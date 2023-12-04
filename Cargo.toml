@@ -1,11 +1,23 @@
 [package]
-name = "evm-poc"
+name = "ledger"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-hex = "0.4.3"
+const-hex = "1.10.0"
+derive_more = "0.99.17"
+derive_setters = "0.1.6"
+ethabi = "18.0.0"
 hex-literal = "0.4.1"
+primitive-types = "0.12.2"
 revm = "3.5.0"
 thiserror = "1.0.50"
 tiny-keccak = "2.0.2"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+binary_macros = "1.0.0"
+eyre = "0.6.9"
+serial_test = "2.0.0"
+stringreader = "0.1.1"
