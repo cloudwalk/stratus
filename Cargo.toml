@@ -1,0 +1,11 @@
+[package]
+name = "evm-poc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hex = "0.4.3"
+hex-literal = "0.4.1"
+revm = "3.5.0"
+thiserror = "1.0.50"
+tiny-keccak = "2.0.2"
