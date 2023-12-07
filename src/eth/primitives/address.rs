@@ -1,13 +1,16 @@
 use std::fmt::Display;
 
 use ethabi::Token;
+use ethereum_types::H160;
+use ethers_core::types::NameOrAddress;
 use hex_literal::hex;
-use primitive_types::H160;
 use revm::primitives::Address as RevmAddress;
 
+use crate::derive_newtype_from;
+
 /// Address of an EVM account (wallet or contract).
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, derive_more::From)]
-pub struct Address(pub H160);
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Deserialize)]
+pub struct Address(H160);
 
 impl Address {
     // Special ETH address used in several
@@ -15,6 +18,11 @@ impl Address {
 
     /// Special address that receives the block reward.
     pub const COINBASE: Address = Address(H160(hex!("00000000000000000000000000000000000000ff")));
+
+    /// Const constructor.
+    pub const fn new_const(bytes: [u8; 20]) -> Self {
+        Self(H160(bytes))
+    }
 
     /// Checks if current address is the zero address.
     pub fn is_zero(&self) -> bool {
@@ -33,11 +41,10 @@ impl Display for Address {
     }
 }
 
-impl From<[u8; 20]> for Address {
-    fn from(value: [u8; 20]) -> Self {
-        Address(H160(value))
-    }
-}
+// -----------------------------------------------------------------------------
+// Other -> Self
+// -----------------------------------------------------------------------------
+derive_newtype_from!(self = Address, other = H160, [u8; 20]);
 
 impl From<RevmAddress> for Address {
     fn from(value: RevmAddress) -> Self {
@@ -45,14 +52,26 @@ impl From<RevmAddress> for Address {
     }
 }
 
+impl From<NameOrAddress> for Address {
+    fn from(value: NameOrAddress) -> Self {
+        match value {
+            NameOrAddress::Name(_) => panic!("TODO"),
+            NameOrAddress::Address(value) => Self(value),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Self -> Other
+// -----------------------------------------------------------------------------
 impl From<Address> for RevmAddress {
     fn from(value: Address) -> Self {
-        Self(value.0 .0.into())
+        RevmAddress(value.0 .0.into())
     }
 }
 
 impl From<Address> for Token {
     fn from(value: Address) -> Self {
-        Self::Address(value.0)
+        Token::Address(value.0)
     }
 }

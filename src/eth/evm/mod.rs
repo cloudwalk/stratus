@@ -1,12 +1,12 @@
-//! Ethereum and EVM.
+//! EVM bytecode executor
 
-pub mod entities;
-mod error;
 #[allow(clippy::module_inception)]
 mod evm;
 mod evm_storage;
 pub mod revm;
 
-pub use error::EvmError;
 pub use evm::Evm;
+pub use evm::EvmCall;
+pub use evm::EvmDeployment;
+pub use evm::EvmTransaction;
 pub use evm_storage::EvmStorage;

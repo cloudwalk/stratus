@@ -1,8 +1,7 @@
-//! EVM implementation using [`revm`](https://crates.io/crates/revm).
+//! EVM implementation using [`revm`](https://crates.io/crates/revm)
 
 use std::sync::Arc;
 
-use const_hex::encode_prefixed;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
@@ -16,12 +15,13 @@ use revm::Database;
 use revm::Inspector;
 use revm::EVM;
 
-use crate::evm::entities::Address;
-use crate::evm::entities::Bytecode;
-use crate::evm::entities::TransactionExecution;
-use crate::evm::Evm;
-use crate::evm::EvmError;
-use crate::evm::EvmStorage;
+use crate::eth::evm::Evm;
+use crate::eth::evm::EvmDeployment;
+use crate::eth::evm::EvmStorage;
+use crate::eth::evm::EvmTransaction;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::EthError;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
@@ -54,42 +54,38 @@ impl Revm {
     }
 
     /// Execute an EVM call or transaction
-    fn execute_evm(&mut self) -> Result<TransactionExecution, EvmError> {
+    fn execute_evm(&mut self) -> Result<TransactionExecution, EthError> {
         let evm_result = self.evm.inspect(RevmInspector {});
         match evm_result {
             Ok(result) => Ok(result.into()),
             Err(e) => {
                 tracing::error!(reason = ?e, "unexpected error in evm execution");
-                Err(EvmError::UnexpectedEvmError)
+                Err(EthError::UnexpectedEvmError)
             }
         }
     }
 }
 
 impl Evm for Revm {
-    fn _do_deployment(&mut self, caller: &Address, bytecode: &Bytecode) -> Result<TransactionExecution, EvmError> {
-        tracing::info!(bytecode_len = %bytecode.len(), "deploying contract");
-
+    fn do_deployment(&mut self, input: EvmDeployment) -> Result<TransactionExecution, EthError> {
         self.reset_emv_tx();
-        self.evm.env.tx.caller = caller.clone().into();
+        self.evm.env.tx.caller = input.caller.into();
         self.evm.env.tx.transact_to = TransactTo::Create(CreateScheme::Create);
-        self.evm.env.tx.data = bytecode.clone().into();
+        self.evm.env.tx.data = input.data.into();
 
         self.execute_evm()
     }
 
-    fn _do_transaction(&mut self, caller: &Address, contract: &Address, data: &[u8]) -> Result<TransactionExecution, EvmError> {
-        let data_encoded = encode_prefixed(data);
-        tracing::info!(%contract, data = %data_encoded, "calling contract");
+    fn do_transaction(&mut self, input: EvmTransaction) -> Result<TransactionExecution, EthError> {
         self.reset_emv_tx();
-        self.evm.env.tx.caller = caller.clone().into();
-        self.evm.env.tx.transact_to = TransactTo::Call(contract.clone().into());
-        self.evm.env.tx.data = data.to_vec().into();
+        self.evm.env.tx.caller = input.caller.into();
+        self.evm.env.tx.transact_to = TransactTo::Call(input.contract.into());
+        self.evm.env.tx.data = input.data.into();
 
         self.execute_evm()
     }
 
-    fn _do_save(&mut self, execution: &TransactionExecution) -> Result<(), EvmError> {
+    fn do_save(&mut self, execution: TransactionExecution) -> Result<(), EthError> {
         self.storage.save_execution(execution)?;
         Ok(())
     }
@@ -103,10 +99,10 @@ struct RevmDatabase {
 }
 
 impl Database for RevmDatabase {
-    type Error = EvmError;
+    type Error = EthError;
 
     fn basic(&mut self, address: RevmAddress) -> Result<Option<AccountInfo>, Self::Error> {
-        let account = self.storage.get_account(&address.into())?;
+        let account = self.storage.read_account(&address.into())?;
         Ok(Some(account.into()))
     }
 
@@ -115,7 +111,7 @@ impl Database for RevmDatabase {
     }
 
     fn storage(&mut self, address: RevmAddress, index: U256) -> Result<U256, Self::Error> {
-        let slot = self.storage.get_slot(&address.into(), &index.into())?;
+        let slot = self.storage.read_slot(&address.into(), &index.into())?;
         Ok(slot.present.into())
     }
 
@@ -142,7 +138,10 @@ impl Inspector<RevmDatabase> for RevmInspector {
         //     interpreter.stack.data(),
         // );
         // use revm::interpreter::opcode;
-        // print!("{} ", opcode::OPCODE_JUMPMAP[_interpreter.current_opcode() as usize].unwrap());
+        // match opcode::OPCODE_JUMPMAP[_interpreter.current_opcode() as usize] {
+        //     Some(opcode) => println!("{} ", opcode),
+        //     None => println!("{:#x} ", _interpreter.current_opcode() as usize),
+        // }
         InstructionResult::Continue
     }
 }

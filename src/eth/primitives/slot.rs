@@ -1,8 +1,10 @@
 use std::fmt::Display;
 
-use primitive_types::U256;
+use ethereum_types::U256;
 use revm::primitives::StorageSlot;
 use revm::primitives::U256 as RevmU256;
+
+use crate::derive_newtype_from;
 
 #[derive(Debug, Clone, Default)]
 pub struct Slot {
@@ -31,7 +33,7 @@ impl From<(RevmU256, StorageSlot)> for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, derive_more::From)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct SlotIndex(U256);
 
 impl Display for SlotIndex {
@@ -39,6 +41,8 @@ impl Display for SlotIndex {
         write!(f, "{:#x}", self.0)
     }
 }
+
+derive_newtype_from!(self = SlotIndex, other = U256);
 
 impl From<RevmU256> for SlotIndex {
     fn from(value: RevmU256) -> Self {
@@ -50,7 +54,7 @@ impl From<RevmU256> for SlotIndex {
 // SlotValue
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, derive_more::From)]
+#[derive(Debug, Clone, Default)]
 pub struct SlotValue(U256);
 
 impl Display for SlotValue {
@@ -58,6 +62,8 @@ impl Display for SlotValue {
         write!(f, "{:#x}", self.0)
     }
 }
+
+derive_newtype_from!(self = SlotValue, other = U256);
 
 impl From<RevmU256> for SlotValue {
     fn from(value: RevmU256) -> Self {

@@ -1,15 +1,11 @@
 use std::sync::Arc;
 
-use ledger::evm::revm::Revm;
-use ledger::storage::inmemory::InMemoryStorage;
-use tracing_subscriber::EnvFilter;
+use ledger::eth::evm::revm::Revm;
+use ledger::eth::storage::InMemoryStorage;
 
 pub fn init_testenv() -> (Revm, Arc<InMemoryStorage>) {
     // init tracing
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "debug");
-    }
-    let _ = tracing_subscriber::fmt().compact().with_env_filter(EnvFilter::from_default_env()).try_init();
+    ledger::infra::init_tracing();
 
     // init  evm
     let storage = Arc::new(InMemoryStorage::new());
@@ -21,14 +17,14 @@ pub fn init_testenv() -> (Revm, Arc<InMemoryStorage>) {
 #[macro_export]
 macro_rules! data {
     ($contract:ident.$function:tt( $($param:expr),* )) => {
-        #[allow(clippy::vec_init_then_push)]
-        #[allow(unused_mut)]
         {
-            let mut tokens: Vec<ethabi::Token> = Vec::new();
-            $(
-                tokens.push($param.into());
-            )*
-            $contract.function(stringify!($function)).unwrap().encode_input(&tokens).unwrap().as_slice()
+            #[allow(unused_mut)]
+            let tokens: Vec<ethabi::Token> = vec![
+                $(
+                    $param.into(),
+                )*
+            ];
+            $contract.function(stringify!($function)).unwrap().encode_input(&tokens).unwrap()
         }
     };
 }

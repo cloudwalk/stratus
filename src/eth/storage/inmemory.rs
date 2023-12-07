@@ -1,15 +1,15 @@
-//! In-memory storage implementations.
+//! In-memory storage implementations
 
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use crate::evm::entities::Account;
-use crate::evm::entities::Address;
-use crate::evm::entities::Slot;
-use crate::evm::entities::SlotIndex;
-use crate::evm::entities::TransactionExecution;
-use crate::evm::EvmError;
-use crate::evm::EvmStorage;
+use crate::eth::evm::EvmStorage;
+use crate::eth::primitives::Account;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::Slot;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::EthError;
 
 /// In-memory implementation using HashMaps.
 #[derive(Debug, Default)]
@@ -25,7 +25,7 @@ impl InMemoryStorage {
 }
 
 impl EvmStorage for InMemoryStorage {
-    fn get_account(&self, address: &Address) -> Result<Account, EvmError> {
+    fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "retrieving account");
 
         let lock = self.accounts.read().unwrap();
@@ -42,7 +42,7 @@ impl EvmStorage for InMemoryStorage {
         }
     }
 
-    fn get_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EvmError> {
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "retrieving slot");
 
         let lock = self.account_slots.read().unwrap();
@@ -65,15 +65,15 @@ impl EvmStorage for InMemoryStorage {
         }
     }
 
-    fn save_execution(&self, execution: &TransactionExecution) -> Result<(), EvmError> {
+    fn save_execution(&self, execution: TransactionExecution) -> Result<(), EthError> {
         let mut account_lock = self.accounts.write().unwrap();
         let mut account_slots_lock = self.account_slots.write().unwrap();
 
         let execution_changes = execution.changes.clone();
         for (address, changes) in execution_changes {
             tracing::debug!(%address, "saving changes");
-            let account = account_lock.entry(address.clone()).or_default();
-            let account_slots = account_slots_lock.entry(address.clone()).or_default();
+            let account = account_lock.entry(address).or_default();
+            let account_slots = account_slots_lock.entry(address).or_default();
 
             // nonce
             tracing::trace!(nonce = %changes.nonce, "saving nonce");

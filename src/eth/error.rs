@@ -1,22 +1,26 @@
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
+use jsonrpsee::types::ErrorObjectOwned;
+
 /// Errors that can occur when EVM is executing.
 #[derive(Debug, thiserror::Error)]
-pub enum EvmError {
+pub enum EthError {
     // -------------------------------------------------------------------------
-    // Input data related
+    // Input data
     // -------------------------------------------------------------------------
     #[error("Transaction sent from zero address is not allowed.")]
-    TransactionFromZeroAddress,
+    ZeroCaller,
 
     // -------------------------------------------------------------------------
-    // Evm related
+    // EVM
     // -------------------------------------------------------------------------
     #[error("Unexpected error with EVM bytecode. Check logs for more information.")]
     UnexpectedEvmError,
 
     // -------------------------------------------------------------------------
-    // Storage related
+    // Storage
     // -------------------------------------------------------------------------
-    #[error("Cannot persist EVM state because storage state does not match expected previous state.")]
+    #[error("Cannot persist EVM state because current storage state does not match expected previous state.")]
     StorageConflict,
 
     #[error("Unexpected error with EVM storage. Check logs for more information.")]
@@ -26,5 +30,11 @@ pub enum EvmError {
     // Bugs
     // -------------------------------------------------------------------------
     #[error("Bug: Contract was deployed, but no address was returned.")]
-    ContractDeploymentWithoutAddress,
+    DeploymentWithoutAddress,
+}
+
+impl From<EthError> for ErrorObjectOwned {
+    fn from(_: EthError) -> Self {
+        ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, None::<String>)
+    }
 }
