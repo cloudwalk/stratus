@@ -69,6 +69,9 @@ impl EthStorage for InMemoryStorage {
         let mut account_lock = self.accounts.write().unwrap();
         let mut account_slots_lock = self.account_slots.write().unwrap();
 
+        // save transaction
+
+        // save execution changes
         let execution_changes = execution.changes.clone();
         for (address, changes) in execution_changes {
             tracing::debug!(%address, "saving changes");

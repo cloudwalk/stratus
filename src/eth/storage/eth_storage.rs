@@ -6,6 +6,8 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::EthError;
 
 /// EVM storage operations.
+///
+/// TODO: Evaluate if it should be split in multiple traits like EthAccountStorage, EthSlotStorage, EthTransactionStorage, etc.
 pub trait EthStorage: Send + Sync + 'static {
     /// Retrieves an account from the storage.
     ///

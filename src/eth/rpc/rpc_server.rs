@@ -1,7 +1,6 @@
 //! RPC server for HTTP and WS
 
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use ethers_core::types::Block;
 use ethers_core::types::TransactionReceipt;
@@ -15,19 +14,19 @@ use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
 use serde_json::Value as JsonValue;
 
-use crate::eth::evm::Evm;
-use crate::eth::evm::EvmDeployment;
-use crate::eth::evm::EvmTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Transaction;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcLogger;
 use crate::eth::storage::EthStorage;
+use crate::eth::EthDeployment;
+use crate::eth::EthExecutor;
+use crate::eth::EthTransaction;
 
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
-pub async fn serve_rpc(evm: Box<Mutex<impl Evm>>, eth_storage: Arc<impl EthStorage>) -> eyre::Result<()> {
+pub async fn serve_rpc(coordinator: EthExecutor, storage: Arc<impl EthStorage>) -> eyre::Result<()> {
     // configure context
     let ctx = RpcContext {
         chain_id: 2008,
@@ -35,8 +34,8 @@ pub async fn serve_rpc(evm: Box<Mutex<impl Evm>>, eth_storage: Arc<impl EthStora
         gas_price: 0,
 
         // services
-        evm,
-        eth_storage,
+        executor: coordinator,
+        storage,
     };
     tracing::info!(?ctx, "starting rpc server");
 
@@ -130,7 +129,7 @@ fn eth_get_block_by_number(_: Params, _: &RpcContext) -> JsonValue {
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     // extract
     let (_, address) = parse_address(params.sequence())?;
-    let account = ctx.eth_storage.read_account(&address)?;
+    let account = ctx.storage.read_account(&address)?;
 
     Ok(hex_num(account.nonce))
 }
@@ -158,11 +157,10 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
     let caller = trx.signer()?;
 
     // execute transaction
-    let mut evm = ctx.evm.lock().unwrap();
     match trx.to() {
         // function call
         Some(contract) => {
-            evm.transact(EvmTransaction {
+            ctx.executor.transact(EthTransaction {
                 caller,
                 contract,
                 data: trx.input(),
@@ -172,7 +170,7 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 
         // deployment
         None => {
-            evm.deploy(EvmDeployment {
+            ctx.executor.deploy(EthDeployment {
                 caller,
                 data: trx.input().into(),
             })?;
@@ -186,7 +184,7 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 /// OK
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (_, address) = parse_address(params.sequence())?;
-    let account = ctx.eth_storage.read_account(&address)?;
+    let account = ctx.storage.read_account(&address)?;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
 }

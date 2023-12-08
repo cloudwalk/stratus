@@ -16,8 +16,7 @@ use revm::Inspector;
 use revm::EVM;
 
 use crate::eth::evm::Evm;
-use crate::eth::evm::EvmDeployment;
-use crate::eth::evm::EvmTransaction;
+use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::EthStorage;
@@ -26,21 +25,25 @@ use crate::eth::EthError;
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
     evm: EVM<RevmDatabase>,
-    storage: Arc<dyn EthStorage>,
 }
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
     pub fn new(storage: Arc<dyn EthStorage>) -> Self {
         let mut evm = EVM::new();
+
+        // evm general config
         evm.env.cfg.spec_id = SpecId::LONDON;
         evm.env.cfg.limit_contract_code_size = Some(usize::MAX);
         evm.env.block.coinbase = Address::COINBASE.into();
 
-        evm.database(RevmDatabase { storage: storage.clone() });
+        // evm database config
+        evm.database(RevmDatabase { storage });
 
-        let mut revm = Self { evm, storage };
+        // evm tx config
+        let mut revm = Self { evm };
         revm.reset_emv_tx();
+
         revm
     }
 
@@ -52,9 +55,20 @@ impl Revm {
         self.evm.env.tx.gas_limit = 100_000_000;
         self.evm.env.tx.nonce = None;
     }
+}
 
-    /// Execute an EVM call or transaction
-    fn execute_evm(&mut self) -> Result<TransactionExecution, EthError> {
+impl Evm for Revm {
+    fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
+        // configure evm params
+        self.reset_emv_tx();
+        self.evm.env.tx.caller = input.caller.into();
+        self.evm.env.tx.transact_to = match input.contract {
+            Some(contract) => TransactTo::Call(contract.into()),
+            None => TransactTo::Create(CreateScheme::Create),
+        };
+        self.evm.env.tx.data = input.data.into();
+
+        // execute evm
         let evm_result = self.evm.inspect(RevmInspector {});
         match evm_result {
             Ok(result) => Ok(result.into()),
@@ -63,31 +77,6 @@ impl Revm {
                 Err(EthError::UnexpectedEvmError)
             }
         }
-    }
-}
-
-impl Evm for Revm {
-    fn do_deployment(&mut self, input: EvmDeployment) -> Result<TransactionExecution, EthError> {
-        self.reset_emv_tx();
-        self.evm.env.tx.caller = input.caller.into();
-        self.evm.env.tx.transact_to = TransactTo::Create(CreateScheme::Create);
-        self.evm.env.tx.data = input.data.into();
-
-        self.execute_evm()
-    }
-
-    fn do_transaction(&mut self, input: EvmTransaction) -> Result<TransactionExecution, EthError> {
-        self.reset_emv_tx();
-        self.evm.env.tx.caller = input.caller.into();
-        self.evm.env.tx.transact_to = TransactTo::Call(input.contract.into());
-        self.evm.env.tx.data = input.data.into();
-
-        self.execute_evm()
-    }
-
-    fn do_save(&mut self, execution: TransactionExecution) -> Result<(), EthError> {
-        self.storage.save_execution(execution)?;
-        Ok(())
     }
 }
 

@@ -1,9 +1,8 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::sync::Mutex;
 
-use crate::eth::evm::Evm;
 use crate::eth::storage::EthStorage;
+use crate::eth::EthExecutor;
 
 pub struct RpcContext {
     // blockchain config
@@ -14,8 +13,8 @@ pub struct RpcContext {
     pub gas_price: usize,
 
     // services
-    pub evm: Box<Mutex<dyn Evm>>,
-    pub eth_storage: Arc<dyn EthStorage>,
+    pub executor: EthExecutor,
+    pub storage: Arc<dyn EthStorage>,
 }
 
 impl Debug for RpcContext {

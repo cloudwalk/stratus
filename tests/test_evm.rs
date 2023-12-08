@@ -4,13 +4,12 @@ use binary_macros::base16;
 use ethabi::Contract;
 use ethabi::Token;
 use hex_literal::hex;
-use ledger::eth::evm::revm::Revm;
-use ledger::eth::evm::Evm;
-use ledger::eth::evm::EvmCall;
-use ledger::eth::evm::EvmDeployment;
-use ledger::eth::evm::EvmTransaction;
 use ledger::eth::primitives::Address;
 use ledger::eth::primitives::Amount;
+use ledger::eth::EthCall;
+use ledger::eth::EthDeployment;
+use ledger::eth::EthExecutor;
+use ledger::eth::EthTransaction;
 use stringreader::StringReader;
 
 static BRLC_ABI: &str = include_str!("contracts/BRLCToken.abi");
@@ -33,45 +32,45 @@ use serial_test::serial;
 #[serial]
 fn evm_brlc() -> eyre::Result<()> {
     // deploy
-    let (mut evm, _) = common::init_testenv();
-    let (brlc, abi) = deploy_brlc(&mut evm)?;
+    let executor = common::init_testenv();
+    let (brlc, abi) = deploy_brlc(&executor)?;
 
     // execute
     log_operation("mint");
-    evm.transact(EvmTransaction {
+    executor.transact(EthTransaction {
         caller: MINTER,
         contract: brlc,
         data: data!(abi.mint(TEST1, Amount::from(u16::MAX))),
     })?;
 
     log_operation("balance");
-    evm.call(EvmCall {
+    executor.call(EthCall {
         contract: brlc,
         data: data!(abi.balanceOf(TEST1)),
     })?;
 
     log_operation("transfer");
-    evm.transact(EvmTransaction {
+    executor.transact(EthTransaction {
         caller: TEST1,
         contract: brlc,
         data: data!(abi.transfer(TEST2, Amount::from(u8::MAX))),
     })?;
 
     log_operation("balance");
-    evm.call(EvmCall {
+    executor.call(EthCall {
         contract: brlc,
         data: data!(abi.balanceOf(TEST1)),
     })?;
 
     log_operation("transfer too large");
-    evm.transact(EvmTransaction {
+    executor.transact(EthTransaction {
         caller: TEST1,
         contract: brlc,
         data: data!(abi.transfer(TEST2, Amount::from(u32::MAX))),
     })?;
 
     log_operation("balance");
-    evm.call(EvmCall {
+    executor.call(EthCall {
         contract: brlc,
         data: data!(abi.balanceOf(TEST1)),
     })?;
@@ -83,20 +82,20 @@ fn evm_brlc() -> eyre::Result<()> {
 #[serial]
 fn evm_cpp() -> eyre::Result<()> {
     // deploy
-    let (mut evm, _) = common::init_testenv();
-    let (brlc, _) = deploy_brlc(&mut evm)?;
-    let (cpp, abi) = deploy_cpp(&mut evm, brlc)?;
+    let executor = common::init_testenv();
+    let (brlc, _) = deploy_brlc(&executor)?;
+    let (cpp, abi) = deploy_cpp(&executor, brlc)?;
 
     // execute
     log_operation("make payment");
-    evm.transact(EvmTransaction {
+    executor.transact(EthTransaction {
         caller: TEST1,
         contract: cpp,
         data: data!(abi.makePayment(Amount::ZERO, Amount::ZERO, Token::FixedBytes(vec![1u8; 16]), Token::FixedBytes(vec![1u8; 16]))),
     })?;
 
     log_operation("get payment");
-    evm.call(EvmCall {
+    executor.call(EthCall {
         contract: cpp,
         data: data!(abi.paymentFor(Token::FixedBytes(vec![1u8; 16]))),
     })?;
@@ -108,13 +107,13 @@ fn evm_cpp() -> eyre::Result<()> {
 #[serial]
 fn evm_pix() -> eyre::Result<()> {
     // deploy
-    let (mut evm, _) = common::init_testenv();
-    let (brlc, _) = deploy_brlc(&mut evm)?;
-    let (pix, abi) = deploy_pix(&mut evm, brlc)?;
+    let executor = common::init_testenv();
+    let (brlc, _) = deploy_brlc(&executor)?;
+    let (pix, abi) = deploy_pix(&executor, brlc)?;
 
     // execute
     log_operation("cash-in");
-    evm.transact(EvmTransaction {
+    executor.transact(EthTransaction {
         caller: MINTER,
         contract: pix,
         data: data!(abi.cashIn(TEST1, Amount::ONE, Token::FixedBytes(vec![1u8; 32]))),
@@ -127,30 +126,30 @@ fn evm_pix() -> eyre::Result<()> {
 // Helpers
 // -----------------------------------------------------------------------------
 
-fn deploy_brlc(evm: &mut Revm) -> eyre::Result<(Address, Contract)> {
+fn deploy_brlc(evm: &EthExecutor) -> eyre::Result<(Address, Contract)> {
     let abi = Contract::load(StringReader::new(BRLC_ABI))?;
 
     log_operation("deploy brlc");
-    let brlc = evm.deploy(EvmDeployment {
+    let brlc = evm.deploy(EthDeployment {
         caller: DEPLOYER,
         data: BRLC_BYTECODE.into(),
     })?;
 
     log_operation("brlc owner");
-    evm.call(EvmCall {
+    evm.call(EthCall {
         contract: brlc,
         data: data!(abi.owner()),
     })?;
 
     log_operation("configure master minter");
-    evm.transact(EvmTransaction {
+    evm.transact(EthTransaction {
         caller: DEPLOYER,
         contract: brlc,
         data: data!(abi.updateMasterMinter(MINTER)),
     })?;
 
     log_operation("configure minter");
-    evm.transact(EvmTransaction {
+    evm.transact(EthTransaction {
         caller: DEPLOYER,
         contract: brlc,
         data: data!(abi.configureMinter(MINTER, Amount::from(u64::MAX))),
@@ -159,17 +158,17 @@ fn deploy_brlc(evm: &mut Revm) -> eyre::Result<(Address, Contract)> {
     Ok((brlc, abi))
 }
 
-fn deploy_cpp(evm: &mut Revm, brlc: Address) -> eyre::Result<(Address, Contract)> {
+fn deploy_cpp(evm: &EthExecutor, brlc: Address) -> eyre::Result<(Address, Contract)> {
     let abi = Contract::load(StringReader::new(CPP_ABI))?;
 
     log_operation("deploy cpp");
-    let cpp = evm.deploy(EvmDeployment {
+    let cpp = evm.deploy(EthDeployment {
         caller: DEPLOYER,
         data: CPP_BYTECODE.into(),
     })?;
 
     log_operation("init token");
-    evm.transact(EvmTransaction {
+    evm.transact(EthTransaction {
         caller: DEPLOYER,
         contract: cpp,
         data: data!(abi.initialize(brlc)),
@@ -178,24 +177,24 @@ fn deploy_cpp(evm: &mut Revm, brlc: Address) -> eyre::Result<(Address, Contract)
     Ok((cpp, abi))
 }
 
-fn deploy_pix(evm: &mut Revm, brlc: Address) -> eyre::Result<(Address, Contract)> {
+fn deploy_pix(evm: &EthExecutor, brlc: Address) -> eyre::Result<(Address, Contract)> {
     let abi = Contract::load(StringReader::new(PIX_ABI))?;
 
     log_operation("deploy pix");
-    let pix = evm.deploy(EvmDeployment {
+    let pix = evm.deploy(EthDeployment {
         caller: DEPLOYER,
         data: PIX_BYTECODE.into(),
     })?;
 
     log_operation("init token");
-    evm.transact(EvmTransaction {
+    evm.transact(EthTransaction {
         caller: DEPLOYER,
         contract: pix,
         data: data!(abi.initialize(brlc)),
     })?;
 
     log_operation("grant role");
-    evm.transact(EvmTransaction {
+    evm.transact(EthTransaction {
         caller: DEPLOYER,
         contract: pix,
         data: data!(abi.grantRole(

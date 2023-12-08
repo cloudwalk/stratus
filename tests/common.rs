@@ -2,16 +2,16 @@ use std::sync::Arc;
 
 use ledger::eth::evm::revm::Revm;
 use ledger::eth::storage::inmemory::InMemoryStorage;
+use ledger::eth::EthExecutor;
 
-pub fn init_testenv() -> (Revm, Arc<InMemoryStorage>) {
+pub fn init_testenv() -> EthExecutor {
     // init tracing
     ledger::infra::init_tracing();
 
     // init  evm
     let storage = Arc::new(InMemoryStorage::new());
     let evm = Revm::new(storage.clone());
-
-    (evm, storage)
+    EthExecutor::new(Box::new(evm), storage)
 }
 
 #[macro_export]

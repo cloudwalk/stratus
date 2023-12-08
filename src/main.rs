@@ -1,9 +1,9 @@
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use ledger::eth::evm::revm::Revm;
 use ledger::eth::rpc::serve_rpc;
 use ledger::eth::storage::inmemory::InMemoryStorage;
+use ledger::eth::EthExecutor;
 use ledger::infra;
 
 #[tokio::main]
@@ -12,9 +12,10 @@ async fn main() -> eyre::Result<()> {
     infra::init_tracing();
 
     // init services
-    let eth_storage = Arc::new(InMemoryStorage::new());
-    let evm = Box::new(Mutex::new(Revm::new(eth_storage.clone())));
+    let storage = Arc::new(InMemoryStorage::new());
+    let evm = Box::new(Revm::new(storage.clone()));
+    let executor = EthExecutor::new(evm, storage.clone());
 
-    serve_rpc(evm, eth_storage).await?;
+    serve_rpc(executor, storage).await?;
     Ok(())
 }

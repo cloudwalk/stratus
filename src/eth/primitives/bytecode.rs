@@ -42,6 +42,12 @@ impl From<EthersBytes> for Bytecode {
 // -----------------------------------------------------------------------------
 // Self -> Other
 // -----------------------------------------------------------------------------
+impl From<Bytecode> for Vec<u8> {
+    fn from(value: Bytecode) -> Self {
+        value.0
+    }
+}
+
 impl From<Bytecode> for Bytes {
     fn from(value: Bytecode) -> Self {
         value.0.into()
