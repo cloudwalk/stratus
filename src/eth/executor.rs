@@ -24,7 +24,7 @@ impl EthExecutor {
 
     /// Executes a contract deployment and return the address of the deployed contract.
     pub fn deploy(&self, input: EthDeployment) -> Result<Address, EthError> {
-        tracing::info!(caller = %input.caller, bytecode_len = input.data.len(), bytecode = %const_hex::encode_prefixed(&input.data), "deploying contract");
+        tracing::info!(hash = %input.transaction.hash(), caller = %input.caller, bytecode_len = input.data.len(), "deploying contract");
 
         // validate
         if input.caller == Address::ZERO {
@@ -34,9 +34,10 @@ impl EthExecutor {
 
         // execute and save
         let mut lock = self.evm.write().unwrap();
-        let execution = lock.transact(input.into())?;
+        let execution = lock.transact(input.clone().into())?;
         let deployment_address = execution.deployment_address();
-        self.storage.save_execution(execution)?;
+
+        self.storage.save_execution(input.transaction, execution)?;
 
         // return deployed contract address
         match deployment_address {
@@ -57,8 +58,8 @@ impl EthExecutor {
 
         // execute and save
         let mut lock = self.evm.write().unwrap();
-        let execution = lock.transact(input.into())?;
-        self.storage.save_execution(execution)?;
+        let execution = lock.transact(input.clone().into())?;
+        self.storage.save_execution(input.transaction, execution)?;
 
         Ok(())
     }
@@ -75,14 +76,14 @@ impl EthExecutor {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EthDeployment {
     pub transaction: Transaction,
     pub caller: Address,
     pub data: Bytecode,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EthTransaction {
     pub transaction: Transaction,
     pub caller: Address,
@@ -90,7 +91,7 @@ pub struct EthTransaction {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EthCall {
     pub contract: Address,
     pub data: Vec<u8>,

@@ -29,7 +29,7 @@ impl InMemoryStorage {
 
 impl EthStorage for InMemoryStorage {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
-        tracing::debug!(%address, "retrieving account");
+        tracing::info!(%address, "reading account");
 
         let lock = self.accounts.read().unwrap();
         match lock.get(address).cloned() {
@@ -46,7 +46,7 @@ impl EthStorage for InMemoryStorage {
     }
 
     fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
-        tracing::debug!(%address, %slot_index, "retrieving slot");
+        tracing::info!(%address, %slot_index, "reading slot");
 
         let lock = self.account_slots.read().unwrap();
         let slots = match lock.get(address) {
@@ -68,12 +68,29 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn save_execution(&self, execution: TransactionExecution) -> Result<(), EthError> {
+    fn read_transaction(&self, hash: &Hash) -> Result<Option<Transaction>, EthError> {
+        tracing::info!(%hash, "reading transaction");
+        let lock = self.transactions.read().unwrap();
+        match lock.get(hash) {
+            Some(transaction) => {
+                tracing::trace!(%hash, ?transaction, "transaction found");
+                Ok(Some(transaction.0.clone()))
+            }
+            None => {
+                tracing::trace!(%hash, "transaction not found");
+                Ok(None)
+            }
+        }
+    }
+
+    fn save_execution(&self, transaction: Transaction, execution: TransactionExecution) -> Result<(), EthError> {
         let mut account_lock = self.accounts.write().unwrap();
         let mut account_slots_lock = self.account_slots.write().unwrap();
-        // let mut transactions_lock = self.transactions.write().unwrap();
+        let mut transactions_lock = self.transactions.write().unwrap();
 
         // save transaction
+        tracing::info!(hash = %transaction.hash(), "saving transaction");
+        transactions_lock.insert(transaction.hash(), (transaction, execution.clone()));
 
         // save execution changes
         let execution_changes = execution.changes.clone();

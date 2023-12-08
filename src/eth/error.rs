@@ -11,7 +11,7 @@ pub enum EthError {
     #[error("Transaction sent from zero address is not allowed.")]
     ZeroSigner,
 
-    #[error("Transaction signer cannot be recoved. Check the transaction signature is valid.")]
+    #[error("Transaction signer cannot be recovered. Check the transaction signature is valid.")]
     UnrecoverableSigner,
 
     // -------------------------------------------------------------------------

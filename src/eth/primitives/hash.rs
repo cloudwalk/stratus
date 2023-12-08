@@ -1,9 +1,18 @@
+use std::fmt::Display;
+
 use ethereum_types::H256;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Hash(H256);
+
+impl Display for Hash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", const_hex::encode_prefixed(self.0))
+    }
+}
 
 impl AsRef<[u8]> for Hash {
     fn as_ref(&self) -> &[u8] {

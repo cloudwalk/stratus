@@ -15,6 +15,7 @@ use rlp::Decodable;
 use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Transaction;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcLogger;
@@ -128,16 +129,21 @@ fn eth_get_block_by_number(_: Params, _: &RpcContext) -> JsonValue {
 /// OK
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     // extract
-    let (_, address) = parse_address(params.sequence())?;
+    let (_, address) = parse_param::<Address>(params.sequence())?;
     let account = ctx.storage.read_account(&address)?;
 
     Ok(hex_num(account.nonce))
 }
 
 /// TODO
-fn eth_get_transaction_by_hash(_: Params, _: &RpcContext) -> JsonValue {
-    let trx = Transaction::default();
-    serde_json::to_value(trx).unwrap()
+fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+    let (_, hash) = parse_param::<Hash>(params.sequence())?;
+    let transaction = ctx.storage.read_transaction(&hash)?;
+
+    match transaction {
+        Some(trx) => Ok(serde_json::to_value(trx).unwrap()),
+        None => Ok(JsonValue::Null),
+    }
 }
 
 /// TODO
@@ -187,7 +193,7 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 
 /// OK
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    let (_, address) = parse_address(params.sequence())?;
+    let (_, address) = parse_param::<Address>(params.sequence())?;
     let account = ctx.storage.read_account(&address)?;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
@@ -196,11 +202,11 @@ fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectO
 // -----------------------------------------------------------------------------
 // Parsers
 // -----------------------------------------------------------------------------
-fn parse_address(mut params: ParamsSequence) -> Result<(ParamsSequence, Address), ErrorObjectOwned> {
-    match params.next::<Address>() {
+fn parse_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
+    match params.next::<T>() {
         Ok(address) => Ok((params, address)),
         Err(e) => {
-            tracing::warn!(reason = ?e, "failed to parse address");
+            tracing::warn!(reason = ?e, kind = std::any::type_name::<T>(), "failed to parse input param");
             Err(e)
         }
     }

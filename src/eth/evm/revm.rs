@@ -42,13 +42,13 @@ impl Revm {
 
         // evm tx config
         let mut revm = Self { evm };
-        revm.reset_emv_tx();
+        revm.reset_evm_tx();
 
         revm
     }
 
     /// Reset EVM transaction parameters in case they were changed.
-    fn reset_emv_tx(&mut self) {
+    fn reset_evm_tx(&mut self) {
         self.evm.env.tx.caller = RevmAddress::ZERO;
         self.evm.env.tx.value = U256::ZERO;
         self.evm.env.tx.gas_price = U256::ZERO;
@@ -60,7 +60,7 @@ impl Revm {
 impl Evm for Revm {
     fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
         // configure evm params
-        self.reset_emv_tx();
+        self.reset_evm_tx();
         self.evm.env.tx.caller = input.caller.into();
         self.evm.env.tx.transact_to = match input.contract {
             Some(contract) => TransactTo::Call(contract.into()),

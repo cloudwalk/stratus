@@ -7,12 +7,10 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytecode;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
-use crate::eth::primitives::Transaction;
 
 /// Output of a executed transaction in the EVM.
 #[derive(Debug, Clone, Default)]
 pub struct TransactionExecution {
-    pub transaction: Transaction,
     pub changes: HashMap<Address, TransactionExecutionChange>,
 }
 
@@ -33,12 +31,12 @@ impl From<ResultAndState> for TransactionExecution {
         let mut execution = Self::default();
 
         // parse result
-        let (reason, output) = match result.result {
+        let (reason, _) = match result.result {
             ExecutionResult::Success { reason, output, .. } => (format!("Success: {:?}", reason), const_hex::encode(output.data())),
             ExecutionResult::Revert { output, .. } => ("Revert".to_owned(), const_hex::encode(output)),
             ExecutionResult::Halt { reason, .. } => (format!("Halt: {:?}", reason), "".to_owned()),
         };
-        tracing::info!(%reason, %output, "executed");
+        tracing::info!(%reason, "transaction executed");
 
         // parse changes
         for (revm_address, revm_changes) in result.state {
