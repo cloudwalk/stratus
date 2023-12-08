@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use ethers_core::types::Block;
-use ethers_core::types::Transaction;
 use ethers_core::types::TransactionReceipt;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::Server;
@@ -21,6 +20,7 @@ use crate::eth::evm::EvmDeployment;
 use crate::eth::evm::EvmStorage;
 use crate::eth::evm::EvmTransaction;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Transaction;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcLogger;
 
@@ -155,34 +155,28 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
     // decode data
     let (_, data) = parse_hex(params.sequence())?;
     let trx = parse_rlp::<Transaction>(&data)?;
-    let trx_signer: Address = match trx.recover_from() {
-        Ok(signer) => signer.into(),
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to recover transaction signer");
-            return Err(parser_error(Some("cannot recover signer")));
-        }
-    };
+    let caller = trx.signer()?;
 
     // execute transaction
     let mut evm = ctx.evm.lock().unwrap();
-    match trx.to {
+    match trx.to() {
         // function call
         Some(contract) => {
             evm.transact(EvmTransaction {
-                caller: trx_signer,
-                contract: contract.into(),
-                data: trx.input.to_vec(),
+                caller,
+                contract,
+                data: trx.input(),
             })?;
-            Ok(hex_data(trx.hash))
+            Ok(hex_data(trx.hash()))
         }
 
         // deployment
         None => {
             evm.deploy(EvmDeployment {
-                caller: trx_signer,
-                data: trx.input.into(),
+                caller,
+                data: trx.input().into(),
             })?;
-            Ok(hex_data(trx.hash))
+            Ok(hex_data(trx.hash()))
         }
     }
 }

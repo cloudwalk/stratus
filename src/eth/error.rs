@@ -9,7 +9,10 @@ pub enum EthError {
     // Input data
     // -------------------------------------------------------------------------
     #[error("Transaction sent from zero address is not allowed.")]
-    ZeroCaller,
+    ZeroSigner,
+
+    #[error("Transaction signer cannot be recoved. Check the transaction signature is valid.")]
+    UnrecoverableSigner,
 
     // -------------------------------------------------------------------------
     // EVM

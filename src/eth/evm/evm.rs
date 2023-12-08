@@ -21,7 +21,7 @@ pub trait Evm: Send + Sync + 'static {
         // validate
         if input.caller == Address::ZERO {
             tracing::warn!("rejecting deployment from zero address");
-            return Err(EthError::ZeroCaller);
+            return Err(EthError::ZeroSigner);
         }
 
         // execute and save
@@ -43,7 +43,7 @@ pub trait Evm: Send + Sync + 'static {
         // validate
         if input.caller == Address::ZERO {
             tracing::warn!("rejecting transaction from zero address");
-            return Err(EthError::ZeroCaller);
+            return Err(EthError::ZeroSigner);
         }
 
         // execute and save
