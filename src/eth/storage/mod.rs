@@ -1,4 +1,5 @@
 //! Ethereum / EVM storage
 
-mod inmemory;
-pub use inmemory::InMemoryStorage;
+mod eth_storage;
+pub mod inmemory;
+pub use eth_storage::EthStorage;

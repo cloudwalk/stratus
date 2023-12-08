@@ -3,12 +3,12 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use crate::eth::evm::EvmStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 /// In-memory implementation using HashMaps.
@@ -24,7 +24,7 @@ impl InMemoryStorage {
     }
 }
 
-impl EvmStorage for InMemoryStorage {
+impl EthStorage for InMemoryStorage {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "retrieving account");
 

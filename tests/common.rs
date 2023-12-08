@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ledger::eth::evm::revm::Revm;
-use ledger::eth::storage::InMemoryStorage;
+use ledger::eth::storage::inmemory::InMemoryStorage;
 
 pub fn init_testenv() -> (Revm, Arc<InMemoryStorage>) {
     // init tracing

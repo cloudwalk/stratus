@@ -6,7 +6,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::EthError;
 
 /// EVM storage operations.
-pub trait EvmStorage: Send + Sync + 'static {
+pub trait EthStorage: Send + Sync + 'static {
     /// Retrieves an account from the storage.
     ///
     /// When not found, returns an empty account because EVM assumes all account exists.

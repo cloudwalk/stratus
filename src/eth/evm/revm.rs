@@ -17,21 +17,21 @@ use revm::EVM;
 
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmDeployment;
-use crate::eth::evm::EvmStorage;
 use crate::eth::evm::EvmTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
     evm: EVM<RevmDatabase>,
-    storage: Arc<dyn EvmStorage>,
+    storage: Arc<dyn EthStorage>,
 }
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
-    pub fn new(storage: Arc<dyn EvmStorage>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
         let mut evm = EVM::new();
         evm.env.cfg.spec_id = SpecId::LONDON;
         evm.env.cfg.limit_contract_code_size = Some(usize::MAX);
@@ -95,7 +95,7 @@ impl Evm for Revm {
 // Database
 // -----------------------------------------------------------------------------
 struct RevmDatabase {
-    storage: Arc<dyn EvmStorage>,
+    storage: Arc<dyn EthStorage>,
 }
 
 impl Database for RevmDatabase {

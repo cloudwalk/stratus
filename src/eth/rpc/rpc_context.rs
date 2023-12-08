@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::eth::evm::Evm;
-use crate::eth::evm::EvmStorage;
+use crate::eth::storage::EthStorage;
 
 pub struct RpcContext {
     // blockchain config
@@ -15,7 +15,7 @@ pub struct RpcContext {
 
     // services
     pub evm: Box<Mutex<dyn Evm>>,
-    pub evm_storage: Arc<dyn EvmStorage>,
+    pub eth_storage: Arc<dyn EthStorage>,
 }
 
 impl Debug for RpcContext {
