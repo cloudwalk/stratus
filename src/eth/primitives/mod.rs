@@ -9,6 +9,7 @@ mod nonce;
 mod slot;
 mod transaction;
 mod transaction_execution;
+mod transaction_receipt;
 
 pub use account::Account;
 pub use address::Address;
@@ -21,3 +22,4 @@ pub use slot::SlotIndex;
 pub use slot::SlotValue;
 pub use transaction::Transaction;
 pub use transaction_execution::TransactionExecution;
+pub use transaction_receipt::TransactionReceipt;

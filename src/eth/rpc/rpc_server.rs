@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use ethers_core::types::Block;
-use ethers_core::types::TransactionReceipt;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::Server;
 use jsonrpsee::types::error::PARSE_ERROR_CODE;
@@ -17,6 +16,7 @@ use serde_json::Value as JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Transaction;
+use crate::eth::primitives::TransactionReceipt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcLogger;
 use crate::eth::storage::EthStorage;
@@ -128,7 +128,6 @@ fn eth_get_block_by_number(_: Params, _: &RpcContext) -> JsonValue {
 
 /// OK
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    // extract
     let (_, address) = parse_param::<Address>(params.sequence())?;
     let account = ctx.storage.read_account(&address)?;
 
@@ -147,12 +146,15 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonV
 }
 
 /// TODO
-fn eth_get_transaction_receipt(_: Params, _: &RpcContext) -> JsonValue {
-    let receipt = TransactionReceipt {
-        status: Some(1.into()),
-        ..Default::default()
-    };
-    serde_json::to_value(receipt).unwrap()
+fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+    let (_, hash) = parse_param::<Hash>(params.sequence())?;
+    match ctx.storage.read_transaction(&hash)? {
+        Some(trx) => {
+            let receipt = TransactionReceipt::confirmed(trx.hash());
+            Ok(serde_json::to_value(&receipt).unwrap())
+        }
+        None => Ok(JsonValue::Null),
+    }
 }
 
 /// TODO
