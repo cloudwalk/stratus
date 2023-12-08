@@ -27,7 +27,7 @@ impl EthExecutor {
         tracing::info!(hash = %input.transaction.hash(), caller = %input.caller, bytecode_len = input.data.len(), "deploying contract");
 
         // validate
-        if input.caller == Address::ZERO {
+        if input.caller.is_zero() {
             tracing::warn!("rejecting deployment from zero address");
             return Err(EthError::ZeroSigner);
         }
@@ -51,7 +51,7 @@ impl EthExecutor {
         tracing::info!(caller = %input.caller, contract = %input.contract, data_len = %input.data.len(), "executing transaction");
 
         // validate
-        if input.caller == Address::ZERO {
+        if input.caller.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(EthError::ZeroSigner);
         }
