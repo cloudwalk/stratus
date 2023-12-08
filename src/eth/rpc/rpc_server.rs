@@ -153,28 +153,32 @@ fn eth_get_transaction_receipt(_: Params, _: &RpcContext) -> JsonValue {
 fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     // decode data
     let (_, data) = parse_hex(params.sequence())?;
-    let trx = parse_rlp::<Transaction>(&data)?;
-    let caller = trx.signer()?;
+    let transaction = parse_rlp::<Transaction>(&data)?;
+    let caller = transaction.signer()?;
 
     // execute transaction
-    match trx.to() {
+    match transaction.to() {
         // function call
         Some(contract) => {
+            let hash = transaction.hash();
             ctx.executor.transact(EthTransaction {
                 caller,
                 contract,
-                data: trx.input(),
+                data: transaction.input(),
+                transaction,
             })?;
-            Ok(hex_data(trx.hash()))
+            Ok(hex_data(hash))
         }
 
         // deployment
         None => {
+            let hash = transaction.hash();
             ctx.executor.deploy(EthDeployment {
                 caller,
-                data: trx.input().into(),
+                data: transaction.input().into(),
+                transaction,
             })?;
-            Ok(hex_data(trx.hash()))
+            Ok(hex_data(hash))
         }
     }
 }

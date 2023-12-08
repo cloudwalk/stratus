@@ -39,34 +39,37 @@ fn evm_brlc() -> eyre::Result<()> {
     log_operation("mint");
     executor.transact(EthTransaction {
         caller: MINTER,
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.mint(TEST1, Amount::from(u16::MAX))),
+        ..Default::default()
     })?;
 
     log_operation("balance");
     executor.call(EthCall {
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.balanceOf(TEST1)),
     })?;
 
     log_operation("transfer");
     executor.transact(EthTransaction {
         caller: TEST1,
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.transfer(TEST2, Amount::from(u8::MAX))),
+        ..Default::default()
     })?;
 
     log_operation("balance");
     executor.call(EthCall {
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.balanceOf(TEST1)),
     })?;
 
     log_operation("transfer too large");
     executor.transact(EthTransaction {
         caller: TEST1,
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.transfer(TEST2, Amount::from(u32::MAX))),
+        ..Default::default()
     })?;
 
     log_operation("balance");
@@ -84,19 +87,20 @@ fn evm_cpp() -> eyre::Result<()> {
     // deploy
     let executor = common::init_testenv();
     let (brlc, _) = deploy_brlc(&executor)?;
-    let (cpp, abi) = deploy_cpp(&executor, brlc)?;
+    let (cpp, abi) = deploy_cpp(&executor, brlc.clone())?;
 
     // execute
     log_operation("make payment");
     executor.transact(EthTransaction {
         caller: TEST1,
-        contract: cpp,
+        contract: cpp.clone(),
         data: data!(abi.makePayment(Amount::ZERO, Amount::ZERO, Token::FixedBytes(vec![1u8; 16]), Token::FixedBytes(vec![1u8; 16]))),
+        ..Default::default()
     })?;
 
     log_operation("get payment");
     executor.call(EthCall {
-        contract: cpp,
+        contract: cpp.clone(),
         data: data!(abi.paymentFor(Token::FixedBytes(vec![1u8; 16]))),
     })?;
 
@@ -117,6 +121,7 @@ fn evm_pix() -> eyre::Result<()> {
         caller: MINTER,
         contract: pix,
         data: data!(abi.cashIn(TEST1, Amount::ONE, Token::FixedBytes(vec![1u8; 32]))),
+        ..Default::default()
     })?;
 
     Ok(())
@@ -133,26 +138,29 @@ fn deploy_brlc(evm: &EthExecutor) -> eyre::Result<(Address, Contract)> {
     let brlc = evm.deploy(EthDeployment {
         caller: DEPLOYER,
         data: BRLC_BYTECODE.into(),
+        ..Default::default()
     })?;
 
     log_operation("brlc owner");
     evm.call(EthCall {
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.owner()),
     })?;
 
     log_operation("configure master minter");
     evm.transact(EthTransaction {
         caller: DEPLOYER,
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.updateMasterMinter(MINTER)),
+        ..Default::default()
     })?;
 
     log_operation("configure minter");
     evm.transact(EthTransaction {
         caller: DEPLOYER,
-        contract: brlc,
+        contract: brlc.clone(),
         data: data!(abi.configureMinter(MINTER, Amount::from(u64::MAX))),
+        ..Default::default()
     })?;
 
     Ok((brlc, abi))
@@ -165,13 +173,15 @@ fn deploy_cpp(evm: &EthExecutor, brlc: Address) -> eyre::Result<(Address, Contra
     let cpp = evm.deploy(EthDeployment {
         caller: DEPLOYER,
         data: CPP_BYTECODE.into(),
+        ..Default::default()
     })?;
 
     log_operation("init token");
     evm.transact(EthTransaction {
         caller: DEPLOYER,
-        contract: cpp,
+        contract: cpp.clone(),
         data: data!(abi.initialize(brlc)),
+        ..Default::default()
     })?;
 
     Ok((cpp, abi))
@@ -184,23 +194,26 @@ fn deploy_pix(evm: &EthExecutor, brlc: Address) -> eyre::Result<(Address, Contra
     let pix = evm.deploy(EthDeployment {
         caller: DEPLOYER,
         data: PIX_BYTECODE.into(),
+        ..Default::default()
     })?;
 
     log_operation("init token");
     evm.transact(EthTransaction {
         caller: DEPLOYER,
-        contract: pix,
+        contract: pix.clone(),
         data: data!(abi.initialize(brlc)),
+        ..Default::default()
     })?;
 
     log_operation("grant role");
     evm.transact(EthTransaction {
         caller: DEPLOYER,
-        contract: pix,
+        contract: pix.clone(),
         data: data!(abi.grantRole(
             Token::FixedBytes(hex!("ff3317e1e0e8c784290b957ee9b65ea8fe96420c4819db463283b95ecbe4a3fe").into()),
             MINTER
         )),
+        ..Default::default()
     })?;
 
     Ok((pix, abi))

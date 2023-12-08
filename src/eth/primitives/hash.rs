@@ -2,6 +2,7 @@ use ethereum_types::H256;
 
 use crate::derive_newtype_from;
 
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct Hash(H256);
 
 impl AsRef<[u8]> for Hash {

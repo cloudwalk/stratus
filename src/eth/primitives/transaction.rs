@@ -6,7 +6,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Hash;
 use crate::eth::EthError;
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Transaction(EthersTransaction);
 

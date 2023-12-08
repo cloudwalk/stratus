@@ -5,8 +5,10 @@ use std::sync::RwLock;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::Transaction;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
@@ -16,6 +18,7 @@ use crate::eth::EthError;
 pub struct InMemoryStorage {
     pub accounts: RwLock<HashMap<Address, Account>>,
     pub account_slots: RwLock<HashMap<Address, HashMap<SlotIndex, Slot>>>,
+    pub transactions: RwLock<HashMap<Hash, (Transaction, TransactionExecution)>>,
 }
 
 impl InMemoryStorage {
@@ -68,6 +71,7 @@ impl EthStorage for InMemoryStorage {
     fn save_execution(&self, execution: TransactionExecution) -> Result<(), EthError> {
         let mut account_lock = self.accounts.write().unwrap();
         let mut account_slots_lock = self.account_slots.write().unwrap();
+        // let mut transactions_lock = self.transactions.write().unwrap();
 
         // save transaction
 
@@ -75,7 +79,7 @@ impl EthStorage for InMemoryStorage {
         let execution_changes = execution.changes.clone();
         for (address, changes) in execution_changes {
             tracing::debug!(%address, "saving changes");
-            let account = account_lock.entry(address).or_default();
+            let account = account_lock.entry(address.clone()).or_default();
             let account_slots = account_slots_lock.entry(address).or_default();
 
             // nonce

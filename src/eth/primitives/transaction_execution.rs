@@ -7,10 +7,12 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytecode;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
+use crate::eth::primitives::Transaction;
 
 /// Output of a executed transaction in the EVM.
 #[derive(Debug, Clone, Default)]
 pub struct TransactionExecution {
+    pub transaction: Transaction,
     pub changes: HashMap<Address, TransactionExecutionChange>,
 }
 
@@ -19,7 +21,7 @@ impl TransactionExecution {
     pub fn deployment_address(&self) -> Option<Address> {
         for (address, changes) in &self.changes {
             if changes.bytecode.is_some() {
-                return Some(*address);
+                return Some(address.clone());
             }
         }
         None

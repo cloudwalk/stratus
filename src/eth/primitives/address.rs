@@ -9,7 +9,7 @@ use revm::primitives::Address as RevmAddress;
 use crate::derive_newtype_from;
 
 /// Address of an EVM account (wallet or contract).
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize)]
 pub struct Address(H160);
 
 impl Address {

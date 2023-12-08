@@ -4,6 +4,7 @@ use std::sync::RwLock;
 use crate::eth::evm::Evm;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytecode;
+use crate::eth::primitives::Transaction;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
@@ -76,12 +77,14 @@ impl EthExecutor {
 
 #[derive(Debug, Default)]
 pub struct EthDeployment {
+    pub transaction: Transaction,
     pub caller: Address,
     pub data: Bytecode,
 }
 
 #[derive(Debug, Default)]
 pub struct EthTransaction {
+    pub transaction: Transaction,
     pub caller: Address,
     pub contract: Address,
     pub data: Vec<u8>,
