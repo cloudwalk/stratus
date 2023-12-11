@@ -1,31 +1,28 @@
 use std::fmt::Display;
 
 use ethereum_types::U256;
-use revm::primitives::StorageSlot;
 use revm::primitives::U256 as RevmU256;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Slot {
     pub index: SlotIndex,
-    pub previous: SlotValue,
-    pub present: SlotValue,
+    pub value: SlotValue,
+}
+
+impl Slot {
+    pub fn new(index: impl Into<SlotIndex>, value: impl Into<SlotValue>) -> Self {
+        Self {
+            index: index.into(),
+            value: value.into(),
+        }
+    }
 }
 
 impl Display for Slot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}=({}->{})", self.index, self.previous, self.present)
-    }
-}
-
-impl From<(RevmU256, StorageSlot)> for Slot {
-    fn from((index, slot): (RevmU256, StorageSlot)) -> Self {
-        Self {
-            index: index.into(),
-            previous: slot.original_value().into(),
-            present: slot.present_value().into(),
-        }
+        write!(f, "{}={}", self.index, self.value)
     }
 }
 
@@ -54,7 +51,7 @@ impl From<RevmU256> for SlotIndex {
 // SlotValue
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SlotValue(U256);
 
 impl Display for SlotValue {

@@ -1,4 +1,5 @@
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::EthCall;
 use crate::eth::EthDeployment;
@@ -14,7 +15,7 @@ pub trait Evm: Send + Sync + 'static {
 pub struct EvmInput {
     pub caller: Address,
     pub contract: Option<Address>,
-    pub data: Vec<u8>,
+    pub data: Bytes,
 }
 
 impl From<EthDeployment> for EvmInput {
@@ -22,7 +23,7 @@ impl From<EthDeployment> for EvmInput {
         Self {
             caller: value.caller,
             contract: None,
-            data: value.data.into(),
+            data: value.data,
         }
     }
 }

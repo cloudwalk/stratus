@@ -1,1 +1,5 @@
+# IDEs
+.vscode
+
+# Build
 /target

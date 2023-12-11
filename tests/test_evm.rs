@@ -21,10 +21,10 @@ static CPP_BYTECODE: &[u8] = base16!("file:tests/contracts/CardPaymentProcessor.
 static PIX_ABI: &str = include_str!("contracts/PixCashier.abi");
 static PIX_BYTECODE: &[u8] = base16!("file:tests/contracts/PixCashier.bin");
 
-const DEPLOYER: Address = Address::new_const(hex!("1111111111111111111111111111111111111111"));
-const MINTER: Address = Address::new_const(hex!("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"));
-const TEST1: Address = Address::new_const(hex!("1111222233334444555566667777888899990000"));
-const TEST2: Address = Address::new_const(hex!("0000999988887777666655554444333322221111"));
+const DEPLOYER: Address = Address::from_bytes(hex!("1111111111111111111111111111111111111111"));
+const MINTER: Address = Address::from_bytes(hex!("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"));
+const TEST1: Address = Address::from_bytes(hex!("1111222233334444555566667777888899990000"));
+const TEST2: Address = Address::from_bytes(hex!("0000999988887777666655554444333322221111"));
 
 use serial_test::serial;
 

@@ -12,10 +12,10 @@ async fn main() -> eyre::Result<()> {
     infra::init_tracing();
 
     // init services
-    let storage = Arc::new(InMemoryStorage::new());
+    let storage = Arc::new(InMemoryStorage::default());
     let evm = Box::new(Revm::new(storage.clone()));
-    let executor = EthExecutor::new(evm, storage.clone());
+    let executor = EthExecutor::new(evm, storage.clone(), storage.clone());
 
-    serve_rpc(executor, storage).await?;
+    serve_rpc(executor, storage.clone(), storage).await?;
     Ok(())
 }

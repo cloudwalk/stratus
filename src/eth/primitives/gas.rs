@@ -1,13 +1,14 @@
 use std::fmt::Display;
 
-use ethereum_types::U64;
+use ethereum_types::U256;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Nonce(U64);
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(transparent)]
+pub struct Gas(U256);
 
-impl Display for Nonce {
+impl Display for Gas {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
@@ -16,19 +17,13 @@ impl Display for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, usize);
+derive_newtype_from!(self = Gas, other = U256, u8, u16, u32, u64, u128, usize);
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
-// -----------------------------------------------------------------------------
-impl From<Nonce> for usize {
-    fn from(value: Nonce) -> Self {
-        value.0.as_usize()
-    }
-}
-
-impl From<Nonce> for u64 {
-    fn from(value: Nonce) -> Self {
-        value.0.as_u64()
+// ----------------------------------------------------------------------------
+impl From<Gas> for U256 {
+    fn from(value: Gas) -> Self {
+        value.0
     }
 }

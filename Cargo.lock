@@ -471,6 +471,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-new"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1144,6 +1155,7 @@ version = "0.1.0"
 dependencies = [
  "binary_macros",
  "const-hex",
+ "derive-new",
  "derive_more",
  "ethabi",
  "ethereum-types",
@@ -1158,6 +1170,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "stringreader",
+ "strum",
  "thiserror",
  "tiny-keccak",
  "tokio",
