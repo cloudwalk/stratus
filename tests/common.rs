@@ -10,8 +10,8 @@ pub fn init_testenv() -> EthExecutor {
 
     // init  evm
     let storage = Arc::new(InMemoryStorage::default());
-    let evm = Revm::new(storage.clone());
-    EthExecutor::new(Box::new(evm), storage.clone(), storage)
+    let evm = Revm::new(Arc::clone(&storage));
+    EthExecutor::new(Box::new(evm), Arc::clone(&storage), storage)
 }
 
 #[macro_export]

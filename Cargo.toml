@@ -29,3 +29,9 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 binary_macros = "1.0.0"
 serial_test = "2.0.0"
 stringreader = "0.1.1"
+
+[lints.clippy]
+clone_on_ref_ptr = "warn"
+manual_let_else = "warn"
+semicolon_if_nothing_returned = "warn"
+disallowed_names = "warn"

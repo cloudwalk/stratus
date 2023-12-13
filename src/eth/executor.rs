@@ -81,8 +81,8 @@ impl EthExecutor {
         tracing::info!(contract = %input.contract, data_len = input.data.len(), data = %input.data, "calling contract");
 
         // execute, but not save
-        let mut lock = self.evm.lock().unwrap();
-        let result = lock.transact(input.into())?;
+        let mut executor_lock = self.evm.lock().unwrap();
+        let result = executor_lock.transact(input.into())?;
         Ok(result.output)
     }
 }

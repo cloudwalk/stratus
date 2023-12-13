@@ -13,9 +13,9 @@ async fn main() -> eyre::Result<()> {
 
     // init services
     let storage = Arc::new(InMemoryStorage::default());
-    let evm = Box::new(Revm::new(storage.clone()));
-    let executor = EthExecutor::new(evm, storage.clone(), storage.clone());
+    let evm = Box::new(Revm::new(Arc::clone(&storage)));
+    let executor = EthExecutor::new(evm, Arc::clone(&storage), Arc::clone(&storage));
 
-    serve_rpc(executor, storage.clone(), storage).await?;
+    serve_rpc(executor, Arc::clone(&storage), storage).await?;
     Ok(())
 }

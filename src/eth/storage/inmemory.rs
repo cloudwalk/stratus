@@ -31,8 +31,8 @@ impl EthStorage for InMemoryStorage {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
-        let lock = self.accounts.read().unwrap();
-        match lock.get(address) {
+        let accounts_lock = self.accounts.read().unwrap();
+        match accounts_lock.get(address) {
             Some(account) => {
                 let bytecode_len = account.bytecode.as_ref().map(|x| x.len()).unwrap_or_default();
                 tracing::trace!(%address, %bytecode_len, "account found");
@@ -54,13 +54,10 @@ impl EthStorage for InMemoryStorage {
     fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
-        let lock = self.account_slots.read().unwrap();
-        let slots = match lock.get(address) {
-            Some(slots) => slots,
-            None => {
-                tracing::trace!(%address, "account slot not found");
-                return Ok(Default::default());
-            }
+        let account_slots_lock = self.account_slots.read().unwrap();
+        let Some(slots) = account_slots_lock.get(address) else {
+            tracing::trace!(%address, "account slot not found");
+            return Ok(Default::default());
         };
         match slots.get(slot_index) {
             Some(slot) => {
@@ -84,8 +81,8 @@ impl EthStorage for InMemoryStorage {
         }
 
         // handle other blocks
-        let lock = self.blocks.read().unwrap();
-        match lock.get(number) {
+        let blocks_lock = self.blocks.read().unwrap();
+        match blocks_lock.get(number) {
             Some(block) => {
                 tracing::trace!(%number, ?block, "block found");
                 Ok(Some(block.clone()))
@@ -99,8 +96,8 @@ impl EthStorage for InMemoryStorage {
 
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
         tracing::debug!(%hash, "reading transaction");
-        let lock = self.transactions.read().unwrap();
-        match lock.get(hash) {
+        let transactions_lock = self.transactions.read().unwrap();
+        match transactions_lock.get(hash) {
             Some(transaction) => {
                 tracing::trace!(%hash, ?transaction, "transaction found");
                 Ok(Some(transaction.clone()))
@@ -141,7 +138,7 @@ impl EthStorage for InMemoryStorage {
             // balance
             if let Some(balance) = changes.balance.take_if_modified() {
                 tracing::trace!(%balance, "saving balance");
-                account.balance = balance
+                account.balance = balance;
             }
 
             // bytecode

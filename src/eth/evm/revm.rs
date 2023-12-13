@@ -34,7 +34,7 @@ pub struct Revm {
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
-    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
+    pub fn new(storage: Arc<impl EthStorage>) -> Self {
         let mut evm = EVM::new();
 
         // evm general config
@@ -62,7 +62,7 @@ impl Revm {
 impl Evm for Revm {
     fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
         // configure database
-        self.evm.database(RevmDatabaseSession::new(self.storage.clone()));
+        self.evm.database(RevmDatabaseSession::new(Arc::clone(&self.storage)));
 
         // configure evm params
         self.reset_evm_tx();

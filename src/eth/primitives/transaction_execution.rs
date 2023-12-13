@@ -91,12 +91,9 @@ impl TransactionExecution {
             }
             // status: touched (updated)
             else if account_updated {
-                let existing_account = match storage_changes.get_mut(&address) {
-                    Some(account) => account,
-                    None => {
-                        tracing::error!(keys = ?storage_changes.keys(), reason = "account updated, but account was not loaded", %address);
-                        return Err(EthError::AccountNotLoaded(address));
-                    }
+                let Some(existing_account) = storage_changes.get_mut(&address) else {
+                    tracing::error!(keys = ?storage_changes.keys(), reason = "account updated, but account was not loaded", %address);
+                    return Err(EthError::AccountNotLoaded(address));
                 };
                 existing_account.apply_changes(account, account_modified_slots);
             }
