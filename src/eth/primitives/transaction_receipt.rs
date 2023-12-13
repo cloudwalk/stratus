@@ -2,7 +2,7 @@ use ethereum_types::U64;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 
 use crate::eth::primitives::Address;
-use crate::eth::primitives::TransactionExecutionResult;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::TransactionMined;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -25,11 +25,11 @@ impl From<TransactionMined> for TransactionReceipt {
             transaction_hash: transaction_input.hash.into(),
             from: transaction_input.from.into(),
             to: transaction_input.to.map(|x| x.into()),
-            gas_used: Some(execution.gas_used.into()),
+            gas_used: Some(execution.gas.into()),
             status: match execution.result {
-                TransactionExecutionResult::Commited { .. } => Some(U64::one()),
-                TransactionExecutionResult::Reverted { .. } => Some(U64::zero()),
-                TransactionExecutionResult::Halted { .. } => Some(U64::zero()),
+                ExecutionResult::Success { .. } => Some(U64::one()),
+                ExecutionResult::Reverted { .. } => Some(U64::zero()),
+                ExecutionResult::Halted { .. } => Some(U64::zero()),
             },
             contract_address: contract_address.map(|x| x.into()),
             ..Default::default()

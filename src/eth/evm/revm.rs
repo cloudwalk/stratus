@@ -1,6 +1,5 @@
 //! EVM implementation using [`revm`](https://crates.io/crates/revm).
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use revm::interpreter::InstructionResult;
@@ -18,11 +17,12 @@ use revm::EVM;
 
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
-use crate::eth::primitives::AccountChanges;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::ValueChange;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
@@ -60,7 +60,7 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
+    fn transact(&mut self, input: EvmInput) -> Result<Execution, EthError> {
         // configure database
         self.evm.database(RevmDatabaseSession::new(Arc::clone(&self.storage)));
 
@@ -78,7 +78,7 @@ impl Evm for Revm {
         match evm_result {
             Ok(result) => {
                 let session = self.evm.take_db();
-                Ok(TransactionExecution::from_revm_result(result, session.storage_changes))?
+                Ok(Execution::from_revm_result(result, session.storage_changes))?
             }
             Err(e) => {
                 tracing::error!(reason = ?e, "unexpected error in evm execution");
@@ -95,14 +95,14 @@ impl Evm for Revm {
 /// Retrieve and keep track of all original values that are requested by the EVM.
 struct RevmDatabaseSession {
     storage: Arc<dyn EthStorage>,
-    storage_changes: HashMap<Address, AccountChanges>,
+    storage_changes: ExecutionChanges,
 }
 
 impl RevmDatabaseSession {
     pub fn new(storage: Arc<dyn EthStorage>) -> Self {
         Self {
             storage,
-            storage_changes: HashMap::new(),
+            storage_changes: ExecutionChanges::new(),
         }
     }
 }
@@ -117,7 +117,7 @@ impl Database for RevmDatabaseSession {
 
         // track original value
         self.storage_changes
-            .insert(account.address.clone(), AccountChanges::from_existing_account(account));
+            .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account));
 
         Ok(Some(revm_account))
     }
@@ -137,7 +137,7 @@ impl Database for RevmDatabaseSession {
         // track original value
         match self.storage_changes.get_mut(&address) {
             Some(account) => {
-                account.slots.insert(index, ValueChange::from_original(slot));
+                account.slots.insert(index, ExecutionValueChange::from_original(slot));
             }
             None => {
                 tracing::error!(reason = "reading slot without account loaded", %address, %index);

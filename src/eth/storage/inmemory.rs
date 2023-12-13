@@ -74,13 +74,6 @@ impl EthStorage for InMemoryStorage {
     fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
         tracing::debug!(%number, "reading block");
 
-        // handle genesis block
-        if number.is_genesis() {
-            // TODO: genesis block
-            return Ok(Some(Block::default()));
-        }
-
-        // handle other blocks
         let blocks_lock = self.blocks.read().unwrap();
         match blocks_lock.get(number) {
             Some(block) => {
@@ -121,7 +114,7 @@ impl EthStorage for InMemoryStorage {
         transactions_lock.insert(mined.transaction_input.hash.clone(), mined.clone());
 
         // save execution changes
-        let completed = mined.is_commited();
+        let completed = mined.is_success();
         let execution_changes = mined.execution.changes;
         for mut changes in execution_changes {
             let address = changes.address;

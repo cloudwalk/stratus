@@ -1,8 +1,7 @@
 use ethers_core::types::Transaction as EthersTransaction;
 
 use crate::eth::primitives::Block;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionResult;
+use crate::eth::primitives::Execution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionReceipt;
 
@@ -13,7 +12,7 @@ pub struct TransactionMined {
     pub transaction_input: TransactionInput,
 
     /// Transaction EVM execution result.
-    pub execution: TransactionExecution,
+    pub execution: Execution,
 
     /// Block where the transaction was mined.
     pub block: Block,
@@ -21,8 +20,8 @@ pub struct TransactionMined {
 
 impl TransactionMined {
     /// Check if the current transaction was completed normally.
-    pub fn is_commited(&self) -> bool {
-        matches!(self.execution.result, TransactionExecutionResult::Commited { .. })
+    pub fn is_success(&self) -> bool {
+        self.execution.is_success()
     }
 
     /// Convert itself into a [`TransactionReceipt`].

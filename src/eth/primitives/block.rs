@@ -1,3 +1,4 @@
+use ethereum_types::Bloom;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 
@@ -12,6 +13,17 @@ pub struct Block {
     pub gas_used: Gas,
 
     pub(super) inner: EthersBlock<EthersTransaction>,
+}
+
+impl Block {
+    /// Generates the genesis block.
+    ///
+    /// TODO: make it constant / cached
+    pub fn genesis() -> Self {
+        let mut block = Self::default();
+        block.inner.logs_bloom = Some(Bloom::zero());
+        block
+    }
 }
 
 // -----------------------------------------------------------------------------

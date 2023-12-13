@@ -13,6 +13,7 @@ use rlp::Decodable;
 use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumberSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -129,7 +130,14 @@ fn eth_get_block_by_number(params: Params, ctx: &RpcContext) -> Result<JsonValue
         BlockNumberSelection::Latest => ctx.block_number_storage.current_block_number()?,
         BlockNumberSelection::Block(number) => number,
     };
-    let block = ctx.eth_storage.read_block(&number)?;
+
+    // handle genesis block
+    let block = if number.is_genesis() {
+        Some(Block::genesis())
+    } else {
+        ctx.eth_storage.read_block(&number)?
+    };
+
     Ok(serde_json::to_value(block).unwrap())
 }
 

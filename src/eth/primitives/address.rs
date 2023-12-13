@@ -13,23 +13,23 @@ use crate::derive_newtype_from;
 pub struct Address(H160);
 
 impl Address {
-    // Special ETH address used in several
+    // Special ETH address used in some contexts.
     pub const ZERO: Address = Address(H160::zero());
 
     /// Special address that receives the block reward.
     pub const COINBASE: Address = Address(H160(hex!("00000000000000000000000000000000000000ff")));
 
     /// Const constructor.
-    pub const fn from_bytes(bytes: [u8; 20]) -> Self {
+    pub const fn new_const(bytes: [u8; 20]) -> Self {
         Self(H160(bytes))
     }
 
-    /// Checks if current address is the zero address.
+    /// Check if current address is the zero address.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
     }
 
-    /// Checks if current address is the coinbase address.
+    /// Check if current address is the coinbase address.
     pub fn is_coinbase(&self) -> bool {
         self == &Self::COINBASE
     }

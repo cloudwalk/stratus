@@ -3,27 +3,31 @@ use std::fmt::Debug;
 
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::ResultAndState as RevmResultAndState;
+use revm::primitives::State as RevmState;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Amount;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Gas;
+use crate::eth::primitives::Log;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::EthError;
+
+pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
 
 // -----------------------------------------------------------------------------
 // Transaction Execution Result
 // -----------------------------------------------------------------------------
 
 /// Indicates how a transaction was finished.
-#[derive(Debug, Clone, strum::Display)]
-pub enum TransactionExecutionResult {
+#[derive(Debug, Clone, strum::Display, derive_new::new)]
+pub enum ExecutionResult {
     /// Transaction execution finished normally (RETURN).
-    #[strum(serialize = "Commited")]
-    Commited,
+    #[strum(serialize = "Success")]
+    Success,
 
     /// Transaction execution finished with a reversion (REVERT).
     #[strum(serialize = "Reverted")]
@@ -39,76 +43,31 @@ pub enum TransactionExecutionResult {
 // -----------------------------------------------------------------------------
 /// Output of a executed transaction in the EVM.
 #[derive(Debug, Clone)]
-pub struct TransactionExecution {
-    pub result: TransactionExecutionResult,
+pub struct Execution {
+    pub result: ExecutionResult,
     pub output: Bytes,
-    pub gas_used: Gas,
-    pub changes: Vec<AccountChanges>,
+    pub logs: Vec<Log>,
+    pub gas: Gas,
+    pub changes: Vec<ExecutionAccountChanges>,
 }
 
-impl TransactionExecution {
+impl Execution {
     /// Apply REVM transaction execution result to the storage original values, creating a new `TransactionExecution` that can be used to update the state.
-    pub fn from_revm_result(revm_result: RevmResultAndState, mut storage_changes: HashMap<Address, AccountChanges>) -> Result<Self, EthError> {
-        // parse result
-        let (result, output, gas) = match revm_result.result {
-            RevmExecutionResult::Success { output, gas_used, .. } => (TransactionExecutionResult::Commited, Bytes::from(output), gas_used),
-            RevmExecutionResult::Revert { output, gas_used } => (TransactionExecutionResult::Reverted, Bytes::from(output), gas_used),
-            RevmExecutionResult::Halt { reason, gas_used } => (
-                TransactionExecutionResult::Halted {
-                    reason: format!("{:?}", reason),
-                },
-                Bytes::default(),
-                gas_used,
-            ),
-        };
-
-        // parse state changes
-        for (revm_address, revm_account) in revm_result.state {
-            // ignore coinbase address changes because we don't charge gas
-            let address: Address = revm_address.into();
-            if address.is_coinbase() {
-                continue;
-            }
-
-            // apply changes according to account status
-            tracing::debug!(status = ?revm_account.status, %address,  "applying account changes");
-
-            // parse revm status
-            let account_created = revm_account.is_created();
-            let account_updated = revm_account.is_touched();
-
-            // parse revm to internal representation
-            let account: Account = (revm_address, revm_account.info).into();
-            let account_modified_slots: Vec<Slot> = revm_account
-                .storage
-                .into_iter()
-                .map(|(index, value)| Slot::new(index, value.present_value))
-                .collect();
-
-            // status: created
-            if account_created {
-                storage_changes.insert(account.address.clone(), AccountChanges::from_created_account(account, account_modified_slots));
-            }
-            // status: touched (updated)
-            else if account_updated {
-                let Some(existing_account) = storage_changes.get_mut(&address) else {
-                    tracing::error!(keys = ?storage_changes.keys(), reason = "account updated, but account was not loaded", %address);
-                    return Err(EthError::AccountNotLoaded(address));
-                };
-                existing_account.apply_changes(account, account_modified_slots);
-            }
-        }
+    pub fn from_revm_result(revm_result: RevmResultAndState, execution_changes: ExecutionChanges) -> Result<Self, EthError> {
+        let (result, output, logs, gas) = parse_revm_result(revm_result.result);
+        let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
 
         if output.len() > 256 {
-            tracing::info!(%result, %gas, output_len = %output.len(), output = %"too long", "executed");
+            tracing::info!(%result, %gas, output_len = %output.len(), output = %("too long"), "executed");
         } else {
             tracing::info!(%result, %gas, output_len = %output.len(), %output, "executed");
         }
         Ok(Self {
             result,
             output,
-            gas_used: gas.into(),
-            changes: storage_changes.into_values().collect(),
+            logs,
+            gas,
+            changes: execution_changes.into_values().collect(),
         })
     }
 
@@ -121,6 +80,75 @@ impl TransactionExecution {
         }
         None
     }
+
+    /// Check if the current transaction was completed normally.
+    pub fn is_success(&self) -> bool {
+        matches!(self.result, ExecutionResult::Success { .. })
+    }
+}
+
+fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
+    match result {
+        RevmExecutionResult::Success { output, gas_used, logs, .. } => {
+            let result = ExecutionResult::Success;
+            let output = Bytes::from(output);
+            let logs = logs.into_iter().map(|x| x.into()).collect();
+            let gas = Gas::from(gas_used);
+            (result, output, logs, gas)
+        }
+        RevmExecutionResult::Revert { output, gas_used } => {
+            let result = ExecutionResult::Reverted;
+            let output = Bytes::from(output);
+            let gas = Gas::from(gas_used);
+            (result, output, Vec::new(), gas)
+        }
+        RevmExecutionResult::Halt { reason, gas_used } => {
+            let result = ExecutionResult::new_halted(format!("{:?}", reason));
+            let output = Bytes::default();
+            let gas = Gas::from(gas_used);
+            (result, output, Vec::new(), gas)
+        }
+    }
+}
+
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, EthError> {
+    for (revm_address, revm_account) in revm_state {
+        let address: Address = revm_address.into();
+
+        // do not apply state changes to coinbase because we do not charge gas, otherwise it will have to be updated for every transaction
+        if address.is_coinbase() {
+            continue;
+        }
+
+        // apply changes according to account status
+        tracing::debug!(status = ?revm_account.status, %address,  "applying account changes");
+        let (account_created, account_updated) = (revm_account.is_created(), revm_account.is_touched());
+
+        // parse revm to internal representation
+        let account: Account = (revm_address, revm_account.info).into();
+        let account_modified_slots: Vec<Slot> = revm_account
+            .storage
+            .into_iter()
+            .map(|(index, value)| Slot::new(index, value.present_value))
+            .collect();
+
+        // status: created
+        if account_created {
+            execution_changes.insert(
+                account.address.clone(),
+                ExecutionAccountChanges::from_created_account(account, account_modified_slots),
+            );
+        }
+        // status: touched (updated)
+        else if account_updated {
+            let Some(existing_account) = execution_changes.get_mut(&address) else {
+                tracing::error!(keys = ?execution_changes.keys(), reason = "account was updated, but it was not loaded by evm", %address);
+                return Err(EthError::AccountNotLoaded(address));
+            };
+            existing_account.apply_changes(account, account_modified_slots);
+        }
+    }
+    Ok(execution_changes)
 }
 
 // -----------------------------------------------------------------------------
@@ -129,23 +157,23 @@ impl TransactionExecution {
 
 /// Changes that happened to an account during a transaction.
 #[derive(Debug, Clone)]
-pub struct AccountChanges {
+pub struct ExecutionAccountChanges {
     pub address: Address,
-    pub nonce: ValueChange<Nonce>,
-    pub balance: ValueChange<Amount>,
-    pub bytecode: ValueChange<Option<Bytes>>,
-    pub slots: HashMap<SlotIndex, ValueChange<Slot>>,
+    pub nonce: ExecutionValueChange<Nonce>,
+    pub balance: ExecutionValueChange<Amount>,
+    pub bytecode: ExecutionValueChange<Option<Bytes>>,
+    pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
 }
 
-impl AccountChanges {
+impl ExecutionAccountChanges {
     /// Create a new `TransactionAccountChanges` that represents an existing account from the storage.
     pub fn from_existing_account(account: impl Into<Account>) -> Self {
         let account = account.into();
         Self {
             address: account.address,
-            nonce: ValueChange::from_original(account.nonce),
-            balance: ValueChange::from_original(account.balance),
-            bytecode: ValueChange::from_original(account.bytecode),
+            nonce: ExecutionValueChange::from_original(account.nonce),
+            balance: ExecutionValueChange::from_original(account.balance),
+            bytecode: ExecutionValueChange::from_original(account.bytecode),
             slots: HashMap::new(),
         }
     }
@@ -154,14 +182,14 @@ impl AccountChanges {
     pub fn from_created_account(account: Account, modified_slots: Vec<Slot>) -> Self {
         let mut changes = Self {
             address: account.address,
-            nonce: ValueChange::from_modified(account.nonce),
-            balance: ValueChange::from_modified(account.balance),
-            bytecode: ValueChange::from_modified(account.bytecode),
+            nonce: ExecutionValueChange::from_modified(account.nonce),
+            balance: ExecutionValueChange::from_modified(account.balance),
+            bytecode: ExecutionValueChange::from_modified(account.bytecode),
             slots: HashMap::new(),
         };
 
         for slot in modified_slots {
-            changes.slots.insert(slot.index.clone(), ValueChange::from_modified(slot));
+            changes.slots.insert(slot.index.clone(), ExecutionValueChange::from_modified(slot));
         }
 
         changes
@@ -178,7 +206,7 @@ impl AccountChanges {
                     entry.modified = Some(slot);
                 }
                 None => {
-                    self.slots.insert(slot.index.clone(), ValueChange::from_modified(slot));
+                    self.slots.insert(slot.index.clone(), ExecutionValueChange::from_modified(slot));
                 }
             };
         }
@@ -191,7 +219,7 @@ impl AccountChanges {
 
 /// Changes that happened to an account value during a transaction.
 #[derive(Debug, Clone)]
-pub struct ValueChange<T>
+pub struct ExecutionValueChange<T>
 where
     T: PartialEq,
 {
@@ -199,7 +227,7 @@ where
     pub modified: Option<T>,
 }
 
-impl<T> ValueChange<T>
+impl<T> ExecutionValueChange<T>
 where
     T: PartialEq,
 {
