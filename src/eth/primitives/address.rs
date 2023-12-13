@@ -8,12 +8,12 @@ use revm::primitives::Address as RevmAddress;
 
 use crate::derive_newtype_from;
 
-/// Address of an EVM account (wallet or contract).
+/// Address of an Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize)]
 pub struct Address(H160);
 
 impl Address {
-    // Special ETH address used in several
+    // Special ETH address used in some contexts.
     pub const ZERO: Address = Address(H160::zero());
 
     /// Special address that receives the block reward.
@@ -24,12 +24,12 @@ impl Address {
         Self(H160(bytes))
     }
 
-    /// Checks if current address is the zero address.
+    /// Check if current address is the zero address.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
     }
 
-    /// Checks if current address is the coinbase address.
+    /// Check if current address is the coinbase address.
     pub fn is_coinbase(&self) -> bool {
         self == &Self::COINBASE
     }
@@ -42,7 +42,7 @@ impl Display for Address {
 }
 
 // -----------------------------------------------------------------------------
-// Other -> Self
+// Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 derive_newtype_from!(self = Address, other = H160, [u8; 20]);
 
@@ -62,8 +62,14 @@ impl From<NameOrAddress> for Address {
 }
 
 // -----------------------------------------------------------------------------
-// Self -> Other
+// Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl From<Address> for H160 {
+    fn from(value: Address) -> Self {
+        value.0
+    }
+}
+
 impl From<Address> for RevmAddress {
     fn from(value: Address) -> Self {
         RevmAddress(value.0 .0.into())

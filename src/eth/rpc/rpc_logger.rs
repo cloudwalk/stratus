@@ -17,10 +17,10 @@ impl Logger for RpcLogger {
         Self::Instant::now()
     }
 
-    fn on_call(&self, method: &str, _: Params, _: MethodKind, _: TransportProtocol) {
-        // let params = params.as_str().unwrap_or_default();
-        // tracing::debug!(%method, %params, "rpc request");
-        tracing::debug!(%method, "rpc request");
+    fn on_call(&self, method: &str, _params: Params, _: MethodKind, _: TransportProtocol) {
+        // let params = _params.as_str().unwrap_or_default();
+        // tracing::info!(%method, %params, "rpc request");
+        tracing::info!(%method, "rpc request");
     }
 
     fn on_result(&self, _: &str, _: MethodResponseResult, _: Self::Instant, _: TransportProtocol) {}

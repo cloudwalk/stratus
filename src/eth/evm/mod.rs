@@ -1,4 +1,4 @@
-//! EVM bytecode executor
+//! EVM bytecode executor.
 
 #[allow(clippy::module_inception)]
 mod evm;

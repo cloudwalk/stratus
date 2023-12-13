@@ -1,4 +1,4 @@
-//! EVM implementation using [`revm`](https://crates.io/crates/revm)
+//! EVM implementation using [`revm`](https://crates.io/crates/revm).
 
 use std::sync::Arc;
 
@@ -18,18 +18,23 @@ use revm::EVM;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExecutionValueChange;
+use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
-    evm: EVM<RevmDatabase>,
+    evm: EVM<RevmDatabaseSession>,
+    storage: Arc<dyn EthStorage>,
 }
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
-    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
+    pub fn new(storage: Arc<impl EthStorage>) -> Self {
         let mut evm = EVM::new();
 
         // evm general config
@@ -37,11 +42,8 @@ impl Revm {
         evm.env.cfg.limit_contract_code_size = Some(usize::MAX);
         evm.env.block.coinbase = Address::COINBASE.into();
 
-        // evm database config
-        evm.database(RevmDatabase { storage });
-
         // evm tx config
-        let mut revm = Self { evm };
+        let mut revm = Self { evm, storage };
         revm.reset_evm_tx();
 
         revm
@@ -58,7 +60,10 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
+    fn transact(&mut self, input: EvmInput) -> Result<Execution, EthError> {
+        // configure database
+        self.evm.database(RevmDatabaseSession::new(Arc::clone(&self.storage)));
+
         // configure evm params
         self.reset_evm_tx();
         self.evm.env.tx.caller = input.caller.into();
@@ -71,7 +76,10 @@ impl Evm for Revm {
         // execute evm
         let evm_result = self.evm.inspect(RevmInspector {});
         match evm_result {
-            Ok(result) => Ok(result.into()),
+            Ok(result) => {
+                let session = self.evm.take_db();
+                Ok(Execution::from_revm_result(result, session.storage_changes))?
+            }
             Err(e) => {
                 tracing::error!(reason = ?e, "unexpected error in evm execution");
                 Err(EthError::UnexpectedEvmError)
@@ -83,25 +91,61 @@ impl Evm for Revm {
 // -----------------------------------------------------------------------------
 // Database
 // -----------------------------------------------------------------------------
-struct RevmDatabase {
+
+/// Retrieve and keep track of all original values that are requested by the EVM.
+struct RevmDatabaseSession {
     storage: Arc<dyn EthStorage>,
+    storage_changes: ExecutionChanges,
 }
 
-impl Database for RevmDatabase {
+impl RevmDatabaseSession {
+    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
+        Self {
+            storage,
+            storage_changes: ExecutionChanges::new(),
+        }
+    }
+}
+
+impl Database for RevmDatabaseSession {
     type Error = EthError;
 
     fn basic(&mut self, address: RevmAddress) -> Result<Option<AccountInfo>, Self::Error> {
+        // retrieve account and convert to REVM format
         let account = self.storage.read_account(&address.into())?;
-        Ok(Some(account.into()))
+        let revm_account: AccountInfo = account.clone().into();
+
+        // track original value
+        self.storage_changes
+            .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account));
+
+        Ok(Some(revm_account))
     }
 
     fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, Self::Error> {
         todo!()
     }
 
-    fn storage(&mut self, address: RevmAddress, index: U256) -> Result<U256, Self::Error> {
-        let slot = self.storage.read_slot(&address.into(), &index.into())?;
-        Ok(slot.present.into())
+    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> Result<U256, Self::Error> {
+        // retrieve slot and convert to REVM format
+        let address: Address = revm_address.into();
+        let index: SlotIndex = revm_index.into();
+
+        let slot = self.storage.read_slot(&address, &index)?;
+        let revm_slot: U256 = slot.value.clone().into();
+
+        // track original value
+        match self.storage_changes.get_mut(&address) {
+            Some(account) => {
+                account.slots.insert(index, ExecutionValueChange::from_original(slot));
+            }
+            None => {
+                tracing::error!(reason = "reading slot without account loaded", %address, %index);
+                return Err(EthError::AccountNotLoaded(address));
+            }
+        };
+
+        Ok(revm_slot)
     }
 
     fn block_hash(&mut self, _: U256) -> Result<B256, Self::Error> {
@@ -114,8 +158,8 @@ impl Database for RevmDatabase {
 // -----------------------------------------------------------------------------
 struct RevmInspector;
 
-impl Inspector<RevmDatabase> for RevmInspector {
-    fn step(&mut self, _interpreter: &mut revm::interpreter::Interpreter, _: &mut revm::EVMData<'_, RevmDatabase>) -> InstructionResult {
+impl Inspector<RevmDatabaseSession> for RevmInspector {
+    fn step(&mut self, _interpreter: &mut revm::interpreter::Interpreter, _: &mut revm::EVMData<'_, RevmDatabaseSession>) -> InstructionResult {
         // let arg1 = unsafe { *interpreter.instruction_pointer.add(1) };
         // let arg2 = unsafe { *interpreter.instruction_pointer.add(2) };
         // println!(

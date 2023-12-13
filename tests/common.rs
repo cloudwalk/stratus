@@ -9,9 +9,9 @@ pub fn init_testenv() -> EthExecutor {
     ledger::infra::init_tracing();
 
     // init  evm
-    let storage = Arc::new(InMemoryStorage::new());
-    let evm = Revm::new(storage.clone());
-    EthExecutor::new(Box::new(evm), storage)
+    let storage = Arc::new(InMemoryStorage::default());
+    let evm = Revm::new(Arc::clone(&storage));
+    EthExecutor::new(Box::new(evm), Arc::clone(&storage), storage)
 }
 
 #[macro_export]
@@ -24,7 +24,7 @@ macro_rules! data {
                     $param.into(),
                 )*
             ];
-            $contract.function(stringify!($function)).unwrap().encode_input(&tokens).unwrap()
+            $contract.function(stringify!($function)).unwrap().encode_input(&tokens).unwrap().into()
         }
     };
 }
