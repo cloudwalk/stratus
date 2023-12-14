@@ -1,5 +1,10 @@
-# IDEs
+# IDEs / Tools
 .vscode
+.tool-versions
+
+# E2E
+e2e/node_modules
+e2e/cache
 
 # Build
 /target
