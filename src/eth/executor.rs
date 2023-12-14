@@ -40,11 +40,11 @@ impl EthExecutor {
         let mut evm_lock = self.evm.lock().unwrap();
         let mut miner_lock = self.miner.lock().unwrap();
 
-        // execute / save / get address
+        // execute, mine and save
         let execution = evm_lock.transact(input.clone().into())?;
         let deployment_address = execution.contract_address();
-        let mined_transaction = miner_lock.mine(input.transaction, execution)?;
-        self.eth_storage.save_mined_transaction(mined_transaction)?;
+        let block = miner_lock.mine_one_transaction(input.transaction, execution)?;
+        self.eth_storage.save_block(block)?;
 
         // return deployed contract address
         match deployment_address {
@@ -67,10 +67,10 @@ impl EthExecutor {
         let mut evm_lock = self.evm.lock().unwrap();
         let mut miner_lock = self.miner.lock().unwrap();
 
-        // execute / save
+        // execute, mine and save
         let execution = evm_lock.transact(input.clone().into())?;
-        let mined_transaction = miner_lock.mine(input.transaction, execution)?;
-        self.eth_storage.save_mined_transaction(mined_transaction)?;
+        let block = miner_lock.mine_one_transaction(input.transaction, execution)?;
+        self.eth_storage.save_block(block)?;
 
         Ok(())
     }

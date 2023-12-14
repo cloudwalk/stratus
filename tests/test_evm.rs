@@ -5,7 +5,7 @@ use ethabi::Contract;
 use ethabi::Token;
 use hex_literal::hex;
 use ledger::eth::primitives::Address;
-use ledger::eth::primitives::Amount;
+use ledger::eth::primitives::Wei;
 use ledger::eth::EthCall;
 use ledger::eth::EthDeployment;
 use ledger::eth::EthExecutor;
@@ -40,7 +40,7 @@ fn evm_brlc() -> eyre::Result<()> {
     executor.transact(EthTransaction {
         caller: MINTER,
         contract: brlc.clone(),
-        data: data!(abi.mint(TEST1, Amount::from(u16::MAX))),
+        data: data!(abi.mint(TEST1, Wei::from(u16::MAX))),
         ..Default::default()
     })?;
 
@@ -54,7 +54,7 @@ fn evm_brlc() -> eyre::Result<()> {
     executor.transact(EthTransaction {
         caller: TEST1,
         contract: brlc.clone(),
-        data: data!(abi.transfer(TEST2, Amount::from(u8::MAX))),
+        data: data!(abi.transfer(TEST2, Wei::from(u8::MAX))),
         ..Default::default()
     })?;
 
@@ -68,7 +68,7 @@ fn evm_brlc() -> eyre::Result<()> {
     executor.transact(EthTransaction {
         caller: TEST1,
         contract: brlc.clone(),
-        data: data!(abi.transfer(TEST2, Amount::from(u32::MAX))),
+        data: data!(abi.transfer(TEST2, Wei::from(u32::MAX))),
         ..Default::default()
     })?;
 
@@ -94,7 +94,7 @@ fn evm_cpp() -> eyre::Result<()> {
     executor.transact(EthTransaction {
         caller: TEST1,
         contract: cpp.clone(),
-        data: data!(abi.makePayment(Amount::ZERO, Amount::ZERO, Token::FixedBytes(vec![1u8; 16]), Token::FixedBytes(vec![1u8; 16]))),
+        data: data!(abi.makePayment(Wei::ZERO, Wei::ZERO, Token::FixedBytes(vec![1u8; 16]), Token::FixedBytes(vec![1u8; 16]))),
         ..Default::default()
     })?;
 
@@ -120,7 +120,7 @@ fn evm_pix() -> eyre::Result<()> {
     executor.transact(EthTransaction {
         caller: MINTER,
         contract: pix,
-        data: data!(abi.cashIn(TEST1, Amount::ONE, Token::FixedBytes(vec![1u8; 32]))),
+        data: data!(abi.cashIn(TEST1, Wei::ONE, Token::FixedBytes(vec![1u8; 32]))),
         ..Default::default()
     })?;
 
@@ -159,7 +159,7 @@ fn deploy_brlc(evm: &EthExecutor) -> eyre::Result<(Address, Contract)> {
     evm.transact(EthTransaction {
         caller: DEPLOYER,
         contract: brlc.clone(),
-        data: data!(abi.configureMinter(MINTER, Amount::from(u64::MAX))),
+        data: data!(abi.configureMinter(MINTER, Wei::from(u64::MAX))),
         ..Default::default()
     })?;
 

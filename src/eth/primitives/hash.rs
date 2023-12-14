@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use ethereum_types::H256;
-use hex_literal::hex;
 
 use crate::derive_newtype_from;
 
@@ -10,9 +9,6 @@ use crate::derive_newtype_from;
 pub struct Hash(H256);
 
 impl Hash {
-    /// Special hash used in block mining to indicate no uncle blocks.
-    pub const EMPTY_UNCLE: Hash = Hash::new_const(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
-
     /// Const constructor.
     pub const fn new_const(bytes: [u8; 32]) -> Self {
         Self(H256(bytes))

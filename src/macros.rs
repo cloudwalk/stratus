@@ -11,3 +11,15 @@ macro_rules! derive_newtype_from {
         )+
     };
 }
+
+/// Ternary operator from [ternop](https://docs.rs/ternop/1.0.1/ternop/), but renamed.
+#[macro_export]
+macro_rules! if_else {
+    ($condition: expr, $_true: expr, $_false: expr) => {
+        if $condition {
+            $_true
+        } else {
+            $_false
+        }
+    };
+}

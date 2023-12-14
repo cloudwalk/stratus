@@ -3,9 +3,10 @@ use revm::primitives::Address as RevmAddress;
 use revm::primitives::KECCAK_EMPTY;
 
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Amount;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Wei;
+use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Default)]
@@ -17,7 +18,7 @@ pub struct Account {
     pub nonce: Nonce,
 
     /// Current balance of the account. Changes when a transfer is made or the account pays a fee for executing a transaction.
-    pub balance: Amount,
+    pub balance: Wei,
 
     /// Contract bytecode. Present only if the account is a contract.
     pub bytecode: Option<Bytes>,
@@ -32,7 +33,7 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             address: value.0.into(),
             nonce: value.1.nonce.into(),
             balance: value.1.balance.into(),
-            bytecode: value.1.code.map(|b| b.into()),
+            bytecode: value.1.code.map_into(),
         }
     }
 }
@@ -46,7 +47,7 @@ impl From<Account> for RevmAccountInfo {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
             code_hash: KECCAK_EMPTY,
-            code: value.bytecode.map(|b| b.into()),
+            code: value.bytecode.map_into(),
         }
     }
 }
