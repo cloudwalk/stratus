@@ -1,28 +1,46 @@
-use ethereum_types::Bloom;
+use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
+use itertools::Itertools;
+use serde_json::Value as JsonValue;
 
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Gas;
-use crate::eth::primitives::Hash;
+use crate::eth::primitives::TransactionMined;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Block {
-    pub hash: Hash,
-    pub number: BlockNumber,
-    pub gas_used: Gas,
-
-    pub(super) inner: EthersBlock<EthersTransaction>,
+    pub header: BlockHeader,
+    pub transactions: Vec<TransactionMined>,
 }
 
 impl Block {
-    /// Generates the genesis block.
-    ///
-    /// TODO: make it constant / cached
-    pub fn genesis() -> Self {
-        let mut block = Self::default();
-        block.inner.logs_bloom = Some(Bloom::zero());
-        block
+    /// Creates a new block with the given number.
+    pub fn new(number: BlockNumber) -> Self {
+        Self {
+            header: BlockHeader::new(number),
+            transactions: vec![],
+        }
+    }
+
+    /// Creates a new block with the given number and transactions capacity.
+    pub fn new_with_capacity(number: BlockNumber, capacity: usize) -> Self {
+        Self {
+            header: BlockHeader::new(number),
+            transactions: Vec::with_capacity(capacity),
+        }
+    }
+
+    /// Serializes itself with full transactions included.
+    pub fn to_json_with_full_transactions(&self) -> JsonValue {
+        let json_struct: EthersBlock<EthersTransaction> = self.into();
+        serde_json::to_value(json_struct).unwrap()
+    }
+
+    /// Serializes itself with only transactions hashes included.
+    pub fn to_json_with_transactions_hashes(&self) -> JsonValue {
+        let json_struct: EthersBlock<H256> = self.into();
+        serde_json::to_value(json_struct).unwrap()
     }
 }
 
@@ -34,20 +52,31 @@ impl serde::Serialize for Block {
     where
         S: serde::Serializer,
     {
-        self.inner.serialize(serializer)
+        Into::<EthersBlock<EthersTransaction>>::into(self).serialize(serializer)
     }
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: Other -> Self
+// Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<EthersBlock<EthersTransaction>> for Block {
-    fn from(value: EthersBlock<EthersTransaction>) -> Self {
+impl From<&Block> for EthersBlock<EthersTransaction> {
+    fn from(block: &Block) -> Self {
+        let ethers_block = EthersBlock::<EthersTransaction>::from(block.header.clone());
+        let ethers_block_transactions: Vec<EthersTransaction> = block.transactions.clone().into_iter().map_into().collect();
         Self {
-            hash: value.hash.unwrap().into(),
-            number: value.number.unwrap().into(),
-            gas_used: value.gas_used.into(),
-            inner: value,
+            transactions: ethers_block_transactions,
+            ..ethers_block
+        }
+    }
+}
+
+impl From<&Block> for EthersBlock<H256> {
+    fn from(block: &Block) -> Self {
+        let ethers_block = EthersBlock::<H256>::from(block.header.clone());
+        let ethers_block_transactions: Vec<H256> = block.transactions.clone().into_iter().map(|x| x.input.hash).map_into().collect();
+        Self {
+            transactions: ethers_block_transactions,
+            ..ethers_block
         }
     }
 }

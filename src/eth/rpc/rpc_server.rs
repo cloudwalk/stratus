@@ -12,8 +12,8 @@ use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
 use serde_json::Value as JsonValue;
 
+use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumberSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -125,7 +125,10 @@ fn eth_block_number(_: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjec
 }
 /// TODO
 fn eth_get_block_by_number(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
-    let (_, number_selection) = parse_param::<BlockNumberSelection>(params.sequence())?;
+    let (params, number_selection) = parse_param::<BlockNumberSelection>(params.sequence())?;
+    let (_, full_transactions) = parse_param::<bool>(params)?;
+
+    // parse transaction
     let number = match number_selection {
         BlockNumberSelection::Latest => ctx.block_number_storage.current_block_number()?,
         BlockNumberSelection::Block(number) => number,
@@ -133,12 +136,16 @@ fn eth_get_block_by_number(params: Params, ctx: &RpcContext) -> Result<JsonValue
 
     // handle genesis block
     let block = if number.is_genesis() {
-        Some(Block::genesis())
+        Some(BlockMiner::genesis())
     } else {
         ctx.eth_storage.read_block(&number)?
     };
 
-    Ok(serde_json::to_value(block).unwrap())
+    match (block, full_transactions) {
+        (Some(block), true) => Ok(block.to_json_with_full_transactions()),
+        (Some(block), false) => Ok(block.to_json_with_transactions_hashes()),
+        (None, _) => Ok(JsonValue::Null),
+    }
 }
 
 // Transaction

@@ -6,6 +6,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::EthError;
+use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionInput {
@@ -13,7 +14,7 @@ pub struct TransactionInput {
     pub from: Address,
     pub to: Option<Address>,
     pub input: Bytes,
-    pub gas_limit: Gas,
+    pub gas: Gas,
     pub(super) inner: EthersTransaction,
 }
 
@@ -57,9 +58,9 @@ impl From<EthersTransaction> for TransactionInput {
         Self {
             hash: value.hash.into(),
             from: value.from.into(),
-            to: value.to.map(|x| x.into()),
+            to: value.to.map_into(),
             input: value.input.clone().into(),
-            gas_limit: value.gas.into(),
+            gas: value.gas.into(),
             inner: value,
         }
     }

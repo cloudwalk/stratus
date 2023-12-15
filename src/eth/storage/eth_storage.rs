@@ -32,8 +32,8 @@ pub trait EthStorage: Send + Sync + 'static {
     /// It should return `None` when not found.
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError>;
 
-    /// Persist atomically all changes from a transaction execution.
+    /// Persist atomically all changes from a block.
     ///
-    /// Before applying changes, it checks the storage current state matches the transaction execution previous state.
-    fn save_mined_transaction(&self, transaction: TransactionMined) -> Result<(), EthError>;
+    /// Before applying changes, it checks the storage current state matches the transaction previous state.
+    fn save_block(&self, block: Block) -> Result<(), EthError>;
 }

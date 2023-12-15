@@ -6,16 +6,16 @@ use revm::primitives::U256 as RevmU256;
 
 use crate::derive_newtype_from;
 
-/// Native token amount (represented in wei).
+/// Native token amount in wei.
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
-pub struct Amount(U256);
+pub struct Wei(U256);
 
-impl Amount {
-    pub const ZERO: Amount = Amount(U256::zero());
-    pub const ONE: Amount = Amount(U256::one());
+impl Wei {
+    pub const ZERO: Wei = Wei(U256::zero());
+    pub const ONE: Wei = Wei(U256::one());
 }
 
-impl Display for Amount {
+impl Display for Wei {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
@@ -24,9 +24,9 @@ impl Display for Amount {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Amount, other = U256, u8, u16, u32, u64, u128, usize);
+derive_newtype_from!(self = Wei, other = U256, u8, u16, u32, u64, u128, usize);
 
-impl From<RevmU256> for Amount {
+impl From<RevmU256> for Wei {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())
     }
@@ -35,14 +35,14 @@ impl From<RevmU256> for Amount {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Amount> for Token {
-    fn from(value: Amount) -> Self {
+impl From<Wei> for Token {
+    fn from(value: Wei) -> Self {
         Token::Uint(value.0)
     }
 }
 
-impl From<Amount> for RevmU256 {
-    fn from(value: Amount) -> Self {
+impl From<Wei> for RevmU256 {
+    fn from(value: Wei) -> Self {
         RevmU256::from_limbs(value.0 .0)
     }
 }

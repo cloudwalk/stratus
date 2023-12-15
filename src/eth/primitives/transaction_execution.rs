@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+use itertools::Itertools;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::State as RevmState;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Amount;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::Wei;
 use crate::eth::EthError;
 
 pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
@@ -43,7 +44,7 @@ pub enum ExecutionResult {
 // -----------------------------------------------------------------------------
 /// Output of a executed transaction in the EVM.
 #[derive(Debug, Clone)]
-pub struct Execution {
+pub struct TransactionExecution {
     pub result: ExecutionResult,
     pub output: Bytes,
     pub logs: Vec<Log>,
@@ -51,7 +52,7 @@ pub struct Execution {
     pub changes: Vec<ExecutionAccountChanges>,
 }
 
-impl Execution {
+impl TransactionExecution {
     /// Apply REVM transaction execution result to the storage original values, creating a new `TransactionExecution` that can be used to update the state.
     pub fn from_revm_result(revm_result: RevmResultAndState, execution_changes: ExecutionChanges) -> Result<Self, EthError> {
         let (result, output, logs, gas) = parse_revm_result(revm_result.result);
@@ -92,7 +93,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
         RevmExecutionResult::Success { output, gas_used, logs, .. } => {
             let result = ExecutionResult::Success;
             let output = Bytes::from(output);
-            let logs = logs.into_iter().map(|x| x.into()).collect();
+            let logs = logs.into_iter().map_into().collect();
             let gas = Gas::from(gas_used);
             (result, output, logs, gas)
         }
@@ -121,7 +122,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         }
 
         // apply changes according to account status
-        tracing::debug!(status = ?revm_account.status, %address,  "applying account changes");
+        tracing::debug!(status = ?revm_account.status, %address, "account changes");
         let (account_created, account_updated) = (revm_account.is_created(), revm_account.is_touched());
 
         // parse revm to internal representation
@@ -160,7 +161,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
 pub struct ExecutionAccountChanges {
     pub address: Address,
     pub nonce: ExecutionValueChange<Nonce>,
-    pub balance: ExecutionValueChange<Amount>,
+    pub balance: ExecutionValueChange<Wei>,
     pub bytecode: ExecutionValueChange<Option<Bytes>>,
     pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
 }

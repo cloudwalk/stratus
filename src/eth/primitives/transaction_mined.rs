@@ -1,7 +1,8 @@
 use ethers_core::types::Transaction as EthersTransaction;
 
-use crate::eth::primitives::Block;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionReceipt;
 
@@ -9,13 +10,19 @@ use crate::eth::primitives::TransactionReceipt;
 #[derive(Debug, Clone, derive_new::new)]
 pub struct TransactionMined {
     /// Transaction input.
-    pub transaction_input: TransactionInput,
+    pub input: TransactionInput,
 
     /// Transaction EVM execution result.
-    pub execution: Execution,
+    pub execution: TransactionExecution,
 
-    /// Block where the transaction was mined.
-    pub block: Block,
+    /// Position of the transaction inside the block.
+    pub index_in_block: usize,
+
+    /// Block number where the transaction was mined.
+    pub block_number: BlockNumber,
+
+    /// Block hash where the transaction was mined.
+    pub block_hash: Hash,
 }
 
 impl TransactionMined {
@@ -48,13 +55,12 @@ impl serde::Serialize for TransactionMined {
 // -----------------------------------------------------------------------------
 impl From<TransactionMined> for EthersTransaction {
     fn from(value: TransactionMined) -> Self {
-        let input = value.transaction_input;
-        let block = value.block;
+        let input = value.input;
 
         // create inner with block information
         EthersTransaction {
-            block_hash: Some(block.hash.into()),
-            block_number: Some(block.number.into()),
+            block_hash: Some(value.block_hash.into()),
+            block_number: Some(value.block_number.into()),
             transaction_index: Some(0.into()),
             ..input.inner
         }

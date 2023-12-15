@@ -18,11 +18,11 @@ use revm::EVM;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
@@ -60,7 +60,7 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn transact(&mut self, input: EvmInput) -> Result<Execution, EthError> {
+    fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
         // configure database
         self.evm.database(RevmDatabaseSession::new(Arc::clone(&self.storage)));
 
@@ -78,7 +78,7 @@ impl Evm for Revm {
         match evm_result {
             Ok(result) => {
                 let session = self.evm.take_db();
-                Ok(Execution::from_revm_result(result, session.storage_changes))?
+                Ok(TransactionExecution::from_revm_result(result, session.storage_changes))?
             }
             Err(e) => {
                 tracing::error!(reason = ?e, "unexpected error in evm execution");
