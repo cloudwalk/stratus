@@ -9,6 +9,9 @@ use ledger::infra;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    // get CLI configs
+    let cfg = Config::parse();
+
     // init infra
     infra::init_tracing();
     infra::init_metrics();
