@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use jsonrpsee::server::RpcModule;
+use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
 use jsonrpsee::types::error::PARSE_ERROR_CODE;
 use jsonrpsee::types::error::PARSE_ERROR_MSG;
@@ -20,7 +21,6 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::RpcContext;
-use crate::eth::rpc::RpcLogger;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthCall;
@@ -31,6 +31,9 @@ use crate::eth::EthTransaction;
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
+
+const MAX_LOG_LENGTH: u32 = 1024;
+
 pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<impl EthStorage>, block_number_storage: Arc<impl BlockNumberStorage>) -> eyre::Result<()> {
     // configure context
     let ctx = RpcContext {
@@ -50,7 +53,8 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<impl EthStorage>,
     module = register_routes(module)?;
 
     // serve module
-    let server = Server::builder().set_logger(RpcLogger).build("0.0.0.0:3000").await?;
+    let rpc_middleware = RpcServiceBuilder::new().rpc_logger(MAX_LOG_LENGTH);
+    let server = Server::builder().set_rpc_middleware(rpc_middleware).build("0.0.0.0:3000").await?;
     let handle = server.start(module);
     handle.stopped().await;
 

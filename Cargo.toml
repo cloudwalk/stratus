@@ -13,8 +13,8 @@ ethereum-types = "0.14.1"
 ethers-core = "2.0.11"
 eyre = "0.6.9"
 hex-literal = "0.4.1"
+jsonrpsee = { version = "0.21.0", features = ["server"] }
 itertools = "0.12.0"
-jsonrpsee = { version = "0.20.3", features = ["server"] }
 keccak-hasher = "0.15.0" # this version must be compatible with triehash
 revm = "3.5.0"
 rlp = "0.5.2"
