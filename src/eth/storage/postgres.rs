@@ -12,7 +12,6 @@ type Index = U256;
 #[derive(FromRow)]
 struct Accounts {
     id: Index,
-    address: Address,
     account: Account,
 }
 
