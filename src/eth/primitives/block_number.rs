@@ -11,6 +11,8 @@ use crate::eth::EthError;
 pub struct BlockNumber(U64);
 
 impl BlockNumber {
+    pub const ZERO: BlockNumber = BlockNumber(U64::zero());
+
     /// Checks if the block number is the genesis block.
     pub fn is_genesis(&self) -> bool {
         self.0.as_usize() == 0

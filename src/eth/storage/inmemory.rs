@@ -102,52 +102,52 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn save_mined_transaction(&self, mined: TransactionMined) -> Result<(), EthError> {
+    fn save_block(&self, block: Block) -> Result<(), EthError> {
+        let mut blocks_lock = self.blocks.write().unwrap();
+        let mut transactions_lock = self.transactions.write().unwrap();
         let mut account_lock = self.accounts.write().unwrap();
         let mut account_slots_lock = self.account_slots.write().unwrap();
-        let mut transactions_lock = self.transactions.write().unwrap();
-        let mut blocks_lock = self.blocks.write().unwrap();
 
-        // save transaction
-        tracing::debug!(hash = %mined.transaction_input.hash, "saving transaction");
-        blocks_lock.insert(mined.block.number.clone(), mined.block.clone());
-        transactions_lock.insert(mined.transaction_input.hash.clone(), mined.clone());
+        // save block
+        tracing::debug!(number = %block.header.number, "saving block");
+        blocks_lock.insert(block.header.number.clone(), block.clone());
 
-        // save execution changes
-        let completed = mined.is_success();
-        let execution_changes = mined.execution.changes;
-        for mut changes in execution_changes {
-            let address = changes.address;
-            tracing::debug!(%address, "saving account changes");
-            let account = account_lock.entry(address.clone()).or_default();
-            let account_slots = account_slots_lock.entry(address).or_default();
+        // save transactions
+        for transaction in block.transactions {
+            tracing::debug!(hash = %transaction.input.hash, "saving transaction");
+            transactions_lock.insert(transaction.input.hash.clone(), transaction.clone());
 
-            // nonce
-            if let Some(nonce) = changes.nonce.take_if_modified() {
-                tracing::trace!(%nonce, "saving nonce");
-                account.nonce = nonce;
-            }
+            // save execution changes
+            let is_success = transaction.is_success();
+            for mut changes in transaction.execution.changes {
+                let account = account_lock.entry(changes.address.clone()).or_default();
+                let account_slots = account_slots_lock.entry(changes.address).or_default();
 
-            // balance
-            if let Some(balance) = changes.balance.take_if_modified() {
-                tracing::trace!(%balance, "saving balance");
-                account.balance = balance;
-            }
-
-            // bytecode
-            if completed {
-                if let Some(Some(bytecode)) = changes.bytecode.take_if_modified() {
-                    tracing::trace!(bytecode_len = %bytecode.len(), "saving bytecode");
-                    account.bytecode = Some(bytecode);
+                // nonce
+                if let Some(nonce) = changes.nonce.take_if_modified() {
+                    account.nonce = nonce;
                 }
-            }
 
-            // storage
-            if completed {
-                for (slot_index, mut slot) in changes.slots {
-                    if let Some(slot) = slot.take_if_modified() {
-                        tracing::trace!(%slot, "saving slot");
-                        account_slots.insert(slot_index, slot);
+                // balance
+                if let Some(balance) = changes.balance.take_if_modified() {
+                    account.balance = balance;
+                }
+
+                // bytecode
+                if is_success {
+                    if let Some(Some(bytecode)) = changes.bytecode.take_if_modified() {
+                        tracing::trace!(bytecode_len = %bytecode.len(), "saving bytecode");
+                        account.bytecode = Some(bytecode);
+                    }
+                }
+
+                // storage
+                if is_success {
+                    for (slot_index, mut slot) in changes.slots {
+                        if let Some(slot) = slot.take_if_modified() {
+                            tracing::trace!(%slot, "saving slot");
+                            account_slots.insert(slot_index, slot);
+                        }
                     }
                 }
             }

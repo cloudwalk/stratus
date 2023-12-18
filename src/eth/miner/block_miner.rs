@@ -1,16 +1,12 @@
 use std::sync::Arc;
 
-use chrono::Utc;
-use ethereum_types::Bloom;
-use ethereum_types::H256;
-use ethereum_types::H64;
-use ethereum_types::U256;
-use ethers_core::types::Block as EthersBlock;
-use ethers_core::types::Bytes as EthersBytes;
+use chrono::DateTime;
+use keccak_hasher::KeccakHasher;
 
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::BlockNumberStorage;
@@ -25,59 +21,44 @@ impl BlockMiner {
         Self { storage }
     }
 
-    pub fn mine(&mut self, transaction: TransactionInput, execution: Execution) -> Result<TransactionMined, EthError> {
+    /// Returns the genesis block.
+    pub fn genesis() -> Block {
+        let mut block = Block::new(BlockNumber::ZERO);
+        block.header.created_at = DateTime::from_timestamp(1702568764, 0).unwrap();
+        block
+    }
+
+    /// Mine one block with a single transaction.
+    pub fn mine_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> Result<Block, EthError> {
+        self.mine_many_transactions(vec![(input, execution)])
+    }
+
+    /// Mine one block from one or more transactions.
+    pub fn mine_many_transactions(&mut self, transactions: Vec<(TransactionInput, TransactionExecution)>) -> Result<Block, EthError> {
+        // prepare base block
         let number = self.storage.increment_block_number()?;
+        let mut block = Block::new_with_capacity(number, transactions.len());
+        let header = &mut block.header;
 
-        // mine logs
-        let bloom = Bloom::default();
-        // if execution.is_success() {
-        //     for log in &execution.logs {}
-        // }
+        // add transactions to block
+        for (index, (input, execution)) in transactions.into_iter().enumerate() {
+            let trx = TransactionMined::new(input, execution, index, header.number.clone(), header.hash.clone());
+            block.transactions.push(trx);
+        }
 
-        let block = EthersBlock {
-            // block: identifiers
-            hash: Some(H256::random()), // TODO: how hash is created?
-            number: Some(number.into()),
+        // calculate transactions hash
+        if !block.transactions.is_empty() {
+            let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
+            header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
+        }
 
-            // block: relation with other blocks
-            uncles_hash: Hash::EMPTY_UNCLE.into(),
-            uncles: Vec::new(),
-            parent_beacon_block_root: None,
+        // calculate final block hash
 
-            // mining: identifiers
-            timestamp: Utc::now().timestamp().into(),
-            author: Some(Address::COINBASE.into()),
+        // replicate hash from block header to transactions
+        for transaction in block.transactions.iter_mut() {
+            transaction.block_hash = block.header.hash.clone();
+        }
 
-            // minining: difficulty
-            difficulty: U256::zero(),
-            total_difficulty: Some(U256::zero()),
-            nonce: Some(H64::zero()),
-
-            // mining: gas
-            gas_limit: transaction.gas_limit.clone().into(),
-            gas_used: execution.gas.clone().into(),
-            base_fee_per_gas: Some(U256::zero()),
-            blob_gas_used: None,
-            excess_blob_gas: None,
-
-            // data
-            logs_bloom: Some(bloom),
-            extra_data: EthersBytes::default(),
-
-            ..Default::default() // seal_fields: todo!(),
-                                 // transactions: todo!(),
-                                 // size: todo!(),
-                                 // mix_hash: todo!(),
-                                 // withdrawals_root: todo!(),
-                                 // withdrawals: todo!(),
-                                 // other: todo!(),
-                                 // parent_hash: todo!(),
-                                 // state_root: todo!(),
-                                 // transactions_root: todo!(),
-                                 // receipts_root: todo!(),
-        };
-
-        let mined = TransactionMined::new(transaction, execution, block.into());
-        Ok(mined)
+        Ok(block)
     }
 }

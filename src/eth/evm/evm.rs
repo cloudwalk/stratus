@@ -1,6 +1,6 @@
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::EthCall;
 use crate::eth::EthDeployment;
 use crate::eth::EthError;
@@ -9,7 +9,7 @@ use crate::eth::EthTransaction;
 /// EVM operations.
 pub trait Evm: Send + Sync + 'static {
     /// Execute a transaction that deploys a contract or call a function of a deployed contract.
-    fn transact(&mut self, input: EvmInput) -> Result<Execution, EthError>;
+    fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError>;
 }
 
 pub struct EvmInput {
