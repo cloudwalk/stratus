@@ -1,49 +1,44 @@
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::EthCall;
-use crate::eth::EthDeployment;
 use crate::eth::EthError;
-use crate::eth::EthTransaction;
 
 /// EVM operations.
 pub trait Evm: Send + Sync + 'static {
-    /// Execute a transaction that deploys a contract or call a function of a deployed contract.
-    fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError>;
+    /// Execute a transaction that deploys a contract or call a contract function.
+    fn execute(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError>;
 }
 
+/// EVM input data. Usually derived from a transaction or call.
 pub struct EvmInput {
-    pub caller: Address,
-    pub contract: Option<Address>,
+    /// Operation party address.
+    ///
+    /// It can be:
+    /// * Transaction signer when executing an `eth_sendRawTransaction`.
+    /// * Address present in the `from` field when performing an `eth_call`.
+    pub from: Address,
+
+    /// Operation counterparty address.
+    ///
+    /// It can be:
+    /// * Contract address when performing a function call.
+    /// * Destination account address when transfering funds.
+    /// * Not specified when deploying a contract.
+    pub to: Option<Address>,
+
+    /// Operation data.
+    ///
+    /// It can be:
+    /// * Function ID and parameters when performing a contract function call.
+    /// * Not specified when transfering funds.
+    /// * Contract bytecode when deploying a contract.
     pub data: Bytes,
-}
 
-impl From<EthDeployment> for EvmInput {
-    fn from(value: EthDeployment) -> Self {
-        Self {
-            caller: value.caller,
-            contract: None,
-            data: value.data,
-        }
-    }
-}
-
-impl From<EthTransaction> for EvmInput {
-    fn from(value: EthTransaction) -> Self {
-        Self {
-            caller: value.caller,
-            contract: Some(value.contract),
-            data: value.data,
-        }
-    }
-}
-
-impl From<EthCall> for EvmInput {
-    fn from(value: EthCall) -> Self {
-        Self {
-            caller: Address::ZERO,
-            contract: Some(value.contract),
-            data: value.data,
-        }
-    }
+    /// Operation party nonce.
+    ///
+    /// It can be:
+    /// * Required when executing an `eth_sendRawTransaction`.
+    /// * Not specified when performing an `eth_call`.
+    pub nonce: Option<Nonce>,
 }

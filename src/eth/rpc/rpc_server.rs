@@ -23,10 +23,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::RpcContext;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthCall;
-use crate::eth::EthDeployment;
 use crate::eth::EthExecutor;
-use crate::eth::EthTransaction;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -187,10 +184,7 @@ fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned
     let (_, call) = parse_param::<CallInput>(params.sequence())?;
 
     // execute
-    let result = ctx.executor.call(EthCall {
-        contract: call.to,
-        data: call.data,
-    });
+    let result = ctx.executor.call(call);
     match result {
         Ok(output) => Ok(hex_data(output)),
         Err(e) => {
@@ -204,29 +198,10 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
     // decode
     let (_, data) = parse_param::<Bytes>(params.sequence())?;
     let transaction = parse_rlp::<TransactionInput>(&data)?;
-    let caller = transaction.signer()?;
 
     // execute
     let hash = transaction.hash.clone();
-    let result = match transaction.to.clone() {
-        // function call
-        Some(contract) => ctx.executor.transact(EthTransaction {
-            caller,
-            contract,
-            data: transaction.input.clone(),
-            transaction,
-        }),
-
-        // deployment
-        None => ctx
-            .executor
-            .deploy(EthDeployment {
-                caller,
-                data: transaction.input.clone(),
-                transaction,
-            })
-            .map(|_| ()),
-    };
+    let result = ctx.executor.transact(transaction);
 
     match result {
         Ok(_) => Ok(hex_data(hash)),

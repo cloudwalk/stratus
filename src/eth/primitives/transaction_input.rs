@@ -1,6 +1,8 @@
 use ethers_core::types::Transaction as EthersTransaction;
 use rlp::Decodable;
 
+use super::Nonce;
+use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Gas;
@@ -11,15 +13,19 @@ use crate::ext::OptionExt;
 #[derive(Debug, Clone, Default)]
 pub struct TransactionInput {
     pub hash: Hash,
+    pub nonce: Nonce,
     pub from: Address,
     pub to: Option<Address>,
     pub input: Bytes,
     pub gas: Gas,
+
+    // TODO: Remove it from here. Use the same approach used in Block where operation are internally are delegated to the Ethers library
+    // without having to keep the representation as part of the struct.
     pub(super) inner: EthersTransaction,
 }
 
 impl TransactionInput {
-    /// Transaction signer. Can be different from `from`, specially if `from` was not specified.
+    /// Transaction signer (derived from the tranasaction signature).
     pub fn signer(&self) -> Result<Address, EthError> {
         match self.inner.recover_from() {
             Ok(signer) => Ok(signer.into()),
@@ -51,12 +57,29 @@ impl Decodable for TransactionInput {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
+impl TryFrom<TransactionInput> for EvmInput {
+    type Error = EthError;
+
+    fn try_from(value: TransactionInput) -> Result<Self, Self::Error> {
+        Ok(Self {
+            from: value.signer()?,
+            to: value.to,
+            data: value.input,
+            nonce: Some(value.nonce),
+        })
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 impl From<EthersTransaction> for TransactionInput {
     fn from(value: EthersTransaction) -> Self {
         Self {
             hash: value.hash.into(),
+            nonce: value.nonce.into(),
             from: value.from.into(),
             to: value.to.map_into(),
             input: value.input.clone().into(),
