@@ -22,4 +22,7 @@ pub struct Config {
     /// Which storage to use
     #[arg(short, long, default_value_t = Storage::InMemory)]
     pub storage: Storage,
+
+    #[arg(short, long)]
+    pub database_url: String,
 }

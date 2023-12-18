@@ -14,7 +14,7 @@ impl Postgres {
             .min_connections(1)
             .max_connections(100)
             .acquire_timeout(Duration::from_secs(2))
-            .connect("http://localhost:5432")
+            .connect("postgres://localhost:5432")
             .await?;
 
         Ok(Self { sqlx_pool })

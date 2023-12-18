@@ -1,9 +1,12 @@
 //! In-memory storage implementations.
 
-use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use std::sync::RwLock;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        RwLock,
+    },
+};
 
 use indexmap::IndexMap;
 
