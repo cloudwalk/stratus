@@ -13,7 +13,11 @@ pub struct Bytes(Vec<u8>);
 
 impl Display for Bytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", const_hex::encode_prefixed(&self.0))
+        if self.len() <= 256 {
+            write!(f, "{}", const_hex::encode_prefixed(&self.0))
+        } else {
+            write!(f, "too long")
+        }
     }
 }
 

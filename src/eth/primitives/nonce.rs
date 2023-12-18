@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
-use ethereum_types::U64;
+use ethereum_types::U256;
 
 use crate::derive_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Nonce(U64);
+pub struct Nonce(U256);
 
 impl Display for Nonce {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -16,7 +16,7 @@ impl Display for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, usize);
+derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize);
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
