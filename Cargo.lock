@@ -1285,6 +1285,7 @@ dependencies = [
  "keccak-hasher",
  "metrics",
  "metrics-exporter-prometheus",
+ "nom",
  "paste",
  "pin-project",
  "quote",
