@@ -10,7 +10,7 @@ pub enum Storage {
 impl fmt::Display for Storage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Storage::InMemory => write!(f, "in_memory"),
+            Storage::InMemory => write!(f, "in-memory"),
             Storage::Postgres => write!(f, "postgres"),
         }
     }
@@ -23,6 +23,6 @@ pub struct Config {
     #[arg(short, long, default_value_t = Storage::InMemory)]
     pub storage: Storage,
 
-    #[arg(short, long)]
+    #[arg(short, long, default_value = "postgres://localhost:5432")]
     pub database_url: String,
 }

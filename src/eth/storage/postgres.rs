@@ -1,11 +1,15 @@
 use revm::primitives::U256;
 use sqlx::{FromRow, PgPool};
 
-use crate::eth::{
-    primitives::{Account, Address, Block, BlockNumber, Hash, Slot, SlotIndex, TransactionMined},
-    storage::traits::{BlockNumberStorage, EthStorage},
-    EthError,
+use crate::{
+    eth::{
+        primitives::{Account, Address, Block, BlockNumber, Hash, Slot, SlotIndex, TransactionMined},
+        storage::traits::{BlockNumberStorage, EthStorage},
+        EthError,
+    },
+    infra::postgres::Postgres,
 };
+use tokio::runtime::Runtime;
 
 type Index = U256;
 
@@ -32,20 +36,41 @@ struct Schema {
 
 pub struct PostgresStorage {
     pg_pool: PgPool,
-    schema: Schema,
+    // schema: Schema,
+}
+
+impl PostgresStorage {
+    async fn new() -> Self {
+        let pg_pool = Postgres::new().await.unwrap().sqlx_pool;
+        Self { pg_pool }
+    }
 }
 
 impl EthStorage for PostgresStorage {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
-        let account_row = sqlx::query!(
-            r#"
-                SELECT id, address
-                FROM accounts
-                ORDER BY id
-            "#
-        );
-        todo!()
+        let rt = Runtime::new().unwrap();
+        let row = rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"
+                        SELECT address, nonce, balance, bytecode
+                        FROM accounts
+                    "#
+                )
+                .fetch_one(&self.pg_pool)
+                .await
+            })
+            .unwrap();
+
+        let account = Account {
+            address: row.address.into(),
+            nonce: row.nonce.into(),
+            balance: row.balance.into(),
+            bytecode: row.bytecode,
+        };
+
+        Ok(account)
     }
     fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
