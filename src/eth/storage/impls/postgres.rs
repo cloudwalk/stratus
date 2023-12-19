@@ -12,8 +12,8 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::traits::BlockNumberStorage;
-use crate::eth::storage::traits::EthStorage;
+use crate::eth::storage::BlockNumberStorage;
+use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::infra::postgres::Postgres;
 
