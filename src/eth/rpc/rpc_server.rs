@@ -21,6 +21,7 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::RpcContext;
+use crate::eth::rpc::RpcMiddleware;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
@@ -28,8 +29,6 @@ use crate::eth::EthExecutor;
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
-
-const MAX_LOG_LENGTH: u32 = 1024;
 
 pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<impl EthStorage>, block_number_storage: Arc<impl BlockNumberStorage>) -> eyre::Result<()> {
     // configure context
@@ -49,8 +48,10 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<impl EthStorage>,
     let mut module = RpcModule::<RpcContext>::new(ctx);
     module = register_routes(module)?;
 
+    // configure middleware
+    let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+
     // serve module
-    let rpc_middleware = RpcServiceBuilder::new().rpc_logger(MAX_LOG_LENGTH);
     let server = Server::builder().set_rpc_middleware(rpc_middleware).build("0.0.0.0:3000").await?;
     let handle = server.start(module);
     handle.stopped().await;
