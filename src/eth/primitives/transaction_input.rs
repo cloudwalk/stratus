@@ -1,13 +1,14 @@
 use ethers_core::types::Transaction as EthersTransaction;
 use rlp::Decodable;
 
-use super::Nonce;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Nonce;
 use crate::eth::EthError;
+use crate::ext::not;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default)]
@@ -34,6 +35,11 @@ impl TransactionInput {
                 Err(EthError::UnrecoverableSigner)
             }
         }
+    }
+
+    /// Checks if the current transaction is for a contract deployment.
+    pub fn is_contract_deployment(&self) -> bool {
+        self.to.is_none() && not(self.input.is_empty())
     }
 }
 
