@@ -1,5 +1,7 @@
-use clap::{Parser, ValueEnum};
 use std::fmt;
+
+use clap::Parser;
+use clap::ValueEnum;
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Storage {

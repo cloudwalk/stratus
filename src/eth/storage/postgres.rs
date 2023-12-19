@@ -1,15 +1,21 @@
 use revm::primitives::U256;
-use sqlx::{FromRow, PgPool};
-
-use crate::{
-    eth::{
-        primitives::{Account, Address, Block, BlockNumber, Hash, Slot, SlotIndex, TransactionMined},
-        storage::traits::{BlockNumberStorage, EthStorage},
-        EthError,
-    },
-    infra::postgres::Postgres,
-};
+use sqlx::FromRow;
+use sqlx::PgPool;
 use tokio::runtime::Runtime;
+
+use crate::config::Config;
+use crate::eth::primitives::Account;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
+use crate::eth::primitives::Slot;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::traits::BlockNumberStorage;
+use crate::eth::storage::traits::EthStorage;
+use crate::eth::EthError;
+use crate::infra::postgres::Postgres;
 
 type Index = U256;
 
@@ -40,8 +46,8 @@ pub struct PostgresStorage {
 }
 
 impl PostgresStorage {
-    async fn new() -> Self {
-        let pg_pool = Postgres::new().await.unwrap().sqlx_pool;
+    async fn new(cfg: &Config) -> Self {
+        let pg_pool = Postgres::new(&cfg.database_url).await.unwrap().sqlx_pool;
         Self { pg_pool }
     }
 }
@@ -63,12 +69,13 @@ impl EthStorage for PostgresStorage {
             })
             .unwrap();
 
-        let account = Account {
-            address: row.address.into(),
-            nonce: row.nonce.into(),
-            balance: row.balance.into(),
-            bytecode: row.bytecode,
-        };
+        // let account = Account {
+        //     address: row.address.into(),
+        //     nonce: row.nonce.into(),
+        //     balance: row.balance.into(),
+        //     bytecode: row.bytecode,
+        // };
+        let account = Account::default();
 
         Ok(account)
     }
