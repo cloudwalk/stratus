@@ -25,6 +25,8 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
+use crate::ext::not;
+use crate::ext::OptionExt;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
@@ -43,34 +45,25 @@ impl Revm {
         evm.env.block.coinbase = Address::COINBASE.into();
 
         // evm tx config
-        let mut revm = Self { evm, storage };
-        revm.reset_evm_tx();
+        evm.env.tx.gas_price = U256::ZERO;
+        evm.env.tx.gas_limit = 100_000_000;
 
-        revm
-    }
-
-    /// Reset EVM transaction parameters in case they were changed.
-    fn reset_evm_tx(&mut self) {
-        self.evm.env.tx.caller = RevmAddress::ZERO;
-        self.evm.env.tx.value = U256::ZERO;
-        self.evm.env.tx.gas_price = U256::ZERO;
-        self.evm.env.tx.gas_limit = 100_000_000;
-        self.evm.env.tx.nonce = None;
+        Self { evm, storage }
     }
 }
 
 impl Evm for Revm {
-    fn transact(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
+    fn execute(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
         // configure database
-        self.evm.database(RevmDatabaseSession::new(Arc::clone(&self.storage)));
+        self.evm.database(RevmDatabaseSession::new(Arc::clone(&self.storage), input.to.clone()));
 
         // configure evm params
-        self.reset_evm_tx();
-        self.evm.env.tx.caller = input.caller.into();
-        self.evm.env.tx.transact_to = match input.contract {
+        self.evm.env.tx.caller = input.from.into();
+        self.evm.env.tx.transact_to = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create(CreateScheme::Create),
         };
+        self.evm.env.tx.nonce = input.nonce.map_into();
         self.evm.env.tx.data = input.data.into();
 
         // execute evm
@@ -94,15 +87,17 @@ impl Evm for Revm {
 
 /// Retrieve and keep track of all original values that are requested by the EVM.
 struct RevmDatabaseSession {
+    to: Option<Address>,
     storage: Arc<dyn EthStorage>,
     storage_changes: ExecutionChanges,
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>, to: Option<Address>) -> Self {
         Self {
             storage,
             storage_changes: ExecutionChanges::new(),
+            to,
         }
     }
 }
@@ -110,10 +105,18 @@ impl RevmDatabaseSession {
 impl Database for RevmDatabaseSession {
     type Error = EthError;
 
-    fn basic(&mut self, address: RevmAddress) -> Result<Option<AccountInfo>, Self::Error> {
+    fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, Self::Error> {
         // retrieve account and convert to REVM format
-        let account = self.storage.read_account(&address.into())?;
+        let address: Address = revm_address.into();
+        let account = self.storage.read_account(&address)?;
         let revm_account: AccountInfo = account.clone().into();
+
+        // warn if the loaded account is the `to` account and it does not have a bytecode
+        if let Some(ref to_address) = self.to {
+            if &address == to_address && not(account.is_contract()) {
+                tracing::warn!(%address, "evm to account does not have bytecode");
+            }
+        }
 
         // track original value
         self.storage_changes

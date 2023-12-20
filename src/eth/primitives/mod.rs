@@ -2,6 +2,7 @@
 
 mod account;
 mod address;
+mod alias;
 mod block;
 mod block_header;
 mod block_number;
@@ -21,6 +22,9 @@ mod wei;
 
 pub use account::Account;
 pub use address::Address;
+pub use alias::Signature32Bytes;
+pub use alias::Signature4Bytes;
+pub use alias::SoliditySignature;
 pub use block::Block;
 pub use block_header::BlockHeader;
 pub use block_number::BlockNumber;

@@ -3,13 +3,10 @@
 use std::sync::Arc;
 
 use jsonrpsee::server::RpcModule;
+use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
-use jsonrpsee::types::error::PARSE_ERROR_CODE;
-use jsonrpsee::types::error::PARSE_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params;
-use jsonrpsee::types::ParamsSequence;
-use rlp::Decodable;
 use serde_json::Value as JsonValue;
 
 use crate::eth::miner::BlockMiner;
@@ -19,18 +16,18 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::rpc::parse_rpc_param;
+use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::RpcContext;
-use crate::eth::rpc::RpcLogger;
+use crate::eth::rpc::RpcMiddleware;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthCall;
-use crate::eth::EthDeployment;
 use crate::eth::EthExecutor;
-use crate::eth::EthTransaction;
 
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
+
 pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<impl EthStorage>, block_number_storage: Arc<impl BlockNumberStorage>) -> eyre::Result<()> {
     // configure context
     let ctx = RpcContext {
@@ -49,8 +46,11 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<impl EthStorage>,
     let mut module = RpcModule::<RpcContext>::new(ctx);
     module = register_routes(module)?;
 
+    // configure middleware
+    let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+
     // serve module
-    let server = Server::builder().set_logger(RpcLogger).build("0.0.0.0:3000").await?;
+    let server = Server::builder().set_rpc_middleware(rpc_middleware).build("0.0.0.0:3000").await?;
     let handle = server.start(module);
     handle.stopped().await;
 
@@ -125,8 +125,8 @@ fn eth_block_number(_: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjec
 }
 /// TODO
 fn eth_get_block_by_number(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
-    let (params, number_selection) = parse_param::<BlockNumberSelection>(params.sequence())?;
-    let (_, full_transactions) = parse_param::<bool>(params)?;
+    let (params, number_selection) = parse_rpc_param::<BlockNumberSelection>(params.sequence())?;
+    let (_, full_transactions) = parse_rpc_param::<bool>(params)?;
 
     // parse transaction
     let number = match number_selection {
@@ -152,7 +152,7 @@ fn eth_get_block_by_number(params: Params, ctx: &RpcContext) -> Result<JsonValue
 
 /// OK
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    let (_, address) = parse_param::<Address>(params.sequence())?;
+    let (_, address) = parse_rpc_param::<Address>(params.sequence())?;
     let account = ctx.eth_storage.read_account(&address)?;
 
     Ok(hex_num(account.nonce))
@@ -160,7 +160,7 @@ fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String,
 
 /// TODO
 fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
-    let (_, hash) = parse_param::<Hash>(params.sequence())?;
+    let (_, hash) = parse_rpc_param::<Hash>(params.sequence())?;
     let mined = ctx.eth_storage.read_mined_transaction(&hash)?;
 
     match mined {
@@ -171,7 +171,7 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonV
 
 /// TODO
 fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
-    let (_, hash) = parse_param::<Hash>(params.sequence())?;
+    let (_, hash) = parse_rpc_param::<Hash>(params.sequence())?;
     match ctx.eth_storage.read_mined_transaction(&hash)? {
         Some(mined_transaction) => Ok(serde_json::to_value(&mined_transaction.to_receipt()).unwrap()),
         None => Ok(JsonValue::Null),
@@ -180,13 +180,10 @@ fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonV
 
 fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     // decode
-    let (_, call) = parse_param::<CallInput>(params.sequence())?;
+    let (_, call) = parse_rpc_param::<CallInput>(params.sequence())?;
 
     // execute
-    let result = ctx.executor.call(EthCall {
-        contract: call.to,
-        data: call.data,
-    });
+    let result = ctx.executor.call(call);
     match result {
         Ok(output) => Ok(hex_data(output)),
         Err(e) => {
@@ -198,31 +195,12 @@ fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned
 
 fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     // decode
-    let (_, data) = parse_param::<Bytes>(params.sequence())?;
-    let transaction = parse_rlp::<TransactionInput>(&data)?;
-    let caller = transaction.signer()?;
+    let (_, data) = parse_rpc_param::<Bytes>(params.sequence())?;
+    let transaction = parse_rpc_rlp::<TransactionInput>(&data)?;
 
     // execute
     let hash = transaction.hash.clone();
-    let result = match transaction.to.clone() {
-        // function call
-        Some(contract) => ctx.executor.transact(EthTransaction {
-            caller,
-            contract,
-            data: transaction.input.clone(),
-            transaction,
-        }),
-
-        // deployment
-        None => ctx
-            .executor
-            .deploy(EthDeployment {
-                caller,
-                data: transaction.input.clone(),
-                transaction,
-            })
-            .map(|_| ()),
-    };
+    let result = ctx.executor.transact(transaction);
 
     match result {
         Ok(_) => Ok(hex_data(hash)),
@@ -237,33 +215,10 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 
 /// OK
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    let (_, address) = parse_param::<Address>(params.sequence())?;
+    let (_, address) = parse_rpc_param::<Address>(params.sequence())?;
     let account = ctx.eth_storage.read_account(&address)?;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
-}
-
-// -----------------------------------------------------------------------------
-// Parsers
-// -----------------------------------------------------------------------------
-fn parse_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
-    match params.next::<T>() {
-        Ok(address) => Ok((params, address)),
-        Err(e) => {
-            tracing::warn!(reason = ?e, kind = std::any::type_name::<T>(), "failed to parse input param");
-            Err(e)
-        }
-    }
-}
-
-fn parse_rlp<T: Decodable>(value: &[u8]) -> Result<T, ErrorObjectOwned> {
-    match rlp::decode::<T>(value) {
-        Ok(trx) => Ok(trx),
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to decode rlp data");
-            Err(error_parsing(value))
-        }
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -281,8 +236,4 @@ fn hex_num(value: impl Into<usize>) -> String {
 
 fn hex_zero() -> String {
     "0x0".to_owned()
-}
-
-fn error_parsing<S: serde::Serialize>(data: S) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(PARSE_ERROR_CODE, PARSE_ERROR_MSG, Some(data))
 }

@@ -58,11 +58,7 @@ impl TransactionExecution {
         let (result, output, logs, gas) = parse_revm_result(revm_result.result);
         let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
 
-        if output.len() > 256 {
-            tracing::info!(%result, %gas, output_len = %output.len(), output = %("too long"), "executed");
-        } else {
-            tracing::info!(%result, %gas, output_len = %output.len(), %output, "executed");
-        }
+        tracing::info!(%result, %gas, output_len = %output.len(), %output, "evm executed");
         Ok(Self {
             result,
             output,
@@ -122,7 +118,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         }
 
         // apply changes according to account status
-        tracing::debug!(status = ?revm_account.status, %address, "account changes");
+        tracing::debug!(%address, status = ?revm_account.status, slots = %revm_account.storage.len(), "evm account");
         let (account_created, account_updated) = (revm_account.is_created(), revm_account.is_touched());
 
         // parse revm to internal representation

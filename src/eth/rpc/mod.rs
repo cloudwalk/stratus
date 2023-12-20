@@ -1,9 +1,12 @@
 //! Ethereum RPC server.
 
 mod rpc_context;
-mod rpc_logger;
+mod rpc_middleware;
+mod rpc_parser;
 mod rpc_server;
 
-pub use rpc_context::RpcContext;
-pub use rpc_logger::RpcLogger;
+use rpc_context::RpcContext;
+use rpc_middleware::RpcMiddleware;
+use rpc_parser::parse_rpc_param;
+use rpc_parser::parse_rpc_rlp;
 pub use rpc_server::serve_rpc;

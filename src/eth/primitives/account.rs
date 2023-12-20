@@ -24,6 +24,16 @@ pub struct Account {
     pub bytecode: Option<Bytes>,
 }
 
+impl Account {
+    /// Checks the current account is a contract.
+    pub fn is_contract(&self) -> bool {
+        match self.bytecode {
+            Some(ref bytecode) => !bytecode.is_empty(),
+            None => false,
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------

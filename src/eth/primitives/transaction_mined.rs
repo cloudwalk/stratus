@@ -1,5 +1,6 @@
 use ethers_core::types::Transaction as EthersTransaction;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionExecution;
@@ -7,9 +8,12 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionReceipt;
 
 /// Complete transaction after being executed by EVM and added to a block.
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone)]
 pub struct TransactionMined {
-    /// Transaction input.
+    /// Address who signed the transaction.
+    pub signer: Address,
+
+    /// Transaction input received through RPC.
     pub input: TransactionInput,
 
     /// Transaction EVM execution result.
@@ -59,6 +63,7 @@ impl From<TransactionMined> for EthersTransaction {
 
         // create inner with block information
         EthersTransaction {
+            from: value.signer.into(),
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.into()),
             transaction_index: Some(0.into()),

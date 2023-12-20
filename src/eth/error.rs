@@ -4,7 +4,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 
 use crate::eth::primitives::Address;
 
-/// Errors that can occur when EVM is executing.
+/// Errors that can occur when anything related to Ethereum is executing.
 #[derive(Debug, thiserror::Error)]
 pub enum EthError {
     // -------------------------------------------------------------------------

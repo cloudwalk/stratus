@@ -10,6 +10,7 @@ use ledger::infra;
 async fn main() -> eyre::Result<()> {
     // init infra
     infra::init_tracing();
+    infra::init_metrics();
 
     // init services
     let storage = Arc::new(InMemoryStorage::default());

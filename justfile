@@ -2,6 +2,10 @@
 run:
     cargo run
 
+# Runs the service locally with release options
+run-release:
+    cargo run --release
+
 # Compile project with debug options
 build:
     cargo build

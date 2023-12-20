@@ -3,8 +3,8 @@ use std::sync::Mutex;
 
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CallInput;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
@@ -26,39 +26,23 @@ impl EthExecutor {
         }
     }
 
-    /// Executes a contract deployment and return the address of the deployed contract.
-    pub fn deploy(&self, input: EthDeployment) -> Result<Address, EthError> {
-        tracing::info!(hash = %input.transaction.hash, caller = %input.caller, bytecode_len = input.data.len(), "deploying contract");
-
-        // validate
-        if input.caller.is_zero() {
-            tracing::warn!("rejecting deployment from zero address");
-            return Err(EthError::ZeroSigner);
-        }
-
-        // acquire locks
-        let mut evm_lock = self.evm.lock().unwrap();
-        let mut miner_lock = self.miner.lock().unwrap();
-
-        // execute, mine and save
-        let execution = evm_lock.transact(input.clone().into())?;
-        let deployment_address = execution.contract_address();
-        let block = miner_lock.mine_one_transaction(input.transaction, execution)?;
-        self.eth_storage.save_block(block)?;
-
-        // return deployed contract address
-        match deployment_address {
-            Some(address) => Ok(address),
-            None => Err(EthError::DeploymentWithoutAddress),
-        }
-    }
-
     /// Execute a transaction, mutate the state and return function output.
-    pub fn transact(&self, input: EthTransaction) -> Result<(), EthError> {
-        tracing::info!(hash = %input.transaction.hash, caller = %input.caller, contract = %input.contract, data_len = %input.data.len(), data = %input.data, "executing transaction");
+    pub fn transact(&self, transaction: TransactionInput) -> Result<(), EthError> {
+        let signer = transaction.signer()?;
+
+        tracing::info!(
+            hash = %transaction.hash,
+            nonce = %transaction.nonce,
+            from = %transaction.from,
+            signer = %signer,
+            to = ?transaction.to,
+            data_len = %transaction.input.len(),
+            data = %transaction.input,
+            "evm executing transaction"
+        );
 
         // validate
-        if input.caller.is_zero() {
+        if signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(EthError::ZeroSigner);
         }
@@ -68,8 +52,8 @@ impl EthExecutor {
         let mut miner_lock = self.miner.lock().unwrap();
 
         // execute, mine and save
-        let execution = evm_lock.transact(input.clone().into())?;
-        let block = miner_lock.mine_one_transaction(input.transaction, execution)?;
+        let execution = evm_lock.execute(transaction.clone().try_into()?)?;
+        let block = miner_lock.mine_with_one_transaction(signer, transaction, execution)?;
         self.eth_storage.save_block(block)?;
 
         Ok(())
@@ -77,33 +61,18 @@ impl EthExecutor {
 
     /// Execute a function and return the function output. State changes are ignored.
     /// TODO: return value
-    pub fn call(&self, input: EthCall) -> Result<Bytes, EthError> {
-        tracing::info!(contract = %input.contract, data_len = input.data.len(), data = %input.data, "calling contract");
+    pub fn call(&self, input: CallInput) -> Result<Bytes, EthError> {
+        tracing::info!(
+            from = %input.from,
+            to = %input.to,
+            data_len = input.data.len(),
+            data = %input.data,
+            "evm executing call"
+        );
 
         // execute, but not save
         let mut executor_lock = self.evm.lock().unwrap();
-        let result = executor_lock.transact(input.into())?;
+        let result = executor_lock.execute(input.into())?;
         Ok(result.output)
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct EthDeployment {
-    pub transaction: TransactionInput,
-    pub caller: Address,
-    pub data: Bytes,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct EthTransaction {
-    pub transaction: TransactionInput,
-    pub caller: Address,
-    pub contract: Address,
-    pub data: Bytes,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct EthCall {
-    pub contract: Address,
-    pub data: Bytes,
 }
