@@ -52,6 +52,12 @@ pub enum EthError {
     // -------------------------------------------------------------------------
     #[error("Bug: Contract was deployed, but no address was returned.")]
     DeploymentWithoutAddress,
+
+    // -------------------------------------------------------------------------
+    // Type Conversion
+    // -------------------------------------------------------------------------
+    #[error("Cannot convert into Address")]
+    TryIntoAddressError,
 }
 
 impl From<EthError> for ErrorObjectOwned {

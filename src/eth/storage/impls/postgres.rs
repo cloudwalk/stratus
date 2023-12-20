@@ -43,6 +43,7 @@ struct Schema {
 impl EthStorage for Postgres {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
+
         let rt = Runtime::new().unwrap();
         let row = rt
             .block_on(async {
@@ -52,13 +53,12 @@ impl EthStorage for Postgres {
                         FROM accounts
                     "#
                 )
-                .fetch_one(&self.sqlx_pool)
+                .fetch_one(&self.connection_pool)
                 .await
             })
             .unwrap();
 
         let account = Account {
-            // TODO: use correct Error type for TryInto<Address>
             address: row.address.try_into()?,
             nonce: row.nonce.into(),
             balance: row.balance.into(),
@@ -69,7 +69,27 @@ impl EthStorage for Postgres {
     }
     fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
-        todo!()
+
+        let rt = Runtime::new().unwrap();
+        let row = rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"
+                        SELECT idx, value
+                        FROM account_slots
+                    "#
+                )
+                .fetch_one(&self.connection_pool)
+                .await
+            })
+            .unwrap();
+
+        let slot = Slot {
+            index: row.idx.try_into()?,
+            value: row.value.try_into()?,
+        };
+
+        Ok(slot)
     }
     fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
         tracing::debug!(%number, "reading block");

@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::eth::EthError;
+
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
@@ -55,6 +57,15 @@ impl From<RevmU256> for SlotIndex {
     }
 }
 
+impl TryFrom<Vec<u8>> for SlotIndex {
+    type Error = EthError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, EthError> {
+        let value: [u8; 32] = value.try_into().unwrap();
+        Ok(SlotIndex(U256::from(value)))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // SlotValue
 // -----------------------------------------------------------------------------
@@ -85,5 +96,14 @@ impl From<RevmU256> for SlotValue {
 impl From<SlotValue> for RevmU256 {
     fn from(value: SlotValue) -> Self {
         RevmU256::from_limbs(value.0 .0)
+    }
+}
+
+impl TryFrom<Vec<u8>> for SlotValue {
+    type Error = EthError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, EthError> {
+        let value: [u8; 32] = value.try_into().unwrap();
+        Ok(SlotValue(U256::from(value)))
     }
 }
