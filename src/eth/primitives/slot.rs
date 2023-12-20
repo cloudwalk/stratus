@@ -1,13 +1,12 @@
 use std::fmt::Display;
 
-use crate::eth::EthError;
-
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
 
 use crate::derive_newtype_from;
+use crate::eth::EthError;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Slot {

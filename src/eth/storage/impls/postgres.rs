@@ -103,3 +103,13 @@ impl EthStorage for Postgres {
         todo!()
     }
 }
+
+impl BlockNumberStorage for Postgres {
+    fn current_block_number(&self) -> Result<BlockNumber, EthError> {
+        todo!()
+    }
+
+    fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
+        todo!()
+    }
+}
