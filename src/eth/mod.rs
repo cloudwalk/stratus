@@ -1,5 +1,6 @@
 //! Ethereum layers.
 
+pub mod codegen;
 mod error;
 pub mod evm;
 mod executor;
