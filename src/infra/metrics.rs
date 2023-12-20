@@ -12,7 +12,7 @@ use paste::paste;
 
 use crate::metrics;
 use crate::metrics_impl_describe;
-use crate::metrics_impl_fn_record;
+use crate::metrics_impl_fn_inc;
 
 /// Init application metrics.
 pub fn init_metrics() {
@@ -36,13 +36,15 @@ metrics! {
 // Labels
 // -----------------------------------------------------------------------------
 
-/// Internal label representation.
+/// Representation of a label value.
 ///
-/// It exists for two reasons over the Label representation from the `metrics` crate:
-/// * To provide automatic conversion from several types to a label value.
-/// * To remove the need of clients to handle scenarios where the label value is `None`.
+/// It exists to improve two aspects `metrics` crate does not cover:
+/// * Conversion from several types to a label value.
+/// * Handling of optional values.
 pub enum LabelValue {
+    /// Label has a value and should be recorded.
     Some(String),
+    /// Label does not have a value and should be ignored.
     None,
 }
 
@@ -73,7 +75,7 @@ impl From<bool> for LabelValue {
     }
 }
 
-/// Convert a list of internal label representations to the label from `metrics` crate. Missing labels are filtered out.
+/// Converts a list of label keys-value pairs to `metrics::Label`. Labels with missing values are filtered out.
 fn into_labels(labels: Vec<(&'static str, LabelValue)>) -> Vec<MetricsLabel> {
     labels
         .into_iter()
@@ -107,7 +109,7 @@ macro_rules! metrics {
 
         // Record metrics
         $(
-            metrics_impl_fn_record!($kind $name $($label)+);
+            metrics_impl_fn_inc!($kind $name $($label)+);
         )+
     }
 }
@@ -127,9 +129,9 @@ macro_rules! metrics_impl_describe {
     };
 }
 
-/// Internal - Generates a function that records a new metric value.
+/// Internal - Generates a function that increases a metric value.
 #[macro_export]
-macro_rules! metrics_impl_fn_record {
+macro_rules! metrics_impl_fn_inc {
     (counter $name:ident $($label:ident)+) => {
         paste! {
             #[doc = "Increment 1 to the `" $name "` counter."]
