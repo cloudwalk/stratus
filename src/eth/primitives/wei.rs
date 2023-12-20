@@ -5,6 +5,7 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
+use sqlx::types::BigDecimal;
 
 use crate::derive_newtype_from;
 
@@ -38,6 +39,12 @@ derive_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i
 impl From<RevmU256> for Wei {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())
+    }
+}
+
+impl From<BigDecimal> for Wei {
+    fn from(value: BigDecimal) -> Self {
+        value.into()
     }
 }
 

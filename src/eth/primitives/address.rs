@@ -9,6 +9,7 @@ use hex_literal::hex;
 use revm::primitives::Address as RevmAddress;
 
 use crate::derive_newtype_from;
+use crate::eth::EthError;
 
 /// Address of an Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]

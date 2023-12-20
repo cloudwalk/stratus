@@ -26,6 +26,12 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
+impl From<BigDecimal> for Nonce {
+    fn from(value: BigDecimal) -> Self {
+        value.into()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 use revm::primitives::U256;
 use sqlx::FromRow;
-use sqlx::PgPool;
 use tokio::runtime::Runtime;
 
 use crate::config::Config;
@@ -15,6 +14,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
+use crate::ext::OptionExt;
 use crate::infra::postgres::Postgres;
 
 type Index = U256;
@@ -40,19 +40,7 @@ struct Schema {
     accounts_slots: AccountSlots,
 }
 
-pub struct PostgresStorage {
-    pg_pool: PgPool,
-    // schema: Schema,
-}
-
-impl PostgresStorage {
-    async fn new(cfg: &Config) -> Self {
-        let pg_pool = Postgres::new(&cfg.database_url).await.unwrap().sqlx_pool;
-        Self { pg_pool }
-    }
-}
-
-impl EthStorage for PostgresStorage {
+impl EthStorage for Postgres {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
         let rt = Runtime::new().unwrap();
@@ -64,18 +52,18 @@ impl EthStorage for PostgresStorage {
                         FROM accounts
                     "#
                 )
-                .fetch_one(&self.pg_pool)
+                .fetch_one(&self.sqlx_pool)
                 .await
             })
             .unwrap();
 
-        // let account = Account {
-        //     address: row.address.into(),
-        //     nonce: row.nonce.into(),
-        //     balance: row.balance.into(),
-        //     bytecode: row.bytecode,
-        // };
-        let account = Account::default();
+        let account = Account {
+            // TODO: use correct Error type for TryInto<Address>
+            address: row.address.try_into()?,
+            nonce: row.nonce.into(),
+            balance: row.balance.into(),
+            bytecode: row.bytecode.map_into(),
+        };
 
         Ok(account)
     }
