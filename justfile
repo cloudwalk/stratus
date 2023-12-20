@@ -1,6 +1,6 @@
 # Runs the service locally
 run:
-    cargo run
+    RUST_LOG=info cargo run
 
 # Runs the service locally with release options
 run-release:
@@ -40,11 +40,29 @@ test-unit name="":
 test-int name="":
     cargo test --test '*' {{name}} -- --nocapture
 
+# Generate documentation
+doc:
+    @just test-doc
+    cargo +nightly doc --no-deps
+
+# Format code and run configured linters
+lint:
+    cargo +nightly fmt --all
+    cargo +nightly clippy --all-targets
+
+
+# ------------------------------------------------------------------------------
+# E2E
+# ------------------------------------------------------------------------------
+
 # Execute E2E tests
 e2e network="ledger":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
+    fi
+    if [ ! -d node_modules ]; then
+        npm install
     fi
     npx hardhat test test/*.test.ts --network {{network}}
 
@@ -102,24 +120,13 @@ e2e-ledger:
     fi
 
     echo "-> Starting Ledger"
-    just run &
+    RUST_LOG=info just run &
 
     echo "-> Waiting Ledger to start"
-    sleep 1
+    sleep 2
 
     echo "-> Running E2E tests"
     just e2e ledger
 
     echo "-> Killing Ledger"
     lsof -n -i :3000 | grep -v PID | awk '{print $2}' | xargs -I{} kill -9 {}
-
-# Generate documentation
-doc:
-    @just test-doc
-    cargo +nightly doc --no-deps
-
-# Format code and run configured linters
-lint:
-    cargo +nightly fmt --all
-    cargo +nightly clippy --all-targets
-

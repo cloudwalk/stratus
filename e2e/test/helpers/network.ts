@@ -8,7 +8,7 @@ export enum Network {
     Unknown = "",
 }
 
-export const NETWORK = match(network.name)
+export const CURRENT_NETWORK = match(network.name)
     .returnType<Network>()
     .with("hardhat", () => Network.Hardhat)
     .with("anvil", () => Network.Anvil)

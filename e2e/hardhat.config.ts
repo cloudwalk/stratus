@@ -16,6 +16,9 @@ const config: HardhatUserConfig = {
             chainId: 2008,
             gasPrice: 0,
             initialBaseFeePerGas: 0,
+            mining: {
+                auto: true,
+            },
         },
         anvil: {
             url: "http://localhost:8546",

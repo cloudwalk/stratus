@@ -1,64 +1,117 @@
 import { expect } from "chai";
-import { Block, TransactionReceipt } from "ethers";
+import { keccak256 } from "ethers";
 import { match } from "ts-pattern";
+import { Block, Transaction, TransactionReceipt } from "web3-types";
 
-import { NETWORK, Network } from "./helpers/network";
+import { ALICE, BOB } from "./helpers/account";
+import { CURRENT_NETWORK, Network } from "./helpers/network";
 import * as rpc from "./helpers/rpc";
+
+const CHAIN_ID_DEC = 2008;
+const CHAIN_ID = "0x" + CHAIN_ID_DEC.toString(16);
+const ZERO = "0x0";
+const ONE = "0x1";
+const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";
+const HASH_EMPTY_TRANSACTIONS = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
 
 describe("JSON-RPC", async () => {
     describe("Metadata", async () => {
         it("eth_chainId", async () => {
-            (await rpc.sendExpect("eth_chainId")).eq("0x7d8");
-        });
-        it("eth_chainId", async () => {
-            (await rpc.sendExpect("eth_chainId")).eq("0x7d8");
+            (await rpc.sendExpect("eth_chainId")).eq(CHAIN_ID);
         });
         it("net_version", async () => {
-            (await rpc.sendExpect("net_version")).eq("2008");
+            (await rpc.sendExpect("net_version")).eq(CHAIN_ID_DEC + "");
         });
         it("web3_clientVersion", async () => {
             let client = await rpc.sendExpect("web3_clientVersion");
-            match(NETWORK).with(Network.Ledger, () => client.eq("ledger"));
+            match(CURRENT_NETWORK).with(Network.Ledger, () => client.deep.eq("ledger"));
         });
     });
+
     describe("Gas", async () => {
         it("eth_gasPrice", async () => {
             let gasPrice = await rpc.sendExpect("eth_gasPrice");
-            match(NETWORK)
-                .with(Network.Ledger, () => gasPrice.eq("0x0"))
-                .otherwise(() => gasPrice.not.eq("0x0"));
+            match(CURRENT_NETWORK)
+                .with(Network.Ledger, () => gasPrice.eq(ZERO))
+                .otherwise(() => gasPrice.not.eq(ZERO));
         });
     });
+
+    describe("Account", async () => {
+        it("eth_getTransactionCount", async () => {
+            (await rpc.sendExpect("eth_getTransactionCount", [ALICE])).eq(ZERO);
+            (await rpc.sendExpect("eth_getTransactionCount", [ALICE, "latest"])).eq(ZERO);
+        });
+    });
+
     describe("Block", async () => {
         it("eth_blockNumber", async function () {
-            (await rpc.sendExpect("eth_blockNumber")).eq("0x0");
+            (await rpc.sendExpect("eth_blockNumber")).eq(ZERO);
         });
         it("eth_getBlockByNumber", async function () {
-            let block: Block = await rpc.send("eth_getBlockByNumber", ["0x0", true]);
+            let block: Block = await rpc.send("eth_getBlockByNumber", [ZERO, true]);
             expect(block.transactions.length).eq(0);
         });
     });
 });
 
-const TRX1_HASH = "0x1c65f63cec3c3a856baf02675181e0414d7d14775ce678a2645c2a6cb0663d0e";
-describe("Transactions", async () => {
+describe("Transaction", async () => {
     describe("Empty transfer", async () => {
+        let ctx: {
+            txHash: string | null;
+            tx: Transaction | null;
+            block: Block | null;
+        } = {
+            txHash: null,
+            tx: null,
+            block: null,
+        };
         it("Send transaction", async () => {
-            let tx = await rpc.signer().sendTransaction({
-                to: "0x0000000000000000000000000000000000000000",
+            let txSigned = await ALICE.signer().signTransaction({
+                chainId: CHAIN_ID_DEC,
+                to: BOB,
                 value: 0,
                 gasPrice: 0,
                 gasLimit: 500_000,
             });
-            console.log(tx.hash);
+            ctx.txHash = await rpc.send("eth_sendRawTransaction", [txSigned]);
+            expect(ctx.txHash).eq(keccak256(txSigned));
         });
-        it("Mine block automatically", async () => {
-            (await rpc.sendExpect("eth_blockNumber")).eq("0x1");
+        it("Transaction is created", async () => {
+            let tx: Transaction = await rpc.send("eth_getTransactionByHash", [ctx.txHash]);
+            expect(tx.from).eq(ALICE.address);
+            expect(tx.to).eq(BOB.address);
+            expect(tx.nonce).eq(ZERO);
+            expect(tx.chainId).eq(CHAIN_ID);
+            ctx.tx = tx;
         });
-        it("Transaction receipt is valid", async () => {
-            let receipt: TransactionReceipt = await rpc.send("eth_getTransactionReceipt", [TRX1_HASH]);
-            expect(receipt.blockNumber).eq("0x1");
-            expect(receipt.status).eq("0x1");
+        it("Block is created", async () => {
+            expect(await rpc.send("eth_blockNumber")).eq(ONE);
+
+            let block: Block = await rpc.send("eth_getBlockByNumber", [ONE, true]);
+            expect(block.number).eq(ONE);
+
+            expect(block.transactionsRoot).not.eq(HASH_EMPTY_TRANSACTIONS);
+            expect(block.uncles).lengthOf(0);
+            expect(block.sha3Uncles).eq(HASH_EMPTY_UNCLES);
+
+            expect(block.transactions.length).eq(1);
+            expect(block.transactions[0] as Transaction).deep.eq(ctx.tx);
+            ctx.block = block;
+        });
+        it("Receipt is created", async () => {
+            let receipt: TransactionReceipt = await rpc.send("eth_getTransactionReceipt", [ctx.txHash]);
+            expect(receipt.blockNumber).eq(ctx.block!.number);
+            expect(receipt.blockHash).eq(ctx.block!.hash);
+            expect(receipt.transactionHash).eq(ctx.txHash);
+            expect(receipt.transactionIndex).eq(ZERO);
+            expect(receipt.status).eq(ONE);
+        });
+        it("Sender nonce increased", async () => {
+            expect(await rpc.send("eth_getTransactionCount", [ALICE, "latest"])).eq(ONE);
+        });
+        it("Receiver nonce not increased", async () => {
+            expect(await rpc.send("eth_getTransactionCount", [BOB, "latest"])).eq(ZERO);
         });
     });
 });
