@@ -1,3 +1,4 @@
+use ethers_core::k256::elliptic_curve::rand_core::block;
 use revm::primitives::U256;
 use sqlx::FromRow;
 use tokio::runtime::Runtime;
@@ -6,6 +7,7 @@ use crate::config::Config;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
@@ -93,6 +95,26 @@ impl EthStorage for Postgres {
     }
     fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
         tracing::debug!(%number, "reading block");
+
+        let rt = Runtime::new().unwrap();
+        let row = rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"
+                        SELECT number, hash, transactions_root, created_at
+                        FROM blocks
+                    "#
+                )
+                .fetch_one(&self.connection_pool)
+                .await
+            })
+            .unwrap();
+
+        // let block_header = BlockHeader {}
+        // let block = Block {};
+
+        // Ok(Some(block))
+
         todo!()
     }
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
@@ -105,11 +127,45 @@ impl EthStorage for Postgres {
 }
 
 impl BlockNumberStorage for Postgres {
+    // TODO: add logs
     fn current_block_number(&self) -> Result<BlockNumber, EthError> {
-        todo!()
+        let rt = Runtime::new().unwrap();
+        let row = rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"
+                        SELECT CURRVAL('block_number_seq')
+                    "#
+                )
+                .fetch_one(&self.connection_pool)
+                .await
+            })
+            .unwrap();
+
+        // TODO: deal with Option<i64> here in a better way
+        let block_number = BlockNumber(row.currval.unwrap().into());
+
+        Ok(block_number)
     }
 
+    // TODO: add logs
     fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
-        todo!()
+        let rt = Runtime::new().unwrap();
+        let row = rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"
+                        SELECT NEXTVAL('block_number_seq')
+                    "#
+                )
+                .fetch_one(&self.connection_pool)
+                .await
+            })
+            .unwrap();
+
+        // TODO: deal with Option<i64> here in a better way
+        let block_number = BlockNumber(row.nextval.unwrap().into());
+
+        Ok(block_number)
     }
 }
