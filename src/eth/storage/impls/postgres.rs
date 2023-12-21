@@ -1,28 +1,18 @@
-use chrono::DateTime;
-use ethereum_types::Bloom;
-use revm::primitives::U256;
-use sqlx::FromRow;
-use tokio::runtime::Runtime;
-
-use crate::config::Config;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockHeader;
+
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionInput;
+
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
-use crate::ext::OptionExt;
-use crate::infra::postgres::Postgres;
 
-type Index = U256;
+use crate::infra::postgres::Postgres;
 
 impl EthStorage for Postgres {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
@@ -121,7 +111,7 @@ impl EthStorage for Postgres {
         tracing::debug!(%hash, "reading transaction");
         todo!()
     }
-    fn save_block(&self, block: Block) -> Result<(), EthError> {
+    fn save_block(&self, _block: Block) -> Result<(), EthError> {
         todo!()
     }
 }
