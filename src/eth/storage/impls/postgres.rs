@@ -1,4 +1,5 @@
-use ethers_core::k256::elliptic_curve::rand_core::block;
+use chrono::DateTime;
+use ethereum_types::Bloom;
 use revm::primitives::U256;
 use sqlx::FromRow;
 use tokio::runtime::Runtime;
@@ -12,6 +13,8 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
@@ -101,8 +104,10 @@ impl EthStorage for Postgres {
             .block_on(async {
                 sqlx::query!(
                     r#"
-                        SELECT number, hash, transactions_root, created_at
-                        FROM blocks
+                        SELECT b.number, b.hash, b.transactions_root, b.created_at, b.gas as block_gas,
+                            t.signer_address, t.gas as transaction_gas, t.address_from, t.address_to, t.input, t.idx_in_block
+                        FROM blocks b
+                        JOIN transactions t on b.number = t.block_number
                     "#
                 )
                 .fetch_one(&self.connection_pool)
@@ -110,8 +115,28 @@ impl EthStorage for Postgres {
             })
             .unwrap();
 
-        // let block_header = BlockHeader {}
-        // let block = Block {};
+        let block_header = BlockHeader {
+            number: row.number.into(),
+            hash: row.hash.try_into().unwrap(),
+            transactions_root: row.transactions_root.try_into().unwrap(),
+            gas: row.gas.into(),
+            bloom: Bloom::default(),
+            created_at: DateTime::default(), //row.created_at,
+        };
+
+        // // let transaction_mined = TransactionMined {
+        // //     signer: row.signer_address.try_into().unwrap(),
+        // //     input: TransactionInput::default(), // row.input.try_into().unwrap(),
+        // //     execution: TransactionExecution { result: , output: , logs: , gas: , changes:  },
+        // //     index_in_block: row.idx_in_block.try_into().unwrap(),
+        // //     block_number: row.number.into(),
+        // //     block_hash: row.hash.try_into().unwrap(),
+        // // };
+
+        // let block = Block {
+        //     header: block_header,
+        //     transactions: vec![transaction_mined],
+        // };
 
         // Ok(Some(block))
 
