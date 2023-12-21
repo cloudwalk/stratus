@@ -1,7 +1,7 @@
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -25,7 +25,7 @@ pub trait EthStorage: Send + Sync + 'static {
     /// Retrieves a block from the storage.
     ///
     /// It should return `None` when not found.
-    fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError>;
+    fn read_block(&self, number: &BlockSelection) -> Result<Option<Block>, EthError>;
 
     /// Retrieves a transaction from the storage.
     ///

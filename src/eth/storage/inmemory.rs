@@ -5,10 +5,14 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::RwLock;
 
+use indexmap::IndexMap;
+
+use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -18,13 +22,31 @@ use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 /// In-memory implementation using HashMaps.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct InMemoryStorage {
     pub accounts: RwLock<HashMap<Address, Account>>,
     pub account_slots: RwLock<HashMap<Address, HashMap<SlotIndex, Slot>>>,
     pub transactions: RwLock<HashMap<Hash, TransactionMined>>,
-    pub blocks: RwLock<HashMap<BlockNumber, Block>>,
+    pub blocks_by_number: RwLock<IndexMap<BlockNumber, Block>>,
+    pub blocks_by_hash: RwLock<IndexMap<Hash, Block>>,
     pub block_number: AtomicUsize,
+}
+
+impl Default for InMemoryStorage {
+    fn default() -> Self {
+        let genesis = BlockMiner::genesis();
+        let storage = Self {
+            accounts: Default::default(),
+            account_slots: Default::default(),
+            transactions: Default::default(),
+            blocks_by_number: Default::default(),
+            blocks_by_hash: Default::default(),
+            block_number: Default::default(),
+        };
+        storage.blocks_by_hash.write().unwrap().insert(genesis.header.hash.clone(), genesis.clone());
+        storage.blocks_by_number.write().unwrap().insert(genesis.header.number.clone(), genesis);
+        storage
+    }
 }
 
 impl EthStorage for InMemoryStorage {
@@ -71,17 +93,30 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
-        tracing::debug!(%number, "reading block");
+    fn read_block(&self, selection: &BlockSelection) -> Result<Option<Block>, EthError> {
+        tracing::debug!(?selection, "reading block");
 
-        let blocks_lock = self.blocks.read().unwrap();
-        match blocks_lock.get(number) {
+        let block = match selection {
+            BlockSelection::Latest => {
+                let blocks_lock = self.blocks_by_number.read().unwrap();
+                blocks_lock.values().last().cloned()
+            }
+            BlockSelection::Number(number) => {
+                let blocks_lock = self.blocks_by_number.read().unwrap();
+                blocks_lock.get(number).cloned()
+            }
+            BlockSelection::Hash(hash) => {
+                let blocks_lock = self.blocks_by_hash.read().unwrap();
+                blocks_lock.get(hash).cloned()
+            }
+        };
+        match block {
             Some(block) => {
-                tracing::trace!(%number, ?block, "block found");
+                tracing::trace!(?selection, ?block, "block found");
                 Ok(Some(block.clone()))
             }
             None => {
-                tracing::trace!(%number, "block not found");
+                tracing::trace!(?selection, "block not found");
                 Ok(None)
             }
         }
@@ -103,14 +138,16 @@ impl EthStorage for InMemoryStorage {
     }
 
     fn save_block(&self, block: Block) -> Result<(), EthError> {
-        let mut blocks_lock = self.blocks.write().unwrap();
+        let mut blocks_by_number_lock = self.blocks_by_number.write().unwrap();
+        let mut blocks_by_hash_lock = self.blocks_by_hash.write().unwrap();
         let mut transactions_lock = self.transactions.write().unwrap();
         let mut account_lock = self.accounts.write().unwrap();
         let mut account_slots_lock = self.account_slots.write().unwrap();
 
         // save block
         tracing::debug!(number = %block.header.number, "saving block");
-        blocks_lock.insert(block.header.number.clone(), block.clone());
+        blocks_by_number_lock.insert(block.header.number.clone(), block.clone());
+        blocks_by_hash_lock.insert(block.header.hash.clone(), block.clone());
 
         // save transactions
         for transaction in block.transactions {

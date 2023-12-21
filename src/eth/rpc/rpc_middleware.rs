@@ -47,7 +47,10 @@ where
 
         // trace request
         tracing::info!(
-            id = %request.id, %method, function = %function.unwrap_or_default(),
+            id = %request.id,
+            %method,
+            function = %function.unwrap_or_default(),
+            // params = ?request.params(),
             "rpc request"
         );
 
@@ -116,7 +119,12 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
 
             // trace response
             tracing::info!(
-                id = %proj.id, method = %proj.method, function = %proj.function.unwrap_or_default(), duration_ms = %elapsed.as_millis(), success = %response.success_or_error.is_success(),
+                id = %proj.id,
+                method = %proj.method,
+                function = %proj.function.unwrap_or_default(),
+                duration_ms = %elapsed.as_millis(),
+                success = %response.success_or_error.is_success(),
+                // result = %response.result,
                 "rpc response"
             );
 

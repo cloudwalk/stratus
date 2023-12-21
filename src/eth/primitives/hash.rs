@@ -1,17 +1,24 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use ethereum_types::H256;
 
 use crate::derive_newtype_from;
+use crate::eth::EthError;
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Hash(H256);
 
 impl Hash {
-    /// Const constructor.
-    pub const fn new_const(bytes: [u8; 32]) -> Self {
+    /// Creates a hash from the given bytes.
+    pub const fn new(bytes: [u8; 32]) -> Self {
         Self(H256(bytes))
+    }
+
+    /// Creates a random hash.
+    pub fn random() -> Self {
+        Self(H256::random())
     }
 }
 
@@ -31,6 +38,20 @@ impl AsRef<[u8]> for Hash {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 derive_newtype_from!(self = Hash, other = H256, [u8; 32]);
+
+impl FromStr for Hash {
+    type Err = EthError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match H256::from_str(s) {
+            Ok(parsed) => Ok(Self(parsed)),
+            Err(e) => {
+                tracing::warn!(reason = ?e, value = %s, "failed to parse hash");
+                Err(EthError::parsing("hash", s.to_owned()))
+            }
+        }
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

@@ -1280,6 +1280,7 @@ dependencies = [
  "ethers-core",
  "eyre",
  "hex-literal",
+ "indexmap 2.1.0",
  "itertools",
  "jsonrpsee",
  "keccak-hasher",
