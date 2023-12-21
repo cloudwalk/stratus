@@ -101,7 +101,7 @@ impl From<RevmOutput> for Bytes {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Bytes {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <Vec<u8> as sqlx::Decode<sqlx::Postgres>>::decode(value).unwrap();
+        let value = <Vec<u8> as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }

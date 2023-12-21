@@ -25,7 +25,8 @@ impl EthStorage for Postgres {
                 sqlx::query_as!(
                     Account,
                     r#"
-                        SELECT address as "address: _", 
+                        SELECT 
+                            address as "address: _", 
                             nonce as "nonce: _", 
                             balance as "balance: _",
                             bytecode as "bytecode: _"
@@ -35,9 +36,9 @@ impl EthStorage for Postgres {
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .unwrap();
+            .map_err(|_| EthError::UnexpectedStorageError);
 
-        Ok(account)
+        account
     }
     fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
@@ -49,7 +50,8 @@ impl EthStorage for Postgres {
                 sqlx::query_as!(
                     Slot,
                     r#"
-                        SELECT idx as "index: _", 
+                        SELECT 
+                            idx as "index: _", 
                             value as "value: _"
                         FROM account_slots
                     "#
@@ -57,9 +59,9 @@ impl EthStorage for Postgres {
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .unwrap();
+            .map_err(|_| EthError::UnexpectedStorageError);
 
-        Ok(slot)
+        slot
     }
     fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
         tracing::debug!(%number, "reading block");
@@ -117,8 +119,9 @@ impl EthStorage for Postgres {
 }
 
 impl BlockNumberStorage for Postgres {
-    // TODO: add logs
     fn current_block_number(&self) -> Result<BlockNumber, EthError> {
+        tracing::debug!("reading current block number");
+
         let rt = tokio::runtime::Handle::current();
 
         let row = rt
@@ -131,16 +134,21 @@ impl BlockNumberStorage for Postgres {
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .unwrap();
+            .map_err(|_| EthError::UnexpectedStorageError)?;
 
-        // TODO: deal with Option<i64> here in a better way
+        if row.currval.is_none() {
+            return Err(EthError::MissingStorageItem("block_number_seq"));
+        }
+
+        // safe unwrap, check above
         let block_number = BlockNumber(row.currval.unwrap().into());
 
         Ok(block_number)
     }
 
-    // TODO: add logs
     fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
+        tracing::debug!("incrementing block number");
+
         let rt = tokio::runtime::Handle::current();
 
         let row = rt
@@ -153,9 +161,13 @@ impl BlockNumberStorage for Postgres {
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .unwrap();
+            .map_err(|_| EthError::UnexpectedStorageError)?;
 
-        // TODO: deal with Option<i64> here in a better way
+        if row.nextval.is_none() {
+            return Err(EthError::MissingStorageItem("block_number_seq"));
+        }
+
+        // safe unwrap, check above
         let block_number = BlockNumber(row.nextval.unwrap().into());
 
         Ok(block_number)

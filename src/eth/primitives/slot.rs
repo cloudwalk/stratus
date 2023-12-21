@@ -73,7 +73,7 @@ impl TryFrom<Vec<u8>> for SlotIndex {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }
@@ -131,7 +131,7 @@ impl TryFrom<Vec<u8>> for SlotValue {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotValue {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }

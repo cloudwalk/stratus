@@ -41,7 +41,7 @@ impl From<BigDecimal> for Nonce {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Nonce {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }

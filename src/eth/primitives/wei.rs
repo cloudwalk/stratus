@@ -56,7 +56,7 @@ impl From<BigDecimal> for Wei {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Wei {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }

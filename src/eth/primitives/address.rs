@@ -84,7 +84,7 @@ impl From<NameOrAddress> for Address {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Address {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <[u8; 20] as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        let value = <[u8; 20] as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }
