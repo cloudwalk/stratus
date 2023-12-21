@@ -6,11 +6,14 @@ use ledger::eth::storage::inmemory::InMemoryStorage;
 use ledger::eth::storage::EthStorage;
 use ledger::eth::EthExecutor;
 use ledger::infra;
+use ledger::infra::postgres::Postgres;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     // get CLI configs
     let cfg = Config::parse();
+
+    let runtime_handle = tokio::runtime::Handle::current();
 
     // init infra
     infra::init_tracing();

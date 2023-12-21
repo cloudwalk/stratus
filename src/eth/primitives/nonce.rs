@@ -33,6 +33,22 @@ impl From<BigDecimal> for Nonce {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Nonce {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for Nonce {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 impl From<Nonce> for u64 {

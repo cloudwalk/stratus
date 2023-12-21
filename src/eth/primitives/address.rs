@@ -7,6 +7,9 @@ use fake::Dummy;
 use fake::Faker;
 use hex_literal::hex;
 use revm::primitives::Address as RevmAddress;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
+use sqlx::Decode;
 
 use crate::derive_newtype_from;
 use crate::eth::EthError;
@@ -73,6 +76,19 @@ impl From<NameOrAddress> for Address {
             NameOrAddress::Name(_) => panic!("TODO"),
             NameOrAddress::Address(value) => Self(value),
         }
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Address {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <[u8; 20] as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for Address {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }
 }
 

@@ -50,11 +50,15 @@ impl EthStorage for Postgres {
         tracing::debug!(%address, "reading account");
 
         let rt = Runtime::new().unwrap();
-        let row = rt
+        let account = rt
             .block_on(async {
-                sqlx::query!(
+                sqlx::query_as!(
+                    Account,
                     r#"
-                        SELECT address, nonce, balance, bytecode
+                        SELECT address as "address: _", 
+                            nonce as "nonce: _", 
+                            balance as "balance: _",
+                            bytecode as "bytecode: _"
                         FROM accounts
                     "#
                 )
@@ -62,13 +66,6 @@ impl EthStorage for Postgres {
                 .await
             })
             .unwrap();
-
-        let account = Account {
-            address: row.address.try_into()?,
-            nonce: row.nonce.into(),
-            balance: row.balance.into(),
-            bytecode: row.bytecode.map_into(),
-        };
 
         Ok(account)
     }
@@ -99,39 +96,39 @@ impl EthStorage for Postgres {
     fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
         tracing::debug!(%number, "reading block");
 
-        let rt = Runtime::new().unwrap();
-        let row = rt
-            .block_on(async {
-                sqlx::query!(
-                    r#"
-                        SELECT b.number, b.hash, b.transactions_root, b.created_at, b.gas as block_gas,
-                            t.signer_address, t.gas as transaction_gas, t.address_from, t.address_to, t.input, t.idx_in_block
-                        FROM blocks b
-                        JOIN transactions t on b.number = t.block_number
-                    "#
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })
-            .unwrap();
+        // let rt = Runtime::new().unwrap();
+        // let row = rt
+        //     .block_on(async {
+        //         sqlx::query!(
+        //             r#"
+        //                 SELECT b.number, b.hash, b.transactions_root, b.created_at, b.gas as block_gas,
+        //                     t.signer_address, t.gas as transaction_gas, t.address_from, t.address_to, t.input, t.idx_in_block
+        //                 FROM blocks b
+        //                 JOIN transactions t on b.number = t.block_number
+        //             "#
+        //         )
+        //         .fetch_one(&self.connection_pool)
+        //         .await
+        //     })
+        //     .unwrap();
 
-        let block_header = BlockHeader {
-            number: row.number.into(),
-            hash: row.hash.try_into().unwrap(),
-            transactions_root: row.transactions_root.try_into().unwrap(),
-            gas: row.gas.into(),
-            bloom: Bloom::default(),
-            created_at: DateTime::default(), //row.created_at,
-        };
+        // let block_header = BlockHeader {
+        //     number: row.number.into(),
+        //     hash: row.hash.try_into().unwrap(),
+        //     transactions_root: row.transactions_root.try_into().unwrap(),
+        //     gas: row.gas.into(),
+        //     bloom: Bloom::default(),
+        //     created_at: DateTime::default(), //row.created_at,
+        // };
 
-        // // let transaction_mined = TransactionMined {
-        // //     signer: row.signer_address.try_into().unwrap(),
-        // //     input: TransactionInput::default(), // row.input.try_into().unwrap(),
-        // //     execution: TransactionExecution { result: , output: , logs: , gas: , changes:  },
-        // //     index_in_block: row.idx_in_block.try_into().unwrap(),
-        // //     block_number: row.number.into(),
-        // //     block_hash: row.hash.try_into().unwrap(),
-        // // };
+        // let transaction_mined = TransactionMined {
+        //     signer: row.signer_address.try_into().unwrap(),
+        //     input: TransactionInput::default(), // row.input.try_into().unwrap(),
+        //     execution: TransactionExecution { result: , output: , logs: , gas: , changes:  },
+        //     index_in_block: row.idx_in_block.try_into().unwrap(),
+        //     block_number: row.number.into(),
+        //     block_hash: row.hash.try_into().unwrap(),
+        // };
 
         // let block = Block {
         //     header: block_header,

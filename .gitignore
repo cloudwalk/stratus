@@ -11,6 +11,3 @@ e2e-contracts/repos
 
 # Build
 /target
-
-# sqlx
-.sqlx/

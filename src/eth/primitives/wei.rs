@@ -5,7 +5,7 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
-use sqlx::types::BigDecimal;
+use sqlx::{database::HasValueRef, error::BoxDynError, types::BigDecimal, Decode};
 
 use crate::derive_newtype_from;
 
@@ -45,6 +45,22 @@ impl From<RevmU256> for Wei {
 impl From<BigDecimal> for Wei {
     fn from(value: BigDecimal) -> Self {
         value.into()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Wei {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for Wei {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
 

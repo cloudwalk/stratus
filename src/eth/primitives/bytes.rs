@@ -6,6 +6,8 @@ use ethers_core::types::Bytes as EthersBytes;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::Bytes as RevmBytes;
 use revm::primitives::Output as RevmOutput;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::derive_newtype_from;
 
@@ -91,6 +93,22 @@ impl From<RevmOutput> for Bytes {
             RevmOutput::Call(bytes) => bytes.into(),
             RevmOutput::Create(bytes, _) => bytes.into(),
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Bytes {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <Vec<u8> as sqlx::Decode<sqlx::Postgres>>::decode(value).unwrap();
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for Bytes {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }
 }
 
