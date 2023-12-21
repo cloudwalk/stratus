@@ -5,7 +5,10 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
-use sqlx::{database::HasValueRef, error::BoxDynError, types::BigDecimal, Decode};
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
+use sqlx::types::BigDecimal;
+use sqlx::Decode;
 
 use crate::derive_newtype_from;
 

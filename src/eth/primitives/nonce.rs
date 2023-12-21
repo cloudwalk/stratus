@@ -3,6 +3,10 @@ use std::fmt::Display;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
+use sqlx::types::BigDecimal;
+use sqlx::Decode;
 
 use crate::derive_newtype_from;
 

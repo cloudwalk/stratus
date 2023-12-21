@@ -6,11 +6,10 @@ use sqlx::PgPool;
 #[derive(Debug, Clone)]
 pub struct Postgres {
     pub connection_pool: PgPool,
-    runtime_handle: tokio::runtime::Handle,
 }
 
 impl Postgres {
-    pub async fn new(runtime_handle: tokio::runtime::Handle, url: &str) -> eyre::Result<Self> {
+    pub async fn new(url: &str) -> eyre::Result<Self> {
         tracing::info!("initing postgres");
 
         let connection_pool = PgPoolOptions::new()
@@ -20,9 +19,6 @@ impl Postgres {
             .connect(url)
             .await?;
 
-        Ok(Self {
-            connection_pool,
-            runtime_handle,
-        })
+        Ok(Self { connection_pool })
     }
 }

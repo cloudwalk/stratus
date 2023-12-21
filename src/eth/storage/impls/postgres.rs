@@ -24,32 +24,12 @@ use crate::infra::postgres::Postgres;
 
 type Index = U256;
 
-#[derive(FromRow)]
-struct Accounts {
-    id: Index,
-    account: Account,
-}
-
-#[derive(FromRow)]
-struct AccountSlots {
-    id: Index,
-    address: Address,
-}
-
-struct Transactions {}
-
-struct Blocks {}
-
-struct Schema {
-    accounts: Accounts,
-    accounts_slots: AccountSlots,
-}
-
 impl EthStorage for Postgres {
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
-        let rt = Runtime::new().unwrap();
+        let rt = tokio::runtime::Handle::current();
+
         let account = rt
             .block_on(async {
                 sqlx::query_as!(
@@ -72,12 +52,15 @@ impl EthStorage for Postgres {
     fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
-        let rt = Runtime::new().unwrap();
-        let row = rt
+        let rt = tokio::runtime::Handle::current();
+
+        let slot = rt
             .block_on(async {
-                sqlx::query!(
+                sqlx::query_as!(
+                    Slot,
                     r#"
-                        SELECT idx, value
+                        SELECT idx as "index: _", 
+                            value as "value: _"
                         FROM account_slots
                     "#
                 )
@@ -85,11 +68,6 @@ impl EthStorage for Postgres {
                 .await
             })
             .unwrap();
-
-        let slot = Slot {
-            index: row.idx.try_into()?,
-            value: row.value.try_into()?,
-        };
 
         Ok(slot)
     }
@@ -151,7 +129,8 @@ impl EthStorage for Postgres {
 impl BlockNumberStorage for Postgres {
     // TODO: add logs
     fn current_block_number(&self) -> Result<BlockNumber, EthError> {
-        let rt = Runtime::new().unwrap();
+        let rt = tokio::runtime::Handle::current();
+
         let row = rt
             .block_on(async {
                 sqlx::query!(
@@ -172,7 +151,8 @@ impl BlockNumberStorage for Postgres {
 
     // TODO: add logs
     fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
-        let rt = Runtime::new().unwrap();
+        let rt = tokio::runtime::Handle::current();
+
         let row = rt
             .block_on(async {
                 sqlx::query!(

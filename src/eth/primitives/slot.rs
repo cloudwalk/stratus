@@ -4,6 +4,9 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
+use sqlx::Decode;
 
 use crate::derive_newtype_from;
 use crate::eth::EthError;
@@ -66,6 +69,22 @@ impl TryFrom<Vec<u8>> for SlotIndex {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions: sqlx -> SlotIndex
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for SlotIndex {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+// -----------------------------------------------------------------------------
 // SlotValue
 // -----------------------------------------------------------------------------
 
@@ -104,5 +123,21 @@ impl TryFrom<Vec<u8>> for SlotValue {
     fn try_from(value: Vec<u8>) -> Result<Self, EthError> {
         let value: [u8; 32] = value.try_into().unwrap();
         Ok(SlotValue(U256::from(value)))
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> SlotValue
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotValue {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value).unwrap();
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for SlotValue {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }
 }
