@@ -41,7 +41,7 @@ impl EthStorage for Postgres {
                 .await
             })
             .map_err(|e| {
-                tracing::error!(reason = ?e, "failed to read address {:?}", address);
+                tracing::error!(reason = ?e, address = ?address, "Failed to read address");
                 EthError::UnexpectedStorageError
             })?;
 
@@ -74,7 +74,7 @@ impl EthStorage for Postgres {
                 .await
             })
             .map_err(|e| {
-                tracing::error!(reason = ?e, "failed to read slot index {:?} from address {:?}", slot_index, address);
+                tracing::error!(reason = ?e, index = ?slot_index, address = ?address, "Failed to read slot index");
                 EthError::UnexpectedStorageError
             })?;
 
@@ -89,7 +89,7 @@ impl EthStorage for Postgres {
         todo!()
     }
     fn save_block(&self, _block: Block) -> Result<(), EthError> {
-        tracing::debug!("saving block {:?}", _block);
+        tracing::debug!(?_block, "saving block");
         todo!()
     }
 }
