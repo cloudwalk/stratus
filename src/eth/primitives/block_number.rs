@@ -12,7 +12,7 @@ use crate::eth::EthError;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct BlockNumber(pub U64);
+pub struct BlockNumber(U64);
 
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());

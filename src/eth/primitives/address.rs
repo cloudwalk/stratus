@@ -7,7 +7,8 @@ use fake::Dummy;
 use fake::Faker;
 use hex_literal::hex;
 use revm::primitives::Address as RevmAddress;
-use sqlx::database::HasValueRef;
+use sqlx::database::{HasArguments, HasValueRef};
+use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::Decode;
 
@@ -113,5 +114,14 @@ impl From<Address> for RevmAddress {
 impl From<Address> for Token {
     fn from(value: Address) -> Self {
         Token::Address(value.0)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Self -> sqlx
+// -----------------------------------------------------------------------------
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Address {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        self.0 .0.encode(buf)
     }
 }

@@ -11,6 +11,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
+use sqlx::Encode;
 
 use crate::infra::postgres::Postgres;
 
@@ -31,14 +32,19 @@ impl EthStorage for Postgres {
                             balance as "balance: _",
                             bytecode as "bytecode: _"
                         FROM accounts
-                    "#
+                        WHERE address = $1
+                    "#,
+                    address
                 )
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .map_err(|_| EthError::UnexpectedStorageError);
+            .map_err(|e| {
+                tracing::error!(reason = ?e, "failed to read address {address}");
+                EthError::UnexpectedStorageError
+            })?;
 
-        account
+        Ok(account)
     }
     fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
@@ -54,58 +60,23 @@ impl EthStorage for Postgres {
                             idx as "index: _", 
                             value as "value: _"
                         FROM account_slots
-                    "#
+                        WHERE account_address = $1 AND idx = $2
+                    "#,
+                    address,
+                    slot_index
                 )
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .map_err(|_| EthError::UnexpectedStorageError);
+            .map_err(|e| {
+                tracing::error!(reason = ?e, "failed to read slot index {slot_index} from address {address}");
+                EthError::UnexpectedStorageError
+            })?;
 
-        slot
+        Ok(slot)
     }
     fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
         tracing::debug!(%number, "reading block");
-
-        // let rt = Runtime::new().unwrap();
-        // let row = rt
-        //     .block_on(async {
-        //         sqlx::query!(
-        //             r#"
-        //                 SELECT b.number, b.hash, b.transactions_root, b.created_at, b.gas as block_gas,
-        //                     t.signer_address, t.gas as transaction_gas, t.address_from, t.address_to, t.input, t.idx_in_block
-        //                 FROM blocks b
-        //                 JOIN transactions t on b.number = t.block_number
-        //             "#
-        //         )
-        //         .fetch_one(&self.connection_pool)
-        //         .await
-        //     })
-        //     .unwrap();
-
-        // let block_header = BlockHeader {
-        //     number: row.number.into(),
-        //     hash: row.hash.try_into().unwrap(),
-        //     transactions_root: row.transactions_root.try_into().unwrap(),
-        //     gas: row.gas.into(),
-        //     bloom: Bloom::default(),
-        //     created_at: DateTime::default(), //row.created_at,
-        // };
-
-        // let transaction_mined = TransactionMined {
-        //     signer: row.signer_address.try_into().unwrap(),
-        //     input: TransactionInput::default(), // row.input.try_into().unwrap(),
-        //     execution: TransactionExecution { result: , output: , logs: , gas: , changes:  },
-        //     index_in_block: row.idx_in_block.try_into().unwrap(),
-        //     block_number: row.number.into(),
-        //     block_hash: row.hash.try_into().unwrap(),
-        // };
-
-        // let block = Block {
-        //     header: block_header,
-        //     transactions: vec![transaction_mined],
-        // };
-
-        // Ok(Some(block))
 
         todo!()
     }
@@ -139,7 +110,7 @@ impl BlockNumberStorage for Postgres {
                 EthError::UnexpectedStorageError
             })?;
 
-        let block_number = BlockNumber(currval.into());
+        let block_number = BlockNumber::from(currval);
 
         Ok(block_number)
     }
@@ -164,7 +135,7 @@ impl BlockNumberStorage for Postgres {
                 EthError::UnexpectedStorageError
             })?;
 
-        let block_number = BlockNumber(nextval.into());
+        let block_number = BlockNumber::from(nextval);
 
         Ok(block_number)
     }

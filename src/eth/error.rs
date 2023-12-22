@@ -47,6 +47,9 @@ pub enum EthError {
     #[error("Unexpected error with EVM storage. Check logs for more information.")]
     UnexpectedStorageError,
 
+    #[error("Failed to connect to Storage")]
+    StorageConnectionError,
+
     // -------------------------------------------------------------------------
     // Bugs
     // -------------------------------------------------------------------------

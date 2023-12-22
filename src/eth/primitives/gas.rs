@@ -31,12 +31,6 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 derive_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
-impl From<BigDecimal> for Gas {
-    fn from(value: BigDecimal) -> Self {
-        value.into()
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // ----------------------------------------------------------------------------

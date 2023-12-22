@@ -4,9 +4,10 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
-use sqlx::database::HasValueRef;
+use sqlx::database::{HasArguments, HasValueRef};
+use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
-use sqlx::Decode;
+use sqlx::{Decode, Encode, Postgres};
 
 use crate::derive_newtype_from;
 use crate::eth::EthError;
@@ -81,6 +82,16 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
 impl sqlx::Type<sqlx::Postgres> for SlotIndex {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: SlotIndex -> sqlx
+// -----------------------------------------------------------------------------
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotIndex {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        self.0.to_little_endian(buf);
+        self.encode(buf)
     }
 }
 
