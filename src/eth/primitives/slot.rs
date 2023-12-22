@@ -69,6 +69,12 @@ impl TryFrom<Vec<u8>> for SlotIndex {
     }
 }
 
+impl From<SlotIndex> for ethereum_types::U256 {
+    fn from(value: SlotIndex) -> ethereum_types::U256 {
+        value.0
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> SlotIndex
 // -----------------------------------------------------------------------------

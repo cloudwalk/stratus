@@ -11,6 +11,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
+use ethereum_types::H160;
 use sqlx::Encode;
 
 use crate::infra::postgres::Postgres;
@@ -20,6 +21,8 @@ impl EthStorage for Postgres {
         tracing::debug!(%address, "reading account");
 
         let rt = tokio::runtime::Handle::current();
+
+        let address = H160::from(*address).0;
 
         let account = rt
             .block_on(async {
@@ -34,13 +37,13 @@ impl EthStorage for Postgres {
                         FROM accounts
                         WHERE address = $1
                     "#,
-                    address
+                    &address
                 )
                 .fetch_one(&self.connection_pool)
                 .await
             })
             .map_err(|e| {
-                tracing::error!(reason = ?e, "failed to read address {address}");
+                tracing::error!(reason = ?e, "failed to read address {:?}", address);
                 EthError::UnexpectedStorageError
             })?;
 
@@ -50,6 +53,9 @@ impl EthStorage for Postgres {
         tracing::debug!(%address, %slot_index, "reading slot");
 
         let rt = tokio::runtime::Handle::current();
+
+        let address = H160::from(*address).0;
+        let slot_index = ethereum_types::U256::from(slot_index).0;
 
         let slot = rt
             .block_on(async {
@@ -62,14 +68,14 @@ impl EthStorage for Postgres {
                         FROM account_slots
                         WHERE account_address = $1 AND idx = $2
                     "#,
-                    address,
-                    slot_index
+                    &address,
+                    &slot_index
                 )
                 .fetch_one(&self.connection_pool)
                 .await
             })
             .map_err(|e| {
-                tracing::error!(reason = ?e, "failed to read slot index {slot_index} from address {address}");
+                tracing::error!(reason = ?e, "failed to read slot index {:?} from address {:?}", slot_index, address);
                 EthError::UnexpectedStorageError
             })?;
 
@@ -77,7 +83,6 @@ impl EthStorage for Postgres {
     }
     fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
         tracing::debug!(%number, "reading block");
-
         todo!()
     }
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
@@ -85,6 +90,7 @@ impl EthStorage for Postgres {
         todo!()
     }
     fn save_block(&self, _block: Block) -> Result<(), EthError> {
+        tracing::debug!("saving block {:?}", _block);
         todo!()
     }
 }
