@@ -47,9 +47,6 @@ pub enum EthError {
     #[error("Unexpected error with EVM storage. Check logs for more information.")]
     UnexpectedStorageError,
 
-    #[error("Expected some storage item '{0}', but it's missing")]
-    MissingStorageItem(&'static str),
-
     // -------------------------------------------------------------------------
     // Bugs
     // -------------------------------------------------------------------------

@@ -4,6 +4,8 @@ use std::str::FromStr;
 use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::derive_newtype_from;
 use crate::eth::EthError;
@@ -44,6 +46,22 @@ impl FromStr for BlockNumber {
                 Err(EthError::new_invalid_field("blockNumber", s.to_owned()))
             }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for BlockNumber {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }
 }
 

@@ -124,24 +124,22 @@ impl BlockNumberStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let row = rt
+        let currval: i64 = rt
             .block_on(async {
-                sqlx::query!(
+                sqlx::query_scalar!(
                     r#"
-                        SELECT CURRVAL('block_number_seq')
+                        SELECT CURRVAL('block_number_seq') as "n!: _"
                     "#
                 )
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .map_err(|_| EthError::UnexpectedStorageError)?;
+            .map_err(|e| {
+                tracing::error!(reason = ?e, "failed to retrieve sequence 'block_number_seq' current value");
+                EthError::UnexpectedStorageError
+            })?;
 
-        if row.currval.is_none() {
-            return Err(EthError::MissingStorageItem("block_number_seq"));
-        }
-
-        // safe unwrap, check above
-        let block_number = BlockNumber(row.currval.unwrap().into());
+        let block_number = BlockNumber(currval.into());
 
         Ok(block_number)
     }
@@ -151,24 +149,22 @@ impl BlockNumberStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let row = rt
+        let nextval: i64 = rt
             .block_on(async {
-                sqlx::query!(
+                sqlx::query_scalar!(
                     r#"
-                        SELECT NEXTVAL('block_number_seq')
+                        SELECT NEXTVAL('block_number_seq') as "n!: _"
                     "#
                 )
                 .fetch_one(&self.connection_pool)
                 .await
             })
-            .map_err(|_| EthError::UnexpectedStorageError)?;
+            .map_err(|e| {
+                tracing::error!(reason = ?e, "failed to retrieve sequence 'block_number_seq' next value");
+                EthError::UnexpectedStorageError
+            })?;
 
-        if row.nextval.is_none() {
-            return Err(EthError::MissingStorageItem("block_number_seq"));
-        }
-
-        // safe unwrap, check above
-        let block_number = BlockNumber(row.nextval.unwrap().into());
+        let block_number = BlockNumber(nextval.into());
 
         Ok(block_number)
     }
