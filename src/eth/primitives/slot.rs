@@ -11,7 +11,6 @@ use sqlx::error::BoxDynError;
 use sqlx::Decode;
 
 use crate::derive_newtype_from;
-use crate::eth::EthError;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
@@ -58,15 +57,6 @@ derive_newtype_from!(self = SlotIndex, other = u64, U256);
 impl From<RevmU256> for SlotIndex {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())
-    }
-}
-
-impl TryFrom<Vec<u8>> for SlotIndex {
-    type Error = EthError;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, EthError> {
-        let value: [u8; 32] = value.try_into().unwrap();
-        Ok(SlotIndex(U256::from(value)))
     }
 }
 
@@ -131,15 +121,6 @@ impl From<RevmU256> for SlotValue {
 impl From<SlotValue> for RevmU256 {
     fn from(value: SlotValue) -> Self {
         RevmU256::from_limbs(value.0 .0)
-    }
-}
-
-impl TryFrom<Vec<u8>> for SlotValue {
-    type Error = EthError;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, EthError> {
-        let value: [u8; 32] = value.try_into().unwrap();
-        Ok(SlotValue(U256::from(value)))
     }
 }
 
