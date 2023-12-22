@@ -83,11 +83,19 @@ impl sqlx::Type<sqlx::Postgres> for SlotIndex {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: SlotIndex -> sqlx
+// Conversions: SlotIndex -> Other
 // -----------------------------------------------------------------------------
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotIndex {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
         self.encode(buf)
+    }
+}
+
+impl From<SlotIndex> for [u8; 32] {
+    fn from(value: SlotIndex) -> [u8; 32] {
+        let mut buf: [u8; 32] = [1; 32];
+        U256::from(value).to_little_endian(&mut buf);
+        buf
     }
 }
 

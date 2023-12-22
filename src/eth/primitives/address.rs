@@ -118,6 +118,12 @@ impl From<Address> for Token {
     }
 }
 
+impl From<Address> for [u8; 20] {
+    fn from(value: Address) -> Self {
+        H160::from(value.clone()).0
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Self -> sqlx
 // -----------------------------------------------------------------------------

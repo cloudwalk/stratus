@@ -1,6 +1,3 @@
-use ethereum_types::H160;
-use ethereum_types::U256;
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -20,7 +17,7 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let address = H160::from(address.clone()).0;
+        let address: [u8; 20] = (*address).clone().into();
 
         let account = rt
             .block_on(async {
@@ -52,9 +49,8 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let address = H160::from(address.clone()).0;
-        let mut buf: [u8; 32] = [1; 32];
-        U256::from(slot_index.clone()).to_little_endian(&mut buf);
+        let address: [u8; 20] = (*address).clone().into();
+        let slot_index: [u8; 32] = slot_index.clone().into();
 
         let slot = rt
             .block_on(async {
@@ -68,7 +64,7 @@ impl EthStorage for Postgres {
                         WHERE account_address = $1 AND idx = $2
                     "#,
                     &address,
-                    &buf
+                    &slot_index
                 )
                 .fetch_one(&self.connection_pool)
                 .await
