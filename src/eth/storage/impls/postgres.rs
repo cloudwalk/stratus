@@ -1,19 +1,17 @@
+use ethereum_types::H160;
+use ethereum_types::U256;
+
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
-
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
-use ethereum_types::H160;
-use sqlx::Encode;
-
 use crate::infra::postgres::Postgres;
 
 impl EthStorage for Postgres {
@@ -22,7 +20,7 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let address = H160::from(*address).0;
+        let address = H160::from(address.clone()).0;
 
         let account = rt
             .block_on(async {
@@ -54,8 +52,9 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let address = H160::from(*address).0;
-        let slot_index = ethereum_types::U256::from(slot_index).0;
+        let address = H160::from(address.clone()).0;
+        let mut buf: [u8; 32] = [1; 32];
+        U256::from(slot_index.clone()).to_little_endian(&mut buf);
 
         let slot = rt
             .block_on(async {
@@ -69,7 +68,7 @@ impl EthStorage for Postgres {
                         WHERE account_address = $1 AND idx = $2
                     "#,
                     &address,
-                    &slot_index
+                    &buf
                 )
                 .fetch_one(&self.connection_pool)
                 .await
