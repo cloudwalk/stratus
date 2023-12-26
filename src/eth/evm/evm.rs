@@ -1,8 +1,8 @@
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::EthError;
@@ -48,7 +48,7 @@ pub struct EvmInput {
     /// Block number indicating the point-in-time the EVM state will be used to compute the transaction.
     ///
     /// When not specified, assumes the current state.
-    pub block_number: Option<BlockNumber>,
+    pub point_in_time: StoragerPointInTime,
 }
 
 // -----------------------------------------------------------------------------
@@ -63,19 +63,19 @@ impl TryFrom<TransactionInput> for EvmInput {
             to: value.to,
             data: value.input,
             nonce: Some(value.nonce),
-            block_number: None,
+            point_in_time: StoragerPointInTime::Present,
         })
     }
 }
 
-impl From<(CallInput, Option<BlockNumber>)> for EvmInput {
-    fn from(value: (CallInput, Option<BlockNumber>)) -> Self {
+impl From<(CallInput, StoragerPointInTime)> for EvmInput {
+    fn from(value: (CallInput, StoragerPointInTime)) -> Self {
         Self {
             from: value.0.from,
             to: Some(value.0.to),
             data: value.0.data,
             nonce: None,
-            block_number: value.1,
+            point_in_time: value.1,
         }
     }
 }

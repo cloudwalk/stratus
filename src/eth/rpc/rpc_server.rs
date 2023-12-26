@@ -168,7 +168,7 @@ fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned
     let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
 
     // execute
-    let block_number = ctx.storage.translate_to_block_number(&block_selection)?;
+    let block_number = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let result = ctx.executor.call(call, block_number);
     match result {
         Ok(output) => Ok(hex_data(output)),

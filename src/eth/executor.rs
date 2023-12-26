@@ -3,9 +3,9 @@ use std::sync::Mutex;
 
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
@@ -61,7 +61,7 @@ impl EthExecutor {
 
     /// Execute a function and return the function output. State changes are ignored.
     /// TODO: return value
-    pub fn call(&self, input: CallInput, block_number: Option<BlockNumber>) -> Result<Bytes, EthError> {
+    pub fn call(&self, input: CallInput, point_in_time: StoragerPointInTime) -> Result<Bytes, EthError> {
         tracing::info!(
             from = %input.from,
             to = %input.to,
@@ -72,7 +72,7 @@ impl EthExecutor {
 
         // execute, but not save
         let mut executor_lock = self.evm.lock().unwrap();
-        let result = executor_lock.execute((input, block_number).into())?;
+        let result = executor_lock.execute((input, point_in_time).into())?;
         Ok(result.output)
     }
 }
