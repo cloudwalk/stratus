@@ -6,7 +6,7 @@ use ethereum_types::U64;
 use crate::derive_newtype_from;
 use crate::eth::EthError;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::Sub)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::Sub)]
 #[serde(transparent)]
 pub struct BlockNumber(U64);
 
@@ -33,7 +33,7 @@ impl FromStr for BlockNumber {
             Ok(parsed) => Ok(Self(parsed)),
             Err(e) => {
                 tracing::warn!(reason = ?e, value = %s, "failed to parse block number");
-                Err(EthError::parsing("blockNumber", s.to_owned()))
+                Err(EthError::new_invalid_field("blockNumber", s.to_owned()))
             }
         }
     }

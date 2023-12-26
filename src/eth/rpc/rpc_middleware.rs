@@ -17,7 +17,7 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Signature4Bytes;
 use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::rpc::parse_rpc_param;
+use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::infra::metrics;
 
@@ -68,13 +68,13 @@ where
 }
 
 fn extract_function_from_call(params: Params) -> Option<SoliditySignature> {
-    let (_, call) = parse_rpc_param::<CallInput>(params.sequence()).ok()?;
+    let (_, call) = next_rpc_param::<CallInput>(params.sequence()).ok()?;
     let data = call.data;
     extract_function_signature(data.get(..4)?.try_into().ok()?)
 }
 
 fn extract_function_from_transaction(params: Params) -> Option<SoliditySignature> {
-    let (_, data) = parse_rpc_param::<Bytes>(params.sequence()).ok()?;
+    let (_, data) = next_rpc_param::<Bytes>(params.sequence()).ok()?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data).ok()?;
     if transaction.is_contract_deployment() {
         return Some("contract_deployment");

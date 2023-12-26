@@ -5,13 +5,16 @@ use jsonrpsee::types::ErrorObjectOwned;
 use crate::eth::primitives::Address;
 
 /// Errors that can occur when anything related to Ethereum is executing.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum EthError {
     // -------------------------------------------------------------------------
     // Input data
     // -------------------------------------------------------------------------
     #[error("Failed to parse field '{field}' with value '{value}'")]
-    Parsing { field: &'static str, value: String },
+    InvalidField { field: &'static str, value: String },
+
+    #[error("Failed to select block because it is greater than current block number or block hash is invalid.")]
+    InvalidBlockSelection,
 
     #[error("Transaction sent from zero address is not allowed.")]
     ZeroSigner,
@@ -42,13 +45,6 @@ pub enum EthError {
     // -------------------------------------------------------------------------
     #[error("Bug: Contract was deployed, but no address was returned.")]
     DeploymentWithoutAddress,
-}
-
-impl EthError {
-    /// Create a `Parsing` error.
-    pub fn parsing(field: &'static str, value: String) -> Self {
-        Self::Parsing { field, value }
-    }
 }
 
 impl From<EthError> for ErrorObjectOwned {

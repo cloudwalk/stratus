@@ -17,7 +17,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
@@ -52,6 +51,44 @@ impl Default for InMemoryStorage {
 }
 
 impl EthStorage for InMemoryStorage {
+    // -------------------------------------------------------------------------
+    // Block number operations
+    // -------------------------------------------------------------------------
+
+    fn read_current_block_number(&self) -> Result<BlockNumber, EthError> {
+        Ok(self.block_number.load(Ordering::SeqCst).into())
+    }
+
+    fn translate_to_block_number(&self, selection: &BlockSelection) -> Result<Option<BlockNumber>, EthError> {
+        match selection {
+            BlockSelection::Latest => Ok(None),
+            BlockSelection::Number(number) => {
+                let current_block = self.read_current_block_number()?;
+                if number <= &current_block {
+                    Ok(Some(number.clone()))
+                } else {
+                    Err(EthError::InvalidBlockSelection)
+                }
+            }
+            BlockSelection::Hash(hash) => {
+                let state_lock = self.state.read().unwrap();
+                match state_lock.blocks_by_hash.get(hash) {
+                    Some(block) => Ok(Some(block.header.number.clone())),
+                    None => Err(EthError::InvalidBlockSelection),
+                }
+            }
+        }
+    }
+
+    fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
+        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
+        Ok(next.into())
+    }
+
+    // -------------------------------------------------------------------------
+    // State operations
+    // -------------------------------------------------------------------------
+
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
@@ -181,16 +218,5 @@ impl EthStorage for InMemoryStorage {
             }
         }
         Ok(())
-    }
-}
-
-impl BlockNumberStorage for InMemoryStorage {
-    fn current_block_number(&self) -> Result<BlockNumber, EthError> {
-        Ok(self.block_number.load(Ordering::SeqCst).into())
-    }
-
-    fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
-        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(next.into())
     }
 }

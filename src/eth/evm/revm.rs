@@ -36,7 +36,7 @@ pub struct Revm {
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
-    pub fn new(storage: Arc<impl EthStorage>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
         let mut evm = EVM::new();
 
         // evm general config
