@@ -19,8 +19,8 @@ impl Address {
     /// Special address that receives the block reward.
     pub const COINBASE: Address = Address(H160(hex!("00000000000000000000000000000000000000ff")));
 
-    /// Const constructor.
-    pub const fn new_const(bytes: [u8; 20]) -> Self {
+    /// Creates a new address from the given bytes.
+    pub const fn new(bytes: [u8; 20]) -> Self {
         Self(H160(bytes))
     }
 

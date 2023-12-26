@@ -9,9 +9,8 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params;
 use serde_json::Value as JsonValue;
 
-use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumberSelection;
+use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
@@ -69,7 +68,8 @@ fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<
 
     // block
     module.register_method("eth_blockNumber", eth_block_number)?;
-    module.register_method("eth_getBlockByNumber", eth_get_block_by_number)?;
+    module.register_method("eth_getBlockByNumber", eth_get_block_by_selector)?;
+    module.register_method("eth_getBlockByHash", eth_get_block_by_selector)?;
 
     // transactions
     module.register_method("eth_getTransactionCount", eth_get_transaction_count)?;
@@ -123,23 +123,11 @@ fn eth_block_number(_: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjec
     let number = ctx.block_number_storage.current_block_number()?;
     Ok(serde_json::to_value(number).unwrap())
 }
-/// TODO
-fn eth_get_block_by_number(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
-    let (params, number_selection) = parse_rpc_param::<BlockNumberSelection>(params.sequence())?;
+fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+    let (params, block_selection) = parse_rpc_param::<BlockSelection>(params.sequence())?;
     let (_, full_transactions) = parse_rpc_param::<bool>(params)?;
 
-    // parse transaction
-    let number = match number_selection {
-        BlockNumberSelection::Latest => ctx.block_number_storage.current_block_number()?,
-        BlockNumberSelection::Block(number) => number,
-    };
-
-    // handle genesis block
-    let block = if number.is_genesis() {
-        Some(BlockMiner::genesis())
-    } else {
-        ctx.eth_storage.read_block(&number)?
-    };
+    let block = ctx.eth_storage.read_block(&block_selection)?;
 
     match (block, full_transactions) {
         (Some(block), true) => Ok(block.to_json_with_full_transactions()),

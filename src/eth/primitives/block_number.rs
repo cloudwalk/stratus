@@ -12,11 +12,6 @@ pub struct BlockNumber(U64);
 
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());
-
-    /// Checks if the block number is the genesis block.
-    pub fn is_genesis(&self) -> bool {
-        self.0.as_usize() == 0
-    }
 }
 
 impl Display for BlockNumber {
@@ -37,7 +32,7 @@ impl FromStr for BlockNumber {
         match U64::from_str(s) {
             Ok(parsed) => Ok(Self(parsed)),
             Err(e) => {
-                tracing::warn!(reason = ?e, value = %s, "failed to parse block number selection");
+                tracing::warn!(reason = ?e, value = %s, "failed to parse block number");
                 Err(EthError::parsing("blockNumber", s.to_owned()))
             }
         }
