@@ -9,11 +9,13 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params;
 use serde_json::Value as JsonValue;
 
+use super::rpc_internal_error;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -62,7 +64,6 @@ fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<
 
     // gas
     module.register_method("eth_gasPrice", eth_gas_price)?;
-    module.register_method("eth_estimateGas", eth_estimate_gas)?;
 
     // block
     module.register_method("eth_blockNumber", eth_block_number)?;
@@ -73,6 +74,7 @@ fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<
     module.register_method("eth_getTransactionCount", eth_get_transaction_count)?;
     module.register_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
     module.register_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
+    module.register_method("eth_estimateGas", eth_estimate_gas)?;
     module.register_method("eth_call", eth_call)?;
     module.register_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
 
@@ -107,11 +109,6 @@ fn web3_client_version(_: Params, ctx: &RpcContext) -> String {
 
 /// OK
 fn eth_gas_price(_: Params, _: &RpcContext) -> String {
-    hex_zero()
-}
-
-/// OK
-fn eth_estimate_gas(_: Params, _: &RpcContext) -> String {
     hex_zero()
 }
 
@@ -162,16 +159,35 @@ fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonV
     }
 }
 
+/// OK
+fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+    let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
+
+    match ctx.executor.call(call, StoragerPointInTime::Present) {
+        // result is success
+        Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
+
+        // result is failure
+        Ok(result) => Err(rpc_internal_error(hex_data(result.output))),
+
+        // internal error
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to execute eth_estimateGas");
+            Err(e.into())
+        }
+    }
+}
+
 fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    // decode
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
 
-    // execute
     let block_number = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    let result = ctx.executor.call(call, block_number);
-    match result {
-        Ok(output) => Ok(hex_data(output)),
+    match ctx.executor.call(call, block_number) {
+        // success or failure, does not matter
+        Ok(result) => Ok(hex_data(result.output)),
+
+        // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_call");
             Err(e.into())
@@ -180,16 +196,18 @@ fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned
 }
 
 fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    // decode
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data)?;
 
-    // execute
     let hash = transaction.hash.clone();
-    let result = ctx.executor.transact(transaction);
+    match ctx.executor.transact(transaction) {
+        // result is success
+        Ok(result) if result.is_success() => Ok(hex_data(hash)),
 
-    match result {
-        Ok(_) => Ok(hex_data(hash)),
+        // result is failure
+        Ok(result) => Err(rpc_internal_error(hex_data(result.output))),
+
+        // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
             Err(e.into())

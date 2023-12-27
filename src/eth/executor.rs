@@ -3,9 +3,9 @@ use std::sync::Mutex;
 
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
-use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
@@ -27,7 +27,7 @@ impl EthExecutor {
     }
 
     /// Execute a transaction, mutate the state and return function output.
-    pub fn transact(&self, transaction: TransactionInput) -> Result<(), EthError> {
+    pub fn transact(&self, transaction: TransactionInput) -> Result<TransactionExecution, EthError> {
         let signer = transaction.signer()?;
 
         tracing::info!(
@@ -53,18 +53,20 @@ impl EthExecutor {
 
         // execute, mine and save
         let execution = evm_lock.execute(transaction.clone().try_into()?)?;
-        let block = miner_lock.mine_with_one_transaction(signer, transaction, execution)?;
-        self.eth_storage.save_block(block)?;
+        if execution.is_success() {
+            let block = miner_lock.mine_with_one_transaction(signer, transaction, execution.clone())?;
+            self.eth_storage.save_block(block)?;
+        }
 
-        Ok(())
+        Ok(execution)
     }
 
     /// Execute a function and return the function output. State changes are ignored.
     /// TODO: return value
-    pub fn call(&self, input: CallInput, point_in_time: StoragerPointInTime) -> Result<Bytes, EthError> {
+    pub fn call(&self, input: CallInput, point_in_time: StoragerPointInTime) -> Result<TransactionExecution, EthError> {
         tracing::info!(
             from = %input.from,
-            to = %input.to,
+            to = ?input.to,
             data_len = input.data.len(),
             data = %input.data,
             "evm executing call"
@@ -72,7 +74,7 @@ impl EthExecutor {
 
         // execute, but not save
         let mut executor_lock = self.evm.lock().unwrap();
-        let result = executor_lock.execute((input, point_in_time).into())?;
-        Ok(result.output)
+        let execution = executor_lock.execute((input, point_in_time).into())?;
+        Ok(execution)
     }
 }

@@ -40,7 +40,7 @@ where
         // extract signature if available
         let method = request.method_name();
         let function = match method {
-            "eth_call" => extract_function_from_call(request.params()),
+            "eth_call" | "eth_estimateGas" => extract_function_from_call(request.params()),
             "eth_sendRawTransaction" => extract_function_from_transaction(request.params()),
             _ => None,
         };

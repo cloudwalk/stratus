@@ -1,5 +1,7 @@
 //! Helper functions for parsing RPC requests and responses.
 
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::error::PARSE_ERROR_CODE;
 use jsonrpsee::types::error::PARSE_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
@@ -23,7 +25,17 @@ pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, ErrorObjectOwned> 
         Ok(trx) => Ok(trx),
         Err(e) => {
             tracing::warn!(reason = ?e, "failed to decode rlp data");
-            Err(ErrorObjectOwned::owned(PARSE_ERROR_CODE, PARSE_ERROR_MSG, Some(value)))
+            Err(rpc_parsing_error(Some(value)))
         }
     }
+}
+
+/// Creates an RPC internal error response.
+pub fn rpc_internal_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
+    ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(message))
+}
+
+/// Creates an RPC parsing error response.
+pub fn rpc_parsing_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
+    ErrorObjectOwned::owned(PARSE_ERROR_CODE, PARSE_ERROR_MSG, Some(message))
 }
