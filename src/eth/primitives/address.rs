@@ -15,7 +15,6 @@ use sqlx::Decode;
 
 use crate::derive_newtype_from;
 
-
 /// Address of an Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Address(H160);

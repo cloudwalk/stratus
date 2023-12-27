@@ -4,9 +4,7 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
-
 use sqlx::database::HasValueRef;
-
 use sqlx::error::BoxDynError;
 use sqlx::Decode;
 
