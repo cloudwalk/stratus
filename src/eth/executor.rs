@@ -53,8 +53,10 @@ impl EthExecutor {
 
         // execute, mine and save
         let execution = evm_lock.execute(transaction.clone().try_into()?)?;
-        let block = miner_lock.mine_with_one_transaction(signer, transaction, execution.clone())?;
-        self.eth_storage.save_block(block)?;
+        if execution.is_success() {
+            let block = miner_lock.mine_with_one_transaction(signer, transaction, execution.clone())?;
+            self.eth_storage.save_block(block)?;
+        }
 
         Ok(execution)
     }

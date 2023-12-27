@@ -118,15 +118,15 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
             let elapsed = proj.start.elapsed();
 
             // trace response
-            // tracing::info!(
-            //     id = %proj.id,
-            //     method = %proj.method,
-            //     function = %proj.function.unwrap_or_default(),
-            //     duration_ms = %elapsed.as_millis(),
-            //     success = %response.success_or_error.is_success(),
-            //     // result = %response.result,
-            //     "rpc response"
-            // );
+            tracing::info!(
+                id = %proj.id,
+                method = %proj.method,
+                function = %proj.function.unwrap_or_default(),
+                duration_ms = %elapsed.as_millis(),
+                success = %response.success_or_error.is_success(),
+                // result = %response.result,
+                "rpc response"
+            );
 
             // metrify response
             metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.success_or_error.is_success());
