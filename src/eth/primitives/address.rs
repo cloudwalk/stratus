@@ -46,6 +46,12 @@ impl Display for Address {
 // -----------------------------------------------------------------------------
 derive_newtype_from!(self = Address, other = H160, [u8; 20]);
 
+impl AsRef<[u8]> for Address {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 impl From<RevmAddress> for Address {
     fn from(value: RevmAddress) -> Self {
         Address(value.0 .0.into())

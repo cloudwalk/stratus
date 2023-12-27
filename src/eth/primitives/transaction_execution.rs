@@ -45,16 +45,32 @@ pub enum ExecutionResult {
 /// Output of a executed transaction in the EVM.
 #[derive(Debug, Clone)]
 pub struct TransactionExecution {
+    /// Status of the execution.
     pub result: ExecutionResult,
+
+    /// Output returned by the function execution (can be the function output or an exeception).
     pub output: Bytes,
+
+    /// Logs emitted by the function execution.
     pub logs: Vec<Log>,
+
+    /// Consumed gas.
     pub gas: Gas,
+
+    /// Assumed block timestamp during the execution.
+    pub block_timestamp_in_secs: u64,
+
+    /// Storage changes that happened during the transaction execution.
     pub changes: Vec<ExecutionAccountChanges>,
 }
 
 impl TransactionExecution {
     /// Apply REVM transaction execution result to the storage original values, creating a new `TransactionExecution` that can be used to update the state.
-    pub fn from_revm_result(revm_result: RevmResultAndState, execution_changes: ExecutionChanges) -> Result<Self, EthError> {
+    pub fn from_revm_result(
+        revm_result: RevmResultAndState,
+        execution_block_timestamp_in_secs: u64,
+        execution_changes: ExecutionChanges,
+    ) -> Result<Self, EthError> {
         let (result, output, logs, gas) = parse_revm_result(revm_result.result);
         let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
 
@@ -64,6 +80,7 @@ impl TransactionExecution {
             output,
             logs,
             gas,
+            block_timestamp_in_secs: execution_block_timestamp_in_secs,
             changes: execution_changes.into_values().collect(),
         })
     }

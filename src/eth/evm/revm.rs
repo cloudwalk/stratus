@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use chrono::Utc;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
@@ -55,30 +56,40 @@ impl Revm {
 
 impl Evm for Revm {
     fn execute(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
+        // init session
+        let evm = &mut self.evm;
+        let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone());
+
+        // configure evm block
+        evm.env.block.timestamp = U256::from(session.block_timestamp_in_secs);
+
         // configure database
-        self.evm
-            .database(RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone()));
+        evm.database(session);
 
         // configure evm params
-        self.evm.env.tx.caller = input.from.into();
-        self.evm.env.tx.transact_to = match input.to {
+        evm.env.tx.caller = input.from.into();
+        evm.env.tx.transact_to = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create(CreateScheme::Create),
         };
-        self.evm.env.tx.nonce = input.nonce.map_into();
-        self.evm.env.tx.data = input.data.into();
+        evm.env.tx.nonce = input.nonce.map_into();
+        evm.env.tx.data = input.data.into();
 
         // execute evm
         #[cfg(debug_assertions)]
-        let evm_result = self.evm.inspect(RevmInspector {});
+        let evm_result = evm.inspect(RevmInspector {});
 
         #[cfg(not(debug_assertions))]
-        let evm_result = self.evm.transact();
+        let evm_result = evm.transact();
 
         match evm_result {
             Ok(result) => {
-                let session = self.evm.take_db();
-                Ok(TransactionExecution::from_revm_result(result, session.storage_changes))?
+                let session = evm.take_db();
+                Ok(TransactionExecution::from_revm_result(
+                    result,
+                    session.block_timestamp_in_secs,
+                    session.storage_changes,
+                ))?
             }
             Err(e) => {
                 tracing::error!(reason = ?e, "unexpected error in evm execution");
@@ -94,17 +105,28 @@ impl Evm for Revm {
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 struct RevmDatabaseSession {
+    /// Service to communicate with the storage.
     storage: Arc<dyn EthStorage>,
-    point_in_time: StoragerPointInTime,
+
+    /// Point in time of the storage during the transaction execution.
+    storage_point_in_time: StoragerPointInTime,
+
+    /// Block timestamp in seconds.
+    block_timestamp_in_secs: u64,
+
+    /// Address in the `to` field.
     to: Option<Address>,
+
+    /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<dyn EthStorage>, point_in_time: StoragerPointInTime, to: Option<Address>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>, storage_point_in_time: StoragerPointInTime, to: Option<Address>) -> Self {
         Self {
             storage,
-            point_in_time,
+            storage_point_in_time,
+            block_timestamp_in_secs: Utc::now().timestamp() as u64,
             to,
             storage_changes: Default::default(),
         }
@@ -143,7 +165,7 @@ impl Database for RevmDatabaseSession {
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
 
-        let slot = self.storage.read_slot(&address, &index, &self.point_in_time)?;
+        let slot = self.storage.read_slot(&address, &index, &self.storage_point_in_time)?;
         let revm_slot: U256 = slot.value.clone().into();
 
         // track original value

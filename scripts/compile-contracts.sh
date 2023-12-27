@@ -15,5 +15,7 @@ compile() {
 rm ../tests/contracts/*
 compile ../../brlc-token BRLCToken.sol
 compile ../../brlc-periphery CardPaymentProcessor.sol
+compile ../../brlc-periphery CashbackDistributor.sol
 compile ../../brlc-periphery PixCashier.sol
+compile ../../brlc-periphery TokenDistributor.sol
 rm -rf target

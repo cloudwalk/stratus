@@ -89,6 +89,12 @@ impl From<RevmOutput> for Bytes {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl From<Bytes> for EthersBytes {
+    fn from(value: Bytes) -> Self {
+        value.0.into()
+    }
+}
+
 impl From<Bytes> for RevmBytes {
     fn from(value: Bytes) -> Self {
         value.0.into()

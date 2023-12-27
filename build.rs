@@ -18,10 +18,12 @@ fn main() {
 // -----------------------------------------------------------------------------
 // Solidity signatures
 // -----------------------------------------------------------------------------
-const SIGNATURE_FILES: [&str; 3] = [
+const SIGNATURE_FILES: [&str; 5] = [
     "static/contracts/BRLCToken.signatures",
     "static/contracts/CardPaymentProcessor.signatures",
+    "static/contracts/CashbackDistributor.signatures",
     "static/contracts/PixCashier.signatures",
+    "static/contracts/TokenDistributor.signatures",
 ];
 
 /// Generates the `signatures.rs` file containing a static PHF map with Solidity hashes and their description.
