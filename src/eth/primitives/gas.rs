@@ -31,3 +31,9 @@ impl From<Gas> for U256 {
         value.0
     }
 }
+
+impl From<Gas> for usize {
+    fn from(value: Gas) -> Self {
+        value.0.as_usize()
+    }
+}

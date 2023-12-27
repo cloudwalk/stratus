@@ -6,6 +6,7 @@ use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::EthError;
+use crate::ext::OptionExt;
 
 /// EVM operations.
 pub trait Evm: Send + Sync + 'static {
@@ -72,7 +73,7 @@ impl From<(CallInput, StoragerPointInTime)> for EvmInput {
     fn from(value: (CallInput, StoragerPointInTime)) -> Self {
         Self {
             from: value.0.from,
-            to: Some(value.0.to),
+            to: value.0.to.map_into(),
             data: value.0.data,
             nonce: None,
             point_in_time: value.1,

@@ -4,6 +4,6 @@ use crate::eth::primitives::Bytes;
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct CallInput {
     pub from: Address,
-    pub to: Address,
+    pub to: Option<Address>,
     pub data: Bytes,
 }
