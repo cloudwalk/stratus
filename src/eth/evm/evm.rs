@@ -1,7 +1,10 @@
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::EthError;
 
 /// EVM operations.
@@ -41,4 +44,38 @@ pub struct EvmInput {
     /// * Required when executing an `eth_sendRawTransaction`.
     /// * Not specified when performing an `eth_call`.
     pub nonce: Option<Nonce>,
+
+    /// Block number indicating the point-in-time the EVM state will be used to compute the transaction.
+    ///
+    /// When not specified, assumes the current state.
+    pub point_in_time: StoragerPointInTime,
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
+impl TryFrom<TransactionInput> for EvmInput {
+    type Error = EthError;
+
+    fn try_from(value: TransactionInput) -> Result<Self, Self::Error> {
+        Ok(Self {
+            from: value.signer()?,
+            to: value.to,
+            data: value.input,
+            nonce: Some(value.nonce),
+            point_in_time: StoragerPointInTime::Present,
+        })
+    }
+}
+
+impl From<(CallInput, StoragerPointInTime)> for EvmInput {
+    fn from(value: (CallInput, StoragerPointInTime)) -> Self {
+        Self {
+            from: value.0.from,
+            to: Some(value.0.to),
+            data: value.0.data,
+            nonce: None,
+            point_in_time: value.1,
+        }
+    }
 }

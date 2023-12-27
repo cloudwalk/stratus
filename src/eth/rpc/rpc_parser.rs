@@ -7,7 +7,7 @@ use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
 
 /// Extract the next RPC parameter from the parameters sequence.
-pub fn parse_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
+pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
     match params.next::<T>() {
         Ok(address) => Ok((params, address)),
         Err(e) => {

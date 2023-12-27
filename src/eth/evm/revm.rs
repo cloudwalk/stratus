@@ -22,6 +22,7 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
@@ -36,7 +37,7 @@ pub struct Revm {
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
-    pub fn new(storage: Arc<impl EthStorage>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
         let mut evm = EVM::new();
 
         // evm general config
@@ -55,7 +56,8 @@ impl Revm {
 impl Evm for Revm {
     fn execute(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
         // configure database
-        self.evm.database(RevmDatabaseSession::new(Arc::clone(&self.storage), input.to.clone()));
+        self.evm
+            .database(RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone()));
 
         // configure evm params
         self.evm.env.tx.caller = input.from.into();
@@ -67,7 +69,12 @@ impl Evm for Revm {
         self.evm.env.tx.data = input.data.into();
 
         // execute evm
+        #[cfg(debug_assertions)]
         let evm_result = self.evm.inspect(RevmInspector {});
+
+        #[cfg(not(debug_assertions))]
+        let evm_result = self.evm.transact();
+
         match evm_result {
             Ok(result) => {
                 let session = self.evm.take_db();
@@ -85,19 +92,21 @@ impl Evm for Revm {
 // Database
 // -----------------------------------------------------------------------------
 
-/// Retrieve and keep track of all original values that are requested by the EVM.
+/// Contextual data that is read or set durint the execution of a transaction in the EVM.
 struct RevmDatabaseSession {
-    to: Option<Address>,
     storage: Arc<dyn EthStorage>,
+    point_in_time: StoragerPointInTime,
+    to: Option<Address>,
     storage_changes: ExecutionChanges,
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<dyn EthStorage>, to: Option<Address>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>, point_in_time: StoragerPointInTime, to: Option<Address>) -> Self {
         Self {
             storage,
-            storage_changes: ExecutionChanges::new(),
+            point_in_time,
             to,
+            storage_changes: Default::default(),
         }
     }
 }
@@ -134,7 +143,7 @@ impl Database for RevmDatabaseSession {
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
 
-        let slot = self.storage.read_slot(&address, &index)?;
+        let slot = self.storage.read_slot(&address, &index, &self.point_in_time)?;
         let revm_slot: U256 = slot.value.clone().into();
 
         // track original value

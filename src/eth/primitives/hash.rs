@@ -47,7 +47,7 @@ impl FromStr for Hash {
             Ok(parsed) => Ok(Self(parsed)),
             Err(e) => {
                 tracing::warn!(reason = ?e, value = %s, "failed to parse hash");
-                Err(EthError::parsing("hash", s.to_owned()))
+                Err(EthError::new_invalid_field("hash", s.to_owned()))
             }
         }
     }

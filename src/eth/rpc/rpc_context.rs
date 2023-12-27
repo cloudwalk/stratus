@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
 
@@ -15,8 +14,7 @@ pub struct RpcContext {
 
     // services
     pub executor: EthExecutor,
-    pub eth_storage: Arc<dyn EthStorage>,
-    pub block_number_storage: Arc<dyn BlockNumberStorage>,
+    pub storage: Arc<dyn EthStorage>,
 }
 
 impl Debug for RpcContext {

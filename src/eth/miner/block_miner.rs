@@ -10,15 +10,15 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::BlockNumberStorage;
+use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 pub struct BlockMiner {
-    storage: Arc<dyn BlockNumberStorage>,
+    storage: Arc<dyn EthStorage>,
 }
 
 impl BlockMiner {
-    pub fn new(storage: Arc<dyn BlockNumberStorage>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
         Self { storage }
     }
 

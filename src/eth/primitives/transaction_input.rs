@@ -1,7 +1,6 @@
 use ethers_core::types::Transaction as EthersTransaction;
 use rlp::Decodable;
 
-use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Gas;
@@ -59,22 +58,6 @@ impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         let inner = EthersTransaction::decode(rlp)?;
         Ok(Self::from(inner))
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Conversions: Self -> Other
-// -----------------------------------------------------------------------------
-impl TryFrom<TransactionInput> for EvmInput {
-    type Error = EthError;
-
-    fn try_from(value: TransactionInput) -> Result<Self, Self::Error> {
-        Ok(Self {
-            from: value.signer()?,
-            to: value.to,
-            data: value.input,
-            nonce: Some(value.nonce),
-        })
     }
 }
 
