@@ -1,35 +1,32 @@
-use ethers_core::types::Log as EthersLog;
+use itertools::Itertools;
 use revm::primitives::Log as RevmLog;
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::LogTopic;
 
+/// Log is an event emitted by the EVM during contract execution.
 #[derive(Debug, Clone)]
 pub struct Log {
-    _address: Address,
-    _inner: EthersLog,
+    /// Address that emitted the log.
+    pub address: Address,
+
+    /// Topics (0 to 4 positions) describing the log.
+    pub topics: Vec<LogTopic>,
+
+    /// Additional data.
+    pub data: Bytes,
 }
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 impl From<RevmLog> for Log {
     fn from(value: RevmLog) -> Self {
-        EthersLog {
-            address: value.address.0 .0.into(),
-            topics: value.topics.into_iter().map(|x| x.0.into()).collect(),
-            data: value.data.0.into(),
-            removed: Some(false),
-            ..Default::default()
-        }
-        .into()
-    }
-}
-
-impl From<EthersLog> for Log {
-    fn from(value: EthersLog) -> Self {
         Self {
-            _address: value.address.into(),
-            _inner: value,
+            address: value.address.into(),
+            topics: value.topics.into_iter().map_into().collect(),
+            data: value.data.into(),
         }
     }
 }

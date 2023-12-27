@@ -15,18 +15,10 @@ pub struct Block {
 }
 
 impl Block {
-    /// Creates a new block with the given number.
-    pub fn new(number: BlockNumber) -> Self {
-        Self {
-            header: BlockHeader::new(number),
-            transactions: vec![],
-        }
-    }
-
     /// Creates a new block with the given number and transactions capacity.
-    pub fn new_with_capacity(number: BlockNumber, capacity: usize) -> Self {
+    pub fn new_with_capacity(number: BlockNumber, timestamp_in_secs: u64, capacity: usize) -> Self {
         Self {
-            header: BlockHeader::new(number),
+            header: BlockHeader::new(number, timestamp_in_secs),
             transactions: Vec::with_capacity(capacity),
         }
     }

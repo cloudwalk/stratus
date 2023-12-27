@@ -1,5 +1,3 @@
-use chrono::DateTime;
-use chrono::Utc;
 use ethereum_types::Bloom;
 use ethereum_types::H64;
 use ethereum_types::U256;
@@ -24,19 +22,19 @@ pub struct BlockHeader {
     pub transactions_root: Hash,
     pub gas: Gas,
     pub bloom: Bloom,
-    pub created_at: DateTime<Utc>,
+    pub timestamp_in_secs: u64,
 }
 
 impl BlockHeader {
     /// Creates a new block header with the given number.
-    pub fn new(number: BlockNumber) -> Self {
+    pub fn new(number: BlockNumber, timestamp_in_secs: u64) -> Self {
         Self {
             number,
             hash: Hash::random(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
             bloom: Bloom::default(),
-            created_at: Utc::now(),
+            timestamp_in_secs,
         }
     }
 }
@@ -60,7 +58,7 @@ where
             parent_beacon_block_root: None,
 
             // mining: identifiers
-            timestamp: header.created_at.timestamp().into(),
+            timestamp: header.timestamp_in_secs.into(),
             author: Some(Address::COINBASE.into()),
 
             // minining: difficulty
