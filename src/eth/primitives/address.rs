@@ -14,7 +14,7 @@ use sqlx::error::BoxDynError;
 use sqlx::Decode;
 
 use crate::derive_newtype_from;
-use crate::eth::EthError;
+
 
 /// Address of an Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -94,6 +94,12 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Address {
 impl sqlx::Type<sqlx::Postgres> for Address {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+impl AsRef<[u8]> for Address {
+    fn as_ref(&self) -> &[u8] {
+        &self.0 .0
     }
 }
 

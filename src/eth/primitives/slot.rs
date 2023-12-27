@@ -4,9 +4,9 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
-use sqlx::database::HasArguments;
+
 use sqlx::database::HasValueRef;
-use sqlx::encode::IsNull;
+
 use sqlx::error::BoxDynError;
 use sqlx::Decode;
 
@@ -85,12 +85,6 @@ impl sqlx::Type<sqlx::Postgres> for SlotIndex {
 // -----------------------------------------------------------------------------
 // Conversions: SlotIndex -> Other
 // -----------------------------------------------------------------------------
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotIndex {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        self.encode(buf)
-    }
-}
-
 impl From<SlotIndex> for [u8; 32] {
     fn from(value: SlotIndex) -> [u8; 32] {
         let mut buf: [u8; 32] = [1; 32];

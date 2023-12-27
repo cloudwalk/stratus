@@ -21,7 +21,7 @@ impl Postgres {
             .connect(url)
             .await
             .map_err(|e| {
-                tracing::trace!(reason = ?e, url = %url, "Failed to connect to Postgres");
+                tracing::error!(reason = ?e, url = %url, "failed to connect to Postgres");
                 EthError::StorageConnectionError
             })?;
 

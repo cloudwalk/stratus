@@ -17,8 +17,6 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let address: [u8; 20] = (*address).clone().into();
-
         let account = rt
             .block_on(async {
                 sqlx::query_as!(
@@ -32,7 +30,7 @@ impl EthStorage for Postgres {
                         FROM accounts
                         WHERE address = $1
                     "#,
-                    &address
+                    address.as_ref()
                 )
                 .fetch_one(&self.connection_pool)
                 .await
@@ -49,7 +47,7 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let address: [u8; 20] = (*address).clone().into();
+        // TODO: improve this
         let slot_index: [u8; 32] = slot_index.clone().into();
 
         let slot = rt
@@ -63,8 +61,8 @@ impl EthStorage for Postgres {
                         FROM account_slots
                         WHERE account_address = $1 AND idx = $2
                     "#,
-                    &address,
-                    &slot_index
+                    address.as_ref(),
+                    slot_index.as_ref()
                 )
                 .fetch_one(&self.connection_pool)
                 .await
@@ -85,7 +83,7 @@ impl EthStorage for Postgres {
         todo!()
     }
     fn save_block(&self, _block: Block) -> Result<(), EthError> {
-        tracing::debug!(?_block, "saving block");
+        tracing::debug!(block = ?_block, "saving block");
         todo!()
     }
 }
