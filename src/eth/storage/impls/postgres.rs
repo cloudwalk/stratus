@@ -2,6 +2,7 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -74,16 +75,16 @@ impl EthStorage for Postgres {
 
         Ok(slot)
     }
-    fn read_block(&self, number: &BlockNumber) -> Result<Option<Block>, EthError> {
-        tracing::debug!(%number, "reading block");
+    fn read_block(&self, block: &BlockSelection) -> Result<Option<Block>, EthError> {
+        tracing::debug!(block = ?block, "reading block");
         todo!()
     }
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
         tracing::debug!(%hash, "reading transaction");
         todo!()
     }
-    fn save_block(&self, _block: Block) -> Result<(), EthError> {
-        tracing::debug!(block = ?_block, "saving block");
+    fn save_block(&self, block: Block) -> Result<(), EthError> {
+        tracing::debug!(block = ?block, "saving block");
         todo!()
     }
 }
