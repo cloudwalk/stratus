@@ -5,12 +5,11 @@ use std::sync::Arc;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
-use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
-use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params;
 use serde_json::Value as JsonValue;
 
+use super::rpc_internal_error;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
@@ -167,8 +166,10 @@ fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObj
     match ctx.executor.call(call, StoragerPointInTime::Present) {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
+
         // result is failure
-        Ok(result) => Err(ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(hex_data(result.output)))),
+        Ok(result) => Err(rpc_internal_error(hex_data(result.output))),
+
         // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_estimateGas");
@@ -183,7 +184,10 @@ fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned
 
     let block_number = ctx.storage.translate_to_point_in_time(&block_selection)?;
     match ctx.executor.call(call, block_number) {
+        // success or failure, does not matter
         Ok(result) => Ok(hex_data(result.output)),
+
+        // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_call");
             Err(e.into())
@@ -197,7 +201,13 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 
     let hash = transaction.hash.clone();
     match ctx.executor.transact(transaction) {
-        Ok(_) => Ok(hex_data(hash)),
+        // result is success
+        Ok(result) if result.is_success() => Ok(hex_data(hash)),
+
+        // result is failure
+        Ok(result) => Err(rpc_internal_error(hex_data(result.output))),
+
+        // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
             Err(e.into())

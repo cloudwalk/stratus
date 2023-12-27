@@ -27,7 +27,7 @@ impl EthExecutor {
     }
 
     /// Execute a transaction, mutate the state and return function output.
-    pub fn transact(&self, transaction: TransactionInput) -> Result<(), EthError> {
+    pub fn transact(&self, transaction: TransactionInput) -> Result<TransactionExecution, EthError> {
         let signer = transaction.signer()?;
 
         tracing::info!(
@@ -53,10 +53,10 @@ impl EthExecutor {
 
         // execute, mine and save
         let execution = evm_lock.execute(transaction.clone().try_into()?)?;
-        let block = miner_lock.mine_with_one_transaction(signer, transaction, execution)?;
+        let block = miner_lock.mine_with_one_transaction(signer, transaction, execution.clone())?;
         self.eth_storage.save_block(block)?;
 
-        Ok(())
+        Ok(execution)
     }
 
     /// Execute a function and return the function output. State changes are ignored.
@@ -72,7 +72,7 @@ impl EthExecutor {
 
         // execute, but not save
         let mut executor_lock = self.evm.lock().unwrap();
-        let result = executor_lock.execute((input, point_in_time).into())?;
-        Ok(result)
+        let execution = executor_lock.execute((input, point_in_time).into())?;
+        Ok(execution)
     }
 }

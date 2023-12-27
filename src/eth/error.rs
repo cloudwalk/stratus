@@ -1,7 +1,6 @@
-use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
-use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 
+use super::rpc::rpc_internal_error;
 use crate::eth::primitives::Address;
 
 /// Errors that can occur when anything related to Ethereum is executing.
@@ -48,7 +47,7 @@ pub enum EthError {
 }
 
 impl From<EthError> for ErrorObjectOwned {
-    fn from(_: EthError) -> Self {
-        ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, None::<String>)
+    fn from(error: EthError) -> Self {
+        rpc_internal_error(error.to_string())
     }
 }
