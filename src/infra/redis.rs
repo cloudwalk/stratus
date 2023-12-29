@@ -9,7 +9,7 @@ impl RedisStorage {
     pub async fn new(url: &str) -> Self {
         tracing::info!("Redis connection pool created");
 
-        let client = redis::Client::open(&url).unwrap();
+        let client = redis::Client::open(url).unwrap();
 
         Self { client }
     }
