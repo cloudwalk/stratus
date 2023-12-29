@@ -1,5 +1,8 @@
 use std::fmt::Display;
 use std::str::FromStr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+
 
 use ethereum_types::U64;
 
@@ -12,6 +15,11 @@ pub struct BlockNumber(U64);
 
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());
+
+    pub fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
+        let next = self.0.as_u64() + 1;
+        Ok(next.into())
+    }
 }
 
 impl Display for BlockNumber {
@@ -45,5 +53,11 @@ impl FromStr for BlockNumber {
 impl From<BlockNumber> for U64 {
     fn from(block_number: BlockNumber) -> Self {
         block_number.0
+    }
+}
+
+impl From<BlockNumber> for u64 {
+    fn from(block_number: BlockNumber) -> Self {
+        block_number.0.as_u64()
     }
 }
