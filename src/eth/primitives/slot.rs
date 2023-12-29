@@ -5,7 +5,7 @@ use revm::primitives::U256 as RevmU256;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
     pub index: SlotIndex,
     pub value: SlotValue,
@@ -30,7 +30,7 @@ impl Display for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
 impl Display for SlotIndex {
@@ -51,7 +51,7 @@ impl From<RevmU256> for SlotIndex {
 // SlotValue
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(U256);
 
 impl Display for SlotValue {

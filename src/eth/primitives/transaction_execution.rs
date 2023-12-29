@@ -24,7 +24,7 @@ pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
 // -----------------------------------------------------------------------------
 
 /// Indicates how a transaction was finished.
-#[derive(Debug, Clone, strum::Display, derive_new::new)]
+#[derive(Debug, Clone, strum::Display, derive_new::new, serde::Serialize, serde::Deserialize)]
 pub enum ExecutionResult {
     /// Transaction execution finished normally (RETURN).
     #[strum(serialize = "Success")]
@@ -43,7 +43,7 @@ pub enum ExecutionResult {
 // Transaction Execution
 // -----------------------------------------------------------------------------
 /// Output of a executed transaction in the EVM.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TransactionExecution {
     /// Status of the execution.
     pub result: ExecutionResult,
@@ -170,7 +170,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
 // -----------------------------------------------------------------------------
 
 /// Changes that happened to an account during a transaction.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
     pub address: Address,
     pub nonce: ExecutionValueChange<Nonce>,
@@ -232,7 +232,7 @@ impl ExecutionAccountChanges {
 // -----------------------------------------------------------------------------
 
 /// Changes that happened to an account value during a transaction.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionValueChange<T>
 where
     T: PartialEq,

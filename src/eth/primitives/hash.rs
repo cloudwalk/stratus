@@ -6,7 +6,7 @@ use ethereum_types::H256;
 use crate::derive_newtype_from;
 use crate::eth::EthError;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
 pub struct Hash(H256);
 

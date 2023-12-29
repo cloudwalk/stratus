@@ -4,7 +4,7 @@ use ethereum_types::U256;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default, serde::Serialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Gas(U256);
 

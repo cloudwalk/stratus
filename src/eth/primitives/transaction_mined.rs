@@ -12,7 +12,7 @@ use crate::ext::OptionExt;
 use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct TransactionMined {
     /// Address who signed the transaction.
     pub signer: Address,

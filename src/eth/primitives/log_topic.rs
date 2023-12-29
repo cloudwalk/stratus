@@ -2,7 +2,7 @@ use ethereum_types::H256;
 use revm::primitives::B256 as RevmB256;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LogTopic(H256);
 
 // -----------------------------------------------------------------------------

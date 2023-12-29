@@ -4,7 +4,7 @@ use ethereum_types::U256;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U256);
 
 impl Display for Nonce {

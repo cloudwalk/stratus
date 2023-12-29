@@ -10,7 +10,7 @@ use crate::eth::EthError;
 use crate::ext::not;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct TransactionInput {
     pub hash: Hash,
     pub nonce: Nonce,

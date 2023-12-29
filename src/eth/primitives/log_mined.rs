@@ -6,7 +6,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Log;
 
 /// Log that was emitted by the EVM and added to a block.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct LogMined {
     /// Original log emitted by the EVM.
     pub log: Log,

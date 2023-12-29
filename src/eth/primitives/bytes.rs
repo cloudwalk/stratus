@@ -8,7 +8,7 @@ use revm::primitives::Output as RevmOutput;
 
 use crate::derive_newtype_from;
 
-#[derive(Clone, Default, Eq, PartialEq, derive_more::Deref)]
+#[derive(Clone, Default, Eq, PartialEq, derive_more::Deref, serde::Serialize)]
 pub struct Bytes(Vec<u8>);
 
 impl Display for Bytes {

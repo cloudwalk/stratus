@@ -5,11 +5,12 @@ use ethereum_types::H160;
 use ethers_core::types::NameOrAddress;
 use hex_literal::hex;
 use revm::primitives::Address as RevmAddress;
+use serde::{Serialize, Deserialize};
 
 use crate::derive_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct Address(H160);
 
 impl Address {

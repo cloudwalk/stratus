@@ -7,7 +7,7 @@ use revm::primitives::U256 as RevmU256;
 use crate::derive_newtype_from;
 
 /// Native token amount in wei.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Wei(U256);
 
 impl Wei {

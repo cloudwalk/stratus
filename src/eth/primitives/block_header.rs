@@ -9,13 +9,15 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 
+use serde::{Deserialize, Serialize};
+
 /// Special hash used in block mining to indicate no uncle blocks.
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
 
 /// Special hash used in block mining to indicate no transaction root and no receipts root.
 const HASH_EMPTY_TRANSACTIONS_ROOT: Hash = Hash::new(hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"));
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockHeader {
     pub number: BlockNumber,
     pub hash: Hash,

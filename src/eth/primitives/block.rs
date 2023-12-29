@@ -3,12 +3,13 @@ use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
+use serde::{Deserialize, Serialize};
 
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::TransactionMined;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionMined>,
@@ -39,14 +40,14 @@ impl Block {
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
-impl serde::Serialize for Block {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        Into::<EthersBlock<EthersTransaction>>::into(self).serialize(serializer)
-    }
-}
+// impl serde::Serialize for Block {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         Into::<EthersBlock<EthersTransaction>>::into(self).serialize(serializer)
+//     }
+// }
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
