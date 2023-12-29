@@ -1,61 +1,85 @@
-# Runs the service locally
+# Project: Show available tasks
+default:
+    just --list --unsorted
+
+# Project: Run project setup
+setup:
+    @echo "* Installing Cargo killport"
+    cargo install killport
+
+    @echo "* Installing Cargo wait-service"
+    cargo install wait-service
+
+    @echo "* Cloning Solidity repositories"
+    just contracts-clone
+
+# ------------------------------------------------------------------------------
+# Ledger tasks
+# ------------------------------------------------------------------------------
+
+# Ledger: Run locally with debug options
 run:
     RUST_LOG=info cargo run
 
-# Runs the service locally with release options
+# Ledger: Run locally with release options
 run-release:
-    cargo run --release
+    RUST_LOG=info cargo run --release
 
-# Compile project with debug options
+# Ledger: Compile with debug options
 build:
     cargo build
 
-# Compile project with release options
+# Ledger: Compile with release options
 build-release:
     cargo build --release
 
-# Clean project build directory
+# Ledger: Clean build artifacts
 clean:
     cargo clean
 
-# Compile SQLx queries
+# Ledger: Build documentation
+doc:
+    @just test-doc
+    cargo +nightly doc --no-deps
+
+# Ledger: Lint and format code
+lint:
+    cargo +nightly fmt --all
+    cargo +nightly clippy --all-targets
+
+# Ledger: Compile SQLx queries
 sqlx:
     SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@0.0.0.0:5432/ledger -- --all-targets
 
-# Execute all tests
+# ------------------------------------------------------------------------------
+# Test tasks
+# ------------------------------------------------------------------------------
+
+# Test: Execute all Rust tests
 test name="":
     @just test-doc {{name}}
     @just test-unit {{name}}
     @just test-int {{name}}
 
-# Execute doc tests
+# Test: Execute Rust doc tests
 test-doc name="":
     cargo +nightly test {{name}} --doc
 
-# Execute unit tests
+# Test: Execute Rust unit tests
 test-unit name="":
     cargo test --lib {{name}} -- --nocapture
 
-# Execute integration tests
+# Test: Execute Rust integration tests
 test-int name="":
     cargo test --test '*' {{name}} -- --nocapture
 
-# Generate documentation
-doc:
-    @just test-doc
-    cargo +nightly doc --no-deps
-
-# Format code and run configured linters
-lint:
-    cargo +nightly fmt --all
-    cargo +nightly clippy --all-targets
 
 
 # ------------------------------------------------------------------------------
-# E2E
+# E2E tasks
 # ------------------------------------------------------------------------------
 
-# Execute E2E tests
+# E2E: Execute Hardhat tests in the specified network
 e2e network="ledger":
     #!/bin/bash
     if [ -d e2e ]; then
@@ -66,15 +90,7 @@ e2e network="ledger":
     fi
     npx hardhat test test/*.test.ts --network {{network}}
 
-# Lint E2E tests
-e2e-lint:
-    #!/bin/bash
-    if [ -d e2e ]; then
-        cd e2e
-    fi
-    node_modules/.bin/prettier . --write
-
-# Execute E2E tests with Anvil
+# E2E: Starts and execute Hardhat tests in Anvil
 e2e-anvil:
     #!/bin/bash
     if [ -d e2e ]; then
@@ -85,15 +101,15 @@ e2e-anvil:
     anvil --chain-id 2008 --gas-price 0 --block-base-fee-per-gas 0 --port 8546 &
 
     echo "-> Waiting Anvil to start"
-    sleep 0.1
+    wait-service --tcp localhost:8546 -- echo
 
     echo "-> Running E2E tests"
     just e2e anvil
 
     echo "-> Killing Anvil"
-    lsof -n -i :8546 | grep -v PID | awk '{print $2}' | xargs -I{} kill -9 {}
+    killport 8546
 
-# Execute E2E tests with Hardhat
+# E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat:
     #!/bin/bash
     if [ -d e2e ]; then
@@ -104,15 +120,15 @@ e2e-hardhat:
     npx hardhat node &
 
     echo "-> Waiting Hardhat to start"
-    sleep 1
+    wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
     just e2e hardhat
 
     echo "-> Killing Hardhat"
-    lsof -n -i :8545 | grep -v PID | awk '{print $2}' | xargs -I{} kill -9 {}
+    killport 8545
 
-# Execute E2E tests with Ledger
+# E2E: Starts and execute Hardhat tests in Ledger
 e2e-ledger:
     #!/bin/bash
     if [ -d e2e ]; then
@@ -123,10 +139,35 @@ e2e-ledger:
     RUST_LOG=info just run &
 
     echo "-> Waiting Ledger to start"
-    sleep 2
+    wait-service --tcp localhost:3000 -- echo
 
     echo "-> Running E2E tests"
     just e2e ledger
 
     echo "-> Killing Ledger"
-    lsof -n -i :3000 | grep -v PID | awk '{print $2}' | xargs -I{} kill -9 {}
+    killport 3000
+
+# E2E: Lint and format code
+e2e-lint:
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+    node_modules/.bin/prettier . --write
+
+# ------------------------------------------------------------------------------
+# Contracts tasks
+# ------------------------------------------------------------------------------
+
+# Contracts: Clone Solidity repositories
+contracts-clone:
+    cd e2e-contracts && ./clone-contracts.sh
+
+# Contracts: Compile selected Solidity contracts
+contracts-compile:
+    cd e2e-contracts && ./compile-contracts.sh
+
+# Contracts: Test selected Solidity contracts on Ledger
+contracts-test:
+    cd e2e-contracts && ./test-contracts.sh
+alias e2e-contracts := contracts-test

@@ -1,7 +1,7 @@
 use jsonrpsee::types::ErrorObjectOwned;
 
-use super::rpc::rpc_internal_error;
 use crate::eth::primitives::Address;
+use crate::eth::rpc::rpc_internal_error;
 
 /// Errors that can occur when anything related to Ethereum is executing.
 #[derive(Debug, thiserror::Error, derive_new::new)]
