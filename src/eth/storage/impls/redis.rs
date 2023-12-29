@@ -38,43 +38,35 @@ impl RedisStorage {
         let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
     }
 
-    fn get_current_block(&self) -> Result<BlockNumber, redis::RedisError> {
-        let current_block: Result<String, redis::RedisError> = redis::cmd("GET").arg("current_block").query(&mut self.get_connection());
-        match current_block {
-            Ok(block) => block.into()
-            Err(error) => {
-                println!("Error {}", error);
-                Err(error)
-            }
-        }
-    }
-
 }
 
 impl EthStorage for RedisStorage {
 
-    fn save_block(&self, block: Block) -> Result<(), EthError> {
-        let mut con = RedisStorage::get_connection(&self);
-        let number: u64 = block.header.number.into();
-        let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
-        let json = serde_json::to_string(&block).unwrap();
-        let key = "BLOCK_".to_string() + &number.to_string();
-        let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
-        Ok(())
+    fn read_current_block_number(&self) -> Result<BlockNumber, EthError> {
+        tracing::debug!("read_current_block_number");
+        let current_block: Result<u64, redis::RedisError> = redis::cmd("GET").arg("current_block").query(&mut self.get_connection());
+        match current_block {
+            Ok(block) => {
+                let block_number: BlockNumber = block.into();
+                Ok(block_number)
+            }
+            Err(error) => {
+                println!("Error {}", error);
+                Err(EthError::UnexpectedStorageError)
+            }
+        }
     }
 
     fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
-        let current_block = self.get_current_block();
+        tracing::debug!("increment_block_number");
+        let current_block = self.read_current_block_number();
         match current_block {
             Ok(block) => {
                 let number = block.increment_block_number();
                 match number {
                     Ok(res) => {
-                        let res = self.set_current_block(res);
-                        number
-                        // match res {
-                        //     Ok(_) => Ok(number)
-                        // }
+                        self.set_current_block(res.clone());
+                        Ok(res)
                     },
                     Err(error) => Err(error)
                 }
@@ -86,25 +78,52 @@ impl EthStorage for RedisStorage {
         }
     }
 
-    fn read_block(&self, block_number: &BlockSelection) -> Result<Option<Block>, EthError>> {
-        let block: Option<Block> = match selection {
+    fn read_account(&self, address: &Address) -> Result<Account, EthError> {
+        tracing::debug!(%address, "reading account");
+        todo!()
+    }
+
+    fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
+        tracing::debug!(%address, %slot, ?point_in_time, "reading slot");
+        todo!()
+    }
+
+    fn read_block(&self, selection: &BlockSelection) -> Result<Option<Block>, EthError> {
+        tracing::debug!(?selection, "reading block");
+
+        let block: Result<String, redis::RedisError> = match selection {
             BlockSelection::Latest => redis::cmd("GET").arg("block_1").query(&mut self.get_connection()),
-            BlockSelection::Number(number) => redis::cmd("GET").arg("block_"+number).query(&mut self.get_connection()),
-            BlockSelection::Hash(hash) => redis::cmd("GET").arg("block_"+hash).query(&mut self.get_connection()),
-        }
+            BlockSelection::Number(number) => redis::cmd("GET").arg("BLOCK_".to_owned()+&number.to_string()).query(&mut self.get_connection()),
+            BlockSelection::Hash(hash) => redis::cmd("GET").arg("BLOCK_".to_owned()+&hash.to_string()).query(&mut self.get_connection()),
+        };
         
         match block {
-            Some(block) => {
+            Ok(block) => {
                 tracing::trace!(?selection, ?block, "block found");
-                Ok(Some(block.clone()))
+                let block2 = serde_json::from_str(&block).unwrap();
+                Ok(block2)
             }
-            None => {
-                tracing::trace!(?selection, "block not found");
-                Ok(None)
+            Err(error) => {
+                tracing::trace!(?error);
+                Err(EthError::UnexpectedStorageError)
             }
         }
     }
 
-    // Implement other methods of EthStorage trait
-    // ...
+    fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
+        tracing::debug!(%hash, "reading transaction");
+        todo!()
+    }
+
+    fn save_block(&self, block: Block) -> Result<(), EthError> {
+        let mut con = RedisStorage::get_connection(&self);
+        let block2 = block.clone();
+        let number: u64 = block.header.number.into();
+        let json = serde_json::to_string(&block2.clone()).unwrap();
+        let key = "BLOCK_".to_string() + &number.to_string();
+        let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
+        let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
+        Ok(())
+    }
+
 }
