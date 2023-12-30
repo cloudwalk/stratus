@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+use glob::glob;
 use nom::bytes::complete::tag;
 use nom::character::complete::hex_digit1;
 use nom::combinator::rest;
@@ -18,22 +19,26 @@ fn main() {
 // -----------------------------------------------------------------------------
 // Solidity signatures
 // -----------------------------------------------------------------------------
-const SIGNATURE_FILES: [&str; 5] = [
-    "static/contracts/BRLCToken.signatures",
-    "static/contracts/CardPaymentProcessor.signatures",
-    "static/contracts/CashbackDistributor.signatures",
-    "static/contracts/PixCashier.signatures",
-    "static/contracts/TokenDistributor.signatures",
-];
+const SIGNATURES_DIR: &str = "static/contracts/*.signatures";
 
 /// Generates the `signatures.rs` file containing a static PHF map with Solidity hashes and their description.
 fn generate_signature_maps() {
+    // list all signature files to be parsed
+    let signature_files: Vec<PathBuf> = glob(SIGNATURES_DIR)
+        .expect("Listing signature files should not fail")
+        .map(|x| x.expect("Listing signature file should not fail"))
+        .collect();
+
+    if signature_files.is_empty() {
+        panic!("No signature files found in \"{}\"", SIGNATURES_DIR);
+    }
+
     // iterate contract signature files populating 4 bytes and 32 bytes signatures
     let mut seen = HashSet::<Vec<u8>>::new();
     let mut signatures_4_bytes = phf_codegen::Map::<[u8; 4]>::new();
     let mut signatures_32_bytes = phf_codegen::Map::<[u8; 32]>::new();
-    for signatures_file in SIGNATURE_FILES {
-        let signatures_content = read_file(signatures_file);
+    for signature_file in signature_files {
+        let signatures_content = fs::read_to_string(signature_file).expect("Reading signature file shoult not fail");
         populate_signature_maps(&signatures_content, &mut seen, &mut signatures_4_bytes, &mut signatures_32_bytes);
     }
 
@@ -89,11 +94,6 @@ fn parse_signature(input: &str) -> IResult<&str, (Vec<u8>, &str)> {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-/// Read a file content to string.
-fn read_file(filename: &'static str) -> String {
-    fs::read_to_string(filename).expect("Input file should exist")
-}
 
 /// Creates a file in the OUT_DIR directory with the provided name.
 fn create_file(filename: &'static str) -> File {

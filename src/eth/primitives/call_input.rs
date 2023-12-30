@@ -5,5 +5,6 @@ use crate::eth::primitives::Bytes;
 pub struct CallInput {
     pub from: Address,
     pub to: Option<Address>,
+    #[serde(default)]
     pub data: Bytes,
 }

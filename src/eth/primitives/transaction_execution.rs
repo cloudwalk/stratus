@@ -66,6 +66,8 @@ pub struct TransactionExecution {
 
 impl TransactionExecution {
     /// Apply REVM transaction execution result to the storage original values, creating a new `TransactionExecution` that can be used to update the state.
+    ///
+    /// TODO: move this function to REVM submodule.
     pub fn from_revm_result(
         revm_result: RevmResultAndState,
         execution_block_timestamp_in_secs: u64,
@@ -101,6 +103,7 @@ impl TransactionExecution {
     }
 }
 
+/// TODO: move this function to REVM submodule.
 fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
     match result {
         RevmExecutionResult::Success { output, gas_used, logs, .. } => {
@@ -125,6 +128,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
     }
 }
 
+/// TODO: move this function to REVM submodule.
 fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, EthError> {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
