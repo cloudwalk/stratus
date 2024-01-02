@@ -46,3 +46,9 @@ impl From<Wei> for RevmU256 {
         RevmU256::from_limbs(value.0 .0)
     }
 }
+
+impl From<Wei> for U256 {
+    fn from(value: Wei) -> Self {
+        value.0
+    }
+}

@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use ethereum_types::U256;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
@@ -78,7 +79,8 @@ fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<
     module.register_method("eth_call", eth_call)?;
     module.register_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
 
-    // contract
+    // account
+    module.register_method("eth_getBalance", eth_get_balance)?;
     module.register_method("eth_getCode", eth_get_code)?;
 
     Ok(module)
@@ -215,13 +217,20 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
     }
 }
 
-// Code
+// Account
 
-/// OK
+fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+
+    let account = ctx.storage.read_account(&address)?;
+    Ok(hex_num(account.balance))
+}
+
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (_, address) = next_rpc_param::<Address>(params.sequence())?;
-    let account = ctx.storage.read_account(&address)?;
 
+    let account = ctx.storage.read_account(&address)?;
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
 }
 
@@ -234,7 +243,7 @@ fn hex_data<T: AsRef<[u8]>>(value: T) -> String {
 }
 
 #[inline(always)]
-fn hex_num(value: impl Into<usize>) -> String {
+fn hex_num(value: impl Into<U256>) -> String {
     format!("{:#x}", value.into())
 }
 
