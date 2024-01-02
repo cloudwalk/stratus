@@ -28,6 +28,7 @@ impl<'de> serde::Deserialize<'de> for BlockSelection {
         match value.as_str() {
             // parse special keywords
             "latest" => Ok(Self::Latest),
+            "pending" => Ok(Self::Latest), // map to latest because we do not have the concept of pending blocks internally
 
             // parse hash (64: H256 without 0x prefix; 66: H256 with 0x prefix)
             s if s.len() == 64 || s.len() == 66 => {

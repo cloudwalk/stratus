@@ -137,9 +137,11 @@ fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonVal
 
 /// OK
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    let (_, address) = next_rpc_param::<Address>(params.sequence())?;
-    let account = ctx.storage.read_account(&address)?;
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
 
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let account = ctx.storage.read_account(&address, &point_in_time)?;
     Ok(hex_num(account.nonce))
 }
 
@@ -184,8 +186,8 @@ fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
 
-    let block_number = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    match ctx.executor.call(call, block_number) {
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    match ctx.executor.call(call, point_in_time) {
         // success or failure, does not matter
         Ok(result) => Ok(hex_data(result.output)),
 
@@ -223,14 +225,19 @@ fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObje
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
 
-    let account = ctx.storage.read_account(&address)?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let account = ctx.storage.read_account(&address, &point_in_time)?;
+
     Ok(hex_num(account.balance))
 }
 
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
-    let (_, address) = next_rpc_param::<Address>(params.sequence())?;
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
 
-    let account = ctx.storage.read_account(&address)?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let account = ctx.storage.read_account(&address, &point_in_time)?;
+
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
 }
 
