@@ -11,3 +11,4 @@ e2e-contracts/repos
 
 # Build
 /target
+node_modules
