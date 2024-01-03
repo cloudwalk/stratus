@@ -9,7 +9,7 @@ use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct Account {
     /// Immutable address of the account.
     pub address: Address,
