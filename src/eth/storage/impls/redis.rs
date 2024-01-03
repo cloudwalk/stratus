@@ -1,9 +1,6 @@
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::thread::current;
-use redis::Commands;
 extern crate redis;
-use crate::infra::redis::RedisStorage;
+pub use crate::infra::redis::RedisStorage;
+use std::collections::HashMap;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -36,6 +33,23 @@ impl RedisStorage {
         let mut con = self.get_connection();
         let number: u64 = block_number.into();
         let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
+    }
+
+    fn get_slot_key(&self, block_number: u64, address: &Address) -> String {
+        "SLOT_".to_string() + &block_number.to_string() + &"_".to_string() + &address.to_string()
+    }
+
+    fn get_account_key(&self, address: &Address) -> String {
+        "ACCOUNT_".to_string() + &address.to_string()
+    }
+
+    fn get_block_key(&self, block_number: &BlockNumber) -> String {
+        let number: u64 = block_number.clone().into();
+        "BLOCK_".to_string() + &number.to_string()
+    }
+
+    fn get_transaction_key(&self, hash: &Hash) -> String {
+        "TRANSACTION_".to_string() + &hash.to_string()
     }
 
 }
@@ -80,12 +94,66 @@ impl EthStorage for RedisStorage {
 
     fn read_account(&self, address: &Address) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
-        todo!()
+
+        let key = self.get_account_key(address);
+        let account: Result<Option<String>, redis::RedisError> = redis::cmd("GET").arg(key).query(&mut self.get_connection());
+        match account {
+            Ok(account) => {
+                match account {
+                    Some(account) => {
+                        tracing::trace!(?account, "account found");
+                        let account2 = serde_json::from_str(&account).unwrap();
+                        Ok(account2)
+                    }
+                    None => {
+                        tracing::trace!("account not found");
+                        let zero: u64 = 0;
+                        Ok(Account {
+                            address: address.clone(),
+                            nonce: zero.into(),
+                            balance: zero.into(),
+                            bytecode: None
+                        })
+                    }
+                }
+            }
+            Err(error) => {
+                tracing::trace!(?error);
+                Err(EthError::UnexpectedStorageError)
+            }
+        }
     }
 
     fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot, ?point_in_time, "reading slot");
-        todo!()
+
+        let block = match point_in_time {
+            StoragerPointInTime::Present => { self.read_current_block_number()? }
+            StoragerPointInTime::Past(current_block) => { current_block.clone() }
+        };
+
+        let key = self.get_slot_key(block.into(), address);
+        let value: Result<Option<String>, redis::RedisError> = redis::cmd("GET").arg(key).query(&mut self.get_connection());
+        match value {
+            Ok(value) => {
+                match value {
+                    Some(value) => {
+                        tracing::trace!(?value, "slot found");
+                        let slot2: HashMap<SlotIndex, Slot> = serde_json::from_str(&value).unwrap();
+                        let slot3 = slot2.get(slot).unwrap().clone();
+                        Ok(slot3)
+                    }
+                    None => {
+                        tracing::trace!("slot not found");
+                        Ok(Slot::default())
+                    }
+                }
+            }
+            Err(error) => {
+                tracing::trace!(?error);
+                Err(EthError::UnexpectedStorageError)
+            }
+        }
     }
 
     fn read_block(&self, selection: &BlockSelection) -> Result<Option<Block>, EthError> {
@@ -93,7 +161,7 @@ impl EthStorage for RedisStorage {
 
         let block: Result<String, redis::RedisError> = match selection {
             BlockSelection::Latest => redis::cmd("GET").arg("block_1").query(&mut self.get_connection()),
-            BlockSelection::Number(number) => redis::cmd("GET").arg("BLOCK_".to_owned()+&number.to_string()).query(&mut self.get_connection()),
+            BlockSelection::Number(number) => redis::cmd("GET").arg(self.get_block_key(number)).query(&mut self.get_connection()),
             BlockSelection::Hash(hash) => redis::cmd("GET").arg("BLOCK_".to_owned()+&hash.to_string()).query(&mut self.get_connection()),
         };
         
@@ -112,18 +180,108 @@ impl EthStorage for RedisStorage {
 
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
         tracing::debug!(%hash, "reading transaction");
-        todo!()
+        // read transaction
+        let key = self.get_transaction_key(hash);
+        let transaction: Result<Option<String>, redis::RedisError> = redis::cmd("GET").arg(key).query(&mut self.get_connection());
+        match transaction {
+            Ok(transaction) => {
+                match transaction {
+                    Some(transaction) => {
+                        tracing::trace!(?transaction, "transaction found");
+                        let transaction2 = serde_json::from_str(&transaction).unwrap();
+                        Ok(Some(transaction2))
+                    }
+                    None => {
+                        tracing::trace!("transaction not found");
+                        Ok(None)
+                    }
+                }
+            }
+            Err(error) => {
+                tracing::trace!(?error);
+                Err(EthError::UnexpectedStorageError)
+            }
+        }
     }
 
     fn save_block(&self, block: Block) -> Result<(), EthError> {
+        tracing::debug!(number = %block.header.number, "saving block");
         let mut con = RedisStorage::get_connection(&self);
+
+        // save block
         let block2 = block.clone();
-        let number: u64 = block.header.number.into();
+        let block_number = block.header.number;
+        let number: u64 = block_number.clone().into();
         let json = serde_json::to_string(&block2.clone()).unwrap();
-        let key = "BLOCK_".to_string() + &number.to_string();
+        let key = self.get_block_key(&block_number);
         let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
         let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
+
+        // save account data (nonce, balance, bytecode)
+        for transaction in block.transactions {
+            tracing::debug!(hash = %transaction.input.hash, "saving transaction");
+
+            // save transaction
+            let key = self.get_transaction_key(&transaction.input.hash);
+            let json = serde_json::to_string(&transaction.clone()).unwrap();
+            let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
+
+            // save execution changes
+            let is_success = transaction.is_success();
+            for mut changes in transaction.execution.changes {
+                let key = self.get_account_key(&changes.address);
+                let account: Result<Option<String>, redis::RedisError> = redis::cmd("GET").arg(key.clone()).query(&mut con);
+                let mut account: Account = match account {
+                    Ok(data) => { 
+                        match data {
+                            Some(data) => serde_json::from_str(&data).unwrap(),
+                            None => {
+                                let zero: u64 = 0;
+                                Account { 
+                                    address: changes.address.clone(),
+                                    nonce: zero.into(),
+                                    balance: zero.into(),
+                                    bytecode: None
+                                }
+                            }
+                        }
+                    }
+                    Err(error) => { 
+                        tracing::trace!(?error);
+                        panic!("Error {}", error);
+                    }
+                };
+
+                // nonce
+                if let Some(nonce) = changes.nonce.take_if_modified() {
+                    account.nonce = nonce;
+                }
+
+                // balance
+                if let Some(balance) = changes.balance.take_if_modified() {
+                    account.balance = balance;
+                }
+
+                // bytecode
+                if is_success {
+                    if let Some(Some(bytecode)) = changes.bytecode.take_if_modified() {
+                        tracing::trace!(bytecode_len = %bytecode.len(), "saving bytecode");
+                        account.bytecode = Some(bytecode);
+                    }
+                }
+
+                let json = serde_json::to_string(&account.clone()).unwrap();
+                let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
+
+                // store slots of a contract
+                if is_success {
+                    let key = self.get_slot_key(number, &changes.address);
+                    let slots = changes.slots;
+                    let json = serde_json::to_string(&slots).unwrap();
+                    let _ = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
+                }
+            }
+        }
         Ok(())
     }
-
 }

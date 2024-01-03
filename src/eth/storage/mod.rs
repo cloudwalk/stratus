@@ -5,3 +5,4 @@ pub mod eth_storage;
 pub mod impls;
 pub use eth_storage::EthStorage;
 pub use impls::inmemory::InMemoryStorage;
+pub use impls::redis::RedisStorage;
