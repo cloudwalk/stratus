@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use ledger::eth::evm::revm::Revm;
 use ledger::eth::rpc::serve_rpc;
-use ledger::eth::storage::inmemory::InMemoryStorage;
+use ledger::eth::storage::impls::inmemory::InMemoryStorage;
+use ledger::eth::storage::impls::redis::RedisStorage;
 use ledger::eth::storage::EthStorage;
 use ledger::eth::EthExecutor;
 use ledger::infra;
