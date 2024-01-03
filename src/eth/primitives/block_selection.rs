@@ -29,7 +29,6 @@ impl Default for BlockSelection {
 //         match value.as_str() {
 //             // parse special keywords
 //             "latest" => Ok(Self::Latest),
-
 //             // parse hash (64: H256 without 0x prefix; 66: H256 with 0x prefix)
 //             s if s.len() == 64 || s.len() == 66 => {
 //                 let hash: Hash = s.parse().map_err(serde::de::Error::custom)?;

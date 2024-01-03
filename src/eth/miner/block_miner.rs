@@ -66,7 +66,7 @@ impl BlockMiner {
                     transaction_hash: input.hash.clone(),
                     transaction_index,
                     log_index,
-                    block_number: block.header.number.clone(),
+                    block_number: block.header.number,
                     block_hash: block.header.hash.clone(),
                 };
                 mined_logs.push(mined_log);
@@ -81,7 +81,7 @@ impl BlockMiner {
                 input,
                 execution,
                 transaction_index,
-                block_number: block.header.number.clone(),
+                block_number: block.header.number,
                 block_hash: block.header.hash.clone(),
                 logs: mined_logs,
             };

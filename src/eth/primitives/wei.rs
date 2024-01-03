@@ -13,6 +13,7 @@ pub struct Wei(U256);
 impl Wei {
     pub const ZERO: Wei = Wei(U256::zero());
     pub const ONE: Wei = Wei(U256::one());
+    pub const MAX: Wei = Wei(U256::max_value());
 }
 
 impl Display for Wei {
@@ -44,5 +45,11 @@ impl From<Wei> for Token {
 impl From<Wei> for RevmU256 {
     fn from(value: Wei) -> Self {
         RevmU256::from_limbs(value.0 .0)
+    }
+}
+
+impl From<Wei> for U256 {
+    fn from(value: Wei) -> Self {
+        value.0
     }
 }

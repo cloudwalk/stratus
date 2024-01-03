@@ -1308,6 +1308,7 @@ dependencies = [
  "ethereum-types",
  "ethers-core",
  "eyre",
+ "glob",
  "hex-literal",
  "indexmap 2.1.0",
  "itertools",

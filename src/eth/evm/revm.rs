@@ -67,13 +67,15 @@ impl Evm for Revm {
         evm.database(session);
 
         // configure evm params
-        evm.env.tx.caller = input.from.into();
-        evm.env.tx.transact_to = match input.to {
+        let tx = &mut evm.env.tx;
+        tx.caller = input.from.into();
+        tx.transact_to = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create(CreateScheme::Create),
         };
-        evm.env.tx.nonce = input.nonce.map_into();
-        evm.env.tx.data = input.data.into();
+        tx.nonce = input.nonce.map_into();
+        tx.data = input.data.into();
+        tx.value = input.value.into();
 
         // execute evm
         #[cfg(debug_assertions)]
@@ -139,7 +141,7 @@ impl Database for RevmDatabaseSession {
     fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, Self::Error> {
         // retrieve account and convert to REVM format
         let address: Address = revm_address.into();
-        let account = self.storage.read_account(&address)?;
+        let account = self.storage.read_account(&address, &self.storage_point_in_time)?;
         let revm_account: AccountInfo = account.clone().into();
 
         // warn if the loaded account is the `to` account and it does not have a bytecode

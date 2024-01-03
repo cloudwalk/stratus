@@ -24,25 +24,6 @@ pub trait EthStorage: Send + Sync + 'static {
     /// Atomically increments the block number, returning the new value.
     fn increment_block_number(&self) -> Result<BlockNumber, EthError>;
 
-    /// Translates a block selection to a specific storage point-in-time indicator.
-    fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> Result<StoragerPointInTime, EthError> {
-        match block_selection {
-            BlockSelection::Latest => Ok(StoragerPointInTime::Present),
-            BlockSelection::Number(number) => {
-                let current_block = self.read_current_block_number()?;
-                if number <= &current_block {
-                    Ok(StoragerPointInTime::Past(number.clone()))
-                } else {
-                    Err(EthError::InvalidBlockSelection)
-                }
-            }
-            BlockSelection::Hash(_) => match self.read_block(block_selection)? {
-                Some(block) => Ok(StoragerPointInTime::Past(block.header.number.clone())),
-                None => Err(EthError::InvalidBlockSelection),
-            },
-        }
-    }
-
     // -------------------------------------------------------------------------
     // State operations
     // -------------------------------------------------------------------------
@@ -50,7 +31,7 @@ pub trait EthStorage: Send + Sync + 'static {
     /// Retrieves an account from the storage.
     ///
     /// It should return empty empty account when not found.
-    fn read_account(&self, address: &Address) -> Result<Account, EthError>;
+    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError>;
 
     /// Retrieves an slot from the storage.
     ///
@@ -71,4 +52,52 @@ pub trait EthStorage: Send + Sync + 'static {
     ///
     /// Before applying changes, it checks the storage current state matches the transaction previous state.
     fn save_block(&self, block: Block) -> Result<(), EthError>;
+
+    // -------------------------------------------------------------------------
+    // Default operations
+    // -------------------------------------------------------------------------
+
+    /// Translates a block selection to a specific storage point-in-time indicator.
+    fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> Result<StoragerPointInTime, EthError> {
+        match block_selection {
+            BlockSelection::Latest => Ok(StoragerPointInTime::Present),
+            BlockSelection::Number(number) => {
+                let current_block = self.read_current_block_number()?;
+                if number <= &current_block {
+                    Ok(StoragerPointInTime::Past(*number))
+                } else {
+                    Err(EthError::InvalidBlockSelection)
+                }
+            }
+            BlockSelection::Hash(_) => match self.read_block(block_selection)? {
+                Some(block) => Ok(StoragerPointInTime::Past(block.header.number)),
+                None => Err(EthError::InvalidBlockSelection),
+            },
+        }
+    }
+}
+
+/// Retrieves test accounts.
+///
+/// TODO: use another approach to include test accounts instead of relying on debug builds
+/// because we may want to test them in release builds.
+#[cfg(debug_assertions)]
+pub fn test_accounts() -> Vec<Account> {
+    use hex_literal::hex;
+
+    use crate::eth::primitives::Wei;
+
+    [
+        hex!("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"),
+        hex!("70997970c51812dc3a010c7d01b50e0d17dc79c8"),
+        hex!("3c44cdddb6a900fa2b585dd299e03d12fa4293bc"),
+        hex!("15d34aaf54267db7d7c367839aaf71a00a2c6a65"),
+    ]
+    .into_iter()
+    .map(|address| Account {
+        address: address.into(),
+        balance: Wei::MAX,
+        ..Account::default()
+    })
+    .collect()
 }

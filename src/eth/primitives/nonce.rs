@@ -21,14 +21,14 @@ derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize)
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Nonce> for usize {
-    fn from(value: Nonce) -> Self {
-        value.0.as_usize()
-    }
-}
-
 impl From<Nonce> for u64 {
     fn from(value: Nonce) -> Self {
         value.0.as_u64()
+    }
+}
+
+impl From<Nonce> for U256 {
+    fn from(value: Nonce) -> Self {
+        value.0
     }
 }

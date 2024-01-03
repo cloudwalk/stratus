@@ -92,7 +92,7 @@ impl EthStorage for RedisStorage {
         }
     }
 
-    fn read_account(&self, address: &Address) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
         let key = self.get_account_key(address);

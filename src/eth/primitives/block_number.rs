@@ -9,7 +9,7 @@ use ethereum_types::U64;
 use crate::derive_newtype_from;
 use crate::eth::EthError;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::Sub)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::Sub)]
 #[serde(transparent)]
 pub struct BlockNumber(U64);
 

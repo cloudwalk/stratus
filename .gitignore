@@ -2,9 +2,12 @@
 .vscode
 .tool-versions
 
-# E2E
+# E2E (Ledger)
 e2e/node_modules
 e2e/cache
+
+# E2E (Solidity contracts)
+e2e-contracts/repos
 
 # Build
 /target

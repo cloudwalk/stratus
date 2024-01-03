@@ -1,5 +1,9 @@
 import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-toolbox";
+import "@openzeppelin/hardhat-upgrades";
 import { HardhatUserConfig } from "hardhat/config";
+
+const ACCOUNTS_MNEMONIC = "test test test test test test test test test test test junk";
 
 const config: HardhatUserConfig = {
     solidity: {
@@ -22,9 +26,15 @@ const config: HardhatUserConfig = {
         },
         anvil: {
             url: "http://localhost:8546",
+            accounts: {
+                mnemonic: ACCOUNTS_MNEMONIC,
+            },
         },
         ledger: {
             url: "http://localhost:3000",
+            accounts: {
+                mnemonic: ACCOUNTS_MNEMONIC,
+            },
         },
     },
 };
