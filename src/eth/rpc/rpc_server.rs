@@ -20,6 +20,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
+use crate::eth::rpc::rpc_parser::next_rpc_param_default;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::storage::EthStorage;
@@ -135,10 +136,9 @@ fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonVal
 
 // Transaction
 
-/// OK
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
@@ -184,7 +184,7 @@ fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObj
 
 fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     match ctx.executor.call(call, point_in_time) {
@@ -223,7 +223,7 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 
 fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
@@ -233,7 +233,7 @@ fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObje
 
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;

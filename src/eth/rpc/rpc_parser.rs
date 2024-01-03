@@ -8,12 +8,24 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
 
-/// Extract the next RPC parameter from the parameters sequence.
+/// Extracts the next RPC parameter. Fails if parameter not present.
 pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
     match params.next::<T>() {
-        Ok(address) => Ok((params, address)),
+        Ok(value) => Ok((params, value)),
         Err(e) => {
-            tracing::warn!(reason = ?e, kind = std::any::type_name::<T>(), "failed to parse input param");
+            tracing::warn!(reason = ?e, kind = std::any::type_name::<T>(), "failed to parse rpc param");
+            Err(e)
+        }
+    }
+}
+
+/// Extract the next RPC parameter. Assumes default value if not present.
+pub fn next_rpc_param_default<'a, T: serde::Deserialize<'a> + Default>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
+    match params.optional_next::<T>() {
+        Ok(Some(value)) => Ok((params, value)),
+        Ok(None) => Ok((params, T::default())),
+        Err(e) => {
+            tracing::warn!(reason = ?e, kind = std::any::type_name::<T>(), "failed to parse rpc param");
             Err(e)
         }
     }
