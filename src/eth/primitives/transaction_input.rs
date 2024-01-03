@@ -6,6 +6,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Wei;
 use crate::eth::EthError;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -16,6 +17,7 @@ pub struct TransactionInput {
     pub nonce: Nonce,
     pub from: Address,
     pub to: Option<Address>,
+    pub value: Wei,
     pub input: Bytes,
     pub gas: Gas,
 
@@ -71,6 +73,7 @@ impl From<EthersTransaction> for TransactionInput {
             nonce: value.nonce.into(),
             from: value.from.into(),
             to: value.to.map_into(),
+            value: value.value.into(),
             input: value.input.clone().into(),
             gas: value.gas.into(),
             inner: value,

@@ -6,7 +6,6 @@ use std::sync::atomic::Ordering;
 use std::sync::RwLock;
 
 use indexmap::IndexMap;
-use nonempty::NonEmpty;
 
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;
@@ -15,41 +14,50 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::HistoricalValues;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::Wei;
+#[cfg(debug_assertions)]
+use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 /// In-memory implementation using HashMaps.
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    state: RwLock<State>,
+    state: RwLock<InMemoryStorageState>,
     block_number: AtomicUsize,
 }
 
 #[derive(Debug, Default)]
-struct State {
-    accounts: HashMap<Address, Account>,
-    account_slots: HashMap<Address, HashMap<SlotIndex, NonEmpty<SlotChange>>>,
+struct InMemoryStorageState {
+    accounts: HashMap<Address, (Account, HistoricalValues<Wei>)>,
+    account_slots: HashMap<Address, HashMap<SlotIndex, HistoricalValues<Slot>>>,
     transactions: HashMap<Hash, TransactionMined>,
     blocks_by_number: IndexMap<BlockNumber, Block>,
     blocks_by_hash: IndexMap<Hash, Block>,
 }
 
-#[derive(Debug, derive_new::new)]
-struct SlotChange {
-    block_number: BlockNumber,
-    slot: Slot,
-}
-
 impl Default for InMemoryStorage {
     fn default() -> Self {
+        let mut state = InMemoryStorageState::default();
+
+        // add genesis block to state
         let genesis = BlockMiner::genesis();
-        let mut state = State::default();
         state.blocks_by_hash.insert(genesis.header.hash.clone(), genesis.clone());
-        state.blocks_by_number.insert(genesis.header.number.clone(), genesis);
+        state.blocks_by_number.insert(genesis.header.number, genesis);
+
+        // add test accounts to state
+        #[cfg(debug_assertions)]
+        for account in test_accounts() {
+            let balance = account.balance.clone();
+            state
+                .accounts
+                .insert(account.address.clone(), (account.clone(), HistoricalValues::new(BlockNumber::ZERO, balance)));
+        }
 
         Self {
             state: RwLock::new(state),
@@ -76,61 +84,54 @@ impl EthStorage for InMemoryStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
         let state_lock = self.state.read().unwrap();
+
         match state_lock.accounts.get(address) {
-            Some(account) => {
-                let bytecode_len = account.bytecode.as_ref().map(|x| x.len()).unwrap_or_default();
-                tracing::trace!(%address, %bytecode_len, "account found");
+            // account found
+            Some((account, balance_history)) => {
+                let balance = balance_history.get_at_point(point_in_time).unwrap_or_default();
+                tracing::trace!(%address, %balance, "account found");
                 Ok(Account {
                     address: address.clone(),
+                    balance,
                     ..account.clone()
                 })
             }
+
+            // account not found
             None => {
                 tracing::trace!(%address, "account not found");
                 Ok(Account {
                     address: address.clone(),
-                    ..Default::default()
+                    ..Account::default()
                 })
             }
         }
     }
 
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, state: &StoragerPointInTime) -> Result<Slot, EthError> {
-        tracing::debug!(%address, %slot_index, ?state, "reading slot");
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
+        tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
         let state_lock = self.state.read().unwrap();
         let Some(slots) = state_lock.account_slots.get(address) else {
             tracing::trace!(%address, "account slot not found");
             return Ok(Default::default());
         };
-        match (slots.get(slot_index), state) {
+
+        match slots.get(slot_index) {
             // slot exists and block NOT specified
-            (Some(slot_history), StoragerPointInTime::Present) => {
-                let slot = slot_history.last().slot.clone();
+            Some(slot_history) => {
+                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
                 tracing::trace!(%address, %slot_index, %slot, "slot found");
                 Ok(slot)
             }
-            // slot exists and block specified
-            (Some(slot_history), StoragerPointInTime::Past(block_number)) => {
-                let slot = slot_history.iter().take_while(|x| x.block_number <= *block_number).map(|x| &x.slot).last();
-                match slot {
-                    Some(slot) => {
-                        tracing::trace!(%address, %block_number, %slot_index, %slot, "slot found");
-                        Ok(slot.clone())
-                    }
-                    None => {
-                        tracing::trace!(%address, ?block_number, %slot_index, "slot not found");
-                        Ok(Slot::default())
-                    }
-                }
-            }
+
             // slot NOT exists
-            (None, _) => {
-                tracing::trace!(%address, ?state, %slot_index, "slot not found");
+            None => {
+                tracing::trace!(%address, ?point_in_time, %slot_index, "slot not found");
                 Ok(Slot::default())
             }
         }
@@ -163,7 +164,7 @@ impl EthStorage for InMemoryStorage {
 
         match state_lock.transactions.get(hash) {
             Some(transaction) => {
-                tracing::trace!(%hash, ?transaction, "transaction found");
+                tracing::trace!(%hash, "transaction found");
                 Ok(Some(transaction.clone()))
             }
             None => {
@@ -178,7 +179,7 @@ impl EthStorage for InMemoryStorage {
 
         // save block
         tracing::debug!(number = %block.header.number, "saving block");
-        state_lock.blocks_by_number.insert(block.header.number.clone(), block.clone());
+        state_lock.blocks_by_number.insert(block.header.number, block.clone());
         state_lock.blocks_by_hash.insert(block.header.hash.clone(), block.clone());
 
         // save transactions
@@ -189,7 +190,10 @@ impl EthStorage for InMemoryStorage {
             // save execution changes
             let is_success = transaction.is_success();
             for mut changes in transaction.execution.changes {
-                let account = state_lock.accounts.entry(changes.address.clone()).or_default();
+                let (account, account_balances) = state_lock
+                    .accounts
+                    .entry(changes.address.clone())
+                    .or_insert_with(|| (Account::default(), HistoricalValues::new(BlockNumber::ZERO, Wei::ZERO)));
 
                 // nonce
                 if let Some(nonce) = changes.nonce.take_if_modified() {
@@ -198,7 +202,8 @@ impl EthStorage for InMemoryStorage {
 
                 // balance
                 if let Some(balance) = changes.balance.take_if_modified() {
-                    account.balance = balance;
+                    account.balance = balance.clone();
+                    account_balances.push(block.header.number, balance);
                 }
 
                 // bytecode
@@ -215,13 +220,12 @@ impl EthStorage for InMemoryStorage {
                     for (slot_index, mut slot) in changes.slots {
                         if let Some(slot) = slot.take_if_modified() {
                             tracing::trace!(%slot, "saving slot");
-                            let slot_change = SlotChange::new(block.header.number.clone(), slot);
                             match account_slots.get_mut(&slot_index) {
                                 Some(slot_history) => {
-                                    slot_history.push(slot_change);
+                                    slot_history.push(block.header.number, slot);
                                 }
                                 None => {
-                                    account_slots.insert(slot_index, NonEmpty::new(slot_change));
+                                    account_slots.insert(slot_index, HistoricalValues::new(block.header.number, slot));
                                 }
                             };
                         }

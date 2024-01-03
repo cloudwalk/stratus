@@ -5,6 +5,7 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::Wei;
 use crate::eth::EthError;
 use crate::ext::OptionExt;
 
@@ -30,6 +31,9 @@ pub struct EvmInput {
     /// * Destination account address when transfering funds.
     /// * Not specified when deploying a contract.
     pub to: Option<Address>,
+
+    /// TODO: document
+    pub value: Wei,
 
     /// Operation data.
     ///
@@ -62,6 +66,7 @@ impl TryFrom<TransactionInput> for EvmInput {
         Ok(Self {
             from: value.signer()?,
             to: value.to,
+            value: value.value,
             data: value.input,
             nonce: Some(value.nonce),
             point_in_time: StoragerPointInTime::Present,
@@ -74,6 +79,7 @@ impl From<(CallInput, StoragerPointInTime)> for EvmInput {
         Self {
             from: value.0.from,
             to: value.0.to.map_into(),
+            value: value.0.value,
             data: value.0.data,
             nonce: None,
             point_in_time: value.1,

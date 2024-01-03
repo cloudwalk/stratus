@@ -19,7 +19,7 @@ setup:
 
 # Ledger: Run locally with debug options
 run:
-    RUST_LOG=info cargo run
+    RUST_LOG=ledger=info cargo run
 
 # Ledger: Run locally with release options
 run-release:
