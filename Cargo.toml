@@ -36,6 +36,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 triehash = "0.8.4"
 redis = "0.24.0"
+clap = { version = "4.4.11", features = ["derive"] }
 
 [dev-dependencies]
 binary_macros = "1.0.0"

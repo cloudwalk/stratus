@@ -1,17 +1,22 @@
 
 extern crate redis;
 
+#[derive(Debug,Clone)]
 pub struct RedisStorage {
-    pub client: redis::Client
+    pub client: redis::Client,
+    pub url: String,
 }
 
 impl RedisStorage {
-    pub async fn new(url: &str) -> Self {
+    pub async fn new(url: &str) -> eyre::Result<Self> {
         tracing::info!("Redis connection pool created");
 
-        let client = redis::Client::open(url).unwrap();
+        let client = redis::Client::open(url.clone()).unwrap();
 
-        Self { client }
+        Ok(Self {
+            client,
+            url: url.to_string(),
+        })
     }
 
     pub fn get_connection(&self) -> redis::Connection {
