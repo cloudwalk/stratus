@@ -3,6 +3,7 @@ use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
 use hex_literal::hex;
+use jsonrpsee::SubscriptionMessage;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -36,6 +37,18 @@ impl BlockHeader {
             bloom: Bloom::default(),
             timestamp_in_secs,
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Serialization / Deserialization
+// -----------------------------------------------------------------------------
+impl serde::Serialize for BlockHeader {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Into::<EthersBlock<String>>::into(self.clone()).serialize(serializer)
     }
 }
 
@@ -93,5 +106,11 @@ where
                                  // withdrawals: todo!(),
                                  // other: todo!(),
         }
+    }
+}
+
+impl From<BlockHeader> for SubscriptionMessage {
+    fn from(value: BlockHeader) -> Self {
+        Self::from_json(&value).unwrap()
     }
 }

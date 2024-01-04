@@ -1,5 +1,6 @@
 //! RPC server for HTTP and WS.
 
+use std::ops::Deref;
 use std::sync::Arc;
 
 use ethereum_types::U256;
@@ -8,6 +9,8 @@ use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params;
+use jsonrpsee::IntoSubscriptionCloseResponse;
+use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::Address;
@@ -21,8 +24,10 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
 use crate::eth::rpc::rpc_parser::next_rpc_param_default;
+use crate::eth::rpc::rpc_parser::rpc_parsing_error;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcMiddleware;
+use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
 
@@ -30,7 +35,13 @@ use crate::eth::EthExecutor;
 // Server
 // -----------------------------------------------------------------------------
 
-pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) -> eyre::Result<()> {
+pub async fn serve_rpc(mut executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) -> eyre::Result<()> {
+    // configure subscriptions
+    let subs = Arc::new(RpcSubscriptions::default());
+    Arc::clone(&subs).spawn_subscriptions_cleaner();
+    executor.set_rpc_block_notifier(Arc::clone(&subs).spawn_new_heads_notifier());
+    executor.set_rpc_log_notifier(Arc::clone(&subs).spawn_logs_notifier());
+
     // configure context
     let ctx = RpcContext {
         chain_id: 2008,
@@ -40,12 +51,15 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) 
         // services
         executor,
         storage: eth_storage,
+
+        // subscriptions
+        subs,
     };
     tracing::info!(?ctx, "starting rpc server");
 
     // configure module
     let mut module = RpcModule::<RpcContext>::new(ctx);
-    module = register_routes(module)?;
+    module = register_methods(module)?;
 
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
@@ -58,7 +72,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) 
     Ok(())
 }
 
-fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<RpcContext>> {
+fn register_methods(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<RpcContext>> {
     // blockchain
     module.register_method("net_version", net_version)?;
     module.register_method("eth_chainId", eth_chain_id)?;
@@ -83,6 +97,9 @@ fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<
     // account
     module.register_method("eth_getBalance", eth_get_balance)?;
     module.register_method("eth_getCode", eth_get_code)?;
+
+    // subscriptions
+    module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
 
     Ok(module)
 }
@@ -239,6 +256,23 @@ fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectO
     let account = ctx.storage.read_account(&address, &point_in_time)?;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
+}
+
+// Subscription
+
+async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>) -> impl IntoSubscriptionCloseResponse {
+    let (_, kind) = next_rpc_param::<String>(params.sequence())?;
+    match kind.deref() {
+        "newHeads" => ctx.subs.add_new_heads(pending.accept().await?),
+        "logs" => ctx.subs.add_logs(pending.accept().await?),
+
+        // unknown subscription kind
+        kind => {
+            tracing::warn!(%kind, "unsupported subscription kind");
+            pending.reject(rpc_parsing_error(format!("unsupported subscription kind: {}", kind))).await;
+        }
+    }
+    Ok(())
 }
 
 // -----------------------------------------------------------------------------

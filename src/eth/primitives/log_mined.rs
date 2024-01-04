@@ -1,5 +1,6 @@
 use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
+use jsonrpsee::SubscriptionMessage;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -48,5 +49,12 @@ impl From<LogMined> for EthersLog {
             transaction_index: Some(value.transaction_index.into()),
             transaction_log_index: None, // TODO: what is this?
         }
+    }
+}
+
+impl From<LogMined> for SubscriptionMessage {
+    fn from(value: LogMined) -> Self {
+        let ethers_log = Into::<EthersLog>::into(value);
+        Self::from_json(&ethers_log).unwrap()
     }
 }
