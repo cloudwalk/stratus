@@ -19,12 +19,12 @@ use revm::EVM;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionAccountChanges;
+use crate::eth::primitives::TransactionExecutionValueChange;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::ext::not;
@@ -153,7 +153,7 @@ impl Database for RevmDatabaseSession {
 
         // track original value
         self.storage_changes
-            .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account));
+            .insert(account.address.clone(), TransactionExecutionAccountChanges::from_existing_account(account));
 
         Ok(Some(revm_account))
     }
@@ -173,7 +173,7 @@ impl Database for RevmDatabaseSession {
         // track original value
         match self.storage_changes.get_mut(&address) {
             Some(account) => {
-                account.slots.insert(index, ExecutionValueChange::from_original(slot));
+                account.slots.insert(index, TransactionExecutionValueChange::from_original(slot));
             }
             None => {
                 tracing::error!(reason = "reading slot without account loaded", %address, %index);

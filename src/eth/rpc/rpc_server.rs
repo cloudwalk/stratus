@@ -145,8 +145,8 @@ fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonVal
     let block = ctx.storage.read_block(&block_selection)?;
 
     match (block, full_transactions) {
-        (Some(block), true) => Ok(block.to_json_with_full_transactions()),
-        (Some(block), false) => Ok(block.to_json_with_transactions_hashes()),
+        (Some(block), true) => Ok(block.to_json_rpc_with_full_transactions()),
+        (Some(block), false) => Ok(block.to_json_rpc_with_transactions_hashes()),
         (None, _) => Ok(JsonValue::Null),
     }
 }
@@ -167,7 +167,7 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonV
     let mined = ctx.storage.read_mined_transaction(&hash)?;
 
     match mined {
-        Some(mined) => Ok(serde_json::to_value(mined).unwrap()),
+        Some(mined) => Ok(mined.to_json_rpc_transaction()),
         None => Ok(JsonValue::Null),
     }
 }
@@ -175,7 +175,7 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonV
 fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     match ctx.storage.read_mined_transaction(&hash)? {
-        Some(mined_transaction) => Ok(serde_json::to_value(&mined_transaction.to_receipt()).unwrap()),
+        Some(mined_transaction) => Ok(mined_transaction.to_json_rpc_receipt()),
         None => Ok(JsonValue::Null),
     }
 }

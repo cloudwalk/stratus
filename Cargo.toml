@@ -6,12 +6,14 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.31"
 const-hex = "1.10.0"
+dashmap = "5.5.3"
 derive_more = "0.99.17"
 derive-new = "0.6.0"
 ethabi = "18.0.0"
 ethereum-types = "0.14.1"
 ethers-core = "2.0.11"
 eyre = "0.6.9"
+fake = { version = "2.9.2", features = ["derive"] }
 hex-literal = "0.4.1"
 indexmap = "2.1.0"
 itertools = "0.12.0"
@@ -35,7 +37,6 @@ tower = "0.4.13"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 triehash = "0.8.4"
-dashmap = "5.5.3"
 
 [dev-dependencies]
 binary_macros = "1.0.0"

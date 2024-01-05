@@ -2,6 +2,9 @@ use ethereum_types::Bloom;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
+use fake::Dummy;
+use fake::Fake;
+use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
@@ -16,7 +19,7 @@ const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41a
 /// Special hash used in block mining to indicate no transaction root and no receipts root.
 const HASH_EMPTY_TRANSACTIONS_ROOT: Hash = Hash::new(hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"));
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockHeader {
     pub number: BlockNumber,
     pub hash: Hash,
@@ -31,7 +34,7 @@ impl BlockHeader {
     pub fn new(number: BlockNumber, timestamp_in_secs: u64) -> Self {
         Self {
             number,
-            hash: Hash::random(),
+            hash: Hash::new_random(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
             bloom: Bloom::default(),
@@ -40,15 +43,16 @@ impl BlockHeader {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Serialization / Deserialization
-// -----------------------------------------------------------------------------
-impl serde::Serialize for BlockHeader {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        Into::<EthersBlock<String>>::into(self.clone()).serialize(serializer)
+impl Dummy<Faker> for BlockHeader {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+        Self {
+            number: faker.fake_with_rng(rng),
+            hash: faker.fake_with_rng(rng),
+            transactions_root: faker.fake_with_rng(rng),
+            gas: faker.fake_with_rng(rng),
+            bloom: Default::default(),
+            timestamp_in_secs: faker.fake_with_rng(rng),
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::ops::Deref;
 
 use ethers_core::types::Bytes as EthersBytes;
 use revm::primitives::Bytecode as RevmBytecode;
@@ -8,7 +9,7 @@ use revm::primitives::Output as RevmOutput;
 
 use crate::derive_newtype_from;
 
-#[derive(Clone, Default, Eq, PartialEq, derive_more::Deref)]
+#[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]
 pub struct Bytes(Vec<u8>);
 
 impl Display for Bytes {
@@ -27,9 +28,15 @@ impl Debug for Bytes {
     }
 }
 
-impl AsRef<[u8]> for Bytes {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
+// -----------------------------------------------------------------------------
+// Serialization / Deserialization
+// -----------------------------------------------------------------------------
+impl serde::Serialize for Bytes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&const_hex::encode_prefixed(&self.0))
     }
 }
 
@@ -48,6 +55,7 @@ impl<'de> serde::Deserialize<'de> for Bytes {
         }
     }
 }
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
@@ -89,6 +97,20 @@ impl From<RevmOutput> for Bytes {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl AsRef<[u8]> for Bytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Deref for Bytes {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl From<Bytes> for EthersBytes {
     fn from(value: Bytes) -> Self {
         value.0.into()

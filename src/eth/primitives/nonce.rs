@@ -1,10 +1,12 @@
 use std::fmt::Display;
 
 use ethereum_types::U256;
+use fake::Dummy;
+use fake::Faker;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U256);
 
 impl Display for Nonce {
@@ -13,10 +15,16 @@ impl Display for Nonce {
     }
 }
 
+impl Dummy<Faker> for Nonce {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        rng.next_u64().into()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize);
+derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
