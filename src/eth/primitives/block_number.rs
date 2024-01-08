@@ -1,9 +1,12 @@
 use std::fmt::Display;
+use std::num::TryFromIntError;
 use std::str::FromStr;
 
 use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::derive_newtype_from;
 use crate::eth::EthError;
@@ -31,7 +34,7 @@ impl Dummy<Faker> for BlockNumber {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = BlockNumber, other = u8, u16, u32, u64, U64, usize, i32);
+derive_newtype_from!(self = BlockNumber, other = u8, u16, u32, u64, U64, usize, i32, i64);
 
 impl FromStr for BlockNumber {
     type Err = EthError;
@@ -48,10 +51,34 @@ impl FromStr for BlockNumber {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for BlockNumber {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 impl From<BlockNumber> for U64 {
     fn from(block_number: BlockNumber) -> Self {
         block_number.0
+    }
+}
+
+impl TryFrom<BlockNumber> for i64 {
+    type Error = TryFromIntError;
+
+    fn try_from(block_number: BlockNumber) -> Result<i64, TryFromIntError> {
+        block_number.0 .0[0].try_into()
     }
 }

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use clap::Parser;
+use ledger::config::Config;
 use ledger::eth::evm::revm::Revm;
 use ledger::eth::rpc::serve_rpc;
 use ledger::eth::storage::inmemory::InMemoryStorage;
@@ -9,6 +11,9 @@ use ledger::infra;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    // get CLI configs
+    let _cfg = Config::parse();
+
     // init infra
     infra::init_tracing();
     infra::init_metrics();

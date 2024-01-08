@@ -47,11 +47,20 @@ pub enum EthError {
     #[error("Unexpected error with EVM storage. Check logs for more information.")]
     UnexpectedStorageError,
 
+    #[error("Failed to connect to Storage")]
+    StorageConnectionError,
+
     // -------------------------------------------------------------------------
     // Bugs
     // -------------------------------------------------------------------------
     #[error("Bug: Contract was deployed, but no address was returned.")]
     DeploymentWithoutAddress,
+
+    // -------------------------------------------------------------------------
+    // Type Conversion
+    // -------------------------------------------------------------------------
+    #[error("Cannot convert from '{from}' to '{into}'")]
+    StorageConvertError { from: String, into: String },
 }
 
 impl From<EthError> for ErrorObjectOwned {

@@ -4,6 +4,9 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
+use sqlx::Decode;
 
 use crate::derive_newtype_from;
 
@@ -47,11 +50,44 @@ impl Display for SlotIndex {
     }
 }
 
-derive_newtype_from!(self = SlotIndex, other = u64, U256);
+derive_newtype_from!(self = SlotIndex, other = u64, U256, [u8; 32]);
 
 impl From<RevmU256> for SlotIndex {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())
+    }
+}
+
+impl From<SlotIndex> for ethereum_types::U256 {
+    fn from(value: SlotIndex) -> ethereum_types::U256 {
+        value.0
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> SlotIndex
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for SlotIndex {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: SlotIndex -> Other
+// -----------------------------------------------------------------------------
+impl From<SlotIndex> for [u8; 32] {
+    fn from(value: SlotIndex) -> [u8; 32] {
+        let mut buf: [u8; 32] = [1; 32];
+        U256::from(value).to_little_endian(&mut buf);
+        buf
     }
 }
 
@@ -74,7 +110,7 @@ impl Dummy<Faker> for SlotValue {
     }
 }
 
-derive_newtype_from!(self = SlotValue, other = u64, U256);
+derive_newtype_from!(self = SlotValue, other = u64, U256, [u8; 32]);
 
 impl From<RevmU256> for SlotValue {
     fn from(value: RevmU256) -> Self {
@@ -85,5 +121,21 @@ impl From<RevmU256> for SlotValue {
 impl From<SlotValue> for RevmU256 {
     fn from(value: SlotValue) -> Self {
         RevmU256::from_limbs(value.0 .0)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> SlotValue
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotValue {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for SlotValue {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }
 }

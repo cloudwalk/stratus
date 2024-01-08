@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        SELECT CURRVAL('block_number_seq') as \"n!: _\"\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!: _",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6b6552bb23e0e45302eb825393e8e2769630ad676b614413829a0aa1e775920d"
+}

@@ -127,3 +127,21 @@ impl TryFrom<EthersTransaction> for TransactionInput {
         })
     }
 }
+
+// impl TryFrom<Vec<u8>> for TransactionInput {
+//     type Error = EthError;
+
+//     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+//         let input = Self {
+//             hash: value.hash.into(),
+//             nonce: value.nonce.into(),
+//             from: value.from.into(),
+//             to: value.to.map_into(),
+//             input: value.input.clone().into(),
+//             gas: value.gas.into(),
+//             inner: value,
+//         };
+
+//         Ok(input)
+//     }
+// }
