@@ -18,6 +18,7 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
+        // TODO: use HistoricalValue
         let block = match point_in_time {
             StoragerPointInTime::Present => self.read_current_block_number()?,
             StoragerPointInTime::Past(number) => *number,
@@ -59,6 +60,7 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
+        // TODO: use HistoricalValue
         let block = match point_in_time {
             StoragerPointInTime::Present => self.read_current_block_number()?,
             StoragerPointInTime::Past(number) => *number,
