@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                        SELECT \n                            address as \"address: _\", \n                            nonce as \"nonce: _\", \n                            balance as \"balance: _\",\n                            bytecode as \"bytecode: _\"\n                        FROM accounts\n                    ",
+  "query": "\n                        SELECT \n                            address as \"address: _\", \n                            nonce as \"nonce: _\", \n                            balance as \"balance: _\",\n                            bytecode as \"bytecode: _\"\n                        FROM accounts\n                        WHERE address = $1 AND block_number = $2\n                    ",
   "describe": {
     "columns": [
       {
@@ -25,7 +25,10 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
     },
     "nullable": [
       false,
@@ -34,5 +37,5 @@
       true
     ]
   },
-  "hash": "3438fe2376b5b1a0f602a2aa9726654d10ca5383c41577ed2a9d94a87e0201a5"
+  "hash": "631c312835b926788b1489a9130cbc11aca34b43d915a39242b05e49a16392fe"
 }

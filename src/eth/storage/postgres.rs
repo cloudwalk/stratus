@@ -6,17 +6,23 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::BlockNumberStorage;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::infra::postgres::Postgres;
 
 impl EthStorage for Postgres {
-    fn read_account(&self, address: &Address) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
         let rt = tokio::runtime::Handle::current();
+
+        let block_number = self.read_current_block_number()?;
+        let block_number = i64::try_from(block_number).map_err(|_| EthError::StorageConvertError {
+            from: "BlockNumber".to_string(),
+            into: "i64".to_string(),
+        })?;
 
         let account = rt
             .block_on(async {
@@ -29,9 +35,10 @@ impl EthStorage for Postgres {
                             balance as "balance: _",
                             bytecode as "bytecode: _"
                         FROM accounts
-                        WHERE address = $1
+                        WHERE address = $1 AND block_number = $2
                     "#,
-                    address.as_ref()
+                    address.as_ref(),
+                    block_number,
                 )
                 .fetch_one(&self.connection_pool)
                 .await
@@ -43,7 +50,7 @@ impl EthStorage for Postgres {
 
         Ok(account)
     }
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex) -> Result<Slot, EthError> {
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
         let rt = tokio::runtime::Handle::current();
@@ -87,10 +94,7 @@ impl EthStorage for Postgres {
         tracing::debug!(block = ?block, "saving block");
         todo!()
     }
-}
-
-impl BlockNumberStorage for Postgres {
-    fn current_block_number(&self) -> Result<BlockNumber, EthError> {
+    fn read_current_block_number(&self) -> Result<BlockNumber, EthError> {
         tracing::debug!("reading current block number");
 
         let rt = tokio::runtime::Handle::current();

@@ -59,8 +59,8 @@ pub enum EthError {
     // -------------------------------------------------------------------------
     // Type Conversion
     // -------------------------------------------------------------------------
-    #[error("Cannot convert value '{value}' from '{from}' to '{into}'")]
-    StorageConvertError { value: String, from: String, into: String },
+    #[error("Cannot convert from '{from}' to '{into}'")]
+    StorageConvertError { from: String, into: String },
 }
 
 impl From<EthError> for ErrorObjectOwned {

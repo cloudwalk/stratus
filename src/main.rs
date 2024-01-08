@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use clap::Parser;
+use ledger::config::Config;
 use ledger::eth::evm::revm::Revm;
 use ledger::eth::rpc::serve_rpc;
 use ledger::eth::storage::inmemory::InMemoryStorage;

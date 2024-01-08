@@ -50,7 +50,7 @@ impl Display for SlotIndex {
     }
 }
 
-derive_newtype_from!(self = SlotIndex, other = u64, U256);
+derive_newtype_from!(self = SlotIndex, other = u64, U256, [u8; 32]);
 
 impl From<RevmU256> for SlotIndex {
     fn from(value: RevmU256) -> Self {
@@ -110,7 +110,7 @@ impl Dummy<Faker> for SlotValue {
     }
 }
 
-derive_newtype_from!(self = SlotValue, other = u64, U256);
+derive_newtype_from!(self = SlotValue, other = u64, U256, [u8; 32]);
 
 impl From<RevmU256> for SlotValue {
     fn from(value: RevmU256) -> Self {

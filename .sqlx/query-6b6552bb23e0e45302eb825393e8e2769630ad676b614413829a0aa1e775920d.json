@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                        SELECT NEXTVAL('block_number_seq')\n                    ",
+  "query": "\n                        SELECT CURRVAL('block_number_seq') as \"n!: _\"\n                    ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "nextval",
+        "name": "n!: _",
         "type_info": "Int8"
       }
     ],
@@ -16,5 +16,5 @@
       null
     ]
   },
-  "hash": "2db9f0532e839df590c47824d5427ff8f2c21ceccb428f61d8997c69fb522c19"
+  "hash": "6b6552bb23e0e45302eb825393e8e2769630ad676b614413829a0aa1e775920d"
 }
