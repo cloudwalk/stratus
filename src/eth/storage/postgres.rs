@@ -18,8 +18,12 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let block_number = self.read_current_block_number()?;
-        let block_number = i64::try_from(block_number).map_err(|_| EthError::StorageConvertError {
+        let block = match point_in_time {
+            StoragerPointInTime::Present => self.read_current_block_number()?,
+            StoragerPointInTime::Past(number) => *number,
+        };
+
+        let block_number = i64::try_from(block).map_err(|_| EthError::StorageConvertError {
             from: "BlockNumber".to_string(),
             into: "i64".to_string(),
         })?;
@@ -55,7 +59,17 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        // TODO: improve this
+        let block = match point_in_time {
+            StoragerPointInTime::Present => self.read_current_block_number()?,
+            StoragerPointInTime::Past(number) => *number,
+        };
+
+        let block_number = i64::try_from(block).map_err(|_| EthError::StorageConvertError {
+            from: "BlockNumber".to_string(),
+            into: "i64".to_string(),
+        })?;
+
+        // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
         let slot = rt
@@ -67,10 +81,11 @@ impl EthStorage for Postgres {
                             idx as "index: _", 
                             value as "value: _"
                         FROM account_slots
-                        WHERE account_address = $1 AND idx = $2
+                        WHERE account_address = $1 AND idx = $2 AND block_number = $3
                     "#,
                     address.as_ref(),
-                    slot_index.as_ref()
+                    slot_index.as_ref(),
+                    block_number,
                 )
                 .fetch_one(&self.connection_pool)
                 .await
