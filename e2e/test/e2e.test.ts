@@ -79,10 +79,10 @@ describe("Transaction", async () => {
         });
         it("Transaction is created", async () => {
             let tx: Transaction = await rpc.send("eth_getTransactionByHash", [ctx.txHash]);
-            expect(tx.from).eq(ALICE.address);
-            expect(tx.to).eq(BOB.address);
-            expect(tx.nonce).eq(ZERO);
-            expect(tx.chainId).eq(CHAIN_ID);
+            expect(tx.from).eq(ALICE.address, "tx.from");
+            expect(tx.to).eq(BOB.address, "tx.to");
+            expect(tx.nonce).eq(ZERO, "tx.nonce");
+            expect(tx.chainId).eq(CHAIN_ID, "tx.chainId");
             ctx.tx = tx;
         });
         it("Block is created", async () => {
@@ -101,11 +101,12 @@ describe("Transaction", async () => {
         });
         it("Receipt is created", async () => {
             let receipt: TransactionReceipt = await rpc.send("eth_getTransactionReceipt", [ctx.txHash]);
-            expect(receipt.blockNumber).eq(ctx.block!.number);
-            expect(receipt.blockHash).eq(ctx.block!.hash);
-            expect(receipt.transactionHash).eq(ctx.txHash);
-            expect(receipt.transactionIndex).eq(ZERO);
-            expect(receipt.status).eq(ONE);
+            expect(receipt.blockNumber).eq(ctx.block!.number, "receipt.blockNumber");
+            expect(receipt.blockHash).eq(ctx.block!.hash, "receipt.blockHash");
+            expect(receipt.transactionHash).eq(ctx.txHash, "rceipt.txHash");
+            expect(receipt.transactionIndex).eq(ZERO, "receipt.txIndex");
+            expect(receipt.from).eq(ALICE.address, "receipt.from");
+            expect(receipt.status).eq(ONE, "receipt.status");
         });
         it("Sender nonce increased", async () => {
             expect(await rpc.send("eth_getTransactionCount", [ALICE, "latest"])).eq(ONE);

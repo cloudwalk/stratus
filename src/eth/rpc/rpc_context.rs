@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use super::RpcSubscriptions;
+use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
 

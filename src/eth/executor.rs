@@ -48,13 +48,11 @@ impl EthExecutor {
     ///
     /// TODO: too much cloning that can be optimized here.
     pub fn transact(&self, transaction: TransactionInput) -> Result<TransactionExecution, EthError> {
-        let signer = transaction.signer()?;
-
         tracing::info!(
             hash = %transaction.hash,
             nonce = %transaction.nonce,
             from = %transaction.from,
-            signer = %signer,
+            signer = %transaction.signer,
             to = ?transaction.to,
             data_len = %transaction.input.len(),
             data = %transaction.input,
@@ -62,7 +60,7 @@ impl EthExecutor {
         );
 
         // validate
-        if signer.is_zero() {
+        if transaction.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(EthError::ZeroSigner);
         }
@@ -73,7 +71,7 @@ impl EthExecutor {
 
         // execute, mine and save
         let execution = evm_lock.execute(transaction.clone().try_into()?)?;
-        let block = miner_lock.mine_with_one_transaction(signer, transaction, execution.clone())?;
+        let block = miner_lock.mine_with_one_transaction(transaction, execution.clone())?;
         self.eth_storage.save_block(block.clone())?;
 
         // notify new blocks

@@ -4,7 +4,7 @@
 // Macros
 // -----------------------------------------------------------------------------
 
-/// Derive `From` implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) delegating the conversion to the inner type `From` implementation.
+/// Generates `From` implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) delegating the conversion to the inner type `From` implementation.
 #[macro_export]
 macro_rules! derive_newtype_from {
     (self = $type:ty, other = $($source:ty),+) => {
@@ -15,6 +15,21 @@ macro_rules! derive_newtype_from {
                 }
             }
         )+
+    };
+}
+
+/// Generates a unit test that checks a type implementation of `serde::Serialize` and `serde::Deserialize` are compatible.
+#[macro_export]
+macro_rules! test_serde {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            pub fn [<serde_ $type:snake>]() {
+                let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
+                let json = serde_json::to_string(&value).unwrap();
+                assert_eq!(serde_json::from_str::<$type>(&json).unwrap(), value);
+            }
+        }
     };
 }
 

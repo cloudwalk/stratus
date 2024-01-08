@@ -189,7 +189,7 @@ impl EthStorage for InMemoryStorage {
 
             // save execution changes
             let is_success = transaction.is_success();
-            for mut changes in transaction.execution.changes {
+            for changes in transaction.execution.changes {
                 let (account, account_balances) = state_lock
                     .accounts
                     .entry(changes.address.clone())
@@ -217,7 +217,7 @@ impl EthStorage for InMemoryStorage {
                 // storage
                 if is_success {
                     let account_slots = state_lock.account_slots.entry(changes.address).or_default();
-                    for (slot_index, mut slot) in changes.slots {
+                    for (slot_index, slot) in changes.slots {
                         if let Some(slot) = slot.take_if_modified() {
                             tracing::trace!(%slot, "saving slot");
                             match account_slots.get_mut(&slot_index) {

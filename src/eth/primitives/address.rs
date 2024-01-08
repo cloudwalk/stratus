@@ -3,13 +3,15 @@ use std::fmt::Display;
 use ethabi::Token;
 use ethereum_types::H160;
 use ethers_core::types::NameOrAddress;
+use fake::Dummy;
+use fake::Faker;
 use hex_literal::hex;
 use revm::primitives::Address as RevmAddress;
 
 use crate::derive_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Address(H160);
 
 impl Address {
@@ -38,6 +40,12 @@ impl Address {
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:#x}", self.0)
+    }
+}
+
+impl Dummy<Faker> for Address {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        H160::random_using(rng).into()
     }
 }
 

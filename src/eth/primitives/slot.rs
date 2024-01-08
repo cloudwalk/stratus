@@ -1,11 +1,13 @@
 use std::fmt::Display;
 
 use ethereum_types::U256;
+use fake::Dummy;
+use fake::Faker;
 use revm::primitives::U256 as RevmU256;
 
 use crate::derive_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
     pub index: SlotIndex,
     pub value: SlotValue,
@@ -30,8 +32,14 @@ impl Display for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
+
+impl Dummy<Faker> for SlotIndex {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        rng.next_u64().into()
+    }
+}
 
 impl Display for SlotIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -39,7 +47,7 @@ impl Display for SlotIndex {
     }
 }
 
-derive_newtype_from!(self = SlotIndex, other = U256);
+derive_newtype_from!(self = SlotIndex, other = u64, U256);
 
 impl From<RevmU256> for SlotIndex {
     fn from(value: RevmU256) -> Self {
@@ -51,7 +59,7 @@ impl From<RevmU256> for SlotIndex {
 // SlotValue
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(U256);
 
 impl Display for SlotValue {
@@ -60,7 +68,13 @@ impl Display for SlotValue {
     }
 }
 
-derive_newtype_from!(self = SlotValue, other = U256);
+impl Dummy<Faker> for SlotValue {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        rng.next_u64().into()
+    }
+}
+
+derive_newtype_from!(self = SlotValue, other = u64, U256);
 
 impl From<RevmU256> for SlotValue {
     fn from(value: RevmU256) -> Self {

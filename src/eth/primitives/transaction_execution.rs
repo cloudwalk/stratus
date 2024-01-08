@@ -16,26 +16,28 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
 use crate::eth::EthError;
+use crate::ext::not;
 
-pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
+pub type ExecutionChanges = HashMap<Address, TransactionExecutionAccountChanges>;
 
 // -----------------------------------------------------------------------------
 // Transaction Execution Result
 // -----------------------------------------------------------------------------
 
 /// Indicates how a transaction was finished.
-#[derive(Debug, Clone, strum::Display, derive_new::new)]
-pub enum ExecutionResult {
+#[derive(Debug, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransactionExecutionResult {
     /// Transaction execution finished normally (RETURN).
-    #[strum(serialize = "Success")]
+    #[strum(serialize = "success")]
     Success,
 
     /// Transaction execution finished with a reversion (REVERT).
-    #[strum(serialize = "Reverted")]
+    #[strum(serialize = "reverted")]
     Reverted,
 
     /// Transaction execution did not finish.
-    #[strum(serialize = "Halted")]
+    #[strum(serialize = "halted")]
     Halted { reason: String },
 }
 
@@ -43,10 +45,10 @@ pub enum ExecutionResult {
 // Transaction Execution
 // -----------------------------------------------------------------------------
 /// Output of a executed transaction in the EVM.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct TransactionExecution {
     /// Status of the execution.
-    pub result: ExecutionResult,
+    pub result: TransactionExecutionResult,
 
     /// Output returned by the function execution (can be the function output or an exeception).
     pub output: Bytes,
@@ -61,7 +63,7 @@ pub struct TransactionExecution {
     pub block_timestamp_in_secs: u64,
 
     /// Storage changes that happened during the transaction execution.
-    pub changes: Vec<ExecutionAccountChanges>,
+    pub changes: Vec<TransactionExecutionAccountChanges>,
 }
 
 impl TransactionExecution {
@@ -99,28 +101,28 @@ impl TransactionExecution {
 
     /// Check if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
-        matches!(self.result, ExecutionResult::Success { .. })
+        matches!(self.result, TransactionExecutionResult::Success { .. })
     }
 }
 
 /// TODO: move this function to REVM submodule.
-fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
+fn parse_revm_result(result: RevmExecutionResult) -> (TransactionExecutionResult, Bytes, Vec<Log>, Gas) {
     match result {
         RevmExecutionResult::Success { output, gas_used, logs, .. } => {
-            let result = ExecutionResult::Success;
+            let result = TransactionExecutionResult::Success;
             let output = Bytes::from(output);
             let logs = logs.into_iter().map_into().collect();
             let gas = Gas::from(gas_used);
             (result, output, logs, gas)
         }
         RevmExecutionResult::Revert { output, gas_used } => {
-            let result = ExecutionResult::Reverted;
+            let result = TransactionExecutionResult::Reverted;
             let output = Bytes::from(output);
             let gas = Gas::from(gas_used);
             (result, output, Vec::new(), gas)
         }
         RevmExecutionResult::Halt { reason, gas_used } => {
-            let result = ExecutionResult::new_halted(format!("{:?}", reason));
+            let result = TransactionExecutionResult::new_halted(format!("{:?}", reason));
             let output = Bytes::default();
             let gas = Gas::from(gas_used);
             (result, output, Vec::new(), gas)
@@ -154,7 +156,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         if account_created {
             execution_changes.insert(
                 account.address.clone(),
-                ExecutionAccountChanges::from_created_account(account, account_modified_slots),
+                TransactionExecutionAccountChanges::from_created_account(account, account_modified_slots),
             );
         }
         // status: touched (updated)
@@ -174,24 +176,24 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
 // -----------------------------------------------------------------------------
 
 /// Changes that happened to an account during a transaction.
-#[derive(Debug, Clone)]
-pub struct ExecutionAccountChanges {
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+pub struct TransactionExecutionAccountChanges {
     pub address: Address,
-    pub nonce: ExecutionValueChange<Nonce>,
-    pub balance: ExecutionValueChange<Wei>,
-    pub bytecode: ExecutionValueChange<Option<Bytes>>,
-    pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
+    pub nonce: TransactionExecutionValueChange<Nonce>,
+    pub balance: TransactionExecutionValueChange<Wei>,
+    pub bytecode: TransactionExecutionValueChange<Option<Bytes>>,
+    pub slots: HashMap<SlotIndex, TransactionExecutionValueChange<Slot>>,
 }
 
-impl ExecutionAccountChanges {
+impl TransactionExecutionAccountChanges {
     /// Create a new `TransactionAccountChanges` that represents an existing account from the storage.
     pub fn from_existing_account(account: impl Into<Account>) -> Self {
         let account = account.into();
         Self {
             address: account.address,
-            nonce: ExecutionValueChange::from_original(account.nonce),
-            balance: ExecutionValueChange::from_original(account.balance),
-            bytecode: ExecutionValueChange::from_original(account.bytecode),
+            nonce: TransactionExecutionValueChange::from_original(account.nonce),
+            balance: TransactionExecutionValueChange::from_original(account.balance),
+            bytecode: TransactionExecutionValueChange::from_original(account.bytecode),
             slots: HashMap::new(),
         }
     }
@@ -200,14 +202,14 @@ impl ExecutionAccountChanges {
     pub fn from_created_account(account: Account, modified_slots: Vec<Slot>) -> Self {
         let mut changes = Self {
             address: account.address,
-            nonce: ExecutionValueChange::from_modified(account.nonce),
-            balance: ExecutionValueChange::from_modified(account.balance),
-            bytecode: ExecutionValueChange::from_modified(account.bytecode),
+            nonce: TransactionExecutionValueChange::from_modified(account.nonce),
+            balance: TransactionExecutionValueChange::from_modified(account.balance),
+            bytecode: TransactionExecutionValueChange::from_modified(account.bytecode),
             slots: HashMap::new(),
         };
 
         for slot in modified_slots {
-            changes.slots.insert(slot.index.clone(), ExecutionValueChange::from_modified(slot));
+            changes.slots.insert(slot.index.clone(), TransactionExecutionValueChange::from_modified(slot));
         }
 
         changes
@@ -221,10 +223,10 @@ impl ExecutionAccountChanges {
         for slot in modified_slots {
             match self.slots.get_mut(&slot.index) {
                 Some(ref mut entry) => {
-                    entry.modified = Some(slot);
+                    entry.set_modified(slot);
                 }
                 None => {
-                    self.slots.insert(slot.index.clone(), ExecutionValueChange::from_modified(slot));
+                    self.slots.insert(slot.index.clone(), TransactionExecutionValueChange::from_modified(slot));
                 }
             };
         }
@@ -236,47 +238,66 @@ impl ExecutionAccountChanges {
 // -----------------------------------------------------------------------------
 
 /// Changes that happened to an account value during a transaction.
-#[derive(Debug, Clone)]
-pub struct ExecutionValueChange<T>
+///
+
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+pub struct TransactionExecutionValueChange<T>
 where
     T: PartialEq,
 {
-    pub original: Option<T>,
-    pub modified: Option<T>,
+    pub original: TransactionExecutionValueChangeState<T>,
+    pub modified: TransactionExecutionValueChangeState<T>,
 }
 
-impl<T> ExecutionValueChange<T>
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransactionExecutionValueChangeState<T> {
+    Set(T),
+    NotSet,
+}
+
+impl<T> TransactionExecutionValueChangeState<T> {
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::Set(_))
+    }
+
+    pub fn is_not_set(&self) -> bool {
+        not(self.is_set())
+    }
+}
+
+impl<T> TransactionExecutionValueChange<T>
 where
     T: PartialEq,
 {
     /// Create a new `TransactionValueChange` only with original value.
     pub fn from_original(value: T) -> Self {
         Self {
-            original: Some(value),
-            modified: None,
+            original: TransactionExecutionValueChangeState::Set(value),
+            modified: TransactionExecutionValueChangeState::NotSet,
         }
     }
 
     /// Create a new `TransactionValueChange` only with modified value.
     pub fn from_modified(value: T) -> Self {
         Self {
-            original: None,
-            modified: Some(value),
+            original: TransactionExecutionValueChangeState::NotSet,
+            modified: TransactionExecutionValueChangeState::Set(value),
         }
     }
 
     /// Set the modified value of an original value.
     pub fn set_modified(&mut self, value: T) {
-        if self.original.is_none() {
+        if self.original.is_not_set() {
             tracing::warn!("Setting modified value without original value. Use `new_modified` instead.");
         }
-        self.modified = Some(value);
+        self.modified = TransactionExecutionValueChangeState::Set(value);
     }
 
     /// Take the modified value only if the value was modified.
-    pub fn take_if_modified(&mut self) -> Option<T> {
-        if self.is_modified() {
-            self.modified.take()
+    pub fn take_if_modified(self) -> Option<T> {
+        if let TransactionExecutionValueChangeState::Set(value) = self.modified {
+            Some(value)
         } else {
             None
         }
@@ -284,6 +305,6 @@ where
 
     /// Check if the value was modified.
     pub fn is_modified(&self) -> bool {
-        self.modified.is_some() && (self.original != self.modified)
+        self.modified.is_set() && (self.original != self.modified)
     }
 }

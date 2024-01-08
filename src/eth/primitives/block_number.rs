@@ -2,11 +2,13 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use ethereum_types::U64;
+use fake::Dummy;
+use fake::Faker;
 
 use crate::derive_newtype_from;
 use crate::eth::EthError;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::Sub)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct BlockNumber(U64);
 
@@ -20,10 +22,16 @@ impl Display for BlockNumber {
     }
 }
 
+impl Dummy<Faker> for BlockNumber {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        rng.next_u64().into()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = BlockNumber, other = U64, u8, u16, u32, u64, usize);
+derive_newtype_from!(self = BlockNumber, other = u8, u16, u32, u64, U64, usize, i32);
 
 impl FromStr for BlockNumber {
     type Err = EthError;

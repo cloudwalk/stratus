@@ -2,12 +2,14 @@ use std::fmt::Display;
 
 use ethabi::Token;
 use ethereum_types::U256;
+use fake::Dummy;
+use fake::Faker;
 use revm::primitives::U256 as RevmU256;
 
 use crate::derive_newtype_from;
 
 /// Native token amount in wei.
-#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Wei(U256);
 
 impl Wei {
@@ -22,10 +24,16 @@ impl Display for Wei {
     }
 }
 
+impl Dummy<Faker> for Wei {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        rng.next_u64().into()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Wei, other = U256, u8, u16, u32, u64, u128, usize);
+derive_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
 impl From<RevmU256> for Wei {
     fn from(value: RevmU256) -> Self {

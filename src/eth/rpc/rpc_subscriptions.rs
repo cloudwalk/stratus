@@ -51,7 +51,7 @@ impl RpcSubscriptions {
         let (tx, mut rx) = mpsc::unbounded_channel::<Block>();
         tokio::spawn(async move {
             loop {
-                let block = rx.recv().await.expect("newHeads notifer channel should never be closed");
+                let block = rx.recv().await.expect("newHeads notifier channel should never be closed");
                 let msg: SubscriptionMessage = block.header.into();
                 for sub in self.new_heads.iter() {
                     notify(sub, msg.clone()).await;
