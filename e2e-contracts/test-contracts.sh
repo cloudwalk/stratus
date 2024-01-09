@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Runs tests for Solidity contracts in our stratus.
+# Runs tests for Solidity contracts.
 #
 source $(dirname $0)/_functions.sh
 

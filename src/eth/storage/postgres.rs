@@ -101,6 +101,15 @@ impl EthStorage for Postgres {
     }
     fn read_block(&self, block: &BlockSelection) -> Result<Option<Block>, EthError> {
         tracing::debug!(block = ?block, "reading block");
+
+        let block = match block {
+            BlockSelection::Latest => {
+                let current_block_number = self.read_current_block_number()?;
+            },
+            BlockSelection::Hash(hash) => {},
+            BlockSelection::Number(number) => {}
+        };
+        
         todo!()
     }
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
