@@ -18,12 +18,12 @@ setup:
 # ------------------------------------------------------------------------------
 
 # Ledger: Run locally with debug options
-run:
-    RUST_LOG=ledger=info cargo run
+run *args="":
+    RUST_LOG=ledger=info cargo run -- {{args}}
 
 # Ledger: Run locally with release options
-run-release:
-    RUST_LOG=info cargo run --release
+run-release *args="":
+    RUST_LOG=info cargo run --release -- {{args}}
 
 # Ledger: Compile with debug options
 build:
