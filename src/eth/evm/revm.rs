@@ -1,6 +1,7 @@
 //! EVM implementation using [`revm`](https://crates.io/crates/revm).
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use chrono::Utc;
 use revm::interpreter::InstructionResult;
@@ -29,6 +30,7 @@ use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
@@ -139,10 +141,13 @@ impl Database for RevmDatabaseSession {
     type Error = EthError;
 
     fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, Self::Error> {
-        // retrieve account and convert to REVM format
         let address: Address = revm_address.into();
-        let account = self.storage.read_account(&address, &self.storage_point_in_time)?;
-        let revm_account: AccountInfo = account.clone().into();
+
+        // retrieve account tracking time
+        let start = Instant::now();
+        let account_result = self.storage.read_account(&address, &self.storage_point_in_time);
+        metrics::inc_storage_accounts_read(start.elapsed(), account_result.is_ok());
+        let account = account_result?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.to {
@@ -152,10 +157,12 @@ impl Database for RevmDatabaseSession {
         }
 
         // track original value
-        self.storage_changes
-            .insert(account.address.clone(), TransactionExecutionAccountChanges::from_existing_account(account));
+        self.storage_changes.insert(
+            account.address.clone(),
+            TransactionExecutionAccountChanges::from_existing_account(account.clone()),
+        );
 
-        Ok(Some(revm_account))
+        Ok(Some(account.into()))
     }
 
     fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, Self::Error> {
@@ -163,17 +170,19 @@ impl Database for RevmDatabaseSession {
     }
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> Result<U256, Self::Error> {
-        // retrieve slot and convert to REVM format
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
 
-        let slot = self.storage.read_slot(&address, &index, &self.storage_point_in_time)?;
-        let revm_slot: U256 = slot.value.clone().into();
+        // retrieve slot tracking time
+        let start = Instant::now();
+        let slot_result = self.storage.read_slot(&address, &index, &self.storage_point_in_time);
+        metrics::inc_storage_slots_read(start.elapsed(), slot_result.is_ok());
+        let slot = slot_result?;
 
         // track original value
         match self.storage_changes.get_mut(&address) {
             Some(account) => {
-                account.slots.insert(index, TransactionExecutionValueChange::from_original(slot));
+                account.slots.insert(index, TransactionExecutionValueChange::from_original(slot.clone()));
             }
             None => {
                 tracing::error!(reason = "reading slot without account loaded", %address, %index);
@@ -181,7 +190,7 @@ impl Database for RevmDatabaseSession {
             }
         };
 
-        Ok(revm_slot)
+        Ok(slot.value.into())
     }
 
     fn block_hash(&mut self, _: U256) -> Result<B256, Self::Error> {

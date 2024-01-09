@@ -29,7 +29,13 @@ metrics! {
     counter   rpc_requests_started{method, function},
 
     "Ethereum JSON-RPC requests that finished."
-    histogram rpc_requests_finished{method, function, success}
+    histogram rpc_requests_finished{method, function, success},
+
+    "Ethereum storage accounts read during EVM execution or RPC calls."
+    histogram storage_accounts_read{success},
+
+    "Ethereum storage slots read during EVM execution or RPC calls."
+    histogram storage_slots_read{success}
 }
 
 // -----------------------------------------------------------------------------
