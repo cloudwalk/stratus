@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use ethereum_types::U256;
+use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
@@ -63,9 +64,14 @@ pub async fn serve_rpc(mut executor: EthExecutor, eth_storage: Arc<dyn EthStorag
 
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+    let http_middleware = tower::ServiceBuilder::new().layer(ProxyGetRequestLayer::new("/health", "net_listening").unwrap());
 
     // serve module
-    let server = Server::builder().set_rpc_middleware(rpc_middleware).build("0.0.0.0:3000").await?;
+    let server = Server::builder()
+        .set_rpc_middleware(rpc_middleware)
+        .set_http_middleware(http_middleware)
+        .build("0.0.0.0:3000")
+        .await?;
     let handle = server.start(module);
     handle.stopped().await;
 
@@ -73,6 +79,9 @@ pub async fn serve_rpc(mut executor: EthExecutor, eth_storage: Arc<dyn EthStorag
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<RpcContext>> {
+    // status
+    module.register_method("net_listening", net_listening)?;
+
     // blockchain
     module.register_method("net_version", net_version)?;
     module.register_method("eth_chainId", eth_chain_id)?;
@@ -108,26 +117,27 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule
 // Handlers
 // -----------------------------------------------------------------------------
 
+// Status
+fn net_listening(_: Params, _: &RpcContext) -> &'static str {
+    "true"
+}
+
 // Blockchain
 
-/// OK
 fn net_version(_: Params, ctx: &RpcContext) -> String {
     ctx.chain_id.to_string()
 }
 
-/// OK
 fn eth_chain_id(_: Params, ctx: &RpcContext) -> String {
     hex_num(ctx.chain_id)
 }
 
-/// OK
 fn web3_client_version(_: Params, ctx: &RpcContext) -> String {
     ctx.client_version.to_owned()
 }
 
 // Gas
 
-/// OK
 fn eth_gas_price(_: Params, _: &RpcContext) -> String {
     hex_zero()
 }
@@ -180,7 +190,6 @@ fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonV
     }
 }
 
-/// OK
 fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
