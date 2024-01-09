@@ -99,17 +99,52 @@ impl EthStorage for Postgres {
 
         Ok(slot)
     }
+
     fn read_block(&self, block: &BlockSelection) -> Result<Option<Block>, EthError> {
         tracing::debug!(block = ?block, "reading block");
 
-        let block = match block {
-            BlockSelection::Latest => {
-                let current_block_number = self.read_current_block_number()?;
-            },
-            BlockSelection::Hash(hash) => {},
-            BlockSelection::Number(number) => {}
-        };
-        
+
+        // let rt = tokio::runtime::Handle::current();
+        //     rt
+        //     .block_on(async {
+        //         sqlx::query_as!(
+        //             Block,
+        //             r#"
+        //                 SELECT 
+        //                     number as "number: _", 
+        //                     hash as "hash: _",
+        //                     transactions_root as "transactions_root: _",
+        //                     gas as "gas: _",
+        //                     created_at as "created_at: _"
+        //                 FROM blocks
+        //                 WHERE number = $1 AND hash = $2
+        //             "#,
+        //             number,
+        //             hash,
+        //         )
+        //         .fetch_one(&self.connection_pool)
+        //         .await
+        //     })
+        //     .map_err(|e| {
+        //         // tracing::error!(reason = ?e, index = ?slot_index, address = ?address, "Failed to read slot index");
+        //         EthError::UnexpectedStorageError
+        //     })?;
+
+
+        // let query = match block {
+        //     BlockSelection::Latest => {
+        //         let current_block_number = self.read_current_block_number()?;
+        //         ("number", current_block_number)
+        //     },
+        //     BlockSelection::Hash(hash) => {
+        //         ("hash", hash)
+        //     },
+        //     BlockSelection::Number(number) => {
+        //         ("number", number)
+        //     }
+        // };
+
+            
         todo!()
     }
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {

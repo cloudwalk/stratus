@@ -33,6 +33,10 @@ build:
 build-release:
     cargo build --release
 
+# Stratus: Check, or compile without generating code
+check:
+    cargo check
+
 # Stratus: Clean build artifacts
 clean:
     cargo clean
