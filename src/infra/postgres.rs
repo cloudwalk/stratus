@@ -12,7 +12,7 @@ pub struct Postgres {
 
 impl Postgres {
     pub async fn new(url: &str) -> eyre::Result<Self> {
-        tracing::info!("Connecting to PostgreSQL on {url}");
+        tracing::info!(%url, "connecting to postgres");
 
         let connection_pool = PgPoolOptions::new()
             .min_connections(1)
@@ -21,7 +21,7 @@ impl Postgres {
             .connect(url)
             .await
             .map_err(|e| {
-                tracing::error!(reason = ?e, url = %url, "failed to connect to Postgres");
+                tracing::error!(reason = ?e, %url, "failed to connect to postgres");
                 EthError::StorageConnectionError
             })?;
 
