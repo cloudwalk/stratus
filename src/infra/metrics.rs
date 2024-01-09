@@ -119,12 +119,12 @@ macro_rules! metrics {
 macro_rules! metrics_impl_describe {
     (counter $name:ident $description:literal) => {
         paste! {
-            describe_counter!(stringify!($name),  $description)
+            describe_counter!(stringify!([<stratus_$name>]),  $description)
         }
     };
     (histogram  $name:ident $description:literal) => {
         paste! {
-            describe_histogram!(stringify!($name), $description)
+            describe_histogram!(stringify!([<stratus_$name>]), $description)
         }
     };
 }
@@ -143,7 +143,7 @@ macro_rules! metrics_impl_fn_inc {
                         )+
                     ]
                 );
-                counter!(stringify!($name), 1, labels);
+                counter!(stringify!([<stratus_$name>]), 1, labels);
             }
         }
     };
@@ -158,7 +158,7 @@ macro_rules! metrics_impl_fn_inc {
                         )+
                     ]
                 );
-                histogram!(stringify!($name), duration, labels)
+                histogram!(stringify!([<stratus_$name>]), duration, labels)
             }
         }
     };
