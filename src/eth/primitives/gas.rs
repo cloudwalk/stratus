@@ -3,6 +3,8 @@ use std::fmt::Display;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
 
@@ -30,6 +32,22 @@ impl Dummy<Faker> for Gas {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32);
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl <'r> sqlx::Decode<'r, sqlx::Postgres> for Gas {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <Gas as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value)
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for Gas {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

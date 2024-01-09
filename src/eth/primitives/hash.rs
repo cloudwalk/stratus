@@ -4,6 +4,9 @@ use std::str::FromStr;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::error::BoxDynError;
+
+use sqlx::database::HasValueRef;
 
 use crate::eth::EthError;
 use crate::gen_newtype_from;
@@ -52,6 +55,22 @@ impl FromStr for Hash {
                 Err(EthError::new_invalid_field("hash", s.to_owned()))
             }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl <'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <Hash as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value)
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for Hash {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }
 }
 

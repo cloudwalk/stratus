@@ -11,6 +11,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::infra::postgres::Postgres;
+use crate::eth::primitives::BlockHeader;
 
 impl EthStorage for Postgres {
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
@@ -103,48 +104,74 @@ impl EthStorage for Postgres {
     fn read_block(&self, block: &BlockSelection) -> Result<Option<Block>, EthError> {
         tracing::debug!(block = ?block, "reading block");
 
-
         // let rt = tokio::runtime::Handle::current();
-        //     rt
-        //     .block_on(async {
-        //         sqlx::query_as!(
-        //             Block,
-        //             r#"
-        //                 SELECT 
-        //                     number as "number: _", 
-        //                     hash as "hash: _",
-        //                     transactions_root as "transactions_root: _",
-        //                     gas as "gas: _",
-        //                     created_at as "created_at: _"
-        //                 FROM blocks
-        //                 WHERE number = $1 AND hash = $2
-        //             "#,
-        //             number,
-        //             hash,
-        //         )
-        //         .fetch_one(&self.connection_pool)
-        //         .await
-        //     })
-        //     .map_err(|e| {
-        //         // tracing::error!(reason = ?e, index = ?slot_index, address = ?address, "Failed to read slot index");
-        //         EthError::UnexpectedStorageError
-        //     })?;
-
 
         // let query = match block {
         //     BlockSelection::Latest => {
-        //         let current_block_number = self.read_current_block_number()?;
-        //         ("number", current_block_number)
+        //         let block_number = self.read_current_block_number()?;
+
+        // let block_number = i64::try_from(block_number).map_err(|_| EthError::StorageConvertError {
+        //     from: "BlockNumber".to_string(),
+        //     into: "i64".to_string(),
+        // })?;
+        //         sqlx::query_as!(
+        //             BlockHeader,
+        //             r#"
+        //                 SELECT 
+        //                     number as "number: _" 
+        //                     ,hash as "hash: _"
+        //                     ,transactions_root as "transactions_root: _"
+        //                     ,gas as "gas: _"
+        //                     ,logs_bloom as "bloom: _"
+        //                     ,timestamp_in_secs as "timestamp_in_secs: _"
+        //                     -- created_at as "created_at: _"
+        //                 FROM blocks
+        //                 WHERE number = $1
+        //             "#,
+        //             block_number,
+        //         )
         //     },
         //     BlockSelection::Hash(hash) => {
-        //         ("hash", hash)
+
+        //         sqlx::query_as!(
+        //             BlockHeader,
+        //             r#"
+        //                 SELECT 
+        //                     number as "number: _" 
+        //                     ,hash as "hash: _"
+        //                     ,transactions_root as "transactions_root: _"
+        //                     ,gas as "gas: _"
+        //                     -- created_at as "created_at: _"
+        //                 FROM blocks
+        //                 WHERE hash = $1
+        //             "#,
+        //             hash,
+        //         )
+
         //     },
         //     BlockSelection::Number(number) => {
-        //         ("number", number)
+
+        // let block_number = i64::try_from(number).map_err(|_| EthError::StorageConvertError {
+        //     from: "BlockNumber".to_string(),
+        //     into: "i64".to_string(),
+        // })?;
+        //         sqlx::query_as!(
+        //             BlockHeader,
+        //             r#"
+        //                 SELECT 
+        //                     number as "number: _" 
+        //                     ,hash as "hash: _"
+        //                     ,transactions_root as "transactions_root: _"
+        //                     ,gas as "gas: _"
+        //                     -- created_at as "created_at: _"
+        //                 FROM blocks
+        //                 WHERE number = $1
+        //             "#,
+        //             block_number
+        //         )
         //     }
         // };
 
-            
         todo!()
     }
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {

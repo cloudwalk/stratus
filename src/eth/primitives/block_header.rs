@@ -25,7 +25,7 @@ pub struct BlockHeader {
     pub hash: Hash,
     pub transactions_root: Hash,
     pub gas: Gas,
-    pub bloom: Bloom,
+    pub bloom: LogsBloom,
     pub timestamp_in_secs: u64,
 }
 

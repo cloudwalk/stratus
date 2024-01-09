@@ -15,13 +15,16 @@ CREATE TABLE IF NOT EXISTS account_slots (
     PRIMARY KEY (idx, account_address, block_number)
 );
 
+-- TODO: maybe call this table `block_headers`
 CREATE TABLE IF NOT EXISTS blocks (
-    number BIGSERIAL NOT NULL CHECK (number >= 0),
-    hash BYTEA NOT NULL CHECK (LENGTH(hash) = 32),
-    transactions_root BYTEA NOT NULL CHECK (LENGTH(transactions_root) = 32),
-    gas NUMERIC NOT NULL CHECK (gas >= 0),
-    created_at TIMESTAMP NOT NULL
-    -- PRIMARY KEY?
+    number BIGSERIAL NOT NULL CHECK (number >= 0) UNIQUE
+    ,hash BYTEA NOT NULL CHECK (LENGTH(hash) = 32)
+    ,transactions_root BYTEA NOT NULL CHECK (LENGTH(transactions_root) = 32)
+    ,gas NUMERIC NOT NULL CHECK (gas >= 0)
+    ,logs_bloom BYTEA NOT NULL CHECK (LENGTH(logs_bloom) = 256)
+    ,timestamp_in_secs INTEGER NOT NULL CHECK (timestamp_in_secs >= 0)
+    ,created_at TIMESTAMP NOT NULL
+    ,PRIMARY KEY (number, hash)
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
@@ -32,16 +35,16 @@ CREATE TABLE IF NOT EXISTS transactions (
     address_to BYTEA CHECK (LENGTH(address_to) = 20),
     input BYTEA NOT NULL CHECK (LENGTH(input) <= 24000),
     gas NUMERIC NOT NULL CHECK (gas >= 0),
-    idx_in_block  NOT NULL CHECK (idx_in_block >= 0),
+    idx_in_block SERIAL NOT NULL CHECK (idx_in_block >= 0),
     block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0),
-    block_hash BYTEA NOT NULL CHECK (LENGTH(block_hash) = 32)
-    -- PRIMARY KEY?
+    block_hash BYTEA NOT NULL CHECK (LENGTH(block_hash) = 32),
+    PRIMARY KEY (hash)
 );
 
 CREATE SEQUENCE IF NOT EXISTS block_number_seq
-AS BIGINT
-MINVALUE 0
-START WITH 0
-INCREMENT BY 1
-NO CYCLE
-OWNED BY blocks.number;
+    AS BIGINT
+    MINVALUE 0
+    START WITH 0
+    INCREMENT BY 1
+    NO CYCLE
+    OWNED BY blocks.number;

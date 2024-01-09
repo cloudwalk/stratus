@@ -15,6 +15,7 @@ mod hash;
 mod historical_value;
 mod log;
 mod log_filter_input;
+mod logs_bloom;
 mod log_mined;
 mod log_topic;
 mod nonce;
