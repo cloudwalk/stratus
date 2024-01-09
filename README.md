@@ -1,5 +1,3 @@
-# Ledger
+# Stratus
 
-CloudWalk ledger implementation compatible with Ethereum RPC and EVM smart-contracts.
-
-For now, the project is a proof-of-concept (PoC) evaluating EVM implementations with custom storage.
+Stratus is an EVM executor and JSON-RPC server with custom storage that scales horizontally.
