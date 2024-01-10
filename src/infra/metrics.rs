@@ -31,11 +31,20 @@ metrics! {
     "Ethereum JSON-RPC requests that finished."
     histogram rpc_requests_finished{method, function, success},
 
-    "Ethereum storage accounts read during EVM execution or RPC calls."
-    histogram storage_accounts_read{success},
+    "Ethereum storage accounts read."
+    histogram storage_accounts_read{point_in_time, success},
 
-    "Ethereum storage slots read during EVM execution or RPC calls."
-    histogram storage_slots_read{success}
+    "Ethereum storage blocks read."
+    histogram storage_blocks_read{success},
+
+    "Ethereum storage blocks written."
+    histogram storage_blocks_written{success},
+
+    "Ethereum storage slots read."
+    histogram storage_slots_read{point_in_time, success},
+
+    "Ethereum storage transactions read."
+    histogram storage_transactions_read{success}
 }
 
 // -----------------------------------------------------------------------------
@@ -143,7 +152,7 @@ macro_rules! metrics_impl_describe {
 macro_rules! metrics_impl_fn_inc {
     (counter $name:ident $($label:ident)+) => {
         paste! {
-            #[doc = "Increment 1 to the `" $name "` counter."]
+            #[doc = "Add 1 to `" $name "` counter."]
             pub fn [<inc_ $name>]($( $label: impl Into<LabelValue> ),+) {
                 let labels = into_labels(
                     vec![
@@ -158,7 +167,7 @@ macro_rules! metrics_impl_fn_inc {
     };
     (histogram  $name:ident $($label:ident)+) => {
         paste! {
-            #[doc = "Increase the duration of the `" $name "` histogram."]
+            #[doc = "Add operation duration to `" $name "` histogram."]
             pub fn [<inc_ $name>](duration: std::time::Duration, $( $label: impl Into<LabelValue> ),+) {
                 let labels = into_labels(
                     vec![

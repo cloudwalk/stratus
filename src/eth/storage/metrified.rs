@@ -14,6 +14,7 @@ use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::infra::metrics;
 
+/// Proxy storage that tracks metrics.
 pub struct MetrifiedStorage<T: EthStorage> {
     inner: T,
 }
@@ -36,26 +37,35 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
     fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError> {
         let start = Instant::now();
         let result = self.inner.read_account(address, point_in_time);
-        metrics::inc_storage_accounts_read(start.elapsed(), result.is_ok());
+        metrics::inc_storage_accounts_read(start.elapsed(), point_in_time, result.is_ok());
         result
     }
 
     fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
         let start = Instant::now();
         let result = self.inner.read_slot(address, slot, point_in_time);
-        metrics::inc_storage_slots_read(start.elapsed(), result.is_ok());
+        metrics::inc_storage_slots_read(start.elapsed(), point_in_time, result.is_ok());
         result
     }
 
     fn read_block(&self, block_selection: &BlockSelection) -> Result<Option<Block>, EthError> {
-        self.inner.read_block(block_selection)
+        let start = Instant::now();
+        let result = self.inner.read_block(block_selection);
+        metrics::inc_storage_blocks_read(start.elapsed(), result.is_ok());
+        result
     }
 
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
-        self.inner.read_mined_transaction(hash)
+        let start = Instant::now();
+        let result = self.inner.read_mined_transaction(hash);
+        metrics::inc_storage_transactions_read(start.elapsed(), result.is_ok());
+        result
     }
 
     fn save_block(&self, block: Block) -> Result<(), EthError> {
-        self.inner.save_block(block)
+        let start = Instant::now();
+        let result = self.inner.save_block(block);
+        metrics::inc_storage_blocks_written(start.elapsed(), result.is_ok());
+        result
     }
 }
