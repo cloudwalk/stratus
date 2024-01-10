@@ -62,8 +62,8 @@ impl FromStr for Hash {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <Hash as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value)
+        let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
     }
 }
 

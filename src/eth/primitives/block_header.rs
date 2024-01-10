@@ -1,4 +1,3 @@
-use ethereum_types::Bloom;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
