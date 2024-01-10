@@ -20,7 +20,7 @@ git checkout -b feature/325_add_japanese_locale
 
 Before you start coding, make sure you have the Rust environment set up and the necessary dependencies installed. You can do this by running:
 
-````
+````sh
 cargo build
 ````
 
@@ -37,6 +37,24 @@ Our project uses sqlx for database operations. Before you can run the project or
 Here's how to run the database migrations:
 ````
 cargo sqlx migrate run
+````
+
+# 🧪 Running End-to-End Tests
+
+Our end-to-end tests are located in the e2e directory. To run these tests, navigate to the e2e directory and run the following commands:
+
+````
+cd e2e
+npm install
+npx hardhat test
+````
+
+# 🐳 Setting Up Docker
+
+You can use Docker to build and run your project. To do this, run the following command:
+
+````
+docker-compose up --build
 ````
 
 # 👀 Test Your Changes
