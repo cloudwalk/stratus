@@ -1,6 +1,7 @@
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
@@ -101,10 +102,98 @@ impl EthStorage for Postgres {
 
         Ok(slot)
     }
+
     fn read_block(&self, block: &BlockSelection) -> Result<Option<Block>, EthError> {
         tracing::debug!(block = ?block, "reading block");
-        todo!()
+
+        let rt = tokio::runtime::Handle::current();
+
+        match block {
+            BlockSelection::Latest => {
+                let current = self.read_current_block_number()?;
+
+                let block_number = i64::try_from(current).map_err(|_| EthError::StorageConvertError {
+                    from: "BlockNumber".to_string(),
+                    into: "i64".to_string(),
+                })?;
+                let _block = rt.block_on(async {
+                    sqlx::query_as!(
+                        BlockHeader,
+                        r#"
+                        SELECT
+                            number as "number: _"
+                            ,hash as "hash: _"
+                            ,transactions_root as "transactions_root: _"
+                            ,gas as "gas: _"
+                            ,logs_bloom as "bloom: _"
+                            ,timestamp_in_secs as "timestamp_in_secs: _"
+                        FROM blocks
+                        WHERE number = $1
+                    "#,
+                        block_number,
+                    )
+                    .fetch_one(&self.connection_pool)
+                    .await
+                });
+                ();
+            }
+            BlockSelection::Hash(hash) => {
+                let _block = rt.block_on(async {
+                    sqlx::query_as!(
+                        BlockHeader,
+                        r#"
+                        SELECT
+                            number as "number: _"
+                            ,hash as "hash: _"
+                            ,transactions_root as "transactions_root: _"
+                            ,gas as "gas: _"
+                            ,logs_bloom as "bloom: _"
+                            ,timestamp_in_secs as "timestamp_in_secs: _"
+                        FROM blocks
+                        WHERE hash = $1
+                    "#,
+                        hash.as_ref(),
+                    )
+                    .fetch_one(&self.connection_pool)
+                    .await
+                });
+                ();
+            }
+            BlockSelection::Number(number) => {
+                let block_number = i64::try_from(*number).map_err(|_| EthError::StorageConvertError {
+                    from: "BlockNumber".to_string(),
+                    into: "i64".to_string(),
+                })?;
+
+                let _block = rt.block_on(async {
+                    sqlx::query_as!(
+                        BlockHeader,
+                        r#"
+                        SELECT
+                            number as "number: _"
+                            ,hash as "hash: _"
+                            ,transactions_root as "transactions_root: _"
+                            ,gas as "gas: _"
+                            ,logs_bloom as "bloom: _"
+                            ,timestamp_in_secs as "timestamp_in_secs: _"
+                        FROM blocks
+                        WHERE number = $1
+                    "#,
+                        block_number,
+                    )
+                    .fetch_one(&self.connection_pool)
+                    .await
+                });
+                ();
+            }
+            BlockSelection::Earliest => {
+                todo!()
+            }
+        };
+
+        todo!();
     }
+
     fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
         tracing::debug!(%hash, "reading transaction");
         todo!()
