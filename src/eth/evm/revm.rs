@@ -21,7 +21,7 @@ use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionAccountChanges;
 use crate::eth::primitives::TransactionExecutionValueChange;
@@ -111,7 +111,7 @@ struct RevmDatabaseSession {
     storage: Arc<dyn EthStorage>,
 
     /// Point in time of the storage during the transaction execution.
-    storage_point_in_time: StoragerPointInTime,
+    storage_point_in_time: StoragePointInTime,
 
     /// Block timestamp in seconds.
     block_timestamp_in_secs: u64,
@@ -124,7 +124,7 @@ struct RevmDatabaseSession {
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<dyn EthStorage>, storage_point_in_time: StoragerPointInTime, to: Option<Address>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>, storage_point_in_time: StoragePointInTime, to: Option<Address>) -> Self {
         Self {
             storage,
             storage_point_in_time,

@@ -17,7 +17,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::HistoricalValues;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::test_accounts;
@@ -82,7 +82,7 @@ impl EthStorage for InMemoryStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
         let state_lock = self.state.read().unwrap();
@@ -110,7 +110,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
         let state_lock = self.state.read().unwrap();

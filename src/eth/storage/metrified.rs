@@ -8,7 +8,7 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
@@ -34,14 +34,14 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         self.inner.increment_block_number()
     }
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
         let start = Instant::now();
         let result = self.inner.read_account(address, point_in_time);
         metrics::inc_storage_accounts_read(start.elapsed(), point_in_time, result.is_ok());
         result
     }
 
-    fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
+    fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, EthError> {
         let start = Instant::now();
         let result = self.inner.read_slot(address, slot, point_in_time);
         metrics::inc_storage_slots_read(start.elapsed(), point_in_time, result.is_ok());

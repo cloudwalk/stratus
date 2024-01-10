@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 
 /// TODO: document
 #[derive(Debug)]
@@ -37,10 +37,10 @@ where
     }
 
     /// Returns the value at the given point in time.
-    pub fn get_at_point(&self, point_in_time: &StoragerPointInTime) -> Option<T> {
+    pub fn get_at_point(&self, point_in_time: &StoragePointInTime) -> Option<T> {
         match point_in_time {
-            StoragerPointInTime::Present => Some(self.get_current()),
-            StoragerPointInTime::Past(block_number) => self.get_at_block(block_number),
+            StoragePointInTime::Present => Some(self.get_current()),
+            StoragePointInTime::Past(block_number) => self.get_at_block(block_number),
         }
     }
 
