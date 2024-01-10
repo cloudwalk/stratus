@@ -1,3 +1,4 @@
+use super::MetrifiedStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -57,6 +58,14 @@ pub trait EthStorage: Send + Sync + 'static {
     // Default operations
     // -------------------------------------------------------------------------
 
+    /// Wraps the current storage with a proxy that collects execution metrics.
+    fn metrified(self) -> MetrifiedStorage<Self>
+    where
+        Self: Sized,
+    {
+        MetrifiedStorage::new(self)
+    }
+
     /// Translates a block selection to a specific storage point-in-time indicator.
     fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> Result<StoragerPointInTime, EthError> {
         match block_selection {
@@ -79,9 +88,7 @@ pub trait EthStorage: Send + Sync + 'static {
 
 /// Retrieves test accounts.
 ///
-/// TODO: use another approach to include test accounts instead of relying on debug builds
-/// because we may want to test them in release builds.
-#[cfg(debug_assertions)]
+/// TODO: use a feature-flag to determine if test accounts should be returned.
 pub fn test_accounts() -> Vec<Account> {
     use hex_literal::hex;
 

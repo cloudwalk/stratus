@@ -1,14 +1,21 @@
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::ops::Deref;
 
 use ethers_core::types::Bytes as EthersBytes;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::Bytes as RevmBytes;
 use revm::primitives::Output as RevmOutput;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
-use crate::derive_newtype_from;
+use crate::gen_newtype_from;
 
+<<<<<<< HEAD
 #[derive(Clone, Default, Eq, PartialEq, derive_more::Deref, serde::Serialize)]
+=======
+#[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]
+>>>>>>> main
 pub struct Bytes(Vec<u8>);
 
 impl Display for Bytes {
@@ -27,9 +34,15 @@ impl Debug for Bytes {
     }
 }
 
-impl AsRef<[u8]> for Bytes {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
+// -----------------------------------------------------------------------------
+// Serialization / Deserialization
+// -----------------------------------------------------------------------------
+impl serde::Serialize for Bytes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&const_hex::encode_prefixed(&self.0))
     }
 }
 
@@ -48,10 +61,11 @@ impl<'de> serde::Deserialize<'de> for Bytes {
         }
     }
 }
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Bytes, other = Vec<u8>, &[u8]);
+gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8]);
 
 impl From<EthersBytes> for Bytes {
     fn from(value: EthersBytes) -> Self {
@@ -87,8 +101,38 @@ impl From<RevmOutput> for Bytes {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Bytes {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <Vec<u8> as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for Bytes {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl AsRef<[u8]> for Bytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Deref for Bytes {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl From<Bytes> for EthersBytes {
     fn from(value: Bytes) -> Self {
         value.0.into()

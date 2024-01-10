@@ -1,38 +1,39 @@
 use std::sync::Arc;
 
-use ledger::eth::evm::revm::Revm;
-use ledger::eth::rpc::serve_rpc;
-use ledger::eth::storage::impls::inmemory::InMemoryStorage;
-use ledger::eth::storage::impls::redis::RedisStorage;
-use ledger::eth::storage::EthStorage;
-use ledger::eth::EthExecutor;
-use ledger::infra;
+use clap::Parser;
+use stratus::config::Config;
+use stratus::config::StorageConfig;
+use stratus::eth::evm::revm::Revm;
+use stratus::eth::rpc::serve_rpc;
+use stratus::eth::storage::EthStorage;
+use stratus::eth::storage::InMemoryStorage;
+use stratus::eth::EthExecutor;
+use stratus::infra;
+use stratus::infra::postgres::Postgres;
 
 use clap::Parser;
 use ledger::config::{Config, Storage};
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    // parse cli configs
+    let config = Config::parse();
+
     // init infra
     infra::init_tracing();
     infra::init_metrics();
 
-    let cfg = Config::parse();
-
     // init services
-    let eth_storage: Arc<dyn EthStorage> = match cfg.storage {
-        Storage::InMemory => Arc::new(InMemoryStorage::default()),
-        Storage::Redis => {
-            let url = cfg.redis_url;
-            let redis = Arc::new(RedisStorage::new(&url).await?);
-            let eth_storage = Arc::clone(&redis) as Arc<dyn EthStorage>;
-            eth_storage
-        }
+    let storage: Arc<dyn EthStorage> = match config.storage {
+        StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
+        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
+        StorageConfig::Redis { url } => Arc::new(RedisStorage::new(&url).await?.metrified()),
     };
+    let evm = Box::new(Revm::new(Arc::clone(&storage)));
+    let executor = EthExecutor::new(evm, Arc::clone(&storage));
 
-    let evm = Box::new(Revm::new(Arc::clone(&eth_storage)));
-    let executor = EthExecutor::new(evm, Arc::clone(&eth_storage));
+    // start rpc server
+    serve_rpc(executor, storage).await?;
 
-    serve_rpc(executor, eth_storage).await?;
     Ok(())
 }

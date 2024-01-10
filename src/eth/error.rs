@@ -4,6 +4,8 @@ use crate::eth::primitives::Address;
 use crate::eth::rpc::rpc_internal_error;
 
 /// Errors that can occur when anything related to Ethereum is executing.
+///
+/// TODO: organize better by context or just move to anyhow/eyre.
 #[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum EthError {
     // -------------------------------------------------------------------------
@@ -15,11 +17,17 @@ pub enum EthError {
     #[error("Failed to select block because it is greater than current block number or block hash is invalid.")]
     InvalidBlockSelection,
 
+    #[error("Transaction signer cannot be recovered. Check the transaction signature is valid.")]
+    InvalidSigner,
+
+    #[error("Transaction sent without chain id is not allowed.")]
+    InvalidChainId,
+
+    #[error("Transaction sent without gas price is not allowed.")]
+    InvalidGasPrice,
+
     #[error("Transaction sent from zero address is not allowed.")]
     ZeroSigner,
-
-    #[error("Transaction signer cannot be recovered. Check the transaction signature is valid.")]
-    UnrecoverableSigner,
 
     // -------------------------------------------------------------------------
     // EVM
@@ -39,11 +47,20 @@ pub enum EthError {
     #[error("Unexpected error with EVM storage. Check logs for more information.")]
     UnexpectedStorageError,
 
+    #[error("Failed to connect to Storage")]
+    StorageConnectionError,
+
     // -------------------------------------------------------------------------
     // Bugs
     // -------------------------------------------------------------------------
     #[error("Bug: Contract was deployed, but no address was returned.")]
     DeploymentWithoutAddress,
+
+    // -------------------------------------------------------------------------
+    // Type Conversion
+    // -------------------------------------------------------------------------
+    #[error("Cannot convert from '{from}' to '{into}'")]
+    StorageConvertError { from: String, into: String },
 }
 
 impl From<EthError> for ErrorObjectOwned {

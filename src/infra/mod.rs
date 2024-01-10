@@ -6,3 +6,4 @@ pub use metrics::init_metrics;
 pub use tracing::init_tracing;
 
 pub mod redis;
+pub mod postgres;

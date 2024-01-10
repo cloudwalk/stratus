@@ -1,29 +1,40 @@
-use clap::{Parser, ValueEnum};
-use std::fmt;
+//! Application configuration.
 
-#[derive(Clone, Debug, ValueEnum)]
-pub enum Storage {
-    InMemory,
-    Redis,
-}
+use std::str::FromStr;
 
-impl fmt::Display for Storage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Storage::InMemory => write!(f, "InMemoryStorage"),
-            Storage::Redis => write!(f, "RedisStorage"),
-        }
-    }
-}
+use clap::Parser;
 
-#[derive(Debug, Parser)]
+/// Application configuration entry-point.
+#[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Config {
-    // The storage to use
-    #[arg(long, default_value = "InMemoryStorage")]
-    pub storage: Storage,
+    /// Main storage to use.
+    #[arg(short, long, default_value_t = StorageConfig::InMemory)]
+    pub storage: StorageConfig,
+}
 
-    // The URL of the Redis server
-    #[arg(long, default_value = "redis://127.0.0.1:6379")]
-    pub redis_url: String,
+/// Storage configuration.
+#[derive(Clone, Debug, strum::Display)]
+pub enum StorageConfig {
+    #[strum(serialize = "inmemory")]
+    InMemory,
+
+    #[strum(serialize = "postgres")]
+    Postgres { url: String },
+
+    #[strum(serialize = "redis")]
+    Redis { url: String },
+}
+
+impl FromStr for StorageConfig {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "inmemory" => Ok(Self::InMemory),
+            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
+	    s if s.starts_with("redis://") => Ok(Self::Redis { url: s.to_string() }),
+            s => Err(format!("unknown storage: {}", s)),
+        }
+    }
 }

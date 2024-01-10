@@ -1,12 +1,12 @@
-//! Tracing configuration.
+//! Tracing services.
 
 use tracing_subscriber::EnvFilter;
 
-/// Init application tracing.
+/// Init application global tracing.
 pub fn init_tracing() {
     // if tracing level not configured, set default
     if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "ledger=debug");
+        std::env::set_var("RUST_LOG", "stratus=debug");
     }
 
     tracing_subscriber::fmt()

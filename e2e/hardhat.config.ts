@@ -30,7 +30,7 @@ const config: HardhatUserConfig = {
                 mnemonic: ACCOUNTS_MNEMONIC,
             },
         },
-        ledger: {
+        stratus: {
             url: "http://localhost:3000",
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,

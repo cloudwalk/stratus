@@ -1,13 +1,17 @@
 //! RPC server for HTTP and WS.
 
+use std::ops::Deref;
 use std::sync::Arc;
 
 use ethereum_types::U256;
+use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params;
+use jsonrpsee::IntoSubscriptionCloseResponse;
+use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::Address;
@@ -20,8 +24,11 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
+use crate::eth::rpc::rpc_parser::next_rpc_param_default;
+use crate::eth::rpc::rpc_parser::rpc_parsing_error;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcMiddleware;
+use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
 
@@ -30,34 +37,51 @@ use crate::eth::EthExecutor;
 // -----------------------------------------------------------------------------
 
 pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) -> eyre::Result<()> {
+    // configure subscriptions
+    let subs = Arc::new(RpcSubscriptions::default());
+    Arc::clone(&subs).spawn_subscriptions_cleaner();
+    Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
+    Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
+
     // configure context
     let ctx = RpcContext {
         chain_id: 2008,
-        client_version: "ledger",
+        client_version: "stratus",
         gas_price: 0,
 
         // services
         executor,
         storage: eth_storage,
+
+        // subscriptions
+        subs,
     };
     tracing::info!(?ctx, "starting rpc server");
 
     // configure module
     let mut module = RpcModule::<RpcContext>::new(ctx);
-    module = register_routes(module)?;
+    module = register_methods(module)?;
 
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+    let http_middleware = tower::ServiceBuilder::new().layer(ProxyGetRequestLayer::new("/health", "net_listening").unwrap());
 
     // serve module
-    let server = Server::builder().set_rpc_middleware(rpc_middleware).build("0.0.0.0:3000").await?;
+    let server = Server::builder()
+        .set_rpc_middleware(rpc_middleware)
+        .set_http_middleware(http_middleware)
+        .build("0.0.0.0:3000")
+        .await?;
     let handle = server.start(module);
     handle.stopped().await;
 
     Ok(())
 }
 
-fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<RpcContext>> {
+fn register_methods(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<RpcContext>> {
+    // status
+    module.register_method("net_listening", net_listening)?;
+
     // blockchain
     module.register_method("net_version", net_version)?;
     module.register_method("eth_chainId", eth_chain_id)?;
@@ -83,6 +107,9 @@ fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<
     module.register_method("eth_getBalance", eth_get_balance)?;
     module.register_method("eth_getCode", eth_get_code)?;
 
+    // subscriptions
+    module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
+
     Ok(module)
 }
 
@@ -90,26 +117,27 @@ fn register_routes(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule<
 // Handlers
 // -----------------------------------------------------------------------------
 
+// Status
+fn net_listening(_: Params, _: &RpcContext) -> &'static str {
+    "true"
+}
+
 // Blockchain
 
-/// OK
 fn net_version(_: Params, ctx: &RpcContext) -> String {
     ctx.chain_id.to_string()
 }
 
-/// OK
 fn eth_chain_id(_: Params, ctx: &RpcContext) -> String {
     hex_num(ctx.chain_id)
 }
 
-/// OK
 fn web3_client_version(_: Params, ctx: &RpcContext) -> String {
     ctx.client_version.to_owned()
 }
 
 // Gas
 
-/// OK
 fn eth_gas_price(_: Params, _: &RpcContext) -> String {
     hex_zero()
 }
@@ -127,18 +155,17 @@ fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonVal
     let block = ctx.storage.read_block(&block_selection)?;
 
     match (block, full_transactions) {
-        (Some(block), true) => Ok(block.to_json_with_full_transactions()),
-        (Some(block), false) => Ok(block.to_json_with_transactions_hashes()),
+        (Some(block), true) => Ok(block.to_json_rpc_with_full_transactions()),
+        (Some(block), false) => Ok(block.to_json_rpc_with_transactions_hashes()),
         (None, _) => Ok(JsonValue::Null),
     }
 }
 
 // Transaction
 
-/// OK
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
@@ -150,7 +177,7 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonV
     let mined = ctx.storage.read_mined_transaction(&hash)?;
 
     match mined {
-        Some(mined) => Ok(serde_json::to_value(mined).unwrap()),
+        Some(mined) => Ok(mined.to_json_rpc_transaction()),
         None => Ok(JsonValue::Null),
     }
 }
@@ -158,12 +185,11 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonV
 fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     match ctx.storage.read_mined_transaction(&hash)? {
-        Some(mined_transaction) => Ok(serde_json::to_value(&mined_transaction.to_receipt()).unwrap()),
+        Some(mined_transaction) => Ok(mined_transaction.to_json_rpc_receipt()),
         None => Ok(JsonValue::Null),
     }
 }
 
-/// OK
 fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
@@ -184,7 +210,7 @@ fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObj
 
 fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     match ctx.executor.call(call, point_in_time) {
@@ -223,7 +249,7 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 
 fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
@@ -233,12 +259,29 @@ fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObje
 
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let block_selection = next_rpc_param::<Option<BlockSelection>>(params)?.1.unwrap_or_default();
+    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
+}
+
+// Subscription
+
+async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>) -> impl IntoSubscriptionCloseResponse {
+    let (_, kind) = next_rpc_param::<String>(params.sequence())?;
+    match kind.deref() {
+        "newHeads" => ctx.subs.add_new_heads(pending.accept().await?),
+        "logs" => ctx.subs.add_logs(pending.accept().await?),
+
+        // unknown subscription kind
+        kind => {
+            tracing::warn!(%kind, "unsupported subscription kind");
+            pending.reject(rpc_parsing_error(format!("unsupported subscription kind: {}", kind))).await;
+        }
+    }
+    Ok(())
 }
 
 // -----------------------------------------------------------------------------

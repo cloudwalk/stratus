@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use nonempty::NonEmpty;
 
-use super::StoragerPointInTime;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::StoragerPointInTime;
 
 /// TODO: document
 #[derive(Debug)]

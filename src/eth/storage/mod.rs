@@ -1,9 +1,12 @@
 //! Ethereum / EVM storage.
 
-pub mod eth_storage;
-pub mod impls;
-#[cfg(debug_assertions)]
+mod eth_storage;
+mod inmemory;
+mod metrified;
+mod postgres;
+mod redis;
+
 pub use eth_storage::test_accounts;
 pub use eth_storage::EthStorage;
-pub use impls::inmemory::InMemoryStorage;
-pub use impls::redis::RedisStorage;
+pub use inmemory::InMemoryStorage;
+pub use metrified::MetrifiedStorage;

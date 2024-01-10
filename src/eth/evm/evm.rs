@@ -64,7 +64,7 @@ impl TryFrom<TransactionInput> for EvmInput {
 
     fn try_from(value: TransactionInput) -> Result<Self, Self::Error> {
         Ok(Self {
-            from: value.signer()?,
+            from: value.signer,
             to: value.to,
             value: value.value,
             data: value.input,

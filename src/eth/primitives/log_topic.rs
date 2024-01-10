@@ -1,9 +1,17 @@
 use ethereum_types::H256;
+use fake::Dummy;
+use fake::Faker;
 use revm::primitives::B256 as RevmB256;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LogTopic(H256);
+
+impl Dummy<Faker> for LogTopic {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        Self(H256::random_using(rng))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self

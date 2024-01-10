@@ -2,11 +2,13 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use ethereum_types::H256;
+use fake::Dummy;
+use fake::Faker;
 
-use crate::derive_newtype_from;
 use crate::eth::EthError;
+use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Hash(H256);
 
@@ -16,8 +18,8 @@ impl Hash {
         Self(H256(bytes))
     }
 
-    /// Creates a random hash.
-    pub fn random() -> Self {
+    /// Creates a new random hash.
+    pub fn new_random() -> Self {
         Self(H256::random())
     }
 }
@@ -28,16 +30,16 @@ impl Display for Hash {
     }
 }
 
-impl AsRef<[u8]> for Hash {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+impl Dummy<Faker> for Hash {
+    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        H256::random_using(rng).into()
     }
 }
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Hash, other = H256, [u8; 32]);
+gen_newtype_from!(self = Hash, other = H256, [u8; 32]);
 
 impl FromStr for Hash {
     type Err = EthError;
@@ -56,6 +58,12 @@ impl FromStr for Hash {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl AsRef<[u8]> for Hash {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 impl From<Hash> for H256 {
     fn from(value: Hash) -> Self {
         value.0

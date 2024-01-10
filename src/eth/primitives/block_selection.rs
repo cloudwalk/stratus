@@ -46,16 +46,16 @@ impl<'de> serde::Deserialize<'de> for BlockSelection {
 mod tests {
     use serde_json::json;
 
-    use super::*;
+    use crate::eth::primitives::*;
 
     #[test]
-    fn deserialize_block_number_with_latest() {
+    fn serde_block_number_with_latest() {
         let json = json!("latest");
         assert_eq!(serde_json::from_value::<BlockSelection>(json).unwrap(), BlockSelection::Latest);
     }
 
     #[test]
-    fn deserialize_block_number_with_number() {
+    fn serde_block_number_with_number() {
         let json = json!("0x2");
         assert_eq!(serde_json::from_value::<BlockSelection>(json).unwrap(), BlockSelection::Number(2usize.into()));
     }

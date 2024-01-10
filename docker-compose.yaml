@@ -1,0 +1,12 @@
+version: "2"
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: stratus
+    ports:
+      - 5432:5432
+    volumes:
+      - "./static/schema/001-init.sql:/docker-entrypoint-initdb.d/schema.sql"

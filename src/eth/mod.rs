@@ -1,4 +1,4 @@
-//! Ethereum layers.
+//! Ethereum components.
 
 pub mod codegen;
 mod error;

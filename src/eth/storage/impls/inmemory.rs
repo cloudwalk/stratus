@@ -20,12 +20,11 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragerPointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
-#[cfg(debug_assertions)]
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
-/// In-memory implementation using HashMaps.
+/// In-memory implementation using maps.
 #[derive(Debug)]
 pub struct InMemoryStorage {
     state: RwLock<InMemoryStorageState>,
@@ -51,7 +50,6 @@ impl Default for InMemoryStorage {
         state.blocks_by_number.insert(genesis.header.number, genesis);
 
         // add test accounts to state
-        #[cfg(debug_assertions)]
         for account in test_accounts() {
             let balance = account.balance.clone();
             state
@@ -189,7 +187,7 @@ impl EthStorage for InMemoryStorage {
 
             // save execution changes
             let is_success = transaction.is_success();
-            for mut changes in transaction.execution.changes {
+            for changes in transaction.execution.changes {
                 let (account, account_balances) = state_lock
                     .accounts
                     .entry(changes.address.clone())
@@ -217,7 +215,7 @@ impl EthStorage for InMemoryStorage {
                 // storage
                 if is_success {
                     let account_slots = state_lock.account_slots.entry(changes.address).or_default();
-                    for (slot_index, mut slot) in changes.slots {
+                    for (slot_index, slot) in changes.slots {
                         if let Some(slot) = slot.take_if_modified() {
                             tracing::trace!(%slot, "saving slot");
                             match account_slots.get_mut(&slot_index) {

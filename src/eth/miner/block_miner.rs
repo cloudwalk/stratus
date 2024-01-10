@@ -4,7 +4,6 @@ use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 
-use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -31,26 +30,26 @@ impl BlockMiner {
     }
 
     /// Mine one block with a single transaction.
-    pub fn mine_with_one_transaction(&mut self, signer: Address, input: TransactionInput, execution: TransactionExecution) -> Result<Block, EthError> {
-        let transactions = NonEmpty::new((signer, input, execution));
+    pub fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> Result<Block, EthError> {
+        let transactions = NonEmpty::new((input, execution));
         self.mine_with_many_transactions(transactions)
     }
 
     /// Mine one block from one or more transactions.
     ///
     /// TODO: maybe break this in multiple functions after the logic is complete.
-    pub fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(Address, TransactionInput, TransactionExecution)>) -> Result<Block, EthError> {
+    pub fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> Result<Block, EthError> {
         // init block
         let number = self.storage.increment_block_number()?;
         let block_timpestamp = transactions
-            .minimum_by(|(_, _, e1), (_, _, e2)| e1.block_timestamp_in_secs.cmp(&e2.block_timestamp_in_secs))
-            .2
+            .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp_in_secs.cmp(&e2.block_timestamp_in_secs))
+            .1
             .block_timestamp_in_secs;
         let mut block = Block::new_with_capacity(number, block_timpestamp, transactions.len());
 
         // mine transactions and logs
         let mut log_index = 0;
-        for (transaction_index, (signer, input, execution)) in transactions.into_iter().enumerate() {
+        for (transaction_index, (input, execution)) in transactions.into_iter().enumerate() {
             // mine logs
             let mut mined_logs: Vec<LogMined> = Vec::with_capacity(execution.logs.len());
             for mined_log in execution.logs.clone() {
@@ -77,7 +76,6 @@ impl BlockMiner {
 
             // mine transaction
             let mined_transaction = TransactionMined {
-                signer,
                 input,
                 execution,
                 transaction_index,

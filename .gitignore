@@ -2,7 +2,7 @@
 .vscode
 .tool-versions
 
-# E2E (Ledger)
+# E2E (Stratus)
 e2e/node_modules
 e2e/cache
 

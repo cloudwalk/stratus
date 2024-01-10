@@ -1,12 +1,13 @@
 use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
+use jsonrpsee::SubscriptionMessage;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Log;
 
 /// Log that was emitted by the EVM and added to a block.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct LogMined {
     /// Original log emitted by the EVM.
     pub log: Log,
@@ -48,5 +49,12 @@ impl From<LogMined> for EthersLog {
             transaction_index: Some(value.transaction_index.into()),
             transaction_log_index: None, // TODO: what is this?
         }
+    }
+}
+
+impl From<LogMined> for SubscriptionMessage {
+    fn from(value: LogMined) -> Self {
+        let ethers_log = Into::<EthersLog>::into(value);
+        Self::from_json(&ethers_log).unwrap()
     }
 }

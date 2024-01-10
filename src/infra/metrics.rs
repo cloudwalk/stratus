@@ -1,4 +1,4 @@
-//! Metrics configuration.
+//! Metrics services.
 
 use std::stringify;
 
@@ -14,10 +14,10 @@ use crate::metrics;
 use crate::metrics_impl_describe;
 use crate::metrics_impl_fn_inc;
 
-/// Init application metrics.
+/// Init application global metrics.
 pub fn init_metrics() {
     // default configuration runs metrics exporter on port 9000
-    PrometheusBuilder::new().install().expect("Metrics initialization failed");
+    PrometheusBuilder::new().install().expect("metrics initialization failed");
     register_metrics();
 
     tracing::info!("metrics initialized");
@@ -29,7 +29,22 @@ metrics! {
     counter   rpc_requests_started{method, function},
 
     "Ethereum JSON-RPC requests that finished."
-    histogram rpc_requests_finished{method, function, success}
+    histogram rpc_requests_finished{method, function, success},
+
+    "Ethereum storage accounts read."
+    histogram storage_accounts_read{point_in_time, success},
+
+    "Ethereum storage blocks read."
+    histogram storage_blocks_read{success},
+
+    "Ethereum storage blocks written."
+    histogram storage_blocks_written{success},
+
+    "Ethereum storage slots read."
+    histogram storage_slots_read{point_in_time, success},
+
+    "Ethereum storage transactions read."
+    histogram storage_transactions_read{success}
 }
 
 // -----------------------------------------------------------------------------
@@ -91,8 +106,9 @@ fn into_labels(labels: Vec<(&'static str, LabelValue)>) -> Vec<MetricsLabel> {
 // Macros
 // -----------------------------------------------------------------------------
 
-/// Generate functions to record metrics.
+/// Internal - Generate functions to record metrics.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! metrics {
     (
         $(
@@ -116,25 +132,27 @@ macro_rules! metrics {
 
 /// Internal - Generates a statement that describe a metrics.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! metrics_impl_describe {
     (counter $name:ident $description:literal) => {
         paste! {
-            describe_counter!(stringify!($name),  $description)
+            describe_counter!(stringify!([<stratus_$name>]),  $description)
         }
     };
     (histogram  $name:ident $description:literal) => {
         paste! {
-            describe_histogram!(stringify!($name), $description)
+            describe_histogram!(stringify!([<stratus_$name>]), $description)
         }
     };
 }
 
 /// Internal - Generates a function that increases a metric value.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! metrics_impl_fn_inc {
     (counter $name:ident $($label:ident)+) => {
         paste! {
-            #[doc = "Increment 1 to the `" $name "` counter."]
+            #[doc = "Add 1 to `" $name "` counter."]
             pub fn [<inc_ $name>]($( $label: impl Into<LabelValue> ),+) {
                 let labels = into_labels(
                     vec![
@@ -143,13 +161,13 @@ macro_rules! metrics_impl_fn_inc {
                         )+
                     ]
                 );
-                counter!(stringify!($name), 1, labels);
+                counter!(stringify!([<stratus_$name>]), 1, labels);
             }
         }
     };
     (histogram  $name:ident $($label:ident)+) => {
         paste! {
-            #[doc = "Increase the duration of the `" $name "` histogram."]
+            #[doc = "Add operation duration to `" $name "` histogram."]
             pub fn [<inc_ $name>](duration: std::time::Duration, $( $label: impl Into<LabelValue> ),+) {
                 let labels = into_labels(
                     vec![
@@ -158,7 +176,7 @@ macro_rules! metrics_impl_fn_inc {
                         )+
                     ]
                 );
-                histogram!(stringify!($name), duration, labels)
+                histogram!(stringify!([<stratus_$name>]), duration, labels)
             }
         }
     };

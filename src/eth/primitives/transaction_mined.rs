@@ -1,8 +1,8 @@
 use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;
+use serde_json::Value as JsonValue;
 
-use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
@@ -12,11 +12,8 @@ use crate::ext::OptionExt;
 use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMined {
-    /// Address who signed the transaction.
-    pub signer: Address,
-
     /// Transaction input received through RPC.
     pub input: TransactionInput,
 
@@ -42,42 +39,16 @@ impl TransactionMined {
         self.execution.is_success()
     }
 
-    /// Convert itself into a receipt to be sent to the client.
-    pub fn to_receipt(self) -> EthersReceipt {
-        EthersReceipt {
-            // receipt specific
-            status: Some(if_else!(self.is_success(), 1, 0).into()),
-            contract_address: self.execution.contract_address().map_into(),
-
-            // transaction
-            transaction_hash: self.input.hash.into(),
-            from: self.input.from.into(),
-            to: self.input.to.map_into(),
-            gas_used: Some(self.input.gas.into()),
-
-            // block
-            block_hash: Some(self.block_hash.into()),
-            block_number: Some(self.block_number.into()),
-            transaction_index: self.transaction_index.into(),
-
-            // logs
-            logs: self.logs.into_iter().map_into().collect(),
-
-            ..Default::default()
-        }
+    /// Serializes itself to JSON-RPC transaction format.
+    pub fn to_json_rpc_transaction(self) -> JsonValue {
+        let json_struct: EthersTransaction = self.into();
+        serde_json::to_value(json_struct).unwrap()
     }
-}
 
-// -----------------------------------------------------------------------------
-// Serialization / Deserialization
-// -----------------------------------------------------------------------------
-impl serde::Serialize for TransactionMined {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let trx: EthersTransaction = self.clone().into();
-        trx.serialize(serializer)
+    /// Serializes itself to JSON-RPC receipt format.
+    pub fn to_json_rpc_receipt(self) -> JsonValue {
+        let json_struct: EthersReceipt = self.into();
+        serde_json::to_value(json_struct).unwrap()
     }
 }
 
@@ -87,12 +58,50 @@ impl serde::Serialize for TransactionMined {
 impl From<TransactionMined> for EthersTransaction {
     fn from(value: TransactionMined) -> Self {
         let input = value.input;
-        EthersTransaction {
-            from: value.signer.into(),
+        Self {
+            chain_id: Some(input.chain_id.into()),
+            hash: input.hash.into(),
+            nonce: input.nonce.into(),
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.into()),
             transaction_index: Some(value.transaction_index.into()),
-            ..input.inner
+            from: input.signer.into(),
+            to: input.to.map_into(),
+            value: input.value.into(),
+            gas_price: Some(input.gas_price.into()),
+            gas: input.gas.into(),
+            input: input.input.into(),
+            v: input.v,
+            r: input.r,
+            s: input.s,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<TransactionMined> for EthersReceipt {
+    fn from(value: TransactionMined) -> Self {
+        Self {
+            // receipt specific
+            status: Some(if_else!(value.is_success(), 1, 0).into()),
+            contract_address: value.execution.contract_address().map_into(),
+
+            // transaction
+            transaction_hash: value.input.hash.into(),
+            from: value.input.signer.into(),
+            to: value.input.to.map_into(),
+            gas_used: Some(value.input.gas.into()),
+
+            // block
+            block_hash: Some(value.block_hash.into()),
+            block_number: Some(value.block_number.into()),
+            transaction_index: value.transaction_index.into(),
+
+            // logs
+            logs: value.logs.into_iter().map_into().collect(),
+
+            // TODO: there are more fields to populate here
+            ..Default::default()
         }
     }
 }

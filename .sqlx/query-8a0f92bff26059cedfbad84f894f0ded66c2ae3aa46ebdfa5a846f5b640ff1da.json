@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        SELECT \n                            idx as \"index: _\", \n                            value as \"value: _\"\n                        FROM account_slots\n                        WHERE account_address = $1 AND idx = $2 AND block_number = $3\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "index: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "value: _",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8a0f92bff26059cedfbad84f894f0ded66c2ae3aa46ebdfa5a846f5b640ff1da"
+}
