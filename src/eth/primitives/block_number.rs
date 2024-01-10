@@ -8,8 +8,8 @@ use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-use crate::gen_newtype_from;
 use crate::eth::EthError;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
