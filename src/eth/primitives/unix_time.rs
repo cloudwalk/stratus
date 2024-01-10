@@ -33,11 +33,19 @@ impl Dummy<Faker> for UnixTime {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
+
 impl From<u64> for UnixTime {
     fn from(value: u64) -> Self {
         UnixTime(value)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
 
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for UnixTime {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
@@ -47,16 +55,20 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for UnixTime {
     }
 }
 
+impl sqlx::Type<sqlx::Postgres> for UnixTime {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("INTEGER")
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
+
 impl TryFrom<UnixTime> for i64 {
     type Error = TryFromIntError;
 
     fn try_from(timestamp_in_secs: UnixTime) -> Result<i64, TryFromIntError> {
         timestamp_in_secs.0.try_into()
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for UnixTime {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("INTEGER")
     }
 }

@@ -1,3 +1,5 @@
+use sqlx::Encode;
+
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -114,10 +116,10 @@ impl EthStorage for Postgres {
                     from: "BlockNumber".to_string(),
                     into: "i64".to_string(),
                 })?;
-
-                let query = sqlx::query_as!(
-                    BlockHeader,
-                    r#"
+                let block = rt.block_on(async {
+                    sqlx::query_as!(
+                        BlockHeader,
+                        r#"
                         SELECT 
                             number as "number: _"
                             ,hash as "hash: _"
@@ -128,16 +130,60 @@ impl EthStorage for Postgres {
                         FROM blocks
                         WHERE number = $1
                     "#,
-                    block_number,
-                );
+                        block_number,
+                    )
+                    .fetch_one(&self.connection_pool)
+                    .await
+                });
                 ()
             }
             BlockSelection::Hash(hash) => {
-                // self.read_current_block_number()?
+                let block = rt.block_on(async {
+                    sqlx::query_as!(
+                        BlockHeader,
+                        r#"
+                        SELECT 
+                            number as "number: _"
+                            ,hash as "hash: _"
+                            ,transactions_root as "transactions_root: _"
+                            ,gas as "gas: _"
+                            ,logs_bloom as "bloom: _"
+                            ,timestamp_in_secs as "timestamp_in_secs: _"
+                        FROM blocks
+                        WHERE hash = $1
+                    "#,
+                        hash.as_ref(),
+                    )
+                    .fetch_one(&self.connection_pool)
+                    .await
+                });
                 ()
             }
             BlockSelection::Number(number) => {
-                // *number
+                let block_number = i64::try_from(*number).map_err(|_| EthError::StorageConvertError {
+                    from: "BlockNumber".to_string(),
+                    into: "i64".to_string(),
+                })?;
+
+                let block = rt.block_on(async {
+                    sqlx::query_as!(
+                        BlockHeader,
+                        r#"
+                        SELECT 
+                            number as "number: _"
+                            ,hash as "hash: _"
+                            ,transactions_root as "transactions_root: _"
+                            ,gas as "gas: _"
+                            ,logs_bloom as "bloom: _"
+                            ,timestamp_in_secs as "timestamp_in_secs: _"
+                        FROM blocks
+                        WHERE number = $1
+                    "#,
+                        block_number,
+                    )
+                    .fetch_one(&self.connection_pool)
+                    .await
+                });
                 ()
             }
         };
