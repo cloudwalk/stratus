@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123
-      POSTGRES_DB: ledger
+      POSTGRES_DB: stratus
     ports:
       - 5432:5432
     volumes:
