@@ -1,4 +1,3 @@
-use ethereum_types::Bloom;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
@@ -8,10 +7,12 @@ use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::UnixTime;
 
 /// Special hash used in block mining to indicate no uncle blocks.
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
@@ -25,20 +26,20 @@ pub struct BlockHeader {
     pub hash: Hash,
     pub transactions_root: Hash,
     pub gas: Gas,
-    pub bloom: Bloom,
-    pub timestamp_in_secs: u64,
+    pub bloom: LogsBloom,
+    pub timestamp_in_secs: UnixTime,
 }
 
 impl BlockHeader {
     /// Creates a new block header with the given number.
-    pub fn new(number: BlockNumber, timestamp_in_secs: u64) -> Self {
+    pub fn new(number: BlockNumber, _timestamp_in_secs: u64) -> Self {
         Self {
             number,
             hash: Hash::new_random(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
-            bloom: Bloom::default(),
-            timestamp_in_secs,
+            bloom: LogsBloom::default(),
+            timestamp_in_secs: UnixTime::ZERO,
         }
     }
 }
@@ -75,7 +76,7 @@ where
             parent_beacon_block_root: None,
 
             // mining: identifiers
-            timestamp: header.timestamp_in_secs.into(),
+            timestamp: (*header.timestamp_in_secs).into(),
             author: Some(Address::COINBASE.into()),
 
             // minining: difficulty
@@ -95,7 +96,7 @@ where
             receipts_root: HASH_EMPTY_TRANSACTIONS_ROOT.into(),
 
             // data
-            logs_bloom: Some(header.bloom),
+            logs_bloom: Some(*header.bloom),
             extra_data: Default::default(),
 
             // TODO

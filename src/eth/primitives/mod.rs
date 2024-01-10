@@ -17,12 +17,14 @@ mod log;
 mod log_filter_input;
 mod log_mined;
 mod log_topic;
+mod logs_bloom;
 mod nonce;
 mod slot;
 mod storage_point_in_time;
 mod transaction_execution;
 mod transaction_input;
 mod transaction_mined;
+mod unix_time;
 mod wei;
 
 pub use account::Account;
@@ -57,6 +59,7 @@ pub use transaction_execution::TransactionExecutionResult;
 pub use transaction_execution::TransactionExecutionValueChange;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
+pub use unix_time::UnixTime;
 pub use wei::Wei;
 
 // -----------------------------------------------------------------------------
