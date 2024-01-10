@@ -36,7 +36,7 @@ gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32)
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
-impl <'r> sqlx::Decode<'r, sqlx::Postgres> for Gas {
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Gas {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <Gas as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value)

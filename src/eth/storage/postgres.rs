@@ -1,6 +1,7 @@
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
@@ -11,7 +12,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::infra::postgres::Postgres;
-use crate::eth::primitives::BlockHeader;
 
 impl EthStorage for Postgres {
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
@@ -117,8 +117,8 @@ impl EthStorage for Postgres {
         //         sqlx::query_as!(
         //             BlockHeader,
         //             r#"
-        //                 SELECT 
-        //                     number as "number: _" 
+        //                 SELECT
+        //                     number as "number: _"
         //                     ,hash as "hash: _"
         //                     ,transactions_root as "transactions_root: _"
         //                     ,gas as "gas: _"
@@ -136,8 +136,8 @@ impl EthStorage for Postgres {
         //         sqlx::query_as!(
         //             BlockHeader,
         //             r#"
-        //                 SELECT 
-        //                     number as "number: _" 
+        //                 SELECT
+        //                     number as "number: _"
         //                     ,hash as "hash: _"
         //                     ,transactions_root as "transactions_root: _"
         //                     ,gas as "gas: _"
@@ -158,8 +158,8 @@ impl EthStorage for Postgres {
         //         sqlx::query_as!(
         //             BlockHeader,
         //             r#"
-        //                 SELECT 
-        //                     number as "number: _" 
+        //                 SELECT
+        //                     number as "number: _"
         //                     ,hash as "hash: _"
         //                     ,transactions_root as "transactions_root: _"
         //                     ,gas as "gas: _"

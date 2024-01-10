@@ -18,6 +18,7 @@ mod log_filter_input;
 mod logs_bloom;
 mod log_mined;
 mod log_topic;
+mod logs_bloom;
 mod nonce;
 mod slot;
 mod storage_point_in_time;

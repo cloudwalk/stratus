@@ -4,9 +4,8 @@ use std::str::FromStr;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::error::BoxDynError;
-
 use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::eth::EthError;
 use crate::gen_newtype_from;
@@ -61,7 +60,7 @@ impl FromStr for Hash {
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
-impl <'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <Hash as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value)

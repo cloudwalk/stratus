@@ -8,6 +8,7 @@ use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Gas;
@@ -37,7 +38,7 @@ impl BlockHeader {
             hash: Hash::new_random(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
-            bloom: Bloom::default(),
+            bloom: LogsBloom::default(),
             timestamp_in_secs,
         }
     }
@@ -95,7 +96,7 @@ where
             receipts_root: HASH_EMPTY_TRANSACTIONS_ROOT.into(),
 
             // data
-            logs_bloom: Some(header.bloom),
+            logs_bloom: Some(*header.bloom),
             extra_data: Default::default(),
 
             // TODO
