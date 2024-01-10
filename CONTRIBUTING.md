@@ -24,6 +24,21 @@ Before you start coding, make sure you have the Rust environment set up and the 
 cargo build
 ````
 
+Make sure your code adheres to our project's style guidelines by running rustfmt and clippy:
+````
+cargo fmt
+cargo clippy
+````
+
+# 🗄️ Working with the Database
+
+Our project uses sqlx for database operations. Before you can run the project or the tests, you'll need to set up a local database and add the connection string to your environment variables.
+
+Here's how to run the database migrations:
+````
+cargo sqlx migrate run
+````
+
 # 👀 Test Your Changes
 
 Before submitting your changes, make sure they pass the test suite. You can run the tests with:
