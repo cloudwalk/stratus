@@ -17,5 +17,5 @@ RUN cargo build --release
 # Runtime
 FROM rust:1.75 as runtime
 WORKDIR /app
-COPY --from=builder /app/target/release/ledger /app/ledger
-CMD ["/app/ledger"]
+COPY --from=builder /app/target/release/stratus /app/stratus
+CMD ["/app/stratus"]

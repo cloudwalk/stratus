@@ -24,7 +24,7 @@ describe("JSON-RPC", async () => {
         });
         it("web3_clientVersion", async () => {
             let client = await rpc.sendExpect("web3_clientVersion");
-            match(CURRENT_NETWORK).with(Network.Ledger, () => client.deep.eq("ledger"));
+            match(CURRENT_NETWORK).with(Network.Stratus, () => client.deep.eq("stratus"));
         });
     });
 
@@ -32,7 +32,7 @@ describe("JSON-RPC", async () => {
         it("eth_gasPrice", async () => {
             let gasPrice = await rpc.sendExpect("eth_gasPrice");
             match(CURRENT_NETWORK)
-                .with(Network.Ledger, () => gasPrice.eq(ZERO))
+                .with(Network.Stratus, () => gasPrice.eq(ZERO))
                 .otherwise(() => gasPrice.not.eq(ZERO));
         });
     });

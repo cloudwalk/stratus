@@ -14,42 +14,42 @@ setup:
     just contracts-clone
 
 # ------------------------------------------------------------------------------
-# Ledger tasks
+# Stratus tasks
 # ------------------------------------------------------------------------------
 
-# Ledger: Run locally with debug options
+# Stratus: Run locally with debug options
 run *args="":
-    RUST_LOG=ledger=info cargo run -- {{args}}
+    RUST_LOG=stratus=info cargo run -- {{args}}
 
-# Ledger: Run locally with release options
+# Stratus: Run locally with release options
 run-release *args="":
     RUST_LOG=info cargo run --release -- {{args}}
 
-# Ledger: Compile with debug options
+# Stratus: Compile with debug options
 build:
     cargo build
 
-# Ledger: Compile with release options
+# Stratus: Compile with release options
 build-release:
     cargo build --release
 
-# Ledger: Clean build artifacts
+# Stratus: Clean build artifacts
 clean:
     cargo clean
 
-# Ledger: Build documentation
+# Stratus: Build documentation
 doc:
     @just test-doc
     cargo +nightly doc --no-deps
 
-# Ledger: Lint and format code
+# Stratus: Lint and format code
 lint:
     cargo +nightly fmt --all
     cargo +nightly clippy --all-targets
 
-# Ledger: Compile SQLx queries
+# Stratus: Compile SQLx queries
 sqlx:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@0.0.0.0:5432/ledger -- --all-targets
+    SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@0.0.0.0:5432/stratus -- --all-targets
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -80,7 +80,7 @@ test-int name="":
 # ------------------------------------------------------------------------------
 
 # E2E: Execute Hardhat tests in the specified network
-e2e network="ledger":
+e2e network="stratus":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -128,23 +128,23 @@ e2e-hardhat:
     echo "-> Killing Hardhat"
     killport 8545
 
-# E2E: Starts and execute Hardhat tests in Ledger
-e2e-ledger:
+# E2E: Starts and execute Hardhat tests in Stratus
+e2e-stratus:
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
 
-    echo "-> Starting Ledger"
+    echo "-> Starting Stratus"
     RUST_LOG=info just run &
 
-    echo "-> Waiting Ledger to start"
+    echo "-> Waiting Stratus to start"
     wait-service --tcp localhost:3000 -- echo
 
     echo "-> Running E2E tests"
-    just e2e ledger
+    just e2e stratus
 
-    echo "-> Killing Ledger"
+    echo "-> Killing Stratus"
     killport 3000
 
 # E2E: Lint and format code
@@ -167,7 +167,7 @@ contracts-clone:
 contracts-compile:
     cd e2e-contracts && ./compile-contracts.sh
 
-# Contracts: Test selected Solidity contracts on Ledger
+# Contracts: Test selected Solidity contracts on Stratus
 contracts-test:
     cd e2e-contracts && ./test-contracts.sh
 alias e2e-contracts := contracts-test

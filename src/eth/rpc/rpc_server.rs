@@ -46,7 +46,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) 
     // configure context
     let ctx = RpcContext {
         chain_id: 2008,
-        client_version: "ledger",
+        client_version: "stratus",
         gas_price: 0,
 
         // services
