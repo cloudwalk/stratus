@@ -35,7 +35,7 @@ cargo test
 # 📮 Issue a Pull Request
 At this point, you should switch back to your master branch and make sure it's up to date with Stratus' master branch:
 ````
-git remote add upstream git@github.com:original/stratus.git
+git remote add upstream git@github.com:cloudwalk/stratus.git
 git checkout master
 git pull upstream master
 ````
