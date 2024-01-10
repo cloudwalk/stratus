@@ -1,4 +1,3 @@
-use super::MetrifiedStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -9,6 +8,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::MetrifiedStorage;
 use crate::eth::EthError;
 
 /// EVM storage operations.
@@ -78,7 +78,7 @@ pub trait EthStorage: Send + Sync + 'static {
                     Err(EthError::InvalidBlockSelection)
                 }
             }
-            BlockSelection::Hash(_) => match self.read_block(block_selection)? {
+            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection)? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
                 None => Err(EthError::InvalidBlockSelection),
             },

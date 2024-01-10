@@ -141,6 +141,7 @@ impl EthStorage for InMemoryStorage {
         let state_lock = self.state.read().unwrap();
         let block = match selection {
             BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
+            BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
             BlockSelection::Number(number) => state_lock.blocks_by_number.get(number).cloned(),
             BlockSelection::Hash(hash) => state_lock.blocks_by_hash.get(hash).cloned(),
         };

@@ -34,6 +34,11 @@ impl Block {
         let json_struct: EthersBlock<H256> = self.into();
         serde_json::to_value(json_struct).unwrap()
     }
+
+    /// Returns the block number.
+    pub fn number(&self) -> &BlockNumber {
+        &self.header.number
+    }
 }
 
 // -----------------------------------------------------------------------------

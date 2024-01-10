@@ -2,6 +2,7 @@ use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Log;
@@ -26,6 +27,13 @@ pub struct LogMined {
 
     /// Block hash where the log was mined.
     pub block_hash: Hash,
+}
+
+impl LogMined {
+    /// Returns the address that emitted the log.
+    pub fn address(&self) -> &Address {
+        &self.log.address
+    }
 }
 
 // -----------------------------------------------------------------------------

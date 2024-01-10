@@ -3,8 +3,10 @@
 .tool-versions
 
 # E2E (Stratus)
-e2e/node_modules
+e2e/artifacts
 e2e/cache
+e2e/node_modules
+e2e/typechain-types
 
 # E2E (Solidity contracts)
 e2e-contracts/repos
