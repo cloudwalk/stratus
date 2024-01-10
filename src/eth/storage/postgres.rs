@@ -6,22 +6,22 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::infra::postgres::Postgres;
 
 impl EthStorage for Postgres {
-    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
         tracing::debug!(%address, "reading account");
 
         let rt = tokio::runtime::Handle::current();
 
         // TODO: use HistoricalValue
         let block = match point_in_time {
-            StoragerPointInTime::Present => self.read_current_block_number()?,
-            StoragerPointInTime::Past(number) => *number,
+            StoragePointInTime::Present => self.read_current_block_number()?,
+            StoragePointInTime::Past(number) => *number,
         };
 
         let block_number = i64::try_from(block).map_err(|_| EthError::StorageConvertError {
@@ -34,9 +34,9 @@ impl EthStorage for Postgres {
                 sqlx::query_as!(
                     Account,
                     r#"
-                        SELECT 
-                            address as "address: _", 
-                            nonce as "nonce: _", 
+                        SELECT
+                            address as "address: _",
+                            nonce as "nonce: _",
                             balance as "balance: _",
                             bytecode as "bytecode: _"
                         FROM accounts
@@ -55,15 +55,15 @@ impl EthStorage for Postgres {
 
         Ok(account)
     }
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError> {
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, EthError> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
         let rt = tokio::runtime::Handle::current();
 
         // TODO: use HistoricalValue
         let block = match point_in_time {
-            StoragerPointInTime::Present => self.read_current_block_number()?,
-            StoragerPointInTime::Past(number) => *number,
+            StoragePointInTime::Present => self.read_current_block_number()?,
+            StoragePointInTime::Past(number) => *number,
         };
 
         let block_number = i64::try_from(block).map_err(|_| EthError::StorageConvertError {
@@ -79,8 +79,8 @@ impl EthStorage for Postgres {
                 sqlx::query_as!(
                     Slot,
                     r#"
-                        SELECT 
-                            idx as "index: _", 
+                        SELECT
+                            idx as "index: _",
                             value as "value: _"
                         FROM account_slots
                         WHERE account_address = $1 AND idx = $2 AND block_number = $3

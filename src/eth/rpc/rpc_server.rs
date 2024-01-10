@@ -19,7 +19,7 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -193,7 +193,7 @@ fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonV
 fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
-    match ctx.executor.call(call, StoragerPointInTime::Present) {
+    match ctx.executor.call(call, StoragePointInTime::Present) {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 

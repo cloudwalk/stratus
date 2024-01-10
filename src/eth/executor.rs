@@ -8,7 +8,7 @@ use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
@@ -86,7 +86,7 @@ impl EthExecutor {
     }
 
     /// Execute a function and return the function output. State changes are ignored.
-    pub fn call(&self, input: CallInput, point_in_time: StoragerPointInTime) -> Result<TransactionExecution, EthError> {
+    pub fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> Result<TransactionExecution, EthError> {
         tracing::info!(
             from = %input.from,
             to = ?input.to,

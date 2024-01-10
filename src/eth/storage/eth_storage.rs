@@ -7,7 +7,7 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::EthError;
 
@@ -32,12 +32,12 @@ pub trait EthStorage: Send + Sync + 'static {
     /// Retrieves an account from the storage.
     ///
     /// It should return empty empty account when not found.
-    fn read_account(&self, address: &Address, point_in_time: &StoragerPointInTime) -> Result<Account, EthError>;
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError>;
 
     /// Retrieves an slot from the storage.
     ///
     /// It should return empty slot when not found.
-    fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragerPointInTime) -> Result<Slot, EthError>;
+    fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, EthError>;
 
     /// Retrieves a block from the storage.
     ///
@@ -67,19 +67,19 @@ pub trait EthStorage: Send + Sync + 'static {
     }
 
     /// Translates a block selection to a specific storage point-in-time indicator.
-    fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> Result<StoragerPointInTime, EthError> {
+    fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> Result<StoragePointInTime, EthError> {
         match block_selection {
-            BlockSelection::Latest => Ok(StoragerPointInTime::Present),
+            BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
                 let current_block = self.read_current_block_number()?;
                 if number <= &current_block {
-                    Ok(StoragerPointInTime::Past(*number))
+                    Ok(StoragePointInTime::Past(*number))
                 } else {
                     Err(EthError::InvalidBlockSelection)
                 }
             }
             BlockSelection::Hash(_) => match self.read_block(block_selection)? {
-                Some(block) => Ok(StoragerPointInTime::Past(block.header.number)),
+                Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
                 None => Err(EthError::InvalidBlockSelection),
             },
         }
