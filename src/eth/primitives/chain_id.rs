@@ -4,7 +4,7 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::derive_newtype_from;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(U256);
@@ -24,7 +24,7 @@ impl Dummy<Faker> for ChainId {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = ChainId, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

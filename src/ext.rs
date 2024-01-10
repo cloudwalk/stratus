@@ -1,12 +1,12 @@
-//! Standard library reusable extensions.
+//! Standard library extensions.
 
 // -----------------------------------------------------------------------------
 // Macros
 // -----------------------------------------------------------------------------
 
-/// Generates `From` implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) delegating the conversion to the inner type `From` implementation.
+/// Generates [`From`] implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) that delegates to the inner type [`From`].
 #[macro_export]
-macro_rules! derive_newtype_from {
+macro_rules! gen_newtype_from {
     (self = $type:ty, other = $($source:ty),+) => {
         $(
             impl From<$source> for $type {
@@ -18,9 +18,9 @@ macro_rules! derive_newtype_from {
     };
 }
 
-/// Generates a unit test that checks a type implementation of `serde::Serialize` and `serde::Deserialize` are compatible.
+/// Generates unit test that checks implementation of [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize) are compatible.
 #[macro_export]
-macro_rules! test_serde {
+macro_rules! gen_test_serde {
     ($type:ty) => {
         paste::paste! {
             #[test]

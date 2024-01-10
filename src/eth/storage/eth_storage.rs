@@ -88,9 +88,7 @@ pub trait EthStorage: Send + Sync + 'static {
 
 /// Retrieves test accounts.
 ///
-/// TODO: use another approach to include test accounts instead of relying on debug builds
-/// because we may want to test them in release builds.
-#[cfg(debug_assertions)]
+/// TODO: use a feature-flag to determine if test accounts should be returned.
 pub fn test_accounts() -> Vec<Account> {
     use hex_literal::hex;
 

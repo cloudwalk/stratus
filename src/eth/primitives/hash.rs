@@ -5,8 +5,8 @@ use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::derive_newtype_from;
 use crate::eth::EthError;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
@@ -39,7 +39,7 @@ impl Dummy<Faker> for Hash {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Hash, other = H256, [u8; 32]);
+gen_newtype_from!(self = Hash, other = H256, [u8; 32]);
 
 impl FromStr for Hash {
     type Err = EthError;

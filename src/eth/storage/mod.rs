@@ -1,11 +1,11 @@
 //! Ethereum / EVM storage.
 
 mod eth_storage;
-pub mod inmemory;
+mod inmemory;
 mod metrified;
-pub mod postgres;
+mod postgres;
 
-#[cfg(debug_assertions)]
 pub use eth_storage::test_accounts;
 pub use eth_storage::EthStorage;
+pub use inmemory::InMemoryStorage;
 pub use metrified::MetrifiedStorage;

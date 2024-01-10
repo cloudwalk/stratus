@@ -8,8 +8,8 @@ use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-use crate::derive_newtype_from;
 use crate::eth::EthError;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
@@ -34,7 +34,7 @@ impl Dummy<Faker> for BlockNumber {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = BlockNumber, other = u8, u16, u32, u64, U64, usize, i32, i64);
+gen_newtype_from!(self = BlockNumber, other = u8, u16, u32, u64, U64, usize, i32, i64);
 
 impl FromStr for BlockNumber {
     type Err = EthError;

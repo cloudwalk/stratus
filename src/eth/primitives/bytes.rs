@@ -9,7 +9,7 @@ use revm::primitives::Output as RevmOutput;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-use crate::derive_newtype_from;
+use crate::gen_newtype_from;
 
 #[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]
 pub struct Bytes(Vec<u8>);
@@ -61,7 +61,7 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Bytes, other = Vec<u8>, &[u8]);
+gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8]);
 
 impl From<EthersBytes> for Bytes {
     fn from(value: EthersBytes) -> Self {
