@@ -1,3 +1,4 @@
+use super::MetrifiedStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -56,6 +57,14 @@ pub trait EthStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
     // Default operations
     // -------------------------------------------------------------------------
+
+    /// Wraps the current storage with a proxy that collects execution metrics.
+    fn metrified(self) -> MetrifiedStorage<Self>
+    where
+        Self: Sized,
+    {
+        MetrifiedStorage::new(self)
+    }
 
     /// Translates a block selection to a specific storage point-in-time indicator.
     fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> Result<StoragerPointInTime, EthError> {

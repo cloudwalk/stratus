@@ -22,8 +22,8 @@ async fn main() -> eyre::Result<()> {
 
     // init services
     let storage: Arc<dyn EthStorage> = match config.storage {
-        StorageConfig::InMemory => Arc::new(InMemoryStorage::default()),
-        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?),
+        StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
+        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
     };
     let evm = Box::new(Revm::new(Arc::clone(&storage)));
     let executor = EthExecutor::new(evm, Arc::clone(&storage));
