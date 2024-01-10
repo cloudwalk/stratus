@@ -5,8 +5,8 @@ use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
 use crate::eth::EthError;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]

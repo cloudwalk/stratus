@@ -13,7 +13,6 @@ pub struct Config {
     pub storage: StorageConfig,
 }
 
-
 /// Storage configuration.
 #[derive(Clone, Debug, strum::Display)]
 pub enum StorageConfig {
