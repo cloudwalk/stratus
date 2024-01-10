@@ -13,7 +13,7 @@ use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::Decode;
 
-use crate::derive_newtype_from;
+use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -57,7 +57,7 @@ impl Dummy<Faker> for Address {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Address, other = H160, [u8; 20]);
+gen_newtype_from!(self = Address, other = H160, [u8; 20]);
 
 impl From<RevmAddress> for Address {
     fn from(value: RevmAddress) -> Self {

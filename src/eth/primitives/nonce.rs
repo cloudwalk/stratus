@@ -8,7 +8,7 @@ use sqlx::error::BoxDynError;
 use sqlx::types::BigDecimal;
 use sqlx::Decode;
 
-use crate::derive_newtype_from;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U256);
@@ -28,7 +28,7 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
 impl From<BigDecimal> for Nonce {
     fn from(value: BigDecimal) -> Self {

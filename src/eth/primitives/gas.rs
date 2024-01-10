@@ -4,7 +4,7 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::derive_newtype_from;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
@@ -29,7 +29,7 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

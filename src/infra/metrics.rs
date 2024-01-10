@@ -1,4 +1,4 @@
-//! Metrics configuration.
+//! Metrics services.
 
 use std::stringify;
 
@@ -14,10 +14,10 @@ use crate::metrics;
 use crate::metrics_impl_describe;
 use crate::metrics_impl_fn_inc;
 
-/// Init application metrics.
+/// Init application global metrics.
 pub fn init_metrics() {
     // default configuration runs metrics exporter on port 9000
-    PrometheusBuilder::new().install().expect("Metrics initialization failed");
+    PrometheusBuilder::new().install().expect("metrics initialization failed");
     register_metrics();
 
     tracing::info!("metrics initialized");
@@ -91,8 +91,9 @@ fn into_labels(labels: Vec<(&'static str, LabelValue)>) -> Vec<MetricsLabel> {
 // Macros
 // -----------------------------------------------------------------------------
 
-/// Generate functions to record metrics.
+/// Internal - Generate functions to record metrics.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! metrics {
     (
         $(
@@ -116,6 +117,7 @@ macro_rules! metrics {
 
 /// Internal - Generates a statement that describe a metrics.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! metrics_impl_describe {
     (counter $name:ident $description:literal) => {
         paste! {
@@ -131,6 +133,7 @@ macro_rules! metrics_impl_describe {
 
 /// Internal - Generates a function that increases a metric value.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! metrics_impl_fn_inc {
     (counter $name:ident $($label:ident)+) => {
         paste! {
