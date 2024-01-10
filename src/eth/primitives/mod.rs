@@ -63,7 +63,7 @@ pub use wei::Wei;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_serde;
+    use crate::gen_test_serde;
 
     type TransactionExecutionValueChangeBytes = TransactionExecutionValueChange<Bytes>;
     type TransactionExecutionValueChangeNonce = TransactionExecutionValueChange<Nonce>;
@@ -71,29 +71,29 @@ mod tests {
     type TransactionExecutionValueChangeSlot = TransactionExecutionValueChange<Slot>;
     type TransactionExecutionValueChangeWei = TransactionExecutionValueChange<Wei>;
 
-    test_serde!(Address);
-    test_serde!(Block);
-    test_serde!(BlockHeader);
-    test_serde!(BlockNumber);
-    test_serde!(Bytes);
-    test_serde!(ChainId);
-    test_serde!(Gas);
-    test_serde!(Hash);
-    test_serde!(Log);
-    test_serde!(LogMined);
-    test_serde!(LogTopic);
-    test_serde!(Nonce);
-    test_serde!(Slot);
-    test_serde!(SlotIndex);
-    test_serde!(SlotValue);
-    test_serde!(TransactionExecutionAccountChanges);
-    test_serde!(TransactionExecutionResult);
-    test_serde!(TransactionExecutionValueChangeBytes);
-    test_serde!(TransactionExecutionValueChangeNonce);
-    test_serde!(TransactionExecutionValueChangeOptionString);
-    test_serde!(TransactionExecutionValueChangeSlot);
-    test_serde!(TransactionExecutionValueChangeWei);
-    test_serde!(TransactionInput);
-    test_serde!(TransactionMined);
-    test_serde!(Wei);
+    gen_test_serde!(Address);
+    gen_test_serde!(Block);
+    gen_test_serde!(BlockHeader);
+    gen_test_serde!(BlockNumber);
+    gen_test_serde!(Bytes);
+    gen_test_serde!(ChainId);
+    gen_test_serde!(Gas);
+    gen_test_serde!(Hash);
+    gen_test_serde!(Log);
+    gen_test_serde!(LogMined);
+    gen_test_serde!(LogTopic);
+    gen_test_serde!(Nonce);
+    gen_test_serde!(Slot);
+    gen_test_serde!(SlotIndex);
+    gen_test_serde!(SlotValue);
+    gen_test_serde!(TransactionExecutionAccountChanges);
+    gen_test_serde!(TransactionExecutionResult);
+    gen_test_serde!(TransactionExecutionValueChangeBytes);
+    gen_test_serde!(TransactionExecutionValueChangeNonce);
+    gen_test_serde!(TransactionExecutionValueChangeOptionString);
+    gen_test_serde!(TransactionExecutionValueChangeSlot);
+    gen_test_serde!(TransactionExecutionValueChangeWei);
+    gen_test_serde!(TransactionInput);
+    gen_test_serde!(TransactionMined);
+    gen_test_serde!(Wei);
 }

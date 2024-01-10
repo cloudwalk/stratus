@@ -10,7 +10,7 @@ use sqlx::error::BoxDynError;
 use sqlx::types::BigDecimal;
 use sqlx::Decode;
 
-use crate::derive_newtype_from;
+use crate::gen_newtype_from;
 
 /// Native token amount in wei.
 #[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -37,7 +37,7 @@ impl Dummy<Faker> for Wei {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-derive_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
 impl From<RevmU256> for Wei {
     fn from(value: RevmU256) -> Self {

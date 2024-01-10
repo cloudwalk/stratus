@@ -1,15 +1,20 @@
+//! Application configuration.
+
 use std::str::FromStr;
 
 use clap::Parser;
 
+/// Application configuration entry-point.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Config {
-    /// Which storage to use
+    /// Main storage to use.
     #[arg(short, long, default_value_t = StorageConfig::InMemory)]
     pub storage: StorageConfig,
 }
 
+
+/// Storage configuration.
 #[derive(Clone, Debug, strum::Display)]
 pub enum StorageConfig {
     #[strum(serialize = "inmemory")]
