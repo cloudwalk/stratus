@@ -1,14 +1,8 @@
 use std::num::TryFromIntError;
 use std::ops::Deref;
 
-use ethereum_types::H64;
-use ethereum_types::U256;
-use ethers_core::types::Block as EthersBlock;
 use fake::Dummy;
-use fake::Fake;
 use fake::Faker;
-use hex_literal::hex;
-use jsonrpsee::SubscriptionMessage;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 

@@ -1,6 +1,3 @@
-use std::num::TryFromIntError;
-use std::ops::Deref;
-
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
@@ -9,8 +6,6 @@ use fake::Fake;
 use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
-use sqlx::database::HasValueRef;
-use sqlx::error::BoxDynError;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
@@ -37,7 +32,7 @@ pub struct BlockHeader {
 
 impl BlockHeader {
     /// Creates a new block header with the given number.
-    pub fn new(number: BlockNumber, timestamp_in_secs: u64) -> Self {
+    pub fn new(number: BlockNumber, _timestamp_in_secs: u64) -> Self {
         Self {
             number,
             hash: Hash::new_random(),

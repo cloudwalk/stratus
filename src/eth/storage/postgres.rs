@@ -1,5 +1,3 @@
-use sqlx::Encode;
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -116,7 +114,7 @@ impl EthStorage for Postgres {
                     from: "BlockNumber".to_string(),
                     into: "i64".to_string(),
                 })?;
-                let block = rt.block_on(async {
+                let _block = rt.block_on(async {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
@@ -135,10 +133,10 @@ impl EthStorage for Postgres {
                     .fetch_one(&self.connection_pool)
                     .await
                 });
-                ()
+                ();
             }
             BlockSelection::Hash(hash) => {
-                let block = rt.block_on(async {
+                let _block = rt.block_on(async {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
@@ -157,7 +155,7 @@ impl EthStorage for Postgres {
                     .fetch_one(&self.connection_pool)
                     .await
                 });
-                ()
+                ();
             }
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number).map_err(|_| EthError::StorageConvertError {
@@ -165,7 +163,7 @@ impl EthStorage for Postgres {
                     into: "i64".to_string(),
                 })?;
 
-                let block = rt.block_on(async {
+                let _block = rt.block_on(async {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
@@ -184,7 +182,7 @@ impl EthStorage for Postgres {
                     .fetch_one(&self.connection_pool)
                     .await
                 });
-                ()
+                ();
             }
         };
 
