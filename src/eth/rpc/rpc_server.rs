@@ -36,12 +36,12 @@ use crate::eth::EthExecutor;
 // Server
 // -----------------------------------------------------------------------------
 
-pub async fn serve_rpc(mut executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) -> eyre::Result<()> {
+pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) -> eyre::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     Arc::clone(&subs).spawn_subscriptions_cleaner();
-    executor.set_rpc_block_notifier(Arc::clone(&subs).spawn_new_heads_notifier());
-    executor.set_rpc_log_notifier(Arc::clone(&subs).spawn_logs_notifier());
+    Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
+    Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
 
     // configure context
     let ctx = RpcContext {
