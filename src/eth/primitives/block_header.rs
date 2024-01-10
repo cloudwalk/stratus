@@ -1,3 +1,6 @@
+use std::num::TryFromIntError;
+use std::ops::Deref;
+
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
@@ -6,12 +9,15 @@ use fake::Fake;
 use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::UnixTime;
 
 /// Special hash used in block mining to indicate no uncle blocks.
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
@@ -26,7 +32,7 @@ pub struct BlockHeader {
     pub transactions_root: Hash,
     pub gas: Gas,
     pub bloom: LogsBloom,
-    pub timestamp_in_secs: u64,
+    pub timestamp_in_secs: UnixTime,
 }
 
 impl BlockHeader {
@@ -38,7 +44,7 @@ impl BlockHeader {
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
             bloom: LogsBloom::default(),
-            timestamp_in_secs,
+            timestamp_in_secs: UnixTime::ZERO,
         }
     }
 }
@@ -75,7 +81,7 @@ where
             parent_beacon_block_root: None,
 
             // mining: identifiers
-            timestamp: header.timestamp_in_secs.into(),
+            timestamp: (*header.timestamp_in_secs).into(),
             author: Some(Address::COINBASE.into()),
 
             // minining: difficulty
