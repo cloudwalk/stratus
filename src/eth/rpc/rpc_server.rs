@@ -19,7 +19,7 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::StoragerPointInTime;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -36,17 +36,17 @@ use crate::eth::EthExecutor;
 // Server
 // -----------------------------------------------------------------------------
 
-pub async fn serve_rpc(mut executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) -> eyre::Result<()> {
+pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) -> eyre::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     Arc::clone(&subs).spawn_subscriptions_cleaner();
-    executor.set_rpc_block_notifier(Arc::clone(&subs).spawn_new_heads_notifier());
-    executor.set_rpc_log_notifier(Arc::clone(&subs).spawn_logs_notifier());
+    Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
+    Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
 
     // configure context
     let ctx = RpcContext {
         chain_id: 2008,
-        client_version: "ledger",
+        client_version: "stratus",
         gas_price: 0,
 
         // services
@@ -193,7 +193,7 @@ fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonV
 fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
-    match ctx.executor.call(call, StoragerPointInTime::Present) {
+    match ctx.executor.call(call, StoragePointInTime::Present) {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 

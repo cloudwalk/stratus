@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Runs tests for Solidity contracts in our ledger.
+# Runs tests for Solidity contracts.
 #
 source $(dirname $0)/_functions.sh
 
@@ -18,7 +18,7 @@ test() {
     rm -rf .openzeppelin/
 
     # test
-    npx hardhat test --bail --network ledger test/$test.test.ts
+    npx hardhat test --bail --network stratus test/$test.test.ts
 
     # go back to previous directory
     cd -

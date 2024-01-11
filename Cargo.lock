@@ -1586,53 +1586,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
-name = "ledger"
-version = "0.1.0"
-dependencies = [
- "binary_macros",
- "chrono",
- "clap",
- "const-hex",
- "dashmap",
- "derive-new",
- "derive_more",
- "ethabi",
- "ethereum-types",
- "ethers-core",
- "eyre",
- "fake",
- "glob",
- "hex-literal",
- "indexmap 2.1.0",
- "itertools",
- "jsonrpsee",
- "keccak-hasher",
- "metrics",
- "metrics-exporter-prometheus",
- "nom",
- "nonempty",
- "paste",
- "phf",
- "phf_codegen",
- "pin-project",
- "quote",
- "revm",
- "rlp",
- "serde",
- "serde_json",
- "serial_test",
- "sqlx",
- "stringreader",
- "strum",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
- "triehash",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3134,6 +3087,53 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "stratus"
+version = "0.1.0"
+dependencies = [
+ "binary_macros",
+ "chrono",
+ "clap",
+ "const-hex",
+ "dashmap",
+ "derive-new",
+ "derive_more",
+ "ethabi",
+ "ethereum-types",
+ "ethers-core",
+ "eyre",
+ "fake",
+ "glob",
+ "hex-literal",
+ "indexmap 2.1.0",
+ "itertools",
+ "jsonrpsee",
+ "keccak-hasher",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "nom",
+ "nonempty",
+ "paste",
+ "phf",
+ "phf_codegen",
+ "pin-project",
+ "quote",
+ "revm",
+ "rlp",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "sqlx",
+ "stringreader",
+ "strum",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "triehash",
+]
 
 [[package]]
 name = "stringprep"

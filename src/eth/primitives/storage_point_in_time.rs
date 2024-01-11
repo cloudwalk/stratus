@@ -3,7 +3,7 @@ use crate::infra::metrics::LabelValue;
 
 /// EVM storage point-in-time indicator.
 #[derive(Debug)]
-pub enum StoragerPointInTime {
+pub enum StoragePointInTime {
     /// The current state of the EVM storage.
     Present,
 
@@ -11,11 +11,11 @@ pub enum StoragerPointInTime {
     Past(BlockNumber),
 }
 
-impl From<&StoragerPointInTime> for LabelValue {
-    fn from(value: &StoragerPointInTime) -> Self {
+impl From<&StoragePointInTime> for LabelValue {
+    fn from(value: &StoragePointInTime) -> Self {
         match value {
-            StoragerPointInTime::Present => Self::Some("present".to_string()),
-            StoragerPointInTime::Past(_) => Self::Some("past".to_string()),
+            StoragePointInTime::Present => Self::Some("present".to_string()),
+            StoragePointInTime::Past(_) => Self::Some("past".to_string()),
         }
     }
 }
