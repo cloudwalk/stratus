@@ -5,6 +5,8 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -118,7 +120,7 @@ impl EthStorage for Postgres {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
-                        SELECT 
+                        SELECT
                             number as "number: _"
                             ,hash as "hash: _"
                             ,transactions_root as "transactions_root: _"
@@ -133,14 +135,13 @@ impl EthStorage for Postgres {
                     .fetch_one(&self.connection_pool)
                     .await
                 });
-                ();
             }
             BlockSelection::Hash(hash) => {
                 let _block = rt.block_on(async {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
-                        SELECT 
+                        SELECT
                             number as "number: _"
                             ,hash as "hash: _"
                             ,transactions_root as "transactions_root: _"
@@ -155,7 +156,6 @@ impl EthStorage for Postgres {
                     .fetch_one(&self.connection_pool)
                     .await
                 });
-                ();
             }
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number).map_err(|_| EthError::StorageConvertError {
@@ -167,7 +167,7 @@ impl EthStorage for Postgres {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
-                        SELECT 
+                        SELECT
                             number as "number: _"
                             ,hash as "hash: _"
                             ,transactions_root as "transactions_root: _"
@@ -182,7 +182,9 @@ impl EthStorage for Postgres {
                     .fetch_one(&self.connection_pool)
                     .await
                 });
-                ();
+            }
+            BlockSelection::Earliest => {
+                todo!()
             }
         };
 
@@ -193,6 +195,11 @@ impl EthStorage for Postgres {
         tracing::debug!(%hash, "reading transaction");
         todo!()
     }
+
+    fn read_logs(&self, _: &LogFilter) -> Result<Vec<LogMined>, EthError> {
+        Ok(Vec::new())
+    }
+
     fn save_block(&self, block: Block) -> Result<(), EthError> {
         tracing::debug!(block = ?block, "saving block");
         todo!()

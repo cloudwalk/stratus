@@ -25,14 +25,19 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let json_struct: EthersBlock<EthersTransaction> = self.into();
-        serde_json::to_value(json_struct).unwrap()
+        let json_rpc_format: EthersBlock<EthersTransaction> = self.into();
+        serde_json::to_value(json_rpc_format).unwrap()
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let json_struct: EthersBlock<H256> = self.into();
-        serde_json::to_value(json_struct).unwrap()
+        let json_rpc_format: EthersBlock<H256> = self.into();
+        serde_json::to_value(json_rpc_format).unwrap()
+    }
+
+    /// Returns the block number.
+    pub fn number(&self) -> &BlockNumber {
+        &self.header.number
     }
 }
 

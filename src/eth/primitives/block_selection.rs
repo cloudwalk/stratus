@@ -6,6 +6,9 @@ pub enum BlockSelection {
     /// Retrieve the most recent block.
     Latest,
 
+    /// Retrieve the most early block.
+    Earliest,
+
     /// Retrieve a block by its hash.
     Hash(Hash),
 
@@ -29,6 +32,7 @@ impl<'de> serde::Deserialize<'de> for BlockSelection {
             // parse special keywords
             "latest" => Ok(Self::Latest),
             "pending" => Ok(Self::Latest), // map to latest because we do not have the concept of pending blocks internally
+            "earliest" => Ok(Self::Earliest),
 
             // parse hash (64: H256 without 0x prefix; 66: H256 with 0x prefix)
             s if s.len() == 64 || s.len() == 66 => {
