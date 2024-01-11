@@ -6,6 +6,8 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -59,6 +61,13 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         let start = Instant::now();
         let result = self.inner.read_mined_transaction(hash);
         metrics::inc_storage_transactions_read(start.elapsed(), result.is_ok());
+        result
+    }
+
+    fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, EthError> {
+        let start = Instant::now();
+        let result = self.inner.read_logs(filter);
+        metrics::inc_storage_logs_read(start.elapsed(), result.is_ok());
         result
     }
 

@@ -41,14 +41,14 @@ impl TransactionMined {
 
     /// Serializes itself to JSON-RPC transaction format.
     pub fn to_json_rpc_transaction(self) -> JsonValue {
-        let json_struct: EthersTransaction = self.into();
-        serde_json::to_value(json_struct).unwrap()
+        let json_rpc_format: EthersTransaction = self.into();
+        serde_json::to_value(json_rpc_format).unwrap()
     }
 
     /// Serializes itself to JSON-RPC receipt format.
     pub fn to_json_rpc_receipt(self) -> JsonValue {
-        let json_struct: EthersReceipt = self.into();
-        serde_json::to_value(json_struct).unwrap()
+        let json_rpc_format: EthersReceipt = self.into();
+        serde_json::to_value(json_rpc_format).unwrap()
     }
 }
 

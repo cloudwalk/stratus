@@ -1,23 +1,29 @@
 import { expect } from "chai";
-import { JsonRpcProvider, Signer, Wallet } from "ethers";
+import { JsonRpcProvider } from "ethers";
 import { config } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
+import { Web3 } from "web3";
 
 import { Account } from "./account";
 import { CURRENT_NETWORK } from "./network";
 
+// Configure RPC provider according to the network.
+let providerUrl = (config.networks[CURRENT_NETWORK as string] as HttpNetworkConfig).url;
+if (!providerUrl) {
+    providerUrl = "http://localhost:8545";
+}
+export const WEB3 = new Web3(providerUrl);
+export const ETHERJS = new JsonRpcProvider(providerUrl);
+
 // Sends a RPC request to the blockchain.
 export async function send(method: string, params: any[] = []): Promise<any> {
-    // handle special params
     for (const i in params) {
         const param = params[i];
         if (param instanceof Account) {
             params[i] = param.address;
         }
     }
-
-    // send request
-    return PROVIDER.send(method, params);
+    return ETHERJS.send(method, params);
 }
 
 // Sends a RPC request to the blockchain and applies the expect function to the result.
@@ -25,13 +31,11 @@ export async function sendExpect(method: string, params: any[] = []): Promise<Ch
     return expect(await send(method, params));
 }
 
-// Get the default signer to send transactions.
-export function signer(privateKey: string): Signer {
-    return new Wallet(privateKey, PROVIDER);
+// Converts a number to Blockchain hex representation (prefixed with 0x).
+export function toHex(number: number | bigint): string {
+    console.log("num:", number);
+    return "0x" + number.toString(16);
 }
-
-// Configure RPC provider according to the network.
-export const PROVIDER = new JsonRpcProvider((config.networks[CURRENT_NETWORK as string] as HttpNetworkConfig).url);
 
 // Configure RPC logger if LOG_RPC env-var is configured.
 function log(event: any) {
@@ -51,5 +55,5 @@ function log(event: any) {
     }
 }
 if (process.env.LOG_RPC) {
-    PROVIDER.on("debug", log);
+    ETHERJS.on("debug", log);
 }
