@@ -3,6 +3,8 @@
 .tool-versions
 
 # E2E (Stratus)
+e2e/artifacts
+e2e/typechain-types
 e2e/node_modules
 e2e/cache
 

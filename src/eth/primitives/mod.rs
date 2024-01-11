@@ -14,17 +14,16 @@ mod gas;
 mod hash;
 mod historical_value;
 mod log;
+mod log_filter;
 mod log_filter_input;
 mod log_mined;
 mod log_topic;
-mod logs_bloom;
 mod nonce;
 mod slot;
 mod storage_point_in_time;
 mod transaction_execution;
 mod transaction_input;
 mod transaction_mined;
-mod unix_time;
 mod wei;
 
 pub use account::Account;
@@ -44,6 +43,7 @@ pub use hash::Hash;
 pub use historical_value::HistoricalValue;
 pub use historical_value::HistoricalValues;
 pub use log::Log;
+pub use log_filter::LogFilter;
 pub use log_filter_input::LogFilterInput;
 pub use log_mined::LogMined;
 pub use log_topic::LogTopic;
@@ -59,7 +59,6 @@ pub use transaction_execution::TransactionExecutionResult;
 pub use transaction_execution::TransactionExecutionValueChange;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
-pub use unix_time::UnixTime;
 pub use wei::Wei;
 
 // -----------------------------------------------------------------------------

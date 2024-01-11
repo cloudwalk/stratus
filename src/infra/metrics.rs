@@ -40,6 +40,9 @@ metrics! {
     "Ethereum storage blocks written."
     histogram storage_blocks_written{success},
 
+    "Ethereum storage logs read."
+    histogram storage_logs_read{success},
+
     "Ethereum storage slots read."
     histogram storage_slots_read{point_in_time, success},
 
