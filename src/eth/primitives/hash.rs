@@ -4,6 +4,8 @@ use std::str::FromStr;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::eth::EthError;
 use crate::gen_newtype_from;
@@ -36,6 +38,12 @@ impl Dummy<Faker> for Hash {
     }
 }
 
+impl AsRef<[u8]> for Hash {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
@@ -56,13 +64,24 @@ impl FromStr for Hash {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: Self -> Other
+// Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
-impl AsRef<[u8]> for Hash {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
     }
 }
+
+impl sqlx::Type<sqlx::Postgres> for Hash {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
 
 impl From<Hash> for H256 {
     fn from(value: Hash) -> Self {

@@ -12,6 +12,4 @@ use rpc_parser::next_rpc_param;
 use rpc_parser::parse_rpc_rlp;
 pub use rpc_parser::rpc_internal_error;
 pub use rpc_server::serve_rpc;
-pub use rpc_subscriptions::RpcBlockNotifier;
-pub use rpc_subscriptions::RpcLogNotifier;
 pub use rpc_subscriptions::RpcSubscriptions;

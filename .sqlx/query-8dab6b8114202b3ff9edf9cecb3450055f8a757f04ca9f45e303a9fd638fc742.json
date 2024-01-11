@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                        SELECT \n                            idx as \"index: _\", \n                            value as \"value: _\"\n                        FROM account_slots\n                        WHERE account_address = $1 AND idx = $2 AND block_number = $3\n                    ",
+  "query": "\n                        SELECT\n                            idx as \"index: _\",\n                            value as \"value: _\"\n                        FROM account_slots\n                        WHERE account_address = $1 AND idx = $2 AND block_number = $3\n                    ",
   "describe": {
     "columns": [
       {
@@ -26,5 +26,5 @@
       false
     ]
   },
-  "hash": "8a0f92bff26059cedfbad84f894f0ded66c2ae3aa46ebdfa5a846f5b640ff1da"
+  "hash": "8dab6b8114202b3ff9edf9cecb3450055f8a757f04ca9f45e303a9fd638fc742"
 }
