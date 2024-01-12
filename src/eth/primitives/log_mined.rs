@@ -1,7 +1,9 @@
 use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
+use serde_json::Value as JsonValue;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Log;
@@ -26,6 +28,19 @@ pub struct LogMined {
 
     /// Block hash where the log was mined.
     pub block_hash: Hash,
+}
+
+impl LogMined {
+    /// Returns the address that emitted the log.
+    pub fn address(&self) -> &Address {
+        &self.log.address
+    }
+
+    /// Serializes itself to JSON-RPC log format.
+    pub fn to_json_rpc_log(self) -> JsonValue {
+        let json_rpc_format: EthersLog = self.into();
+        serde_json::to_value(json_rpc_format).unwrap()
+    }
 }
 
 // -----------------------------------------------------------------------------

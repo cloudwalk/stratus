@@ -15,6 +15,8 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::HistoricalValues;
+use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -38,6 +40,7 @@ struct InMemoryStorageState {
     transactions: HashMap<Hash, TransactionMined>,
     blocks_by_number: IndexMap<BlockNumber, Block>,
     blocks_by_hash: IndexMap<Hash, Block>,
+    logs: Vec<LogMined>,
 }
 
 impl Default for InMemoryStorage {
@@ -141,6 +144,7 @@ impl EthStorage for InMemoryStorage {
         let state_lock = self.state.read().unwrap();
         let block = match selection {
             BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
+            BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
             BlockSelection::Number(number) => state_lock.blocks_by_number.get(number).cloned(),
             BlockSelection::Hash(hash) => state_lock.blocks_by_hash.get(hash).cloned(),
         };
@@ -172,6 +176,24 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
+    fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, EthError> {
+        tracing::debug!(?filter, "reading logs");
+        let state_lock = self.state.read().unwrap();
+
+        let logs = state_lock
+            .logs
+            .iter()
+            .skip_while(|log| log.block_number < filter.from_block)
+            .take_while(|log| match filter.to_block {
+                Some(to_block) => log.block_number <= to_block,
+                None => true,
+            })
+            .filter(|log| filter.matches(log))
+            .cloned()
+            .collect();
+        Ok(logs)
+    }
+
     fn save_block(&self, block: Block) -> Result<(), EthError> {
         let mut state_lock = self.state.write().unwrap();
 
@@ -184,9 +206,16 @@ impl EthStorage for InMemoryStorage {
         for transaction in block.transactions {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
             state_lock.transactions.insert(transaction.input.hash.clone(), transaction.clone());
+            let is_success = transaction.is_success();
+
+            // save logs
+            if is_success {
+                for log in transaction.logs {
+                    state_lock.logs.push(log);
+                }
+            }
 
             // save execution changes
-            let is_success = transaction.is_success();
             for changes in transaction.execution.changes {
                 let (account, account_balances) = state_lock
                     .accounts
@@ -212,7 +241,7 @@ impl EthStorage for InMemoryStorage {
                     }
                 }
 
-                // storage
+                // slots
                 if is_success {
                     let account_slots = state_lock.account_slots.entry(changes.address).or_default();
                     for (slot_index, slot) in changes.slots {
