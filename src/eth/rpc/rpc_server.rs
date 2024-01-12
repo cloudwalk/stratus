@@ -19,6 +19,7 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
@@ -102,6 +103,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule
     module.register_method("eth_estimateGas", eth_estimate_gas)?;
     module.register_method("eth_call", eth_call)?;
     module.register_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
+
+    // logs
+    module.register_method("eth_getLogs", eth_get_logs)?;
 
     // account
     module.register_method("eth_getBalance", eth_get_balance)?;
@@ -243,6 +247,15 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
             Err(e.into())
         }
     }
+}
+
+// Logs
+fn eth_get_logs(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+    let (_, filter_input) = next_rpc_param::<LogFilterInput>(params.sequence())?;
+    let filter = filter_input.parse(&ctx.storage)?;
+
+    let logs = ctx.storage.read_logs(&filter)?;
+    Ok(JsonValue::Array(logs.into_iter().map(|x| x.to_json_rpc_log()).collect()))
 }
 
 // Account
