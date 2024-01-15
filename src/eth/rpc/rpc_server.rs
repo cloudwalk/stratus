@@ -57,7 +57,8 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) 
         // subscriptions
         subs,
     };
-    tracing::info!(?ctx, "starting rpc server");
+    let url = "0.0.0.0:3000";
+    tracing::info!(url, ?ctx, "starting rpc server");
 
     // configure module
     let mut module = RpcModule::<RpcContext>::new(ctx);
@@ -71,7 +72,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>) 
     let server = Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
-        .build("0.0.0.0:3000")
+        .build(url)
         .await?;
     let handle = server.start(module);
     handle.stopped().await;
