@@ -10,9 +10,7 @@ use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
-
-use clap::Parser;
-use ledger::config::{Config, Storage};
+use stratus::infra::redis::RedisStorage;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
