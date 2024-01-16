@@ -1,9 +1,6 @@
 use std::fmt::Display;
 use std::num::TryFromIntError;
 use std::str::FromStr;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use serde::{Deserialize, Serialize};
 
 use ethereum_types::U64;
 use fake::Dummy;

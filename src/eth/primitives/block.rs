@@ -3,7 +3,6 @@ use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
-use serde::{Deserialize, Serialize};
 
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;

@@ -7,7 +7,6 @@ use fake::Dummy;
 use fake::Faker;
 use hex_literal::hex;
 use revm::primitives::Address as RevmAddress;
-use serde::{Serialize, Deserialize};
 use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;

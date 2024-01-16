@@ -13,8 +13,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 
-use serde::{Deserialize, Serialize};
-
 /// Special hash used in block mining to indicate no uncle blocks.
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
 
