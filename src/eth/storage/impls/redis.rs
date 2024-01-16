@@ -32,7 +32,7 @@ impl RedisStorage {
     fn set_current_block(&self, block_number: BlockNumber) -> () {
         let mut con = self.get_connection();
         let number: u64 = block_number.into();
-        let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
+        let _: () = redis::cmd("SET").arg("CURRENT_BLOCK").arg(number).execute(&mut con);
     }
 
     fn get_slot_key(&self, block_number: u64, address: &Address) -> String {
@@ -58,7 +58,7 @@ impl EthStorage for RedisStorage {
 
     fn read_current_block_number(&self) -> Result<BlockNumber, EthError> {
         tracing::debug!("read_current_block_number");
-        let current_block: Result<u64, redis::RedisError> = redis::cmd("GET").arg("current_block").query(&mut self.get_connection());
+        let current_block: Result<u64, redis::RedisError> = redis::cmd("GET").arg("CURRENT_BLOCK").query(&mut self.get_connection());
         match current_block {
             Ok(block) => {
                 let block_number: BlockNumber = block.into();
@@ -160,7 +160,10 @@ impl EthStorage for RedisStorage {
         tracing::debug!(?selection, "reading block");
 
         let block: Result<String, redis::RedisError> = match selection {
-            BlockSelection::Latest => redis::cmd("GET").arg("block_1").query(&mut self.get_connection()),
+            BlockSelection::Latest => {
+                let number = self.read_current_block_number()?;
+                redis::cmd("GET").arg("BLOCK_".to_string() + &number.to_string()).query(&mut self.get_connection())
+            },
             BlockSelection::Number(number) => redis::cmd("GET").arg(self.get_block_key(number)).query(&mut self.get_connection()),
             BlockSelection::Hash(hash) => redis::cmd("GET").arg("BLOCK_".to_owned()+&hash.to_string()).query(&mut self.get_connection()),
         };
@@ -215,7 +218,7 @@ impl EthStorage for RedisStorage {
         let json = serde_json::to_string(&block2.clone()).unwrap();
         let key = self.get_block_key(&block_number);
         let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
-        let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
+        let _: () = redis::cmd("SET").arg("CURRENT_BLOCK").arg(number).execute(&mut con);
 
         // save account data (nonce, balance, bytecode)
         for transaction in block.transactions {

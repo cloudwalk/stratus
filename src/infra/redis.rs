@@ -28,7 +28,7 @@ impl RedisStorage {
         let mut con = redis_storage.get_connection();
         let _: () = redis::cmd("FLUSHALL").execute(&mut con);
         let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
-        let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
+        let _: () = redis::cmd("SET").arg("CURRENT_BLOCK").arg(number).execute(&mut con);
 
         Ok(redis_storage)
     }
