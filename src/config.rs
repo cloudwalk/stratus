@@ -1,6 +1,7 @@
 //! Application configuration.
 
-use std::{str::FromStr, net::SocketAddr};
+use std::net::SocketAddr;
+use std::str::FromStr;
 
 use clap::Parser;
 
@@ -8,13 +9,13 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Config {
-    /// Main storage to use.
-    #[arg(short, long, default_value_t = StorageConfig::InMemory)]
+    /// Storage implementation.
+    #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
     pub storage: StorageConfig,
 
-    /// The IP Address to host the RPC Server
-    #[arg(short, long, default_value = "0.0.0.0:3000")]
-    pub rpc_address: SocketAddr,
+    /// JSON-RPC binding address.
+    #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
+    pub address: SocketAddr,
 }
 
 /// Storage configuration.
