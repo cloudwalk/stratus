@@ -38,7 +38,7 @@ use crate::eth::EthExecutor;
 // Server
 // -----------------------------------------------------------------------------
 
-pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, host: SocketAddr) -> eyre::Result<()> {
+pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, address: SocketAddr) -> eyre::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     Arc::clone(&subs).spawn_subscriptions_cleaner();
@@ -58,7 +58,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
         // subscriptions
         subs,
     };
-    tracing::info!(?host, ?ctx, "starting rpc server");
+    tracing::info!(%address, ?ctx, "starting rpc server");
 
     // configure module
     let mut module = RpcModule::<RpcContext>::new(ctx);
@@ -72,7 +72,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
     let server = Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
-        .build(host)
+        .build(address)
         .await?;
     let handle = server.start(module);
     handle.stopped().await;
