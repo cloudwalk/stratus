@@ -11,7 +11,7 @@ use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
 
-#[derive(Clone, Default, Eq, PartialEq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]
 pub struct Bytes(Vec<u8>);
 
 impl Display for Bytes {

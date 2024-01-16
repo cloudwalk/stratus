@@ -15,18 +15,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
-
-// o que o redis storage precisa fazer
-// 1. ler o bloco atual
-// 2. incrementar o bloco atual
-// 3. traduzir um bloco para um ponto no tempo
-// 4. ler uma conta
-// 5. ler um slot
-// 6. ler um bloco
-// 7. ler uma transação
-// 8. salvar um bloco
-// 9. salvar uma transação
-
 impl RedisStorage {
 
     fn set_current_block(&self, block_number: BlockNumber) -> () {
@@ -61,6 +49,7 @@ impl EthStorage for RedisStorage {
         let current_block: Result<u64, redis::RedisError> = redis::cmd("GET").arg("CURRENT_BLOCK").query(&mut self.get_connection());
         match current_block {
             Ok(block) => {
+                tracing::debug!("read_current_block_number={:?}",block);
                 let block_number: BlockNumber = block.into();
                 Ok(block_number)
             }
@@ -79,6 +68,7 @@ impl EthStorage for RedisStorage {
                 let number = block.increment_block_number();
                 match number {
                     Ok(res) => {
+                        tracing::debug!("{:?}",res);
                         self.set_current_block(res.clone());
                         Ok(res)
                     },
@@ -101,8 +91,9 @@ impl EthStorage for RedisStorage {
             Ok(account) => {
                 match account {
                     Some(account) => {
-                        tracing::trace!(?account, "account found");
+                        tracing::debug!(?account, "account found");
                         let account2 = serde_json::from_str(&account).unwrap();
+                        tracing::debug!("{:?}",account2);
                         Ok(account2)
                     }
                     None => {
@@ -170,7 +161,7 @@ impl EthStorage for RedisStorage {
         
         match block {
             Ok(block) => {
-                tracing::trace!(?selection, ?block, "block found");
+                tracing::debug!("block found {:?}", block);
                 let block2 = serde_json::from_str(&block).unwrap();
                 Ok(block2)
             }
@@ -214,6 +205,7 @@ impl EthStorage for RedisStorage {
         // save block
         let block2 = block.clone();
         let block_number = block.header.number;
+        tracing::debug!(number = %block_number, "saving block {:?}", block_number);
         let number: u64 = block_number.clone().into();
         let json = serde_json::to_string(&block2.clone()).unwrap();
         let key = self.get_block_key(&block_number);

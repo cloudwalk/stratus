@@ -33,7 +33,7 @@ impl FromStr for StorageConfig {
         match s {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-	    s if s.starts_with("redis://") => Ok(Self::Redis { url: s.to_string() }),
+	        s if s.starts_with("redis://") => Ok(Self::Redis { url: s.to_string() }),
             s => Err(format!("unknown storage: {}", s)),
         }
     }
