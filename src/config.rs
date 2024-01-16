@@ -1,6 +1,6 @@
 //! Application configuration.
 
-use std::str::FromStr;
+use std::{str::FromStr, net::SocketAddr};
 
 use clap::Parser;
 
@@ -11,6 +11,10 @@ pub struct Config {
     /// Main storage to use.
     #[arg(short, long, default_value_t = StorageConfig::InMemory)]
     pub storage: StorageConfig,
+
+    /// The IP Address to host the RPC Server
+    #[arg(short, long, default_value = "0.0.0.0:3000")]
+    pub rpc_address: SocketAddr,
 }
 
 /// Storage configuration.
