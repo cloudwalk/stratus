@@ -1,5 +1,6 @@
 
 extern crate redis;
+use crate::eth::miner::BlockMiner;
 
 #[derive(Debug,Clone)]
 pub struct RedisStorage {
@@ -11,12 +12,25 @@ impl RedisStorage {
     pub async fn new(url: &str) -> eyre::Result<Self> {
         tracing::info!("Redis connection pool created");
 
-        let client = redis::Client::open(url.clone()).unwrap();
+        let client = redis::Client::open(url).unwrap();
 
-        Ok(Self {
+        let redis_storage = Self {
             client,
             url: url.to_string(),
-        })
+        };
+
+        let genesis = BlockMiner::genesis();
+        let block_number = genesis.header.number;
+        let json = serde_json::to_string(&genesis.clone()).unwrap();
+        let number: u64 = block_number.clone().into();
+        let key = "BLOCK_".to_string() + &number.to_string();
+
+        let mut con = redis_storage.get_connection();
+        let _: () = redis::cmd("FLUSHALL").execute(&mut con);
+        let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
+        let _: () = redis::cmd("SET").arg("current_block").arg(number).execute(&mut con);
+
+        Ok(redis_storage)
     }
 
     pub fn get_connection(&self) -> redis::Connection {
