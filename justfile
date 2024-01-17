@@ -67,7 +67,7 @@ test name="":
 
 # Test: Execute Rust doc tests
 test-doc name="":
-    cargo +nightly test {{name}} --doc
+    cargo test {{name}} --doc
 
 # Test: Execute Rust unit tests
 test-unit name="":
