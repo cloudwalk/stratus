@@ -4,16 +4,37 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 use crate::infra::postgres::Postgres;
+
+struct PostgresTransaction {
+    hash: Hash,
+    signer_address: Address,
+    nonce: Nonce,
+    address_from: Address,
+    address_to: Option<Address>,
+    input: Bytes,
+    gas: Gas,
+    idx_in_block: TransactionIndex,
+    block_number: BlockNumber,
+    block_hash: Hash,
+}
+
+struct LogsTransaction {
+    
+}
 
 impl EthStorage for Postgres {
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
@@ -116,8 +137,9 @@ impl EthStorage for Postgres {
                     from: "BlockNumber".to_string(),
                     into: "i64".to_string(),
                 })?;
-                let _block = rt.block_on(async {
-                    sqlx::query_as!(
+
+                rt.block_on(async {
+                    let header = sqlx::query_as!(
                         BlockHeader,
                         r#"
                         SELECT
@@ -132,12 +154,13 @@ impl EthStorage for Postgres {
                     "#,
                         block_number,
                     )
-                    .fetch_one(&self.connection_pool)
-                    .await
+                    .fetch_one(&self.connection_pool);
                 });
+
+                todo!()
             }
             BlockSelection::Hash(hash) => {
-                let _block = rt.block_on(async {
+                let header_query = rt.block_on(async {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
@@ -153,9 +176,30 @@ impl EthStorage for Postgres {
                     "#,
                         hash.as_ref(),
                     )
-                    .fetch_one(&self.connection_pool)
-                    .await
+                    .fetch_one(&self.connection_pool);
+
+                    let transactions_query = sqlx::query_as!(
+                        PostgresTransaction,
+                        r#"
+                        SELECT
+                            hash as "hash: _"
+                            ,signer_address as "signer_address: _"
+                            ,nonce as "nonce: _"
+                            ,address_from as "address_from: _"
+                            ,address_to as "address_to: _"
+                            ,input as "input: _"
+                            ,gas as "gas: _"
+                            ,idx_in_block as "idx_in_block: _"
+                            ,block_number as "block_number: _"
+                            ,block_hash as "block_hash: _"
+                        FROM transactions
+                        WHERE hash = $1
+                        "#,
+                        hash.as_ref()
+                    )
+                    .fetch(&self.connection_pool);
                 });
+                todo!()
             }
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number).map_err(|_| EthError::StorageConvertError {
@@ -163,7 +207,7 @@ impl EthStorage for Postgres {
                     into: "i64".to_string(),
                 })?;
 
-                let _block = rt.block_on(async {
+                rt.block_on(async {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
@@ -186,7 +230,11 @@ impl EthStorage for Postgres {
             BlockSelection::Earliest => {
                 todo!()
             }
-        };
+        }
+        .map_err(|e| {
+            tracing::error!(reason = ?e, "failed to retrieve block header from storage");
+            EthError::UnexpectedStorageError
+        })?;
 
         todo!();
     }
