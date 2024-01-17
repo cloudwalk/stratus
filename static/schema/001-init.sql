@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     gas NUMERIC NOT NULL CHECK (gas >= 0),
     idx_in_block SERIAL NOT NULL CHECK (idx_in_block >= 0) UNIQUE,
     block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0),
-    block_hash BYTEA NOT NULL CHECK (LENGTH(block_hash) = 32),
+    block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32),
     PRIMARY KEY (hash)
 );
 
@@ -46,16 +46,19 @@ CREATE TABLE IF NOT EXISTS logs (
     ,data BYTEA NOT NULL
     ,transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
     ,transaction_idx SERIAL REFERENCES transactions(idx_in_block) NOT NULL CHECK (transaction_idx >= 0)
-    ,log_idx NUMERIC NOT NULL CHECK (log_idx >= 0) UNIQUE
+    ,log_idx SERIAL NOT NULL CHECK (log_idx >= 0) UNIQUE
     ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
     ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
 );
 
 CREATE TABLE IF NOT EXISTS topics (
-    transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
+    topic BYTEA NOT NULL CHECK (LENGTH(topic) = 32)
+    ,transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
     ,transaction_idx SERIAL REFERENCES transactions(idx_in_block) NOT NULL CHECK (transaction_idx >= 0)
-    ,log_idx NUMERIC REFERENCES logs(log_idx) NOT NULL CHECK (log_idx >= 0)
+    ,log_idx SERIAL REFERENCES logs(log_idx) NOT NULL CHECK (log_idx >= 0)
     ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
+    ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
+    ,PRIMARY KEY (topic)
 );
 
 CREATE SEQUENCE IF NOT EXISTS block_number_seq
