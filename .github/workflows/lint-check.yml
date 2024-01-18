@@ -1,0 +1,25 @@
+name: Lint
+
+on:
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  run_lint:
+    name: Lint and Style checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust Nightly
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
+
+      - name: Checking formatting
+        run: cargo +nightly fmt --check
+
+      - name: Linting
+        run: cargo +nightly clippy --all-targets
