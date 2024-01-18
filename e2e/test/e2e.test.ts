@@ -9,13 +9,28 @@ import { ALICE, BOB, CHARLIE } from "./helpers/account";
 import { CURRENT_NETWORK, Network } from "./helpers/network";
 import * as rpc from "./helpers/rpc";
 
+// -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+
 const CHAIN_ID_DEC = 2008;
 const CHAIN_ID = rpc.toHex(CHAIN_ID_DEC);
+
+// Special numbers
 const ZERO = "0x0";
 const ONE = "0x1";
+
+// Special hashes
 const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";
 const HASH_EMPTY_TRANSACTIONS = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
 
+// Test contract topics
+const CONTRACT_TOPIC_ADD = "0x2728c9d3205d667bbc0eefdfeda366261b4d021949630c047f3e5834b30611ab";
+const CONTRACT_TOPIC_SUB = "0xf9c652bcdb0eed6299c6a878897eb3af110dbb265833e7af75ad3d2c2f4a980c";
+
+// -----------------------------------------------------------------------------
+// RPC tests
+// -----------------------------------------------------------------------------
 describe("JSON-RPC", () => {
     describe("Metadata", () => {
         it("eth_chainId", async () => {
@@ -57,6 +72,9 @@ describe("JSON-RPC", () => {
     });
 });
 
+// -----------------------------------------------------------------------------
+// Native transfer tests
+// -----------------------------------------------------------------------------
 describe("Wei Transaction", () => {
     var _tx: Transaction;
     var _txHash: string;
@@ -110,9 +128,12 @@ describe("Wei Transaction", () => {
     });
 });
 
+// -----------------------------------------------------------------------------
+// Contracts tests
+// -----------------------------------------------------------------------------
 describe("Contract", async () => {
     var _contract: TestContract;
-    var _startBlockNumber: bigint;
+    var _block: bigint;
 
     it("Is deployed", async () => {
         const testContractFactory = await ethers.getContractFactory("TestContract");
@@ -120,7 +141,7 @@ describe("Contract", async () => {
     });
 
     it("Performs add/bub", async () => {
-        _startBlockNumber = await rpc.WEB3.eth.getBlockNumber();
+        _block = await rpc.WEB3.eth.getBlockNumber();
 
         // initial balance
         expect(await _contract.get(CHARLIE.address)).eq(0);
@@ -137,28 +158,17 @@ describe("Contract", async () => {
     });
 
     it("Generates logs", async () => {
-        (
-            await rpc.sendExpect("eth_getLogs", [
-                { address: _contract.target, fromBlock: rpc.toHex(_startBlockNumber + 1n) },
-            ])
-        ).length(3);
+        let f = { address: _contract.target, fromBlock: rpc.toHex(_block + 0n) };
 
-        (
-            await rpc.sendExpect("eth_getLogs", [
-                { address: _contract.target, fromBlock: rpc.toHex(_startBlockNumber + 2n) },
-            ])
-        ).length(2);
+        // filter fromBlock
+        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 0n) }])).length(3);
+        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 1n) }])).length(3);
+        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 2n) }])).length(2);
+        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 3n) }])).length(1);
+        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 4n) }])).length(1);
 
-        (
-            await rpc.sendExpect("eth_getLogs", [
-                { address: _contract.target, fromBlock: rpc.toHex(_startBlockNumber + 3n) },
-            ])
-        ).length(1);
-
-        (
-            await rpc.sendExpect("eth_getLogs", [
-                { address: _contract.target, fromBlock: rpc.toHex(_startBlockNumber + 4n) },
-            ])
-        ).length(1);
+        // filter topics
+        (await rpc.sendExpect("eth_getLogs", [{ ...f, topics: [CONTRACT_TOPIC_ADD] }])).length(2);
+        (await rpc.sendExpect("eth_getLogs", [{ ...f, topics: [CONTRACT_TOPIC_SUB] }])).length(1);
     });
 });

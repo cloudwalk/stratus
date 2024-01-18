@@ -25,7 +25,7 @@ pub struct LogFilterInput {
     pub address: Option<Address>,
 
     #[serde(default)]
-    pub topics: Vec<LogTopic>,
+    pub topics: Vec<Option<LogTopic>>,
 }
 
 impl LogFilterInput {
@@ -57,7 +57,13 @@ impl LogFilterInput {
         Ok(LogFilter {
             from_block: from,
             to_block: to,
-            address: None,
+            address: self.address,
+            topics: self
+                .topics
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
+                .collect(),
         })
     }
 }
