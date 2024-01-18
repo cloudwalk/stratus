@@ -31,6 +31,10 @@ impl RedisStorage {
         "ACCOUNT_".to_string() + &address.to_string()
     }
 
+    fn get_account_block_key(&self, address: &Address, block_number: &BlockNumber) -> String {
+        "ACCOUNT_".to_string() + &address.to_string() + &"_BLOCK_".to_string() + &block_number.to_string()
+    }
+
     fn get_block_key(&self, block_number: &BlockNumber) -> String {
         let number: u64 = block_number.clone().into();
         "BLOCK_".to_string() + &number.to_string()
@@ -86,31 +90,73 @@ impl EthStorage for RedisStorage {
         tracing::debug!(%address, "reading account");
 
         let key = self.get_account_key(address);
-        let account: Result<Option<String>, redis::RedisError> = redis::cmd("GET").arg(key).query(&mut self.get_connection());
-        match account {
-            Ok(account) => {
+        match point_in_time {
+            StoragerPointInTime::Present => {
+                let account: Result<Option<String>, redis::RedisError> = redis::cmd("GET").arg(key).query(&mut self.get_connection());
                 match account {
-                    Some(account) => {
-                        tracing::debug!(?account, "account found");
-                        let account2 = serde_json::from_str(&account).unwrap();
-                        tracing::debug!("{:?}",account2);
-                        Ok(account2)
+                    Ok(account) => {
+                        match account {
+                            Some(account) => {
+                                tracing::debug!(?account, "account found");
+                                let account2 = serde_json::from_str(&account).unwrap();
+                                tracing::debug!("{:?}",account2);
+                                Ok(account2)
+                            }
+                            None => {
+                                tracing::trace!("account not found");
+                                let zero: u64 = 0;
+                                Ok(Account {
+                                    address: address.clone(),
+                                    nonce: zero.into(),
+                                    balance: zero.into(),
+                                    bytecode: None
+                                })
+                            }
+                        }
                     }
-                    None => {
-                        tracing::trace!("account not found");
-                        let zero: u64 = 0;
-                        Ok(Account {
+                    Err(error) => {
+                        tracing::trace!(?error);
+                        let account = Account {
                             address: address.clone(),
-                            nonce: zero.into(),
-                            balance: zero.into(),
+                            nonce: 0.into(),
+                            balance: 0.into(),
                             bytecode: None
-                        })
+                        };
+                        tracing::debug!("{:?}",account);
+                        Ok(account)
+                        // Err(EthError::UnexpectedStorageError)
                     }
                 }
             }
-            Err(error) => {
-                tracing::trace!(?error);
-                Err(EthError::UnexpectedStorageError)
+            StoragerPointInTime::Past(current_block) => {
+                let key = self.get_account_block_key(address, current_block);
+                let account: Result<Option<String>, redis::RedisError> = redis::cmd("GET").arg(key).query(&mut self.get_connection());
+                match account {
+                    Ok(account) => {
+                        match account {
+                            Some(account) => {
+                                tracing::debug!(?account, "account found");
+                                let account2 = serde_json::from_str(&account).unwrap();
+                                tracing::debug!("{:?}",account2);
+                                Ok(account2)
+                            }
+                            None => {
+                                tracing::trace!("account not found");
+                                let zero: u64 = 0;
+                                Ok(Account {
+                                    address: address.clone(),
+                                    nonce: zero.into(),
+                                    balance: zero.into(),
+                                    bytecode: None
+                                })
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        tracing::trace!(?error);
+                        Err(EthError::UnexpectedStorageError)
+                    }
+                }
             }
         }
     }
@@ -266,7 +312,10 @@ impl EthStorage for RedisStorage {
                 }
 
                 let json = serde_json::to_string(&account.clone()).unwrap();
-                let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
+                let _: () = redis::cmd("SET").arg(key).arg(&json).execute(&mut con);
+
+                let key_account_block = self.get_account_block_key(&changes.address, &block_number);
+                let _: () = redis::cmd("SET").arg(key_account_block).arg(&json).execute(&mut con);
 
                 // store slots of a contract
                 if is_success {
