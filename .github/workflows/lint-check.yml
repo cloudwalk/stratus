@@ -18,8 +18,8 @@ jobs:
       - name: Set up Rust Nightly
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
 
-      - name: Checking formatting
-        run: cargo +nightly fmt --check
+      - name: Set up Just
+        uses: extractions/setup-just@v1
 
-      - name: Linting
-        run: cargo +nightly clippy --all-targets
+      - name: Just lint-check
+        run: just lint-check
