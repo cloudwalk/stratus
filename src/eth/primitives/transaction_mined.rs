@@ -8,7 +8,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::types::PostgresTransaction;
 use crate::ext::OptionExt;
 use crate::if_else;
 
@@ -104,14 +103,5 @@ impl From<TransactionMined> for EthersReceipt {
             // TODO: there are more fields to populate here
             ..Default::default()
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Conversions: Other -> Self
-// -----------------------------------------------------------------------------
-impl From<PostgresTransaction> for TransactionMined {
-    fn from(value: PostgresTransaction) -> Self {
-        todo!()
     }
 }
