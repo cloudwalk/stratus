@@ -33,7 +33,6 @@ export async function sendExpect(method: string, params: any[] = []): Promise<Ch
 
 // Converts a number to Blockchain hex representation (prefixed with 0x).
 export function toHex(number: number | bigint): string {
-    console.log("num:", number);
     return "0x" + number.toString(16);
 }
 

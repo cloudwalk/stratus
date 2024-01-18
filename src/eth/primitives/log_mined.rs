@@ -3,6 +3,7 @@ use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 use serde_json::Value as JsonValue;
 
+use super::LogTopic;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -34,6 +35,11 @@ impl LogMined {
     /// Returns the address that emitted the log.
     pub fn address(&self) -> &Address {
         &self.log.address
+    }
+
+    /// Returns the topics emitted in the log.
+    pub fn topics(&self) -> &[LogTopic] {
+        &self.log.topics
     }
 
     /// Serializes itself to JSON-RPC log format.
