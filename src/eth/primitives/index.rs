@@ -3,12 +3,13 @@ use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
 
-pub struct Index(i32);
+/// Index is a representation for transaction indexes and log indexes
+pub struct Index(u16);
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Index, other = i32);
+gen_newtype_from!(self = Index, other = u16);
 
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
@@ -23,5 +24,11 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
 impl sqlx::Type<sqlx::Postgres> for Index {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("SERIAL")
+    }
+}
+
+impl From<i32> for Index {
+    fn from(value: i32) -> Self {
+        value.into()
     }
 }

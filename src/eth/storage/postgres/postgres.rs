@@ -222,7 +222,7 @@ impl EthStorage for Postgres {
 
                     // run queries concurrently, but not in parallel
                     // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                    // let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                    let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
                     // let header = res.0?;
                     // let transactions = res.1?;
                     // let logs = res.2?;

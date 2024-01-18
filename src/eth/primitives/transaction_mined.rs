@@ -8,7 +8,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::postgres::types::PostgresTransaction;
+use crate::eth::storage::types::PostgresTransaction;
 use crate::ext::OptionExt;
 use crate::if_else;
 
