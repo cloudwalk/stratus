@@ -4,13 +4,9 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::Index;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
-use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -115,7 +111,7 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let _block = match block {
+        match block {
             BlockSelection::Latest => {
                 let current = self.read_current_block_number()?;
 
@@ -125,7 +121,7 @@ impl EthStorage for Postgres {
                 })?;
 
                 rt.block_on(async {
-                    let header = sqlx::query_as!(
+                    let _header = sqlx::query_as!(
                         BlockHeader,
                         r#"
                         SELECT
@@ -222,7 +218,7 @@ impl EthStorage for Postgres {
 
                     // run queries concurrently, but not in parallel
                     // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                    let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                    let _res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
                     // let header = res.0?;
                     // let transactions = res.1?;
                     // let logs = res.2?;
@@ -246,7 +242,7 @@ impl EthStorage for Postgres {
                     into: "i64".to_string(),
                 })?;
 
-                rt.block_on(async {
+                let _ = rt.block_on(async {
                     sqlx::query_as!(
                         BlockHeader,
                         r#"
