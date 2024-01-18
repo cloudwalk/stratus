@@ -3,7 +3,8 @@ use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
 
-/// Index is a representation for transaction indexes and log indexes
+#[allow(dead_code)]
+/// Representation of a transaction index or log index.
 pub struct Index(u16);
 
 // -----------------------------------------------------------------------------

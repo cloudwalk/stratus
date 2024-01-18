@@ -38,7 +38,7 @@ impl LogFilterInput {
                 (from_to.clone(), from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Earliest))?;
+                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest))?;
                 let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockSelection::Latest))?;
                 (from, to)
             }
