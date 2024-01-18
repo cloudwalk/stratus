@@ -16,6 +16,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::Index;
 use crate::ext::OptionExt;
 use crate::if_else;
 
@@ -32,7 +33,7 @@ pub struct TransactionMined {
     pub logs: Vec<LogMined>,
 
     /// Position of the transaction inside the block.
-    pub transaction_index: usize,
+    pub transaction_index: Index,
 
     /// Block number where the transaction was mined.
     pub block_number: BlockNumber,

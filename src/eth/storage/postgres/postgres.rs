@@ -13,7 +13,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::postgres::types::PostgresLogs;
+use crate::eth::storage::postgres::types::PostgresLog;
 use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
