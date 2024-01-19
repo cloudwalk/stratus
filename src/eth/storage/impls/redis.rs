@@ -1,4 +1,5 @@
 extern crate redis;
+use crate::eth::primitives::TransactionExecutionValueChange;
 pub use crate::infra::redis::RedisStorage;
 use std::collections::HashMap;
 
@@ -97,13 +98,12 @@ impl EthStorage for RedisStorage {
                     Ok(account) => {
                         match account {
                             Some(account) => {
-                                tracing::debug!(?account, "account found");
                                 let account2 = serde_json::from_str(&account).unwrap();
-                                tracing::debug!("{:?}",account2);
+                                tracing::debug!("account found {:?}",account2);
                                 Ok(account2)
                             }
                             None => {
-                                tracing::trace!("account not found");
+                                tracing::debug!("account not found");
                                 let zero: u64 = 0;
                                 Ok(Account {
                                     address: address.clone(),
@@ -115,14 +115,14 @@ impl EthStorage for RedisStorage {
                         }
                     }
                     Err(error) => {
-                        tracing::trace!(?error);
+                        tracing::debug!(?error);
                         let account = Account {
                             address: address.clone(),
                             nonce: 0.into(),
                             balance: 0.into(),
                             bytecode: None
                         };
-                        tracing::debug!("{:?}",account);
+                        tracing::debug!(?account, "didn't found on redis");
                         Ok(account)
                         // Err(EthError::UnexpectedStorageError)
                     }
@@ -135,13 +135,12 @@ impl EthStorage for RedisStorage {
                     Ok(account) => {
                         match account {
                             Some(account) => {
-                                tracing::debug!(?account, "account found");
                                 let account2 = serde_json::from_str(&account).unwrap();
-                                tracing::debug!("{:?}",account2);
+                                tracing::debug!(?account2, "account found");
                                 Ok(account2)
                             }
                             None => {
-                                tracing::trace!("account not found");
+                                tracing::debug!("account not found");
                                 let zero: u64 = 0;
                                 Ok(Account {
                                     address: address.clone(),
@@ -153,8 +152,15 @@ impl EthStorage for RedisStorage {
                         }
                     }
                     Err(error) => {
-                        tracing::trace!(?error);
-                        Err(EthError::UnexpectedStorageError)
+                        tracing::debug!(?error);
+                        let account = Account {
+                            address: address.clone(),
+                            nonce: 0.into(),
+                            balance: 0.into(),
+                            bytecode: None
+                        };
+                        tracing::debug!(?account, "didn't found on redis");
+                        Ok(account)
                     }
                 }
             }
@@ -175,10 +181,28 @@ impl EthStorage for RedisStorage {
             Ok(value) => {
                 match value {
                     Some(value) => {
-                        tracing::trace!(?value, "slot found");
-                        let slot2: HashMap<SlotIndex, Slot> = serde_json::from_str(&value).unwrap();
-                        let slot3 = slot2.get(slot).unwrap().clone();
-                        Ok(slot3)
+                        tracing::debug!(?value, "slot found");
+                        let slot2: HashMap<SlotIndex, TransactionExecutionValueChange<_>> = serde_json::from_str(&value).unwrap();
+                        tracing::debug!(?slot2, "slot found");
+                        let changes = slot2.get(&slot);//.unwrap().clone();
+                        match changes {
+                            Some(changes2) => {
+                                tracing::trace!(?changes2, "slot found");
+                                let some = changes2.clone().take_if_modified();
+                                match some {
+                                    Some(some) => Ok(some),
+                                    None => {
+                                        let some = changes2.clone().take_if_original();
+                                        match some {
+                                            Some(some) => Ok(some),
+                                            None => Ok(Slot::default())
+                                        }
+                                    }
+                                }
+                            }
+                            None => Ok(Slot::default())
+                        }
+                            None => Ok(Slot::default())
                     }
                     None => {
                         tracing::trace!("slot not found");
