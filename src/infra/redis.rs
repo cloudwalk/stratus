@@ -1,6 +1,7 @@
 
 extern crate redis;
 use crate::eth::miner::BlockMiner;
+use crate::eth::storage::test_accounts;
 
 #[derive(Debug,Clone)]
 pub struct RedisStorage {
@@ -29,6 +30,20 @@ impl RedisStorage {
         let _: () = redis::cmd("FLUSHALL").execute(&mut con);
         let _: () = redis::cmd("SET").arg(key).arg(json).execute(&mut con);
         let _: () = redis::cmd("SET").arg("CURRENT_BLOCK").arg(number).execute(&mut con);
+
+        // define the test accounts
+        for account in test_accounts() {
+            let json = serde_json::to_string(&account.clone()).unwrap();
+            let key = "ACCOUNT_".to_string() + &account.address.to_string();
+
+            let _: () = redis::cmd("SET").arg(key).arg(&json).execute(&mut con);
+            let _: () = redis::cmd("SET").arg("CURRENT_BLOCK").arg(number).execute(&mut con);
+
+            let key = "ACCOUNT_".to_string() + &account.address.to_string() + &"_BLOCK_".to_string() + &number.to_string();
+            
+            let _: () = redis::cmd("SET").arg(key).arg(&json).execute(&mut con);
+            let _: () = redis::cmd("SET").arg("CURRENT_BLOCK").arg(number).execute(&mut con);
+        }
 
         Ok(redis_storage)
     }
