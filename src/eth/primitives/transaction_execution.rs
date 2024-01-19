@@ -302,6 +302,14 @@ where
         }
     }
 
+    pub fn take_if_original(self) -> Option<T> {
+        if let TransactionExecutionValueChangeState::Set(value) = self.original {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
     /// Check if the value was modified.
     pub fn is_modified(&self) -> bool {
         self.modified.is_set() && (self.original != self.modified)
