@@ -24,10 +24,10 @@ use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
+use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
-use crate::eth::rpc::rpc_parser::next_rpc_param_default;
-use crate::eth::rpc::rpc_parser::rpc_parsing_error;
+use crate::eth::rpc::rpc_parsing_error;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
@@ -38,6 +38,7 @@ use crate::eth::EthExecutor;
 // Server
 // -----------------------------------------------------------------------------
 
+/// Starts JSON-RPC server.
 pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, address: SocketAddr) -> eyre::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
@@ -170,7 +171,7 @@ fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonVal
 
 fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
+    let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
@@ -215,7 +216,7 @@ fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObj
 
 fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
-    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
+    let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     match ctx.executor.call(call, point_in_time) {
@@ -263,7 +264,7 @@ fn eth_get_logs(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObje
 
 fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
+    let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
@@ -273,7 +274,7 @@ fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObje
 
 fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let (_, block_selection) = next_rpc_param_default::<BlockSelection>(params)?;
+    let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     let account = ctx.storage.read_account(&address, &point_in_time)?;
@@ -284,17 +285,26 @@ fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectO
 // Subscription
 
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>) -> impl IntoSubscriptionCloseResponse {
-    let (_, kind) = next_rpc_param::<String>(params.sequence())?;
+    let (params, kind) = next_rpc_param::<String>(params.sequence())?;
     match kind.deref() {
-        "newHeads" => ctx.subs.add_new_heads(pending.accept().await?),
-        "logs" => ctx.subs.add_logs(pending.accept().await?),
+        // new block emitted
+        "newHeads" => {
+            ctx.subs.add_new_heads(pending.accept().await?);
+        }
 
-        // unknown subscription kind
+        // transaction logs emitted
+        "logs" => {
+            let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
+            let filter = filter.parse(&ctx.storage)?;
+            ctx.subs.add_logs(pending.accept().await?, filter);
+        }
+
+        // unsupported
         kind => {
             tracing::warn!(%kind, "unsupported subscription kind");
             pending.reject(rpc_parsing_error(format!("unsupported subscription kind: {}", kind))).await;
         }
-    }
+    };
     Ok(())
 }
 

@@ -1,7 +1,4 @@
-use jsonrpsee::types::ErrorObjectOwned;
-
 use crate::eth::primitives::Address;
-use crate::eth::rpc::rpc_internal_error;
 
 /// Errors that can occur when anything related to Ethereum is executing.
 ///
@@ -61,10 +58,4 @@ pub enum EthError {
     // -------------------------------------------------------------------------
     #[error("Cannot convert from '{from}' to '{into}'")]
     StorageConvertError { from: String, into: String },
-}
-
-impl From<EthError> for ErrorObjectOwned {
-    fn from(error: EthError) -> Self {
-        rpc_internal_error(error.to_string())
-    }
 }
