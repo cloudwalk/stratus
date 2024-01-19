@@ -8,6 +8,8 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
 
+use crate::eth::EthError;
+
 /// Extracts the next RPC parameter. Fails if parameter not present.
 pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
     match params.next::<T>() {
@@ -20,7 +22,7 @@ pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<
 }
 
 /// Extract the next RPC parameter. Assumes default value if not present.
-pub fn next_rpc_param_default<'a, T: serde::Deserialize<'a> + Default>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
+pub fn next_rpc_param_or_default<'a, T: serde::Deserialize<'a> + Default>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), ErrorObjectOwned> {
     match params.optional_next::<T>() {
         Ok(Some(value)) => Ok((params, value)),
         Ok(None) => Ok((params, T::default())),
@@ -50,4 +52,10 @@ pub fn rpc_internal_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
 /// Creates an RPC parsing error response.
 pub fn rpc_parsing_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
     ErrorObjectOwned::owned(PARSE_ERROR_CODE, PARSE_ERROR_MSG, Some(message))
+}
+
+impl From<EthError> for ErrorObjectOwned {
+    fn from(error: EthError) -> Self {
+        rpc_internal_error(error.to_string())
+    }
 }
