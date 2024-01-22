@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        SELECT\n                            hash as \"hash: _\"\n                            ,signer_address as \"signer_address: _\"\n                            ,nonce as \"nonce: _\"\n                            ,address_from as \"address_from: _\"\n                            ,address_to as \"address_to: _\"\n                            ,input as \"input: _\"\n                            ,gas as \"gas: _\"\n                            ,idx_in_block as \"idx_in_block: _\"\n                            ,block_number as \"block_number: _\"\n                            ,block_hash as \"block_hash: _\"\n                        FROM transactions\n                        WHERE hash = $1\n                        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hash: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "signer_address: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "nonce: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "address_from: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "address_to: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "input: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "gas: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "idx_in_block: _",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "block_number: _",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "block_hash: _",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "47e141bdd05e20653c9f027e826df05b996fd7e6b5cbebe81c8f96ea24a7e23d"
+}

@@ -29,7 +29,7 @@ async fn main() -> eyre::Result<()> {
     let executor = EthExecutor::new(evm, Arc::clone(&storage));
 
     // start rpc server
-    serve_rpc(executor, storage).await?;
+    serve_rpc(executor, storage, config.address).await?;
 
     Ok(())
 }
