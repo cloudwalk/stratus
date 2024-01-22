@@ -48,7 +48,14 @@ doc:
 
 # Stratus: Lint and format code
 lint:
-    cargo +nightly fmt --all
+    @just _lint
+
+# Stratus: Lint and check code formatting
+lint-check:
+    @just _lint --check
+
+_lint fmt-flag="":
+    cargo +nightly fmt --all {{fmt-flag}}
     cargo +nightly clippy --all-targets
 
 # Stratus: Compile SQLx queries
@@ -67,7 +74,7 @@ test name="":
 
 # Test: Execute Rust doc tests
 test-doc name="":
-    cargo +nightly test {{name}} --doc
+    cargo test {{name}} --doc
 
 # Test: Execute Rust unit tests
 test-unit name="":

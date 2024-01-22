@@ -10,7 +10,7 @@ use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
     pub from_block: Option<BlockSelection>,
@@ -25,7 +25,7 @@ pub struct LogFilterInput {
     pub address: Option<Address>,
 
     #[serde(default)]
-    pub topics: Vec<LogTopic>,
+    pub topics: Vec<Option<LogTopic>>,
 }
 
 impl LogFilterInput {
@@ -38,7 +38,7 @@ impl LogFilterInput {
                 (from_to.clone(), from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Earliest))?;
+                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest))?;
                 let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockSelection::Latest))?;
                 (from, to)
             }
@@ -57,7 +57,13 @@ impl LogFilterInput {
         Ok(LogFilter {
             from_block: from,
             to_block: to,
-            address: None,
+            address: self.address,
+            topics: self
+                .topics
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
+                .collect(),
         })
     }
 }
