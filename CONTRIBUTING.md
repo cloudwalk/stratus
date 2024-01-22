@@ -1,6 +1,6 @@
 # 🤝 Contributing to Stratus 🚀
 
-First off, thank you 🙏 for considering contributing to Stratus! It's people like you that will make Stratus our next breakthrough!
+First off, thank you 🙏 for considering contributing to Stratus! It's people like you that make Stratus our next breakthrough!
 
 ## 🤷 Where do I go from here?
 
@@ -12,22 +12,22 @@ If this is something you think you can fix, then fork Stratus and create a branc
 
 A good branch name would be (where issue #325 is the ticket you're working on):
 
-````sh
+```sh
 git checkout -b feature/325_add_japanese_locale
-````
+```
 
 # 🏃‍♀️ Set Up Your Environment
 
 Before you start coding, make sure you have the Rust environment set up and the necessary dependencies installed. You can do this by running:
 
 ````sh
-cargo build
+just build
 ````
 
 Make sure your code adheres to our project's style guidelines by running rustfmt and clippy:
 ````
-cargo fmt
-cargo clippy
+just fmt
+just clippy
 ````
 
 # 🗄️ Working with the Database
@@ -36,7 +36,7 @@ Our project uses sqlx for database operations. Before you can run the project or
 
 Here's how to run the database migrations:
 ````
-cargo sqlx migrate run
+just migrate
 ````
 
 # 🧪 Running End-to-End Tests
@@ -62,7 +62,7 @@ docker-compose up --build
 Before submitting your changes, make sure they pass the test suite. You can run the tests with:
 
 ````
-cargo test
+just test
 ````
 
 # 📮 Issue a Pull Request
