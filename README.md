@@ -1,35 +1,73 @@
-☁️ Stratus: The Interplanetary EVM Executor & JSON-RPC Server ☁️
+# ☁️ Stratus: The Interplanetary EVM Executor & JSON-RPC Server ☁️
 
-Welcome to Stratus! We're not just any EVM executor and JSON-RPC server. We're an interplanetary EVM executor and JSON-RPC server, built with the power and safety of Rust 🦀. And the best part? Our custom storage scales horizontally. That's right, we're all about that growth! 📈
+Welcome to **Stratus**! Dive into the world of an interplanetary EVM executor and JSON-RPC server. Crafted with the robustness of Rust 🦀, Stratus stands out with its custom, horizontally scalable storage. Growth is our game! 📈
+<details open>
 
-🚀 Our Journey 🚀
+## 🚀 Our Journey 🚀
 
-Our journey began in 2016 when we at CloudWalk, Inc., decided to use Ethereum to build our payment acquirer. We've tried various networks and private ledger solutions, but as we scaled, latency became an issue. So, we decided to create our own EVM ledger, named Stratus, and we open-sourced it. This technology will help us build an interplanetary payment network, processing trillions of transactions on planet Earth and soon others.
+Back in 2016, CloudWalk, Inc. embarked on a mission to harness Ethereum for building our payment acquirer. After exploring various networks and private ledgers, we hit a roadblock with scaling issues. Enter **Stratus**: our very own EVM ledger solution, now open-sourced for all. Stratus is our stepping stone to an interplanetary payment network, ready to process trillions of transactions, both on Earth and beyond.
 
-🗃️ Our Current Storage Implementations 🗃️
+## 🗃️ Our Storage Solutions 🗃️
 
-We're proud to offer the following storage implementations:
+Stratus offers diverse storage implementations, catering to various needs:
 
-- In Memory: For those who like to live in the moment.
-- PostgreSQL: For those who prefer the tried-and-true.
+- **In Memory**: Embrace the speed with our ephemeral storage solution.
+- **PostgreSQL**: Rely on the robustness of this time-tested system.
 
-🌌 What's Next for Stratus? 🌌
-We're always looking to the future here at CloudWalk, and with Stratus it is no different. Here's what's on our horizon:
+## 🌌 What's on the Horizon for Stratus? 🌌
 
-- Redis: Fast, flexible, and about to be part of the Stratus family.
-- CockroachDB: The resilient DB that's perfect for cloud services like us.
-- L2 Proof Mechanisms to Ethereum Mainnet: To enable some decentralization, with the goal of achieving awesome latency.
+At CloudWalk, we're constantly looking forward. Here's what Stratus is gearing up for:
 
-Stay tuned for these exciting updates!
+- **Redis Integration**: Prepare for ultra-fast, versatile storage.
+- **CockroachDB**: The resilient, cloud-friendly DB is joining our suite.
+- **L2 Proof Mechanisms to Ethereum Mainnet**: Our step towards decentralized efficiency with amazing latency.
 
-🤲 Contributing 🤲
-We love contributions from everyone. Whether you're a seasoned developer or a newcomer to coding, you can help us make Stratus even better. Check out our CONTRIBUTING.md file to learn how you can start contributing.
+Exciting developments await!
 
-🤝 Join Us! 🤝
+## 🤲 How to Contribute 🤲
 
-We're on a mission to make the best interplanetary EVM executor and JSON-RPC server out there. Want to join us? We're a unicorn company, billions in valuation, hundreds of millions in revenue (400m ARR), profitable (10% net income margins) and a hardcore engineering team moving fast, with no traditional BS you face in most of the startups (+500 people spread around +15 countries). We'd love to have you on board! If you feel the call, please open an issue in our project!
+We welcome contributions from everyone, experts and beginners alike! Join us in refining Stratus. Check our `CONTRIBUTING.md` to get started.
 
-📜 License 📜
-Stratus is open-source and is proudly licensed under the MIT license. This means you can use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, under the conditions stated in the license. For more details, check out the LICENSE file in our repository.
+## 🚀 Getting Started with Stratus 🚀
 
-Thanks for checking out Stratus! ☁️
+Running Stratus is straightforward. Follow these steps to get it up and running on your system.
+
+> Before you begin, ensure you have the following installed Rust:
+>
+> ```bash
+>> curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+>> source $HOME/.cargo/env
+>```
+> Remember your node version needs to be 16:
+
+<details open>
+<summary>📌 How can I run?</summary>
+
+1. **Clone the Repository**
+   ```bash
+   > git clone https://github.com/cloudwalk/stratus.git
+   ```
+
+2. **Navigate to the Repository**
+   ```bash
+   > cd stratus
+   ```
+
+3. **Run application**
+   ```bash
+   > cargo run
+   ```
+
+
+</details>
+
+
+## Join Our Mission 
+
+Join us in shaping the finest interplanetary EVM executor and JSON-RPC server. As a unicorn company valued in billions, with a revenue of 400m ARR and 10% net income margins, CloudWalk fosters a dynamic engineering team across +15 countries. We're over 500 strong, avoiding traditional startup pitfalls. Feel the call? Open an issue in our project and embark on this journey with us!
+
+## 📜 License 📜
+
+Stratus is proudly open-source under the MIT license. This gives you the freedom to use, modify, and distribute the software as per the license terms. For more details, visit our `LICENSE` file in the repository.
+
+**Thanks for exploring Stratus! Stay tuned for more!** ☁️
