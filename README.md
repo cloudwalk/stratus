@@ -1,7 +1,6 @@
 # ☁️ Stratus: The Interplanetary EVM Executor & JSON-RPC Server ☁️
 
 Welcome to **Stratus**! Dive into the world of an interplanetary EVM executor and JSON-RPC server. Crafted with the robustness of Rust 🦀, Stratus stands out with its custom, horizontally scalable storage. Growth is our game! 📈
-<details open>
 
 ## 🚀 Our Journey 🚀
 
@@ -32,16 +31,28 @@ We welcome contributions from everyone, experts and beginners alike! Join us in 
 
 Running Stratus is straightforward. Follow these steps to get it up and running on your system.
 
-> Before you begin, ensure you have the following installed Rust:
+> Before you begin, ensure you have Rust and Node.js installed. For Rust, use this command:
 >
 > ```bash
->> curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
->> source $HOME/.cargo/env
->```
-> Remember your node version needs to be 16:
+> curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+> source $HOME/.cargo/env
+> ```
+>
+> Make sure your Node.js version is 16:
+>
+> ```bash
+> nvm install 16
+> nvm use 16
+> ```
 
-<details open>
-<summary>📌 How can I run?</summary>
+
+## 📌 How can I run Stratus?
+
+1. **Set up Just**
+   ```bash
+   mkdir -p ~/bin
+   curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/bin
+   export PATH="$PATH:$HOME/bin"
 
 1. **Clone the Repository**
    ```bash
@@ -53,16 +64,12 @@ Running Stratus is straightforward. Follow these steps to get it up and running 
    > cd stratus
    ```
 
-3. **Run application**
+3. **Run Stratus with Just**
    ```bash
-   > cargo run
+   > just e2e-stratus
    ```
 
-
-</details>
-
-
-## Join Our Mission 
+## Join Our Mission
 
 Join us in shaping the finest interplanetary EVM executor and JSON-RPC server. As a unicorn company valued in billions, with a revenue of 400m ARR and 10% net income margins, CloudWalk fosters a dynamic engineering team across +15 countries. We're over 500 strong, avoiding traditional startup pitfalls. Feel the call? Open an issue in our project and embark on this journey with us!
 
