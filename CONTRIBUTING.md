@@ -21,7 +21,7 @@ git checkout -b feature/325_add_japanese_locale
 Before you start coding, make sure you have the Rust environment set up and the necessary dependencies installed. You can do this by running:
 
 ````sh
-just build
+just setup
 ````
 
 Make sure your code adheres to our project's style guidelines by running rustfmt and clippy:
