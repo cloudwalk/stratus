@@ -1,4 +1,4 @@
-use crate::eth::primitives::Account;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -11,9 +11,9 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Rs;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragePointInTime;
+
+
+
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionResult;
 use crate::eth::primitives::TransactionInput;
@@ -21,7 +21,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::primitives::V;
-use crate::eth::EthError;
+
 
 pub struct PostgresTransaction {
     pub hash: Hash,
@@ -77,7 +77,7 @@ impl PostgresTransaction {
             block_number: self.block_number,
             block_hash: self.block_hash,
             logs: mined_logs,
-            execution: execution,
+            execution,
             input,
         }
     }
