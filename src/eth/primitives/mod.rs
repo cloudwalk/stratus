@@ -102,6 +102,8 @@ mod transaction_input;
 mod transaction_mined;
 mod unix_time;
 mod wei;
+mod rs;
+mod v;
 
 pub use account::Account;
 pub use address::Address;
@@ -140,6 +142,8 @@ pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
 pub use unix_time::UnixTime;
 pub use wei::Wei;
+pub use rs::Rs;
+pub use v::V;
 
 // -----------------------------------------------------------------------------
 // Tests

@@ -10,6 +10,7 @@
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
+use ethereum_types::H256;
 
 use ethers_core::types::Bytes as EthersBytes;
 use revm::primitives::Bytecode as RevmBytecode;
@@ -70,7 +71,7 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8]);
+gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8], [u8; 32]);
 
 impl From<EthersBytes> for Bytes {
     fn from(value: EthersBytes) -> Self {

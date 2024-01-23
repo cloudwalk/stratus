@@ -15,10 +15,30 @@ use crate::gen_newtype_from;
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Index(u16);
 
+impl Index {
+    pub fn new(inner: u16) -> Self {
+        Index(inner)
+    }
+}
+
+impl Add for Index {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Index(self.0 + rhs.0)
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Index, other = u16);
+
+impl From<i32> for Index {
+    fn from(value: i32) -> Self {
+        value.into()
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
@@ -36,8 +56,18 @@ impl sqlx::Type<sqlx::Postgres> for Index {
     }
 }
 
-impl From<i32> for Index {
-    fn from(value: i32) -> Self {
-        value.into()
+// -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
+impl From<Index> for U64 {
+    fn from(value: Index) -> U64 {
+        value.0.into()
     }
 }
+
+impl From<Index> for U256 {
+    fn from(value: Index) -> U256 {
+        value.0.into()
+    }
+}
+

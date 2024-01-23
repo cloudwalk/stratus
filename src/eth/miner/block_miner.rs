@@ -19,6 +19,8 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
+use crate::eth::EthError;
+use crate::eth::primitives::Index;
 use crate::ext::not;
 
 pub struct BlockMiner {
@@ -61,8 +63,10 @@ impl BlockMiner {
         let mut block = Block::new_with_capacity(number, block_timpestamp, transactions.len());
 
         // mine transactions and logs
-        let mut log_index = 0;
-        for (transaction_index, (input, execution)) in transactions.into_iter().enumerate() {
+        let mut log_index = Index::new(0);
+        for (tx_idx, (input, execution)) in transactions.into_iter().enumerate() {
+
+            let transaction_index = Index::new(tx_idx as u16);
             // mine logs
             let mut mined_logs: Vec<LogMined> = Vec::with_capacity(execution.logs.len());
             for mined_log in execution.logs.clone() {
@@ -76,15 +80,15 @@ impl BlockMiner {
                 let mined_log = LogMined {
                     log: mined_log,
                     transaction_hash: input.hash.clone(),
-                    transaction_index,
-                    log_index,
+                    transaction_index: transaction_index.clone(),
+                    log_index: log_index.clone(),
                     block_number: block.header.number,
                     block_hash: block.header.hash.clone(),
                 };
                 mined_logs.push(mined_log);
 
                 // increment log index
-                log_index += 1;
+                log_index = log_index + Index::new(1);
             }
 
             // mine transaction
