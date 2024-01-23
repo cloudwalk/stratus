@@ -94,24 +94,24 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> eyre::Result<RpcModule
     module.register_method("eth_gasPrice", eth_gas_price)?;
 
     // block
-    module.register_method("eth_blockNumber", eth_block_number)?;
-    module.register_method("eth_getBlockByNumber", eth_get_block_by_selector)?;
-    module.register_method("eth_getBlockByHash", eth_get_block_by_selector)?;
+    module.register_async_method("eth_blockNumber", eth_block_number)?;
+    module.register_async_method("eth_getBlockByNumber", eth_get_block_by_selector)?;
+    module.register_async_method("eth_getBlockByHash", eth_get_block_by_selector)?;
 
     // transactions
-    module.register_method("eth_getTransactionCount", eth_get_transaction_count)?;
-    module.register_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
-    module.register_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
-    module.register_method("eth_estimateGas", eth_estimate_gas)?;
-    module.register_method("eth_call", eth_call)?;
-    module.register_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
+    module.register_async_method("eth_getTransactionCount", eth_get_transaction_count)?;
+    module.register_async_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
+    module.register_async_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
+    module.register_async_method("eth_estimateGas", eth_estimate_gas)?;
+    module.register_async_method("eth_call", eth_call)?;
+    module.register_async_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
 
     // logs
-    module.register_method("eth_getLogs", eth_get_logs)?;
+    module.register_async_method("eth_getLogs", eth_get_logs)?;
 
     // account
-    module.register_method("eth_getBalance", eth_get_balance)?;
-    module.register_method("eth_getCode", eth_get_code)?;
+    module.register_async_method("eth_getBalance", eth_get_balance)?;
+    module.register_async_method("eth_getCode", eth_get_code)?;
 
     // subscriptions
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
@@ -149,16 +149,20 @@ fn eth_gas_price(_: Params, _: &RpcContext) -> String {
 }
 
 // Block
-
-fn eth_block_number(_: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
-    let number = ctx.storage.read_current_block_number()?;
+async fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>) -> Result<JsonValue, ErrorObjectOwned> {
+    let number = tokio::task::spawn_blocking(move || ctx.storage.read_current_block_number())
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
     Ok(serde_json::to_value(number).unwrap())
 }
-fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+
+async fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<JsonValue, ErrorObjectOwned> {
     let (params, block_selection) = next_rpc_param::<BlockSelection>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
-    let block = ctx.storage.read_block(&block_selection)?;
+    let block = tokio::task::spawn_blocking(move || ctx.storage.read_block(&block_selection))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
 
     match (block, full_transactions) {
         (Some(block), true) => Ok(block.to_json_rpc_with_full_transactions()),
@@ -169,18 +173,25 @@ fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> Result<JsonVal
 
 // Transaction
 
-fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+async fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    let account = ctx.storage.read_account(&address, &point_in_time)?;
+    let ctx_clone = ctx.clone();
+    let point_in_time = tokio::task::spawn_blocking(move || ctx_clone.storage.translate_to_point_in_time(&block_selection))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
+    let account = tokio::task::spawn_blocking(move || ctx.storage.read_account(&address, &point_in_time))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
     Ok(hex_num(account.nonce))
 }
 
-fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+async fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<JsonValue, ErrorObjectOwned> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
-    let mined = ctx.storage.read_mined_transaction(&hash)?;
+    let mined = tokio::task::spawn_blocking(move || ctx.storage.read_mined_transaction(&hash))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
 
     match mined {
         Some(mined) => Ok(mined.to_json_rpc_transaction()),
@@ -188,18 +199,24 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> Result<JsonV
     }
 }
 
-fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+async fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<JsonValue, ErrorObjectOwned> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
-    match ctx.storage.read_mined_transaction(&hash)? {
+    match tokio::task::spawn_blocking(move || ctx.storage.read_mined_transaction(&hash))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??
+    {
         Some(mined_transaction) => Ok(mined_transaction.to_json_rpc_receipt()),
         None => Ok(JsonValue::Null),
     }
 }
 
-fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<String, ErrorObjectOwned> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
-    match ctx.executor.call(call, StoragePointInTime::Present) {
+    match tokio::task::spawn_blocking(move || ctx.executor.call(call, StoragePointInTime::Present))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))?
+    {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 
@@ -214,12 +231,18 @@ fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> Result<String, ErrorObj
     }
 }
 
-fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<String, ErrorObjectOwned> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    match ctx.executor.call(call, point_in_time) {
+    let ctx_clone = ctx.clone();
+    let point_in_time = tokio::task::spawn_blocking(move || ctx_clone.storage.translate_to_point_in_time(&block_selection))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
+    match tokio::task::spawn_blocking(move || ctx.executor.call(call, point_in_time))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))?
+    {
         // success or failure, does not matter
         Ok(result) => Ok(hex_data(result.output)),
 
@@ -231,12 +254,15 @@ fn eth_call(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned
     }
 }
 
-fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<String, ErrorObjectOwned> {
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data)?;
 
     let hash = transaction.hash.clone();
-    match ctx.executor.transact(transaction) {
+    match tokio::task::spawn_blocking(move || ctx.executor.transact(transaction))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))?
+    {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_data(hash)),
 
@@ -252,32 +278,44 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> Result<String, 
 }
 
 // Logs
-fn eth_get_logs(params: Params, ctx: &RpcContext) -> Result<JsonValue, ErrorObjectOwned> {
+async fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<JsonValue, ErrorObjectOwned> {
     let (_, filter_input) = next_rpc_param::<LogFilterInput>(params.sequence())?;
     let filter = filter_input.parse(&ctx.storage)?;
 
-    let logs = ctx.storage.read_logs(&filter)?;
+    let logs = tokio::task::spawn_blocking(move || ctx.storage.read_logs(&filter))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
     Ok(JsonValue::Array(logs.into_iter().map(|x| x.to_json_rpc_log()).collect()))
 }
 
 // Account
 
-fn eth_get_balance(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+async fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    let account = ctx.storage.read_account(&address, &point_in_time)?;
+    let ctx_clone = ctx.clone();
+    let point_in_time = tokio::task::spawn_blocking(move || ctx_clone.storage.translate_to_point_in_time(&block_selection))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
+    let account = tokio::task::spawn_blocking(move || ctx.storage.read_account(&address, &point_in_time))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
 
     Ok(hex_num(account.balance))
 }
 
-fn eth_get_code(params: Params, ctx: &RpcContext) -> Result<String, ErrorObjectOwned> {
+async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<String, ErrorObjectOwned> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    let account = ctx.storage.read_account(&address, &point_in_time)?;
+    let ctx_clone = ctx.clone();
+    let point_in_time = tokio::task::spawn_blocking(move || ctx_clone.storage.translate_to_point_in_time(&block_selection))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
+    let account = tokio::task::spawn_blocking(move || ctx.storage.read_account(&address, &point_in_time))
+        .await
+        .map_err(|err| rpc_internal_error(err.to_string()))??;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
 }
