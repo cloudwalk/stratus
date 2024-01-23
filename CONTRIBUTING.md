@@ -44,9 +44,7 @@ just migrate
 Our end-to-end tests are located in the e2e directory. To run these tests, navigate to the e2e directory and run the following commands:
 
 ````
-cd e2e
-npm install
-npx hardhat test
+just e2e-stratus
 ````
 
 # 🐳 Setting Up Docker
