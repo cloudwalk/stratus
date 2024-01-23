@@ -11,7 +11,6 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
 
-
 use ethers_core::types::Bytes as EthersBytes;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::Bytes as RevmBytes;
