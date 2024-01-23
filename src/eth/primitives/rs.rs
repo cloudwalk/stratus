@@ -31,6 +31,6 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Rs {
 
 impl sqlx::Type<sqlx::Postgres> for Rs {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }
 }

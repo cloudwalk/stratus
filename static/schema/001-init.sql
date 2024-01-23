@@ -41,9 +41,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
     ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
     ,block_timestamp INTEGER REFERENCES blocks(timestamp_in_secs) NOT NULL CHECK (block_timestamp >= 0)
-    ,v NUMERIC NOT NULL CHECK (v >= 0)
-    ,r NUMERIC NOT NULL CHECK (r >= 0)
-    ,s NUMERIC NOT NULL CHECK (s >= 0)
+    ,v BYTEA NOT NULL CHECK (v >= 0)
+    ,r BYTEA NOT NULL CHECK (r >= 0)
+    ,s BYTEA NOT NULL CHECK (s >= 0)
     ,value NUMERIC NOT NULL CHECK (value >= 0)
     ,result TEXT NOT NULL
     ,PRIMARY KEY (hash)
