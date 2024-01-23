@@ -9,6 +9,7 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -197,23 +198,28 @@ impl EthStorage for Postgres {
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let _res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                // let header = res.0?;
-                // let transactions = res.1?;
-                // let logs = res.2?;
-                // let topics = res.3?;
+                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                // let (header, transactions, logs, topics) = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let header = res.0.map_err(|_| EthError::UnexpectedStorageError)?;
+                let transactions = res.1.map_err(|_| EthError::UnexpectedStorageError)?;
+                let logs = res.2.map_err(|_| EthError::UnexpectedStorageError)?.into_iter();
+                let topics = res.3.map_err(|_| EthError::UnexpectedStorageError)?.into_iter();
 
-                // let block: Block = Block::new_with_capacity(BlockNumber::default(), 1, 1);
+                // TODO: there's probably a more efficient way of doing this
+                let transactions = transactions.into_iter().map(|tx| {
+                    let current_tx_logs = logs.clone().filter(|log| log.transaction_hash == tx.hash).collect();
+                    let current_tx_topics = topics.clone().filter(|topic| topic.transaction_hash == tx.hash).collect();
+                    tx.into_transaction_mined(current_tx_logs, current_tx_topics)
+                }).collect();
 
-                // let block = Block {
-                //     header,
-                //     transactions
-                // };
+                let block = Block {
+                    header,
+                    transactions
+                };
 
-                // Ok(block)
-
-                todo!()
+                Ok::<Option<Block>, EthError>(Some(block))
             }
+    
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number)?;
 

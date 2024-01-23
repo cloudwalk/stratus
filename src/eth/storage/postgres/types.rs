@@ -40,7 +40,7 @@ pub struct PostgresTransaction {
 }
 
 impl PostgresTransaction {
-    fn into_transaction_mined(self, logs: Vec<PostgresLog>, topics: Vec<PostgresTopic>) -> TransactionMined {
+    pub fn into_transaction_mined(self, logs: Vec<PostgresLog>, topics: Vec<PostgresTopic>) -> TransactionMined {
         let mined_logs: Vec<LogMined> = logs.iter().map(|log| log.into_log_mined(topics.clone())).collect();
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
         let execution = TransactionExecution {
@@ -78,6 +78,7 @@ impl PostgresTransaction {
     }
 }
 
+#[derive(Clone)]
 pub struct PostgresLog {
     pub address: Address,
     pub data: Bytes,
@@ -89,7 +90,7 @@ pub struct PostgresLog {
 }
 
 impl PostgresLog {
-    fn into_log_mined(&self, topics: Vec<PostgresTopic>) -> LogMined {
+    pub fn into_log_mined(&self, topics: Vec<PostgresTopic>) -> LogMined {
         let topics: Vec<LogTopic> = topics.iter().map(|topic| LogTopic::from(topic.clone())).collect();
         let log = Log {
             data: self.data.clone(),
