@@ -95,15 +95,15 @@ mod log_mined;
 mod log_topic;
 mod logs_bloom;
 mod nonce;
+mod rs;
 mod slot;
 mod storage_point_in_time;
 mod transaction_execution;
 mod transaction_input;
 mod transaction_mined;
 mod unix_time;
-mod wei;
-mod rs;
 mod v;
+mod wei;
 
 pub use account::Account;
 pub use address::Address;
@@ -129,6 +129,7 @@ pub use log_filter_input::LogFilterInput;
 pub use log_mined::LogMined;
 pub use log_topic::LogTopic;
 pub use nonce::Nonce;
+pub use rs::Rs;
 pub use slot::Slot;
 pub use slot::SlotIndex;
 pub use slot::SlotValue;
@@ -141,9 +142,8 @@ pub use transaction_execution::TransactionExecutionValueChange;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
 pub use unix_time::UnixTime;
-pub use wei::Wei;
-pub use rs::Rs;
 pub use v::V;
+pub use wei::Wei;
 
 // -----------------------------------------------------------------------------
 // Tests

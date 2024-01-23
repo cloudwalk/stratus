@@ -14,13 +14,13 @@ use nonempty::NonEmpty;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
-use crate::eth::primitives::Index;
 use crate::ext::not;
 
 pub struct BlockMiner {
@@ -65,7 +65,6 @@ impl BlockMiner {
         // mine transactions and logs
         let mut log_index = Index::new(0);
         for (tx_idx, (input, execution)) in transactions.into_iter().enumerate() {
-
             let transaction_index = Index::new(tx_idx as u16);
             // mine logs
             let mut mined_logs: Vec<LogMined> = Vec::with_capacity(execution.logs.len());

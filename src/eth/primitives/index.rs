@@ -70,4 +70,3 @@ impl From<Index> for U256 {
         value.0.into()
     }
 }
-
