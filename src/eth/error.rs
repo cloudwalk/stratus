@@ -1,61 +1,52 @@
 use crate::eth::primitives::Address;
+use anyhow::Context;
+use anyhow::Result;
 
-/// Errors that can occur when anything related to Ethereum is executing.
-///
-/// TODO: organize better by context or just move to anyhow/eyre.
-#[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum EthError {
-    // -------------------------------------------------------------------------
-    // Input data
-    // -------------------------------------------------------------------------
-    #[error("Failed to parse field '{field}' with value '{value}'")]
     InvalidField { field: &'static str, value: String },
-
-    #[error("Failed to select block because it is greater than current block number or block hash is invalid.")]
     InvalidBlockSelection,
-
-    #[error("Transaction signer cannot be recovered. Check the transaction signature is valid.")]
     InvalidSigner,
-
-    #[error("Transaction sent without chain id is not allowed.")]
     InvalidChainId,
-
-    #[error("Transaction sent without gas price is not allowed.")]
     InvalidGasPrice,
-
-    #[error("Transaction sent from zero address is not allowed.")]
     ZeroSigner,
-
-    // -------------------------------------------------------------------------
-    // EVM
-    // -------------------------------------------------------------------------
-    #[error("Account '{0}' was expected to be loaded by EVM, but it was not")]
     AccountNotLoaded(Address),
-
-    #[error("Unexpected error with EVM bytecode. Check logs for more information.")]
     UnexpectedEvmError,
-
-    // -------------------------------------------------------------------------
-    // Storage
-    // -------------------------------------------------------------------------
-    #[error("Cannot persist EVM state because current storage state does not match expected previous state.")]
     StorageConflict,
-
-    #[error("Unexpected error with EVM storage. Check logs for more information.")]
     UnexpectedStorageError,
-
-    #[error("Failed to connect to Storage")]
     StorageConnectionError,
-
-    // -------------------------------------------------------------------------
-    // Bugs
-    // -------------------------------------------------------------------------
-    #[error("Bug: Contract was deployed, but no address was returned.")]
     DeploymentWithoutAddress,
-
-    // -------------------------------------------------------------------------
-    // Type Conversion
-    // -------------------------------------------------------------------------
-    #[error("Cannot convert from '{from}' to '{into}'")]
     StorageConvertError { from: String, into: String },
+}
+
+impl From<EthError> for anyhow::Error {
+    fn from(error: EthError) -> Self {
+        match error {
+            EthError::InvalidField { field, value } =>
+                anyhow::anyhow!("Failed to parse field '{}' with value '{}'", field, value),
+            EthError::InvalidBlockSelection =>
+                anyhow::anyhow!("Failed to select block because it is greater than current block number or block hash is invalid."),
+            EthError::InvalidSigner =>
+                anyhow::anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."),
+            EthError::InvalidChainId =>
+                anyhow::anyhow!("Transaction sent without chain id is not allowed."),
+            EthError::InvalidGasPrice =>
+                anyhow::anyhow!("Transaction sent without gas price is not allowed."),
+            EthError::ZeroSigner =>
+                anyhow::anyhow!("Transaction sent from zero address is not allowed."),
+            EthError::AccountNotLoaded(address) =>
+                anyhow::anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address),
+            EthError::UnexpectedEvmError =>
+                anyhow::anyhow!("Unexpected error with EVM bytecode. Check logs for more information."),
+            EthError::StorageConflict =>
+                anyhow::anyhow!("Cannot persist EVM state because current storage state does not match expected previous state."),
+            EthError::UnexpectedStorageError => 
+                anyhow::anyhow!("Unexpected error with EVM storage. Check logs for more information."),
+            EthError::StorageConnectionError =>
+                anyhow::anyhow!("Failed to connect to Storage"),
+            EthError::DeploymentWithoutAddress =>
+                anyhow::anyhow!("Bug: Contract was deployed, but no address was returned."),
+            EthError::StorageConvertError { from, into } =>
+                anyhow::anyhow!("Cannot convert from '{}' to '{}'", from, into),
+        }
+    }
 }
