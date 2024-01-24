@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use itertools::Itertools;
 use serde_with::formats::PreferMany;
 use serde_with::serde_as;
 use serde_with::OneOrMany;
@@ -8,6 +9,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::LogFilterTopicCombination;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::EthStorage;
@@ -31,7 +33,8 @@ pub struct LogFilterInput {
     pub address: Vec<Address>,
 
     #[serde(rename = "topics", default)]
-    pub topics: Vec<Option<LogTopic>>,
+    #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+    pub topics: Vec<Vec<Option<LogTopic>>>,
 }
 
 impl LogFilterInput {
@@ -60,16 +63,24 @@ impl LogFilterInput {
             StoragePointInTime::Past(number) => Some(number),
         };
 
+        let topics: Vec<LogFilterTopicCombination> = self
+            .topics
+            .into_iter()
+            .map(|topics| {
+                topics
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
+                    .collect_vec()
+                    .into()
+            })
+            .collect_vec();
+
         Ok(LogFilter {
             from_block: from,
             to_block: to,
             addresses: self.address,
-            topics: self
-                .topics
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
-                .collect(),
+            topics_combinations: topics,
         })
     }
 }
