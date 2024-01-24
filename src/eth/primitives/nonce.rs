@@ -1,3 +1,11 @@
+//! Nonce Module
+//!
+//! Manages nonces in Ethereum, which are crucial for preventing transaction
+//! replay attacks. A nonce is a unique number assigned to each transaction sent
+//! by an account, ensuring each transaction is processed once. This module
+//! offers functionalities to create, manage, and convert nonces, maintaining
+//! the integrity and uniqueness of transactions in the network.
+
 use std::fmt::Display;
 
 use ethereum_types::U256;

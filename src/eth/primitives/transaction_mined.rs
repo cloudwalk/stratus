@@ -1,3 +1,11 @@
+//! Transaction Mined Module
+//!
+//! Manages Ethereum transactions that have been executed and included in a
+//! mined block. This module extends transaction information to include
+//! blockchain context such as block number and hash. It is crucial for
+//! tracking transaction history and understanding the state of transactions in
+//! the blockchain.
+
 use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;

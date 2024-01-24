@@ -1,3 +1,11 @@
+//! Unix Time Module
+//!
+//! Manages Unix time representation in the Ethereum ecosystem. Unix time, the
+//! number of seconds since January 1, 1970, is used for timestamping blocks
+//! and transactions in Ethereum. This module provides functionalities to
+//! handle Unix time conversions and interactions, aligning with Ethereum's
+//! time-based mechanisms and requirements.
+
 use std::num::TryFromIntError;
 use std::ops::Deref;
 

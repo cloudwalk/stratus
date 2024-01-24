@@ -1,3 +1,11 @@
+//! Log Filter Module
+//!
+//! Facilitates filtering of Ethereum log entries based on specified criteria.
+//! This is crucial for event monitoring and handling, allowing users and
+//! applications to specify filters for logs based on block range, addresses,
+//! and topics. The module provides the core functionality to create and apply
+//! these filters, enhancing the efficiency of log querying and processing.
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::LogMined;

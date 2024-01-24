@@ -1,3 +1,11 @@
+//! Log Mined Module
+//!
+//! Manages Ethereum logs that have been included in mined blocks. This module
+//! extends the basic log structure to include context of the block and
+//! transaction in which the log was mined, such as the block number, block
+//! hash, and transaction index. It is essential for associating logs with
+//! their blockchain context.
+
 use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;

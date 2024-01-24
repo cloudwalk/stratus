@@ -1,3 +1,11 @@
+//! Log Filter Input Module
+//!
+//! Manages the input structure for Ethereum log filtering, particularly for
+//! JSON-RPC methods like `eth_getLogs` and `eth_subscribe`. This module
+//! defines how filters are inputted, parsed, and translated into log filters.
+//! It's a critical interface for users or applications specifying criteria for
+//! log entries they are interested in retrieving or monitoring.
+
 use std::sync::Arc;
 
 use itertools::Itertools;
