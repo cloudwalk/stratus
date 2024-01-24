@@ -62,6 +62,8 @@ impl EthExecutor {
 
         // acquire locks
         let mut miner_lock = self.miner.lock().await;
+        let mut _evm_lock = self.evm.lock().await;
+
 
         let mut evm = Revm::new(self.eth_storage.clone());
         let tclone = transaction.clone();
@@ -98,6 +100,7 @@ impl EthExecutor {
             "evm executing call"
         );
 
+        let mut _evm_lock = self.evm.lock().await;
         // execute, but not save
         let mut evm = Revm::new(self.eth_storage.clone());
 
