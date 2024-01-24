@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+use anyhow::anyhow;
 use itertools::Itertools;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::ResultAndState as RevmResultAndState;
@@ -15,7 +16,6 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
-use crate::eth::EthError;
 use crate::ext::not;
 
 pub type ExecutionChanges = HashMap<Address, TransactionExecutionAccountChanges>;
@@ -74,7 +74,7 @@ impl TransactionExecution {
         revm_result: RevmResultAndState,
         execution_block_timestamp_in_secs: u64,
         execution_changes: ExecutionChanges,
-    ) -> Result<Self, EthError> {
+    ) -> anyhow::Result<Self> {
         let (result, output, logs, gas) = parse_revm_result(revm_result.result);
         let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
 
@@ -131,7 +131,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (TransactionExecutionResult
 }
 
 /// TODO: move this function to REVM submodule.
-fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, EthError> {
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> anyhow::Result<ExecutionChanges> {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
 
@@ -163,7 +163,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         else if account_updated {
             let Some(existing_account) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), reason = "account was updated, but it was not loaded by evm", %address);
-                return Err(EthError::AccountNotLoaded(address));
+                return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
             };
             existing_account.apply_changes(account, account_modified_slots);
         }

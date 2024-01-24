@@ -12,7 +12,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthError;
 use crate::ext::not;
 
 pub struct BlockMiner {
@@ -30,7 +29,7 @@ impl BlockMiner {
     }
 
     /// Mine one block with a single transaction.
-    pub fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> Result<Block, EthError> {
+    pub fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> anyhow::Result<Block> {
         let transactions = NonEmpty::new((input, execution));
         self.mine_with_many_transactions(transactions)
     }
@@ -38,7 +37,7 @@ impl BlockMiner {
     /// Mine one block from one or more transactions.
     ///
     /// TODO: maybe break this in multiple functions after the logic is complete.
-    pub fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> Result<Block, EthError> {
+    pub fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> anyhow::Result<Block> {
         // init block
         let number = self.storage.increment_block_number()?;
         let block_timpestamp = transactions

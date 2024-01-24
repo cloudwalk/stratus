@@ -24,7 +24,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthError;
 
 /// In-memory implementation using maps.
 #[derive(Debug)]
@@ -72,11 +71,11 @@ impl EthStorage for InMemoryStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    fn read_current_block_number(&self) -> Result<BlockNumber, EthError> {
+    fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
+    fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
         Ok(next.into())
     }
@@ -85,7 +84,7 @@ impl EthStorage for InMemoryStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
 
         let state_lock = self.state.read().unwrap();
@@ -113,7 +112,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, EthError> {
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot,> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
         let state_lock = self.state.read().unwrap();
@@ -138,7 +137,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_block(&self, selection: &BlockSelection) -> Result<Option<Block>, EthError> {
+    fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
         let state_lock = self.state.read().unwrap();
@@ -160,7 +159,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
+    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
         let state_lock = self.state.read().unwrap();
 
@@ -176,7 +175,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, EthError> {
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
         let state_lock = self.state.read().unwrap();
 
@@ -194,7 +193,7 @@ impl EthStorage for InMemoryStorage {
         Ok(logs)
     }
 
-    fn save_block(&self, block: Block) -> Result<(), EthError> {
+    fn save_block(&self, block: Block) -> anyhow::Result<()> {
         let mut state_lock = self.state.write().unwrap();
 
         // save block

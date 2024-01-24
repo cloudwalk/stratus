@@ -2,10 +2,10 @@
 
 use std::time::Duration;
 
+use anyhow::anyhow;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
-use crate::eth::EthError;
 
 #[derive(Debug, Clone)]
 pub struct Postgres {
@@ -13,7 +13,7 @@ pub struct Postgres {
 }
 
 impl Postgres {
-    pub async fn new(url: &str) -> eyre::Result<Self> {
+    pub async fn new(url: &str) -> anyhow::Result<Self> {
         tracing::info!(%url, "connecting to postgres");
 
         let connection_pool = PgPoolOptions::new()
@@ -24,7 +24,7 @@ impl Postgres {
             .await
             .map_err(|e| {
                 tracing::error!(reason = ?e, %url, "failed to connect to postgres");
-                EthError::StorageConnectionError
+                anyhow!("Failed to connect to postgres")
             })?;
 
         Ok(Self { connection_pool })
