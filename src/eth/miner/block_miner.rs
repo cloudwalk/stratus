@@ -63,7 +63,7 @@ impl BlockMiner {
         let mut block = Block::new_with_capacity(number, block_timpestamp, transactions.len());
 
         // mine transactions and logs
-        let mut log_index = Index::new(0);
+        let mut log_index = Index::ZERO;
         for (tx_idx, (input, execution)) in transactions.into_iter().enumerate() {
             let transaction_index = Index::new(tx_idx as u16);
             // mine logs
@@ -87,7 +87,7 @@ impl BlockMiner {
                 mined_logs.push(mined_log);
 
                 // increment log index
-                log_index = log_index + Index::new(1);
+                log_index = log_index + Index::ONE;
             }
 
             // mine transaction

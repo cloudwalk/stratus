@@ -41,7 +41,7 @@ pub struct PostgresTransaction {
 
 impl PostgresTransaction {
     pub fn into_transaction_mined(self, logs: Vec<PostgresLog>, topics: Vec<PostgresTopic>) -> TransactionMined {
-        let mined_logs: Vec<LogMined> = logs.iter().map(|log| log.into_log_mined(topics.clone())).collect();
+        let mined_logs: Vec<LogMined> = logs.into_iter().map(|log| log.into_log_mined(topics.clone())).collect();
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
         let execution = TransactionExecution {
             gas: self.gas.clone(),
@@ -90,19 +90,19 @@ pub struct PostgresLog {
 }
 
 impl PostgresLog {
-    pub fn into_log_mined(&self, topics: Vec<PostgresTopic>) -> LogMined {
-        let topics: Vec<LogTopic> = topics.iter().map(|topic| LogTopic::from(topic.clone())).collect();
+    pub fn into_log_mined(self, topics: Vec<PostgresTopic>) -> LogMined {
+        let topics: Vec<LogTopic> = topics.into_iter().map(|topic| LogTopic::from(topic)).collect();
         let log = Log {
-            data: self.data.clone(),
-            address: self.address.clone(),
+            data: self.data,
+            address: self.address,
             topics,
         };
 
         LogMined {
-            transaction_hash: self.transaction_hash.clone(),
-            transaction_index: self.transaction_idx.clone(),
-            block_hash: self.block_hash.clone(),
-            log_index: self.log_idx.clone(),
+            transaction_hash: self.transaction_hash,
+            transaction_index: self.transaction_idx,
+            block_hash: self.block_hash,
+            log_index: self.log_idx,
             block_number: self.block_number,
             log,
         }

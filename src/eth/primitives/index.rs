@@ -12,20 +12,15 @@ use sqlx::error::BoxDynError;
 use crate::gen_newtype_from;
 
 /// Index is a representation for transaction indexes and log indexes
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add)]
 pub struct Index(u16);
 
 impl Index {
+    pub const ZERO: Index = Index(0u16);
+    pub const ONE: Index = Index(1u16);
+
     pub fn new(inner: u16) -> Self {
         Index(inner)
-    }
-}
-
-impl Add for Index {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Index(self.0 + rhs.0)
     }
 }
 
@@ -36,7 +31,7 @@ gen_newtype_from!(self = Index, other = u16);
 
 impl From<i32> for Index {
     fn from(value: i32) -> Self {
-        value.into()
+        Index::new(value as u16)
     }
 }
 
