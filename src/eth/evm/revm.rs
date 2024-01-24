@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use chrono::Utc;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
@@ -26,7 +27,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionAccountChanges;
 use crate::eth::primitives::TransactionExecutionValueChange;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthError;
 use crate::ext::not;
 use crate::ext::OptionExt;
 
@@ -55,7 +55,7 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn execute(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError> {
+    fn execute(&mut self, input: EvmInput) -> anyhow::Result<TransactionExecution> {
         // init session
         let evm = &mut self.evm;
         let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone());
@@ -91,11 +91,11 @@ impl Evm for Revm {
                     result,
                     session.block_timestamp_in_secs,
                     session.storage_changes,
-                ))?
+                )?)
             }
             Err(e) => {
                 tracing::error!(reason = ?e, "unexpected error in evm execution");
-                Err(EthError::UnexpectedEvmError)
+                Err(anyhow!("Unexpected error with EVM bytecode. Check logs for more information."))
             }
         }
     }
@@ -136,9 +136,9 @@ impl RevmDatabaseSession {
 }
 
 impl Database for RevmDatabaseSession {
-    type Error = EthError;
+    type Error = anyhow::Error;
 
-    fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, Self::Error> {
+    fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
         // retrieve account
         let address: Address = revm_address.into();
         let account = self.storage.read_account(&address, &self.storage_point_in_time)?;
@@ -159,11 +159,11 @@ impl Database for RevmDatabaseSession {
         Ok(Some(account.into()))
     }
 
-    fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, Self::Error> {
+    fn code_by_hash(&mut self, _: B256) -> anyhow::Result<RevmBytecode> {
         todo!()
     }
 
-    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> Result<U256, Self::Error> {
+    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
@@ -176,14 +176,14 @@ impl Database for RevmDatabaseSession {
             }
             None => {
                 tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                return Err(EthError::AccountNotLoaded(address));
+                return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
             }
         };
 
         Ok(slot.value.into())
     }
 
-    fn block_hash(&mut self, _: U256) -> Result<B256, Self::Error> {
+    fn block_hash(&mut self, _: U256) -> anyhow::Result<B256> {
         todo!()
     }
 }

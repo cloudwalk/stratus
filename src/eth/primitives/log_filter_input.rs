@@ -1,15 +1,21 @@
 use std::sync::Arc;
 
+use itertools::Itertools;
+use serde_with::formats::PreferMany;
+use serde_with::serde_as;
+use serde_with::OneOrMany;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::LogFilterTopicCombination;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthError;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
+#[serde_as]
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
@@ -21,16 +27,18 @@ pub struct LogFilterInput {
     #[serde(rename = "blockHash", default)]
     pub block_hash: Option<Hash>,
 
-    #[serde(default)]
-    pub address: Option<Address>,
+    #[serde(rename = "address", default)]
+    #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+    pub address: Vec<Address>,
 
-    #[serde(default)]
-    pub topics: Vec<Option<LogTopic>>,
+    #[serde(rename = "topics", default)]
+    #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+    pub topics: Vec<Vec<Option<LogTopic>>>,
 }
 
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
-    pub fn parse(self, storage: &Arc<dyn EthStorage>) -> Result<LogFilter, EthError> {
+    pub fn parse(self, storage: &Arc<dyn EthStorage>) -> anyhow::Result<LogFilter> {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
@@ -54,16 +62,24 @@ impl LogFilterInput {
             StoragePointInTime::Past(number) => Some(number),
         };
 
+        let topics: Vec<LogFilterTopicCombination> = self
+            .topics
+            .into_iter()
+            .map(|topics| {
+                topics
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
+                    .collect_vec()
+                    .into()
+            })
+            .collect_vec();
+
         Ok(LogFilter {
             from_block: from,
             to_block: to,
-            address: self.address,
-            topics: self
-                .topics
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
-                .collect(),
+            addresses: self.address,
+            topics_combinations: topics,
         })
     }
 }

@@ -2,13 +2,13 @@ use std::fmt::Display;
 use std::num::TryFromIntError;
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-use crate::eth::EthError;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
@@ -37,14 +37,14 @@ impl Dummy<Faker> for BlockNumber {
 gen_newtype_from!(self = BlockNumber, other = u8, u16, u32, u64, U64, usize, i32, i64);
 
 impl FromStr for BlockNumber {
-    type Err = EthError;
+    type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> anyhow::Result<Self> {
         match U64::from_str(s) {
             Ok(parsed) => Ok(Self(parsed)),
             Err(e) => {
                 tracing::warn!(reason = ?e, value = %s, "failed to parse block number");
-                Err(EthError::new_invalid_field("blockNumber", s.to_owned()))
+                Err(anyhow!("Failed to parse field '{}' with value '{}'", "blockNumber", s))
             }
         }
     }
