@@ -1,4 +1,17 @@
 //! Ethereum components.
+//! ----------------------------
+//!
+//! The 'eth' directory encapsulates the Ethereum blockchain operations within the Stratus project. It includes modules for transaction processing, EVM emulation, block mining, and state management, as well as interfaces for RPC communication.
+//!
+//! Modules detail:
+//! - codegen: Generates code required for Ethereum operations.
+//! - evm: Core of the Ethereum Virtual Machine implementation.
+//! - executor: Orchestrates the transaction execution process.
+//! - miner: Responsible for creating new blocks in the blockchain.
+//! - primitives: Basic data structures such as Blocks and Transactions.
+//! - rpc: Handles communication with Ethereum nodes via RPC.
+//! - storage: Stores and retrieves blockchain data, ensuring data integrity and access.
+
 
 pub mod codegen;
 pub mod evm;
