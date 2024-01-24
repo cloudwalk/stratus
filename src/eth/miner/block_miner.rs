@@ -29,17 +29,17 @@ impl BlockMiner {
     }
 
     /// Mine one block with a single transaction.
-    pub fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> anyhow::Result<Block> {
+    pub async fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> anyhow::Result<Block> {
         let transactions = NonEmpty::new((input, execution));
-        self.mine_with_many_transactions(transactions)
+        self.mine_with_many_transactions(transactions).await
     }
 
     /// Mine one block from one or more transactions.
     ///
     /// TODO: maybe break this in multiple functions after the logic is complete.
-    pub fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> anyhow::Result<Block> {
+    pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> anyhow::Result<Block> {
         // init block
-        let number = self.storage.increment_block_number()?;
+        let number = self.storage.increment_block_number().await?;
         let block_timpestamp = transactions
             .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp_in_secs.cmp(&e2.block_timestamp_in_secs))
             .1

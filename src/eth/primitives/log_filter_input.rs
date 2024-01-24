@@ -38,23 +38,23 @@ pub struct LogFilterInput {
 
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
-    pub fn parse(self, storage: &Arc<dyn EthStorage>) -> anyhow::Result<LogFilter> {
+    pub async fn parse(self, storage: &Arc<dyn EthStorage>) -> anyhow::Result<LogFilter> {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
-                let from_to = storage.translate_to_point_in_time(&BlockSelection::Hash(hash))?;
+                let from_to = storage.translate_to_point_in_time(&BlockSelection::Hash(hash)).await?;
                 (from_to.clone(), from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest))?;
-                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockSelection::Latest))?;
+                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest)).await?;
+                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockSelection::Latest)).await?;
                 (from, to)
             }
         };
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Present => storage.read_current_block_number()?,
+            StoragePointInTime::Present => storage.read_current_block_number().await?,
             StoragePointInTime::Past(number) => number,
         };
         let to = match to {
