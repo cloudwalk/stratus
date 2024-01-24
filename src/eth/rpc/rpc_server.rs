@@ -10,14 +10,12 @@ use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
-use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
-use super::rpc_internal_error;
-use super::rpc_parser::RPCError;
+use super::rpc_parser::RpcError;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
@@ -151,11 +149,11 @@ fn eth_gas_price(_: Params, _: &RpcContext) -> String {
 }
 
 // Block
-fn eth_block_number(_: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RPCError> {
+fn eth_block_number(_: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RpcError> {
     let number = ctx.storage.read_current_block_number()?;
     Ok(serde_json::to_value(number).unwrap())
 }
-fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RPCError> {
+fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RpcError> {
     let (params, block_selection) = next_rpc_param::<BlockSelection>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
@@ -170,7 +168,7 @@ fn eth_get_block_by_selector(params: Params, ctx: &RpcContext) -> anyhow::Result
 
 // Transaction
 
-fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError> {
+fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
@@ -179,7 +177,7 @@ fn eth_get_transaction_count(params: Params, ctx: &RpcContext) -> anyhow::Result
     Ok(hex_num(account.nonce))
 }
 
-fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RPCError> {
+fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     let mined = ctx.storage.read_mined_transaction(&hash)?;
 
@@ -189,7 +187,7 @@ fn eth_get_transaction_by_hash(params: Params, ctx: &RpcContext) -> anyhow::Resu
     }
 }
 
-fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RPCError> {
+fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     match ctx.storage.read_mined_transaction(&hash)? {
         Some(mined_transaction) => Ok(mined_transaction.to_json_rpc_receipt()),
@@ -197,7 +195,7 @@ fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> anyhow::Resu
     }
 }
 
-fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError> {
+fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RpcError> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
     match ctx.executor.call(call, StoragePointInTime::Present) {
@@ -215,7 +213,7 @@ fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> anyhow::Result<String, 
     }
 }
 
-fn eth_call(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError> {
+fn eth_call(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RpcError> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
@@ -232,7 +230,7 @@ fn eth_call(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError
     }
 }
 
-fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError> {
+fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RpcError> {
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data)?;
 
@@ -253,7 +251,7 @@ fn eth_send_raw_transaction(params: Params, ctx: &RpcContext) -> anyhow::Result<
 }
 
 // Logs
-fn eth_get_logs(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RPCError> {
+fn eth_get_logs(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RpcError> {
     let (_, filter_input) = next_rpc_param::<LogFilterInput>(params.sequence())?;
     let filter = filter_input.parse(&ctx.storage)?;
 
@@ -263,7 +261,7 @@ fn eth_get_logs(params: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, R
 
 // Account
 
-fn eth_get_balance(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError> {
+fn eth_get_balance(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
@@ -273,7 +271,7 @@ fn eth_get_balance(params: Params, ctx: &RpcContext) -> anyhow::Result<String, R
     Ok(hex_num(account.balance))
 }
 
-fn eth_get_code(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError> {
+fn eth_get_code(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 

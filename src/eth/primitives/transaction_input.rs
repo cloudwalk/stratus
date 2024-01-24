@@ -62,6 +62,12 @@ impl Dummy<Faker> for TransactionInput {
     }
 }
 
+pub enum ConversionError {
+    InvalidSigner(anyhow::Error),
+    NoChainId(anyhow::Error),
+    NoWei(anyhow::Error),
+}
+
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
@@ -70,8 +76,10 @@ impl Decodable for TransactionInput {
         let ethers_transaction = EthersTransaction::decode(rlp)?;
         match Self::try_from(ethers_transaction) {
             Ok(transaction) => Ok(transaction),
-            Err(err) => Err(rlp::DecoderError::Custom("invalid signer")),
-            Err(_) => Err(rlp::DecoderError::Custom("unknown")),
+            Err(err) => match err {
+                ConversionError::InvalidSigner(_) => Err(rlp::DecoderError::Custom("invalid signer")),
+                _ => Err(rlp::DecoderError::Custom("unknown")),
+            },
         }
     }
 }
@@ -80,15 +88,17 @@ impl Decodable for TransactionInput {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 impl TryFrom<EthersTransaction> for TransactionInput {
-    type Error = anyhow::Error;
+    type Error = ConversionError;
 
-    fn try_from(value: EthersTransaction) -> anyhow::Result<Self> {
+    fn try_from(value: EthersTransaction) -> anyhow::Result<Self, ConversionError> {
         // extract signer
         let signer: Address = match value.recover_from() {
             Ok(signer) => signer.into(),
             Err(e) => {
                 tracing::warn!(reason = ?e, "failed to recover transaction signer");
-                return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
+                return Err(ConversionError::InvalidSigner(anyhow!(
+                    "Transaction signer cannot be recovered. Check the transaction signature is valid."
+                )));
             }
         };
 
@@ -97,16 +107,16 @@ impl TryFrom<EthersTransaction> for TransactionInput {
             Some(chain_id) => chain_id.into(),
             None => {
                 tracing::warn!(reason = %"transaction without chain id");
-                return Err(anyhow!("Transaction sent without chain id is not allowed."));
+                return Err(ConversionError::NoChainId(anyhow!("Transaction sent without chain id is not allowed.")));
             }
         };
 
         // extract gas price
         let gas_price: Wei = match value.gas_price {
-            Some(chain_id) => chain_id.into(),
+            Some(wei) => wei.into(),
             None => {
-                tracing::warn!(reason = %"transaction without chain id");
-                return Err(anyhow!("Transaction sent without chain id is not allowed."));
+                tracing::warn!(reason = %"transaction without wei");
+                return Err(ConversionError::NoWei(anyhow!("Transaction sent without wei is not allowed.")));
             }
         };
 

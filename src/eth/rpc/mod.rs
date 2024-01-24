@@ -11,7 +11,6 @@ use rpc_middleware::RpcMiddleware;
 use rpc_parser::next_rpc_param;
 use rpc_parser::next_rpc_param_or_default;
 use rpc_parser::parse_rpc_rlp;
-use rpc_parser::rpc_internal_error;
 use rpc_parser::rpc_parsing_error;
 pub use rpc_server::serve_rpc;
 pub use rpc_subscriptions::RpcSubscriptions;
