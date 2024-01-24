@@ -15,7 +15,6 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
-use super::rpc_parser::RpcError;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
@@ -27,6 +26,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::eth::rpc::rpc_parser::RpcError;
 use crate::eth::rpc::rpc_parsing_error;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcMiddleware;

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use anyhow::anyhow;
 use tokio::sync::broadcast;
 
-use super::primitives::LogMined;
+use crate::eth::primitives::LogMined;
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;

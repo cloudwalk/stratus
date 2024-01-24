@@ -3,7 +3,7 @@ use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 use serde_json::Value as JsonValue;
 
-use super::LogTopic;
+use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
