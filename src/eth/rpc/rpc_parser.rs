@@ -16,7 +16,6 @@ use jsonrpsee::types::ResponsePayload;
 use jsonrpsee::IntoResponse;
 use rlp::Decodable;
 
-
 /// Extracts the next RPC parameter. Fails if parameter not present.
 pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> anyhow::Result<(ParamsSequence, T)> {
     match params.next::<T>() {

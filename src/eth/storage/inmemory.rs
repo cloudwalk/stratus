@@ -112,7 +112,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot,> {
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
         let state_lock = self.state.read().unwrap();

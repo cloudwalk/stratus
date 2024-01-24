@@ -20,7 +20,6 @@ const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
 
 type SubscriptionId = usize;
 
-
 /// State of JSON-RPC websocket subscriptions.
 #[derive(Debug, Default)]
 pub struct RpcSubscriptions {

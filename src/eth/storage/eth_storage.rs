@@ -86,7 +86,9 @@ pub trait EthStorage: Send + Sync + 'static {
             }
             BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection)? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
-                None => Err(anyhow!("Failed to select block because it is greater than current block number or block hash is invalid.")),
+                None => Err(anyhow!(
+                    "Failed to select block because it is greater than current block number or block hash is invalid."
+                )),
             },
         }
     }

@@ -31,11 +31,10 @@ impl EthStorage for Postgres {
 
         let block_number = i64::try_from(block)?;
 
-        let account = rt
-            .block_on(async {
-                sqlx::query_as!(
-                    Account,
-                    r#"
+        let account = rt.block_on(async {
+            sqlx::query_as!(
+                Account,
+                r#"
                         SELECT
                             address as "address: _",
                             nonce as "nonce: _",
@@ -44,12 +43,12 @@ impl EthStorage for Postgres {
                         FROM accounts
                         WHERE address = $1 AND block_number = $2
                     "#,
-                    address.as_ref(),
-                    block_number,
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })?;
+                address.as_ref(),
+                block_number,
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         Ok(account)
     }
@@ -69,24 +68,23 @@ impl EthStorage for Postgres {
         // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
-        let slot = rt
-            .block_on(async {
-                sqlx::query_as!(
-                    Slot,
-                    r#"
+        let slot = rt.block_on(async {
+            sqlx::query_as!(
+                Slot,
+                r#"
                         SELECT
                             idx as "index: _",
                             value as "value: _"
                         FROM account_slots
                         WHERE account_address = $1 AND idx = $2 AND block_number = $3
                     "#,
-                    address.as_ref(),
-                    slot_index.as_ref(),
-                    block_number,
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })?;
+                address.as_ref(),
+                slot_index.as_ref(),
+                block_number,
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         Ok(slot)
     }
@@ -268,16 +266,15 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let currval: i64 = rt
-            .block_on(async {
-                sqlx::query_scalar!(
-                    r#"
+        let currval: i64 = rt.block_on(async {
+            sqlx::query_scalar!(
+                r#"
                         SELECT CURRVAL('block_number_seq') as "n!: _"
                     "#
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })?;
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         let block_number = BlockNumber::from(currval);
 
@@ -289,16 +286,15 @@ impl EthStorage for Postgres {
 
         let rt = tokio::runtime::Handle::current();
 
-        let nextval: i64 = rt
-            .block_on(async {
-                sqlx::query_scalar!(
-                    r#"
+        let nextval: i64 = rt.block_on(async {
+            sqlx::query_scalar!(
+                r#"
                         SELECT NEXTVAL('block_number_seq') as "n!: _"
                     "#
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })?;
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         let block_number = BlockNumber::from(nextval);
 

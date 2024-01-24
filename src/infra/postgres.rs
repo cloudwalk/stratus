@@ -6,7 +6,6 @@ use anyhow::anyhow;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
-
 #[derive(Debug, Clone)]
 pub struct Postgres {
     pub connection_pool: PgPool,

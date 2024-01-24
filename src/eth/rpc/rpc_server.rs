@@ -16,6 +16,8 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
+use super::rpc_internal_error;
+use super::rpc_parser::RPCError;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
@@ -33,9 +35,6 @@ use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
-
-use super::rpc_internal_error;
-use super::rpc_parser::RPCError;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -151,7 +150,6 @@ fn eth_gas_price(_: Params, _: &RpcContext) -> String {
     hex_zero()
 }
 
-
 // Block
 fn eth_block_number(_: Params, ctx: &RpcContext) -> anyhow::Result<JsonValue, RPCError> {
     let number = ctx.storage.read_current_block_number()?;
@@ -198,7 +196,6 @@ fn eth_get_transaction_receipt(params: Params, ctx: &RpcContext) -> anyhow::Resu
         None => Ok(JsonValue::Null),
     }
 }
-
 
 fn eth_estimate_gas(params: Params, ctx: &RpcContext) -> anyhow::Result<String, RPCError> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
