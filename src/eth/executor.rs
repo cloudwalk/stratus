@@ -64,8 +64,7 @@ impl EthExecutor {
         let mut miner_lock = self.miner.lock().await;
         let mut _evm_lock = self.evm.lock().await;
 
-
-        let mut evm = Revm::new(self.eth_storage.clone());
+        let mut evm = Revm::new(Arc::clone(&self.eth_storage));
         let tclone = transaction.clone();
 
         // execute, mine and save
@@ -102,9 +101,9 @@ impl EthExecutor {
 
         let mut _evm_lock = self.evm.lock().await;
         // execute, but not save
-        let mut evm = Revm::new(self.eth_storage.clone());
+        let mut evm = Revm::new(Arc::clone(&self.eth_storage));
 
-        let execution = tokio::task::spawn_blocking(move || {evm.execute((input, point_in_time).into())}).await??;
+        let execution = tokio::task::spawn_blocking(move || evm.execute((input, point_in_time).into())).await??;
         Ok(execution)
     }
 

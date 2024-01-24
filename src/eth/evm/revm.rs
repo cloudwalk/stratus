@@ -142,7 +142,7 @@ impl Database for RevmDatabaseSession {
         let rt = tokio::runtime::Handle::current();
         // retrieve account
         let address: Address = revm_address.into();
-        let account = rt.block_on(async {self.storage.read_account(&address, &self.storage_point_in_time).await})?;
+        let account = rt.block_on(async { self.storage.read_account(&address, &self.storage_point_in_time).await })?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.to {
@@ -170,7 +170,7 @@ impl Database for RevmDatabaseSession {
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
-        let slot = rt.block_on(async {self.storage.read_slot(&address, &index, &self.storage_point_in_time).await})?;
+        let slot = rt.block_on(async { self.storage.read_slot(&address, &index, &self.storage_point_in_time).await })?;
 
         // track original value
         match self.storage_changes.get_mut(&address) {
