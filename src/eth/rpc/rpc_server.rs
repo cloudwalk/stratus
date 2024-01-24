@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use ethereum_types::U256;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
+use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
@@ -73,6 +74,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
     let server = Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
+        .set_id_provider(RandomStringIdProvider::new(8))
         .build(address)
         .await?;
     let handle = server.start(module);
