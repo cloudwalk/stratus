@@ -1,3 +1,5 @@
+use anyhow::anyhow;
+
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -11,7 +13,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::MetrifiedStorage;
-use crate::eth::EthError;
 
 /// EVM storage operations.
 ///
@@ -22,10 +23,10 @@ pub trait EthStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
 
     // Retrieves the last mined block number.
-    fn read_current_block_number(&self) -> Result<BlockNumber, EthError>;
+    fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Atomically increments the block number, returning the new value.
-    fn increment_block_number(&self) -> Result<BlockNumber, EthError>;
+    fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     // -------------------------------------------------------------------------
     // State operations
@@ -34,30 +35,30 @@ pub trait EthStorage: Send + Sync + 'static {
     /// Retrieves an account from the storage.
     ///
     /// It should return empty empty account when not found.
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError>;
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account>;
 
     /// Retrieves an slot from the storage.
     ///
     /// It should return empty slot when not found.
-    fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, EthError>;
+    fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot>;
 
     /// Retrieves a block from the storage.
     ///
     /// It should return `None` when not found.
-    fn read_block(&self, block_selection: &BlockSelection) -> Result<Option<Block>, EthError>;
+    fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
 
     /// Retrieves a transaction from the storage.
     ///
     /// It should return `None` when not found.
-    fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError>;
+    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
 
     /// Retrieves logs from the storage.
-    fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, EthError>;
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     /// Persist atomically all changes from a block.
     ///
     /// Before applying changes, it checks the storage current state matches the transaction previous state.
-    fn save_block(&self, block: Block) -> Result<(), EthError>;
+    fn save_block(&self, block: Block) -> anyhow::Result<()>;
 
     // -------------------------------------------------------------------------
     // Default operations
@@ -72,7 +73,7 @@ pub trait EthStorage: Send + Sync + 'static {
     }
 
     /// Translates a block selection to a specific storage point-in-time indicator.
-    fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> Result<StoragePointInTime, EthError> {
+    fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
@@ -85,7 +86,9 @@ pub trait EthStorage: Send + Sync + 'static {
             }
             BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection)? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
-                None => Err(EthError::InvalidBlockSelection),
+                None => Err(anyhow!(
+                    "Failed to select block because it is greater than current block number or block hash is invalid."
+                )),
             },
         }
     }

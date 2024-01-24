@@ -12,7 +12,7 @@ use stratus::infra;
 use stratus::infra::postgres::Postgres;
 
 #[tokio::main]
-async fn main() -> eyre::Result<()> {
+async fn main() -> anyhow::Result<()> {
     // parse cli configs
     let config = Config::parse();
 

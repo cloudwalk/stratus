@@ -6,13 +6,12 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::Wei;
-use crate::eth::EthError;
 use crate::ext::OptionExt;
 
 /// EVM operations.
 pub trait Evm: Send + Sync + 'static {
     /// Execute a transaction that deploys a contract or call a contract function.
-    fn execute(&mut self, input: EvmInput) -> Result<TransactionExecution, EthError>;
+    fn execute(&mut self, input: EvmInput) -> anyhow::Result<TransactionExecution>;
 }
 
 /// EVM input data. Usually derived from a transaction or call.
@@ -60,9 +59,9 @@ pub struct EvmInput {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 impl TryFrom<TransactionInput> for EvmInput {
-    type Error = EthError;
+    type Error = anyhow::Error;
 
-    fn try_from(value: TransactionInput) -> Result<Self, Self::Error> {
+    fn try_from(value: TransactionInput) -> anyhow::Result<Self> {
         Ok(Self {
             from: value.signer,
             to: value.to,

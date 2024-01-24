@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use clap::Parser;
 
 /// Application configuration entry-point.
@@ -29,13 +30,13 @@ pub enum StorageConfig {
 }
 
 impl FromStr for StorageConfig {
-    type Err = String;
+    type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-            s => Err(format!("unknown storage: {}", s)),
+            s => Err(anyhow!("unknown storage: {}", s)),
         }
     }
 }

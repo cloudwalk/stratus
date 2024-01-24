@@ -15,11 +15,10 @@ use crate::eth::storage::postgres::types::PostgresLogs;
 use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthError;
 use crate::infra::postgres::Postgres;
 
 impl EthStorage for Postgres {
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, EthError> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
 
         let rt = tokio::runtime::Handle::current();
@@ -30,16 +29,12 @@ impl EthStorage for Postgres {
             StoragePointInTime::Past(number) => *number,
         };
 
-        let block_number = i64::try_from(block).map_err(|_| EthError::StorageConvertError {
-            from: "BlockNumber".to_string(),
-            into: "i64".to_string(),
-        })?;
+        let block_number = i64::try_from(block)?;
 
-        let account = rt
-            .block_on(async {
-                sqlx::query_as!(
-                    Account,
-                    r#"
+        let account = rt.block_on(async {
+            sqlx::query_as!(
+                Account,
+                r#"
                         SELECT
                             address as "address: _",
                             nonce as "nonce: _",
@@ -48,20 +43,16 @@ impl EthStorage for Postgres {
                         FROM accounts
                         WHERE address = $1 AND block_number = $2
                     "#,
-                    address.as_ref(),
-                    block_number,
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })
-            .map_err(|e| {
-                tracing::error!(reason = ?e, address = ?address, "Failed to read address");
-                EthError::UnexpectedStorageError
-            })?;
+                address.as_ref(),
+                block_number,
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         Ok(account)
     }
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, EthError> {
+    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
         let rt = tokio::runtime::Handle::current();
@@ -72,41 +63,33 @@ impl EthStorage for Postgres {
             StoragePointInTime::Past(number) => *number,
         };
 
-        let block_number = i64::try_from(block).map_err(|_| EthError::StorageConvertError {
-            from: "BlockNumber".to_string(),
-            into: "i64".to_string(),
-        })?;
+        let block_number = i64::try_from(block)?;
 
         // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
-        let slot = rt
-            .block_on(async {
-                sqlx::query_as!(
-                    Slot,
-                    r#"
+        let slot = rt.block_on(async {
+            sqlx::query_as!(
+                Slot,
+                r#"
                         SELECT
                             idx as "index: _",
                             value as "value: _"
                         FROM account_slots
                         WHERE account_address = $1 AND idx = $2 AND block_number = $3
                     "#,
-                    address.as_ref(),
-                    slot_index.as_ref(),
-                    block_number,
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })
-            .map_err(|e| {
-                tracing::error!(reason = ?e, index = ?slot_index, address = ?address, "Failed to read slot index");
-                EthError::UnexpectedStorageError
-            })?;
+                address.as_ref(),
+                slot_index.as_ref(),
+                block_number,
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         Ok(slot)
     }
 
-    fn read_block(&self, block: &BlockSelection) -> Result<Option<Block>, EthError> {
+    fn read_block(&self, block: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(block = ?block, "reading block");
 
         let rt = tokio::runtime::Handle::current();
@@ -115,10 +98,7 @@ impl EthStorage for Postgres {
             BlockSelection::Latest => {
                 let current = self.read_current_block_number()?;
 
-                let block_number = i64::try_from(current).map_err(|_| EthError::StorageConvertError {
-                    from: "BlockNumber".to_string(),
-                    into: "i64".to_string(),
-                })?;
+                let block_number = i64::try_from(current)?;
 
                 rt.block_on(async {
                     let _header = sqlx::query_as!(
@@ -237,10 +217,7 @@ impl EthStorage for Postgres {
                 todo!()
             }
             BlockSelection::Number(number) => {
-                let block_number = i64::try_from(*number).map_err(|_| EthError::StorageConvertError {
-                    from: "BlockNumber".to_string(),
-                    into: "i64".to_string(),
-                })?;
+                let block_number = i64::try_from(*number)?;
 
                 let _ = rt.block_on(async {
                     sqlx::query_as!(
@@ -270,63 +247,54 @@ impl EthStorage for Postgres {
         todo!();
     }
 
-    fn read_mined_transaction(&self, hash: &Hash) -> Result<Option<TransactionMined>, EthError> {
+    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
         todo!()
     }
 
-    fn read_logs(&self, _: &LogFilter) -> Result<Vec<LogMined>, EthError> {
+    fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         Ok(Vec::new())
     }
 
-    fn save_block(&self, block: Block) -> Result<(), EthError> {
+    fn save_block(&self, block: Block) -> anyhow::Result<()> {
         tracing::debug!(block = ?block, "saving block");
         todo!()
     }
-    fn read_current_block_number(&self) -> Result<BlockNumber, EthError> {
+
+    fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading current block number");
 
         let rt = tokio::runtime::Handle::current();
 
-        let currval: i64 = rt
-            .block_on(async {
-                sqlx::query_scalar!(
-                    r#"
+        let currval: i64 = rt.block_on(async {
+            sqlx::query_scalar!(
+                r#"
                         SELECT CURRVAL('block_number_seq') as "n!: _"
                     "#
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })
-            .map_err(|e| {
-                tracing::error!(reason = ?e, "failed to retrieve sequence 'block_number_seq' current value");
-                EthError::UnexpectedStorageError
-            })?;
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         let block_number = BlockNumber::from(currval);
 
         Ok(block_number)
     }
 
-    fn increment_block_number(&self) -> Result<BlockNumber, EthError> {
+    fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("incrementing block number");
 
         let rt = tokio::runtime::Handle::current();
 
-        let nextval: i64 = rt
-            .block_on(async {
-                sqlx::query_scalar!(
-                    r#"
+        let nextval: i64 = rt.block_on(async {
+            sqlx::query_scalar!(
+                r#"
                         SELECT NEXTVAL('block_number_seq') as "n!: _"
                     "#
-                )
-                .fetch_one(&self.connection_pool)
-                .await
-            })
-            .map_err(|e| {
-                tracing::error!(reason = ?e, "failed to retrieve sequence 'block_number_seq' next value");
-                EthError::UnexpectedStorageError
-            })?;
+            )
+            .fetch_one(&self.connection_pool)
+            .await
+        })?;
 
         let block_number = BlockNumber::from(nextval);
 

@@ -1,18 +1,18 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use anyhow::anyhow;
 use tokio::sync::broadcast;
 
-use super::primitives::LogMined;
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthError;
 
 /// High-level coordinator of Ethereum transactions.
 pub struct EthExecutor {
@@ -41,7 +41,7 @@ impl EthExecutor {
     /// Execute a transaction, mutate the state and return function output.
     ///
     /// TODO: too much cloning that can be optimized here.
-    pub fn transact(&self, transaction: TransactionInput) -> Result<TransactionExecution, EthError> {
+    pub fn transact(&self, transaction: TransactionInput) -> anyhow::Result<TransactionExecution> {
         tracing::info!(
             hash = %transaction.hash,
             nonce = %transaction.nonce,
@@ -56,7 +56,7 @@ impl EthExecutor {
         // validate
         if transaction.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
-            return Err(EthError::ZeroSigner);
+            return Err(anyhow!("Transaction sent from zero address is not allowed."));
         }
 
         // acquire locks
@@ -86,7 +86,7 @@ impl EthExecutor {
     }
 
     /// Execute a function and return the function output. State changes are ignored.
-    pub fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> Result<TransactionExecution, EthError> {
+    pub fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<TransactionExecution> {
         tracing::info!(
             from = %input.from,
             to = ?input.to,

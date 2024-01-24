@@ -1,13 +1,13 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-use crate::eth::EthError;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -50,14 +50,14 @@ impl AsRef<[u8]> for Hash {
 gen_newtype_from!(self = Hash, other = H256, [u8; 32]);
 
 impl FromStr for Hash {
-    type Err = EthError;
+    type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> anyhow::Result<Self> {
         match H256::from_str(s) {
             Ok(parsed) => Ok(Self(parsed)),
             Err(e) => {
                 tracing::warn!(reason = ?e, value = %s, "failed to parse hash");
-                Err(EthError::new_invalid_field("hash", s.to_owned()))
+                Err(anyhow!("Failed to parse field 'hash' with value '{}'", s.to_owned()))
             }
         }
     }
