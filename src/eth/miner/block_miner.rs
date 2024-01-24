@@ -1,3 +1,10 @@
+//! Block Miner
+//!
+//! Responsible for the creation of new blocks in the blockchain. The BlockMiner struct handles
+//! the mining process, transforming a set of transactions into a block. It plays a crucial role in
+//! the transaction execution pipeline, ensuring that transactions are validated, processed, and
+//! added to the blockchain in an orderly and secure manner.
+
 use std::sync::Arc;
 
 use ethereum_types::BloomInput;
@@ -19,24 +26,31 @@ pub struct BlockMiner {
 }
 
 impl BlockMiner {
+    /// Initializes a new BlockMiner with storage access.
+    /// The storage component is crucial for retrieving the current state and persisting new blocks.
     pub fn new(storage: Arc<dyn EthStorage>) -> Self {
         Self { storage }
     }
 
-    /// Returns the genesis block.
+    /// Constructs the genesis block, the first block in the blockchain.
+    /// This block serves as the foundation of the blockchain, with a fixed state and no previous block.
     pub fn genesis() -> Block {
         Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)
     }
 
-    /// Mine one block with a single transaction.
+    /// Mines a new block with a single transaction.
+    /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
+    /// enabling consistent processing for both single and multiple transaction scenarios.
     pub fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> anyhow::Result<Block> {
         let transactions = NonEmpty::new((input, execution));
         self.mine_with_many_transactions(transactions)
     }
 
-    /// Mine one block from one or more transactions.
+    /// Mines a new block from one or more transactions.
+    /// This is the core function for block creation, processing each transaction, generating the necessary logs,
+    /// and finalizing the block. It is used both directly for multiple transactions and indirectly by `mine_with_one_transaction`.
     ///
-    /// TODO: maybe break this in multiple functions after the logic is complete.
+    /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
     pub fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> anyhow::Result<Block> {
         // init block
         let number = self.storage.increment_block_number()?;
