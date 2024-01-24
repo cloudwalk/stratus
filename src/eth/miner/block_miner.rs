@@ -79,8 +79,8 @@ impl BlockMiner {
                 let mined_log = LogMined {
                     log: mined_log,
                     transaction_hash: input.hash.clone(),
-                    transaction_index: transaction_index.clone(),
-                    log_index: log_index.clone(),
+                    transaction_index,
+                    log_index,
                     block_number: block.header.number,
                     block_hash: block.header.hash.clone(),
                 };

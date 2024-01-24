@@ -2,6 +2,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
+use crate::eth::primitives::EcdsaRs;
+use crate::eth::primitives::EcdsaV;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
@@ -9,14 +11,12 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Rs;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionResult;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
-use crate::eth::primitives::V;
 
 pub struct PostgresTransaction {
     pub hash: Hash,
@@ -34,9 +34,9 @@ pub struct PostgresTransaction {
     pub block_timestamp: UnixTime,
     pub output: Bytes,
     pub value: Wei,
-    pub r: Rs,
-    pub s: Rs,
-    pub v: V,
+    pub r: EcdsaRs,
+    pub s: EcdsaRs,
+    pub v: EcdsaV,
 }
 
 impl PostgresTransaction {

@@ -6,10 +6,10 @@ use crate::gen_newtype_from;
 
 // Type representing `v` variable
 // from the ECDSA signature
-pub struct V(U64);
+pub struct EcdsaV(U64);
 
-impl From<V> for U64 {
-    fn from(value: V) -> Self {
+impl From<EcdsaV> for U64 {
+    fn from(value: EcdsaV) -> Self {
         value.0
     }
 }
@@ -17,19 +17,19 @@ impl From<V> for U64 {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = V, other = i32);
+gen_newtype_from!(self = EcdsaV, other = i32);
 
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for V {
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for EcdsaV {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <i32 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }
 
-impl sqlx::Type<sqlx::Postgres> for V {
+impl sqlx::Type<sqlx::Postgres> for EcdsaV {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("BYTEA")
     }

@@ -11,8 +11,8 @@ use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
 
-/// Index is a representation for transaction indexes and log indexes
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add)]
+/// Represents a transaction index or log index
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy)]
 pub struct Index(u16);
 
 impl Index {
