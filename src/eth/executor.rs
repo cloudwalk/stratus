@@ -1,3 +1,10 @@
+//! EthExecutor: Ethereum Transaction Coordinator
+//!
+//! This module provides the `EthExecutor` struct, which acts as a coordinator for executing Ethereum transactions.
+//! It encapsulates the logic for transaction execution, state mutation, and event notification.
+//! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
+//! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
+
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -14,12 +21,17 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 
-/// High-level coordinator of Ethereum transactions.
+/// The EthExecutor struct is responsible for orchestrating the execution of Ethereum transactions.
+/// It holds references to the EVM, block miner, and storage, managing the overall process of
+/// transaction execution, block production, and state management.
 pub struct EthExecutor {
+    // Mutex-wrapped EVM for synchronized access to EVM operations.
     evm: Mutex<Box<dyn Evm>>,
+    // Mutex-wrapped miner for creating new blockchain blocks.
     miner: Mutex<BlockMiner>,
+    // Shared storage backend for persisting blockchain state.
     eth_storage: Arc<dyn EthStorage>,
-
+    // Broadcast channels for notifying subscribers about new blocks and logs.
     block_notifier: broadcast::Sender<Block>,
     log_notifier: broadcast::Sender<LogMined>,
 }
@@ -38,9 +50,16 @@ impl EthExecutor {
         }
     }
 
-    /// Execute a transaction, mutate the state and return function output.
+    /// Executes a transaction and produces a new block.
     ///
-    /// TODO: too much cloning that can be optimized here.
+    /// This function handles the entire lifecycle of a transaction. It starts by validating
+    /// the transaction, then executes it using the EVM, and finally, mines a new block using
+    /// `mine_with_one_transaction`, irrespective of time-based criteria. This approach aligns
+    /// with the Stratus project's strategy of block generation based on transaction processing
+    /// rather than fixed time intervals. The function also manages state mutations and broadcasts
+    /// notifications for new blocks and logs.
+    ///
+    /// TODO: Optimize the cloning operations to enhance performance.
     pub fn transact(&self, transaction: TransactionInput) -> anyhow::Result<TransactionExecution> {
         tracing::info!(
             hash = %transaction.hash,
