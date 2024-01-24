@@ -48,6 +48,7 @@ pub use historical_value::HistoricalValues;
 pub use index::Index;
 pub use log::Log;
 pub use log_filter::LogFilter;
+pub use log_filter::LogFilterTopicCombination;
 pub use log_filter_input::LogFilterInput;
 pub use log_mined::LogMined;
 pub use log_topic::LogTopic;
