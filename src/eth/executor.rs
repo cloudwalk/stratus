@@ -4,11 +4,11 @@ use std::sync::Mutex;
 use anyhow::anyhow;
 use tokio::sync::broadcast;
 
-use crate::eth::primitives::LogMined;
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
