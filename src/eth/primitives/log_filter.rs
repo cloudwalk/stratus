@@ -2,12 +2,13 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
+use crate::ext::not;
 
 #[derive(Clone, Debug)]
 pub struct LogFilter {
     pub from_block: BlockNumber,
     pub to_block: Option<BlockNumber>,
-    pub address: Option<Address>,
+    pub addresses: Vec<Address>,
     pub topics: Vec<(usize, LogTopic)>,
 }
 
@@ -23,7 +24,7 @@ impl LogFilter {
         }
 
         // filter addres
-        if self.address.as_ref().is_some_and(|address| address != log.address()) {
+        if not(self.addresses.contains(log.address())) {
             return false;
         }
 

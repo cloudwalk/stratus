@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+use serde_with::formats::PreferMany;
+use serde_with::serde_as;
+use serde_with::OneOrMany;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
@@ -10,6 +14,7 @@ use crate::eth::storage::EthStorage;
 use crate::eth::EthError;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
+#[serde_as]
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
@@ -21,10 +26,11 @@ pub struct LogFilterInput {
     #[serde(rename = "blockHash", default)]
     pub block_hash: Option<Hash>,
 
-    #[serde(default)]
-    pub address: Option<Address>,
+    #[serde(rename = "address", default)]
+    #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+    pub address: Vec<Address>,
 
-    #[serde(default)]
+    #[serde(rename = "topics", default)]
     pub topics: Vec<Option<LogTopic>>,
 }
 
@@ -57,7 +63,7 @@ impl LogFilterInput {
         Ok(LogFilter {
             from_block: from,
             to_block: to,
-            address: self.address,
+            addresses: self.address,
             topics: self
                 .topics
                 .into_iter()
