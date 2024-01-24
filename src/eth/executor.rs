@@ -50,14 +50,13 @@ impl EthExecutor {
         }
     }
 
-    /// Executes a transaction and produces a new block.
+    /// Executes Ethereum transactions and facilitates block creation.
     ///
-    /// This function handles the entire lifecycle of a transaction. It starts by validating
-    /// the transaction, then executes it using the EVM, and finally, mines a new block using
-    /// `mine_with_one_transaction`, irrespective of time-based criteria. This approach aligns
-    /// with the Stratus project's strategy of block generation based on transaction processing
-    /// rather than fixed time intervals. The function also manages state mutations and broadcasts
-    /// notifications for new blocks and logs.
+    /// This function is a key part of the transaction processing pipeline. It begins by validating
+    /// incoming transactions and then proceeds to execute them. Unlike conventional blockchain systems,
+    /// the block creation here is not dictated by timed intervals but is instead triggered by transaction
+    /// processing itself. This method encapsulates the execution, block mining, and state mutation,
+    /// concluding with broadcasting necessary notifications for the newly created block and associated transaction logs.
     ///
     /// TODO: Optimize the cloning operations to enhance performance.
     pub fn transact(&self, transaction: TransactionInput) -> anyhow::Result<TransactionExecution> {
