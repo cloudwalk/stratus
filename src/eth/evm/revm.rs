@@ -21,6 +21,7 @@ use revm::primitives::U256;
 use revm::Database;
 use revm::Inspector;
 use revm::EVM;
+use tokio::runtime::Handle;
 
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
@@ -144,10 +145,9 @@ impl Database for RevmDatabaseSession {
     type Error = anyhow::Error;
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
-        let rt = tokio::runtime::Handle::current();
         // retrieve account
         let address: Address = revm_address.into();
-        let account = rt.block_on(async { self.storage.read_account(&address, &self.storage_point_in_time).await })?;
+        let account = Handle::current().block_on(self.storage.read_account(&address, &self.storage_point_in_time))?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.to {
@@ -170,12 +170,10 @@ impl Database for RevmDatabaseSession {
     }
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
-        let rt = tokio::runtime::Handle::current();
-
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
-        let slot = rt.block_on(async { self.storage.read_slot(&address, &index, &self.storage_point_in_time).await })?;
+        let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.storage_point_in_time))?;
 
         // track original value
         match self.storage_changes.get_mut(&address) {

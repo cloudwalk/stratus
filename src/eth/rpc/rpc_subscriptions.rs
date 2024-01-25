@@ -1,11 +1,11 @@
 use std::sync::Arc;
+use std::thread;
 
 use dashmap::DashMap;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use tokio::sync::broadcast;
-use tokio::time::sleep;
 use tokio::time::Duration;
 
 use crate::eth::primitives::Block;
@@ -32,17 +32,17 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Spawns a new thread to clean up closed subscriptions from time to time.
+    ///
+    /// Runs in a blocking thread because DashMap was preventing Tokio tasks to progress due to some internal locking.
     pub fn spawn_subscriptions_cleaner(self: Arc<Self>) {
-        tokio::spawn(async move {
-            loop {
-                for closed_sub in self.new_heads.iter().filter(|sub| sub.is_closed()) {
-                    self.new_heads.remove(closed_sub.key());
-                }
-                for closed_sub in self.logs.iter().filter(|sub| sub.0.is_closed()) {
-                    self.logs.remove(closed_sub.key());
-                }
-                sleep(CLEANING_FREQUENCY).await;
+        tokio::task::spawn_blocking(move || loop {
+            for closed_sub in self.new_heads.iter().filter(|sub| sub.is_closed()) {
+                self.new_heads.remove(closed_sub.key());
             }
+            for closed_sub in self.logs.iter().filter(|sub| sub.0.is_closed()) {
+                self.logs.remove(closed_sub.key());
+            }
+            thread::sleep(CLEANING_FREQUENCY);
         });
     }
 

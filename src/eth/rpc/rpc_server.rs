@@ -85,15 +85,15 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
     // status
-    module.register_method("net_listening", net_listening)?;
+    module.register_async_method("net_listening", net_listening)?;
 
     // blockchain
-    module.register_method("net_version", net_version)?;
-    module.register_method("eth_chainId", eth_chain_id)?;
-    module.register_method("web3_clientVersion", web3_client_version)?;
+    module.register_async_method("net_version", net_version)?;
+    module.register_async_method("eth_chainId", eth_chain_id)?;
+    module.register_async_method("web3_clientVersion", web3_client_version)?;
 
     // gas
-    module.register_method("eth_gasPrice", eth_gas_price)?;
+    module.register_async_method("eth_gasPrice", eth_gas_price)?;
 
     // block
     module.register_async_method("eth_blockNumber", eth_block_number)?;
@@ -126,27 +126,27 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 // -----------------------------------------------------------------------------
 
 // Status
-fn net_listening(_: Params, _: &RpcContext) -> &'static str {
+async fn net_listening(_: Params<'_>, _: Arc<RpcContext>) -> &'static str {
     "true"
 }
 
 // Blockchain
 
-fn net_version(_: Params, ctx: &RpcContext) -> String {
+async fn net_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
     ctx.chain_id.to_string()
 }
 
-fn eth_chain_id(_: Params, ctx: &RpcContext) -> String {
+async fn eth_chain_id(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
     hex_num(ctx.chain_id)
 }
 
-fn web3_client_version(_: Params, ctx: &RpcContext) -> String {
+async fn web3_client_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
     ctx.client_version.to_owned()
 }
 
 // Gas
 
-fn eth_gas_price(_: Params, _: &RpcContext) -> String {
+async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
     hex_zero()
 }
 
@@ -206,7 +206,7 @@ async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::R
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 
         // result is failure
-        Ok(result) => Err(anyhow!("Internal error {}", hex_data(result.output)).into()),
+        Ok(result) => Err(anyhow!("{}", hex_data(result.output)).into()),
 
         // internal error
         Err(e) => {
@@ -243,7 +243,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         Ok(result) if result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(result) => Err(anyhow!("Internal Error: {}", hex_data(result.output)).into()),
+        Ok(result) => Err(anyhow!("{}", hex_data(result.output)).into()),
 
         // internal error
         Err(e) => {

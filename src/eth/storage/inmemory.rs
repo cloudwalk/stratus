@@ -3,10 +3,12 @@
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::RwLock;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
+use tokio::sync::RwLock;
+use tokio::sync::RwLockReadGuard;
+use tokio::sync::RwLockWriteGuard;
 
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;
@@ -31,6 +33,18 @@ use crate::eth::storage::EthStorage;
 pub struct InMemoryStorage {
     state: RwLock<InMemoryStorageState>,
     block_number: AtomicUsize,
+}
+
+impl InMemoryStorage {
+    /// Locks inner state for reading.
+    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryStorageState> {
+        self.state.read().await
+    }
+
+    /// Locks inner state for writing.
+    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryStorageState> {
+        self.state.write().await
+    }
 }
 
 #[derive(Debug, Default)]
@@ -89,7 +103,7 @@ impl EthStorage for InMemoryStorage {
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
 
-        let state_lock = self.state.read().unwrap();
+        let state_lock = self.lock_read().await;
 
         match state_lock.accounts.get(address) {
             // account found
@@ -117,7 +131,7 @@ impl EthStorage for InMemoryStorage {
     async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
-        let state_lock = self.state.read().unwrap();
+        let state_lock = self.lock_read().await;
         let Some(slots) = state_lock.account_slots.get(address) else {
             tracing::trace!(%address, "account slot not found");
             return Ok(Default::default());
@@ -142,7 +156,7 @@ impl EthStorage for InMemoryStorage {
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
-        let state_lock = self.state.read().unwrap();
+        let state_lock = self.lock_read().await;
         let block = match selection {
             BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
             BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
@@ -163,7 +177,7 @@ impl EthStorage for InMemoryStorage {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let state_lock = self.state.read().unwrap();
+        let state_lock = self.lock_read().await;
 
         match state_lock.transactions.get(hash) {
             Some(transaction) => {
@@ -179,7 +193,7 @@ impl EthStorage for InMemoryStorage {
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
-        let state_lock = self.state.read().unwrap();
+        let state_lock = self.lock_read().await;
 
         let logs = state_lock
             .logs
@@ -196,7 +210,7 @@ impl EthStorage for InMemoryStorage {
     }
 
     async fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        let mut state_lock = self.state.write().unwrap();
+        let mut state_lock = self.lock_write().await;
 
         // save block
         tracing::debug!(number = %block.header.number, "saving block");
