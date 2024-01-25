@@ -38,12 +38,12 @@ impl BlockMiner {
         Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)
     }
 
-    /// Mines a new block with a single transaction.
+    /// Mine one block with a single transaction.
     /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
     /// enabling consistent processing for both single and multiple transaction scenarios.
-    pub fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> anyhow::Result<Block> {
+    pub async fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: TransactionExecution) -> anyhow::Result<Block> {
         let transactions = NonEmpty::new((input, execution));
-        self.mine_with_many_transactions(transactions)
+        self.mine_with_many_transactions(transactions).await
     }
 
     /// Mines a new block from one or more transactions.
@@ -51,9 +51,9 @@ impl BlockMiner {
     /// and finalizing the block. It is used both directly for multiple transactions and indirectly by `mine_with_one_transaction`.
     ///
     /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
-    pub fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> anyhow::Result<Block> {
+    pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, TransactionExecution)>) -> anyhow::Result<Block> {
         // init block
-        let number = self.storage.increment_block_number()?;
+        let number = self.storage.increment_block_number().await?;
         let block_timpestamp = transactions
             .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp_in_secs.cmp(&e2.block_timestamp_in_secs))
             .1

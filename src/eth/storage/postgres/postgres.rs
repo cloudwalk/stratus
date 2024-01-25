@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -17,24 +19,22 @@ use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
 use crate::infra::postgres::Postgres;
 
+#[async_trait]
 impl EthStorage for Postgres {
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
-
-        let rt = tokio::runtime::Handle::current();
 
         // TODO: use HistoricalValue
         let block = match point_in_time {
-            StoragePointInTime::Present => self.read_current_block_number()?,
+            StoragePointInTime::Present => self.read_current_block_number().await?,
             StoragePointInTime::Past(number) => *number,
         };
 
         let block_number = i64::try_from(block)?;
 
-        let account = rt.block_on(async {
-            sqlx::query_as!(
-                Account,
-                r#"
+        let account = sqlx::query_as!(
+            Account,
+            r#"
                         SELECT
                             address as "address: _",
                             nonce as "nonce: _",
@@ -43,23 +43,20 @@ impl EthStorage for Postgres {
                         FROM accounts
                         WHERE address = $1 AND block_number = $2
                     "#,
-                address.as_ref(),
-                block_number,
-            )
-            .fetch_one(&self.connection_pool)
-            .await
-        })?;
+            address.as_ref(),
+            block_number,
+        )
+        .fetch_one(&self.connection_pool)
+        .await?;
 
         Ok(account)
     }
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, "reading slot");
-
-        let rt = tokio::runtime::Handle::current();
 
         // TODO: use HistoricalValue
         let block = match point_in_time {
-            StoragePointInTime::Present => self.read_current_block_number()?,
+            StoragePointInTime::Present => self.read_current_block_number().await?,
             StoragePointInTime::Past(number) => *number,
         };
 
@@ -68,42 +65,37 @@ impl EthStorage for Postgres {
         // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
-        let slot = rt.block_on(async {
-            sqlx::query_as!(
-                Slot,
-                r#"
+        let slot = sqlx::query_as!(
+            Slot,
+            r#"
                         SELECT
                             idx as "index: _",
                             value as "value: _"
                         FROM account_slots
                         WHERE account_address = $1 AND idx = $2 AND block_number = $3
                     "#,
-                address.as_ref(),
-                slot_index.as_ref(),
-                block_number,
-            )
-            .fetch_one(&self.connection_pool)
-            .await
-        })?;
+            address.as_ref(),
+            slot_index.as_ref(),
+            block_number,
+        )
+        .fetch_one(&self.connection_pool)
+        .await?;
 
         Ok(slot)
     }
 
-    fn read_block(&self, block: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    async fn read_block(&self, block: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(block = ?block, "reading block");
-
-        let rt = tokio::runtime::Handle::current();
 
         match block {
             BlockSelection::Latest => {
-                let current = self.read_current_block_number()?;
+                let current = self.read_current_block_number().await?;
 
                 let block_number = i64::try_from(current)?;
 
-                rt.block_on(async {
-                    let _header = sqlx::query_as!(
-                        BlockHeader,
-                        r#"
+                let _header = sqlx::query_as!(
+                    BlockHeader,
+                    r#"
                         SELECT
                             number as "number: _"
                             ,hash as "hash: _"
@@ -114,18 +106,17 @@ impl EthStorage for Postgres {
                         FROM blocks
                         WHERE number = $1
                     "#,
-                        block_number,
-                    )
-                    .fetch_one(&self.connection_pool);
-                });
+                    block_number,
+                )
+                .fetch_one(&self.connection_pool)
+                .await?;
 
                 todo!()
             }
             BlockSelection::Hash(hash) => {
-                rt.block_on(async {
-                    let header_query = sqlx::query_as!(
-                        BlockHeader,
-                        r#"
+                let header_query = sqlx::query_as!(
+                    BlockHeader,
+                    r#"
                         SELECT
                             number as "number: _"
                             ,hash as "hash: _"
@@ -136,13 +127,13 @@ impl EthStorage for Postgres {
                         FROM blocks
                         WHERE hash = $1
                     "#,
-                        hash.as_ref(),
-                    )
-                    .fetch_one(&self.connection_pool);
+                    hash.as_ref(),
+                )
+                .fetch_one(&self.connection_pool);
 
-                    let transactions_query = sqlx::query_as!(
-                        PostgresTransaction,
-                        r#"
+                let transactions_query = sqlx::query_as!(
+                    PostgresTransaction,
+                    r#"
                         SELECT
                             hash as "hash: _"
                             ,signer_address as "signer_address: _"
@@ -157,13 +148,13 @@ impl EthStorage for Postgres {
                         FROM transactions
                         WHERE hash = $1
                         "#,
-                        hash.as_ref()
-                    )
-                    .fetch_all(&self.connection_pool);
+                    hash.as_ref()
+                )
+                .fetch_all(&self.connection_pool);
 
-                    let logs_query = sqlx::query_as!(
-                        PostgresLogs,
-                        r#"
+                let logs_query = sqlx::query_as!(
+                    PostgresLogs,
+                    r#"
                         SELECT
                             address as "address: _"
                             ,data as "data: _"
@@ -175,13 +166,13 @@ impl EthStorage for Postgres {
                         FROM logs
                         WHERE block_hash = $1
                         "#,
-                        hash.as_ref()
-                    )
-                    .fetch_all(&self.connection_pool);
+                    hash.as_ref()
+                )
+                .fetch_all(&self.connection_pool);
 
-                    let topics_query = sqlx::query_as!(
-                        PostgresTopic,
-                        r#"
+                let topics_query = sqlx::query_as!(
+                    PostgresTopic,
+                    r#"
                         SELECT
                             topic as "topic: _"
                             ,transaction_hash as "transaction_hash: _"
@@ -192,37 +183,35 @@ impl EthStorage for Postgres {
                         FROM topics
                         WHERE block_hash = $1
                         "#,
-                        hash.as_ref()
-                    )
-                    .fetch_all(&self.connection_pool);
+                    hash.as_ref()
+                )
+                .fetch_all(&self.connection_pool);
 
-                    // run queries concurrently, but not in parallel
-                    // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                    let _res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                    // let header = res.0?;
-                    // let transactions = res.1?;
-                    // let logs = res.2?;
-                    // let topics = res.3?;
+                // run queries concurrently, but not in parallel
+                // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
+                let _res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                // let header = res.0?;
+                // let transactions = res.1?;
+                // let logs = res.2?;
+                // let topics = res.3?;
 
-                    // let block: Block = Block::new_with_capacity(BlockNumber::default(), 1, 1);
+                // let block: Block = Block::new_with_capacity(BlockNumber::default(), 1, 1);
 
-                    // let block = Block {
-                    //     header,
-                    //     transactions
-                    // };
+                // let block = Block {
+                //     header,
+                //     transactions
+                // };
 
-                    // Ok(block)
-                });
+                // Ok(block)
 
                 todo!()
             }
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number)?;
 
-                let _ = rt.block_on(async {
-                    sqlx::query_as!(
-                        BlockHeader,
-                        r#"
+                let _ = sqlx::query_as!(
+                    BlockHeader,
+                    r#"
                         SELECT
                             number as "number: _"
                             ,hash as "hash: _"
@@ -233,11 +222,10 @@ impl EthStorage for Postgres {
                         FROM blocks
                         WHERE number = $1
                     "#,
-                        block_number,
-                    )
-                    .fetch_one(&self.connection_pool)
-                    .await
-                });
+                    block_number,
+                )
+                .fetch_one(&self.connection_pool)
+                .await;
             }
             BlockSelection::Earliest => {
                 todo!()
@@ -247,54 +235,46 @@ impl EthStorage for Postgres {
         todo!();
     }
 
-    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
         todo!()
     }
 
-    fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    async fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         Ok(Vec::new())
     }
 
-    fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         tracing::debug!(block = ?block, "saving block");
         todo!()
     }
 
-    fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading current block number");
 
-        let rt = tokio::runtime::Handle::current();
-
-        let currval: i64 = rt.block_on(async {
-            sqlx::query_scalar!(
-                r#"
+        let currval: i64 = sqlx::query_scalar!(
+            r#"
                         SELECT CURRVAL('block_number_seq') as "n!: _"
                     "#
-            )
-            .fetch_one(&self.connection_pool)
-            .await
-        })?;
+        )
+        .fetch_one(&self.connection_pool)
+        .await?;
 
         let block_number = BlockNumber::from(currval);
 
         Ok(block_number)
     }
 
-    fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("incrementing block number");
 
-        let rt = tokio::runtime::Handle::current();
-
-        let nextval: i64 = rt.block_on(async {
-            sqlx::query_scalar!(
-                r#"
+        let nextval: i64 = sqlx::query_scalar!(
+            r#"
                         SELECT NEXTVAL('block_number_seq') as "n!: _"
                     "#
-            )
-            .fetch_one(&self.connection_pool)
-            .await
-        })?;
+        )
+        .fetch_one(&self.connection_pool)
+        .await?;
 
         let block_number = BlockNumber::from(nextval);
 

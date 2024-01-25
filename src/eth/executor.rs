@@ -6,11 +6,12 @@
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use anyhow::anyhow;
 use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 
+use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
@@ -58,8 +59,8 @@ impl EthExecutor {
     /// processing itself. This method encapsulates the execution, block mining, and state mutation,
     /// concluding with broadcasting necessary notifications for the newly created block and associated transaction logs.
     ///
-    /// TODO: Optimize the cloning operations to enhance performance.
-    pub fn transact(&self, transaction: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    /// TODO: too much cloning that can be optimized here.
+    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<TransactionExecution> {
         tracing::info!(
             hash = %transaction.hash,
             nonce = %transaction.nonce,
@@ -78,13 +79,16 @@ impl EthExecutor {
         }
 
         // acquire locks
-        let mut evm_lock = self.evm.lock().unwrap();
-        let mut miner_lock = self.miner.lock().unwrap();
+        let mut miner_lock = self.miner.lock().await;
+        let mut _evm_lock = self.evm.lock().await;
+
+        let mut evm = Revm::new(Arc::clone(&self.eth_storage));
+        let tclone = transaction.clone();
 
         // execute, mine and save
-        let execution = evm_lock.execute(transaction.clone().try_into()?)?;
-        let block = miner_lock.mine_with_one_transaction(transaction, execution.clone())?;
-        self.eth_storage.save_block(block.clone())?;
+        let execution = tokio::task::spawn_blocking(move || evm.execute(tclone.try_into()?)).await??;
+        let block = miner_lock.mine_with_one_transaction(transaction, execution.clone()).await?;
+        self.eth_storage.save_block(block.clone()).await?;
 
         // notify new blocks
         if let Err(e) = self.block_notifier.send(block.clone()) {
@@ -104,7 +108,7 @@ impl EthExecutor {
     }
 
     /// Execute a function and return the function output. State changes are ignored.
-    pub fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<TransactionExecution> {
+    pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<TransactionExecution> {
         tracing::info!(
             from = %input.from,
             to = ?input.to,
@@ -113,9 +117,11 @@ impl EthExecutor {
             "evm executing call"
         );
 
+        let mut _evm_lock = self.evm.lock().await;
         // execute, but not save
-        let mut executor_lock = self.evm.lock().unwrap();
-        let execution = executor_lock.execute((input, point_in_time).into())?;
+        let mut evm = Revm::new(Arc::clone(&self.eth_storage));
+
+        let execution = tokio::task::spawn_blocking(move || evm.execute((input, point_in_time).into())).await??;
         Ok(execution)
     }
 

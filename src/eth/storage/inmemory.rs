@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::RwLock;
 
+use async_trait::async_trait;
 use indexmap::IndexMap;
 
 use crate::eth::miner::BlockMiner;
@@ -66,16 +67,17 @@ impl Default for InMemoryStorage {
     }
 }
 
+#[async_trait]
 impl EthStorage for InMemoryStorage {
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
 
-    fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
         Ok(next.into())
     }
@@ -84,7 +86,7 @@ impl EthStorage for InMemoryStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
 
         let state_lock = self.state.read().unwrap();
@@ -112,7 +114,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
         let state_lock = self.state.read().unwrap();
@@ -137,7 +139,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
         let state_lock = self.state.read().unwrap();
@@ -159,7 +161,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
         let state_lock = self.state.read().unwrap();
 
@@ -175,7 +177,7 @@ impl EthStorage for InMemoryStorage {
         }
     }
 
-    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
         let state_lock = self.state.read().unwrap();
 
@@ -193,7 +195,7 @@ impl EthStorage for InMemoryStorage {
         Ok(logs)
     }
 
-    fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         let mut state_lock = self.state.write().unwrap();
 
         // save block
