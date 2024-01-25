@@ -48,7 +48,6 @@ async fn run_application() -> anyhow::Result<()> {
 ///
 /// TODO: The number of EVMs may be configurable instead of assuming a value based on number of processors.
 fn init_evms(storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
-
     // calculate the number of EVMs
     let cpu_cores = thread::available_parallelism().unwrap();
     let num_evms = max(1, cpu_cores.get() - 2); // TODO: make this value configurable

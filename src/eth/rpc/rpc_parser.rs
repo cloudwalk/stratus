@@ -13,8 +13,6 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
 
-use crate::gen_newtype_from;
-
 /// Extracts the next RPC parameter. Fails if parameter not present.
 pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> anyhow::Result<(ParamsSequence, T)> {
     match params.next::<T>() {
@@ -54,26 +52,43 @@ pub fn rpc_parsing_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
     ErrorObjectOwned::owned(PARSE_ERROR_CODE, PARSE_ERROR_MSG, Some(message))
 }
 
+/// Creates an RPC internal error response.
+pub fn rpc_internal_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
+    ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(message))
+}
+
 /// Helper type so that we can convert anyhow::Error to ErrorObjectOwned
 #[derive(Debug)]
-pub struct RpcError(anyhow::Error);
+pub enum RpcError {
+    Strict(ErrorObjectOwned),
+    Generic(anyhow::Error),
+}
 
 impl std::error::Error for RpcError {}
 
 impl Display for RpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
+        match self {
+            RpcError::Strict(err) => Display::fmt(err, f),
+            RpcError::Generic(err) => Display::fmt(err, f),
+        }
     }
 }
 
-gen_newtype_from!(self = RpcError, other = anyhow::Error);
+impl From<anyhow::Error> for RpcError {
+    fn from(value: anyhow::Error) -> Self {
+        match value.downcast::<ErrorObject>() {
+            Ok(err) => RpcError::Strict(err),
+            Err(err) => RpcError::Generic(err),
+        }
+    }
+}
 
 impl From<RpcError> for ErrorObjectOwned {
     fn from(value: RpcError) -> Self {
-        tracing::debug!("{:?}", value.0);
-        match value.0.downcast::<ErrorObject>() {
-            Ok(err) => err,
-            Err(err) => ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(err.to_string())),
+        match value {
+            RpcError::Strict(err) => err,
+            RpcError::Generic(err) => ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(err.to_string())),
         }
     }
 }
