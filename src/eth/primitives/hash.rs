@@ -1,3 +1,12 @@
+//! Hash Module
+//!
+//! This module provides the fundamental functionality for creating and managing
+//! Ethereum-style hashes (H256). These hashes are crucial for identifying
+//! various blockchain entities, like blocks and transactions. The module
+//! includes mechanisms to generate new hashes from bytes, create random hashes,
+//! and handle conversions between hash formats, providing a robust toolset for
+//! hash manipulation within the Ethereum ecosystem.
+
 use std::fmt::Display;
 use std::str::FromStr;
 

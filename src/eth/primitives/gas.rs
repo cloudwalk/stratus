@@ -1,3 +1,13 @@
+//! Gas Module
+//!
+//! In Ethereum, the Gas module is responsible for representing and managing
+//! gas, the unit used to measure the computational effort required to execute
+//! operations. It plays a critical role in Ethereum's transaction model,
+//! ensuring network security and preventing abuse by assigning a cost to every
+//! computation and storage operation. The module provides functionalities to
+//! calculate, track, and limit gas usage in transactions and smart contract
+//! execution.
+
 use std::fmt::Display;
 
 use ethereum_types::U256;

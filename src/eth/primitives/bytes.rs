@@ -1,3 +1,12 @@
+//! Bytes Module
+//!
+//! The Bytes module handles the representation and manipulation of arbitrary
+//! byte arrays in Ethereum-related contexts. This module is fundamental for
+//! managing raw data, such as transaction payloads, contract bytecode, and
+//! cryptographic hashes. It provides functionality for converting between
+//! various byte formats and Ethereum-specific types, playing a key role in
+//! data serialization and processing.
+
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;

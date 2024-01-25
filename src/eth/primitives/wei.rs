@@ -1,3 +1,12 @@
+//! Wei Module
+//!
+//! Manages Wei, the smallest denomination of Ether, Ethereum's native
+//! cryptocurrency. Wei is essential for representing transaction values,
+//! calculating gas costs, and handling financial operations on the Ethereum
+//! network. This module includes functionalities for manipulating Wei values,
+//! enabling precise financial operations and conversions within the Ethereum
+//! ecosystem.
+
 use std::fmt::Display;
 
 use ethabi::Token;

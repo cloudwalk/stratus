@@ -1,3 +1,11 @@
+//! Slot Module
+//!
+//! Manages the concept of slots in Ethereum's state storage. A slot represents
+//! a storage location in a smart contract, identified by an index and holding a
+//! value. This module defines the structure of a slot and provides mechanisms
+//! for interacting with slots, including reading and modifying storage data in
+//! the context of Ethereum smart contracts.
+
 use std::fmt::Display;
 
 use ethereum_types::U256;

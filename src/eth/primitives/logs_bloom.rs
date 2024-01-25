@@ -1,3 +1,12 @@
+//! Logs Bloom Module
+//!
+//! Manages Ethereum's bloom filters for logs, enabling quick membership
+//! testing for logs in a block header. Bloom filters significantly optimize
+//! log searching by providing a probabilistic data structure to check whether
+//! a log is part of a block without searching through all logs. This module
+//! defines the bloom filter structure and provides essential functionalities
+//! for interacting with and manipulating bloom filters in Ethereum.
+
 use std::ops::Deref;
 use std::ops::DerefMut;
 
