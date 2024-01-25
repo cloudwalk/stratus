@@ -4,6 +4,11 @@
 // Macros
 // -----------------------------------------------------------------------------
 
+use std::time::Duration;
+
+use tokio::runtime::Builder;
+use tokio::runtime::Runtime;
+
 /// Generates [`From`] implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) that delegates to the inner type [`From`].
 #[macro_export]
 macro_rules! gen_newtype_from {
@@ -43,6 +48,22 @@ macro_rules! if_else {
             $_false
         }
     };
+}
+
+// -----------------------------------------------------------------------------
+// Tokio
+// -----------------------------------------------------------------------------
+
+/// Creates a new Tokio runtime with the specified configuration.
+pub fn new_tokio_runtime(thread_name: &'static str, num_async_threads: usize, num_blocking_threads: usize) -> Runtime {
+    Builder::new_multi_thread()
+        .enable_all()
+        .thread_name(thread_name)
+        .worker_threads(num_async_threads)
+        .max_blocking_threads(num_blocking_threads)
+        .thread_keep_alive(Duration::from_secs(u64::MAX))
+        .build()
+        .expect("failed to build tokio runtime")
 }
 
 // -----------------------------------------------------------------------------
