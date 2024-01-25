@@ -38,7 +38,6 @@ impl BlockMiner {
         Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)
     }
 
-
     /// Mine one block with a single transaction.
     /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
     /// enabling consistent processing for both single and multiple transaction scenarios.
