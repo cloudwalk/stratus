@@ -5,8 +5,8 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::RwLock;
 
+use async_trait::async_trait;
 use indexmap::IndexMap;
-use jsonrpsee::core::async_trait;
 
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;

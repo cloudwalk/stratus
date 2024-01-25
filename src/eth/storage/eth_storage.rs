@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use jsonrpsee::core::async_trait;
+use async_trait::async_trait;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
