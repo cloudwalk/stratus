@@ -57,21 +57,20 @@ pub fn rpc_internal_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
     ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(message))
 }
 
-
 /// Helper type so that we can convert anyhow::Error to ErrorObjectOwned
 #[derive(Debug)]
-pub enum RpcError{
+pub enum RpcError {
     Strict(ErrorObjectOwned),
-    Generic(anyhow::Error)
+    Generic(anyhow::Error),
 }
 
 impl std::error::Error for RpcError {}
 
 impl Display for RpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
+        match self {
             RpcError::Strict(err) => Display::fmt(err, f),
-            RpcError::Generic(err) => Display::fmt(err, f)
+            RpcError::Generic(err) => Display::fmt(err, f),
         }
     }
 }
