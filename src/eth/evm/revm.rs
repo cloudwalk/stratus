@@ -1,4 +1,9 @@
-//! EVM implementation using [`revm`](https://crates.io/crates/revm).
+//! Concrete Implementation of the `Evm` Trait Using `revm`
+//!
+//! `Revm` is a concrete implementation of the Evm trait, utilizing the `revm` library.
+//! It translates the abstract requirements of Ethereum transaction execution into actionable logic,
+//! interacting with the project's storage backend to manage state. `Revm` embodies the practical application
+//! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
 use std::sync::Arc;
 

@@ -1,3 +1,13 @@
+//! Account Module
+//!
+//! The Account module is central to Ethereum's functionality, representing
+//! both user wallets and contracts. It encapsulates key aspects of an Ethereum
+//! account, such as its unique address, nonce (which tracks the number of
+//! transactions sent from the account), current balance, and in the case of
+//! smart contracts, their associated bytecode. This module is pivotal for
+//! tracking account states and differentiating between standard accounts and
+//! contract accounts.
+
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::KECCAK_EMPTY;

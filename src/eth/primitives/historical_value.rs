@@ -1,3 +1,11 @@
+//! Historical Value Module
+//!
+//! Manages historical data, particularly tracking changes of a value over
+//! different block numbers. This is crucial for Ethereum's state management,
+//! where understanding the state of a variable at different points in the
+//! blockchain is necessary. It supports querying past states, providing a
+//! history of changes for a particular piece of data.
+
 use std::fmt::Debug;
 
 use nonempty::NonEmpty;

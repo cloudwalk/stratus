@@ -1,3 +1,11 @@
+//! `Evm` Trait and `EvmInput` Structure
+//!
+//! Defines a standard interface for Ethereum Virtual Machine (EVM) implementations within the Stratus project,
+//! allowing for execution of smart contracts and transactions. `EvmInput` encapsulates all necessary parameters
+//! for EVM operations, including sender, receiver, value, data, nonce, and execution context. This abstraction
+//! facilitates flexible EVM integrations, enabling the project to adapt to different blockchain environments
+//! or requirements while maintaining a consistent execution interface.
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;

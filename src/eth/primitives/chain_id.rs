@@ -1,3 +1,11 @@
+//! Chain ID Module
+//!
+//! The Chain ID module provides a unique identifier for different Ethereum
+//! networks, such as Mainnet, Ropsten, or Rinkeby. This identifier is crucial
+//! in transaction signing to prevent replay attacks across different networks.
+//! The module enables the specification and verification of the network for
+//! which a particular transaction is intended.
+
 use std::fmt::Display;
 
 use ethereum_types::U256;

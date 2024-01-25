@@ -1,3 +1,13 @@
+//! Block Module
+//!
+//! The Block module forms the backbone of Ethereum's blockchain structure.
+//! Each block in the blockchain contains a header, which holds vital
+//! information about the block, and a set of transactions that the block
+//! contains. This module facilitates the creation, manipulation, and
+//! serialization of blocks, enabling interactions with the blockchain data
+//! structure, such as querying block information or broadcasting newly mined
+//! blocks.
+
 use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;

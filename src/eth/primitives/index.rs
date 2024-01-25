@@ -1,3 +1,11 @@
+//! Index Module
+//!
+//! Responsible for representing transaction or log indexes within a block.
+//! Indexes are essential for referencing specific transactions or logs in a
+//! block, enabling efficient retrieval and referencing of these items. This
+//! module includes functionality to handle conversions and representations of
+//! indexes, aligning with Ethereum's blockchain data structure needs.
+
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 

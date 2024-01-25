@@ -1,3 +1,10 @@
+//! Transaction Input Module
+//!
+//! Manages the input data for Ethereum transactions. This module defines the
+//! structure of transaction input, including sender, recipient, value, and
+//! payload. It is essential for creating and interpreting Ethereum
+//! transactions, providing a comprehensive interface for transaction data.
+
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
