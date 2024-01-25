@@ -6,7 +6,6 @@
 //! facilitates flexible EVM integrations, enabling the project to adapt to different blockchain environments
 //! or requirements while maintaining a consistent execution interface.
 
-
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;

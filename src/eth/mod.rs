@@ -19,7 +19,6 @@
 //! This approach allows for a more dynamic and responsive blockchain, adapting quickly to varying
 //! transaction loads and ensuring timely block generation.
 
-
 pub mod codegen;
 pub mod evm;
 mod executor;

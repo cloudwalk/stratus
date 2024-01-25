@@ -5,7 +5,6 @@
 //! Implementations of this trait, like `Revm`, offer concrete execution logic, leveraging dynamic dispatch
 //! via `Box<dyn Evm>` to allow for flexible, runtime-determined EVM operations.
 
-
 #[allow(clippy::module_inception)]
 mod evm;
 pub mod revm;
