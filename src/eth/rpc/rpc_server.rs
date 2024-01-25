@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use ethereum_types::U256;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -34,6 +33,8 @@ use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
+
+use super::rpc_parser::rpc_internal_error;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -206,7 +207,7 @@ async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::R
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 
         // result is failure
-        Ok(result) => Err(anyhow!("Internal error {}", hex_data(result.output)).into()),
+        Ok(result) => Err(RpcError::Strict(rpc_internal_error(hex_data(result.output)))),
 
         // internal error
         Err(e) => {
@@ -243,7 +244,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         Ok(result) if result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(result) => Err(anyhow!("Internal Error: {}", hex_data(result.output)).into()),
+        Ok(result) => Err(RpcError::Strict(rpc_internal_error(hex_data(result.output)))),
 
         // internal error
         Err(e) => {
