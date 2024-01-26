@@ -140,7 +140,7 @@ e2e-hardhat:
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus:
+e2e-stratus no-kill="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -154,6 +154,9 @@ e2e-stratus:
 
     echo "-> Running E2E tests"
     just e2e stratus
+
+    # Do not kill Stratus if no-kill is set
+    [ "{{no-kill}}" ] && exit 0
 
     echo "-> Killing Stratus"
     killport 3000
