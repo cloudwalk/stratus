@@ -150,7 +150,7 @@ e2e-stratus:
     RUST_LOG=info just run -r 0.0.0.0:3000 &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -- echo
+    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
 
     echo "-> Running E2E tests"
     just e2e stratus
