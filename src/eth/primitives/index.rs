@@ -6,10 +6,9 @@
 //! module includes functionality to handle conversions and representations of
 //! indexes, aligning with Ethereum's blockchain data structure needs.
 
-use ethereum_types::{U256, U64};
-use sqlx::database::HasValueRef;
 use ethereum_types::U256;
 use ethereum_types::U64;
+use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
