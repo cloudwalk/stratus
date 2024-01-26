@@ -9,6 +9,7 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
@@ -208,7 +209,11 @@ impl EthStorage for Postgres {
                 // TODO: there's probably a more efficient way of doing this
                 let _old_logs: Vec<PostgresLog> = vec![];
                 let _old_topics: Vec<PostgresTopic> = vec![];
+                // We're still cloning the hashes, maybe create a HashMap structure like this
+                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
+                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
+                let mut topic_partitions = partition_topics(topics);
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
@@ -216,7 +221,7 @@ impl EthStorage for Postgres {
                         // let current_tx_topics = topics.clone().into_iter().filter(|topic| topic.transaction_hash == tx.hash).collect();
 
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
-                        let (this_tx_topics, _old_topics) = topics.clone().partition(|topic| topic.transaction_hash == tx.hash);
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
                         tx.into_transaction_mined(this_tx_logs, this_tx_topics)
                     })
                     .collect();
@@ -308,6 +313,22 @@ fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, 
             part.push(log);
         } else {
             partitions.insert(log.transaction_hash.clone(), vec![log]);
+        }
+    }
+    partitions
+}
+
+fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> {
+    let mut partitions: HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> = HashMap::new();
+    for topic in topics {
+        if let Some(transaction) = partitions.get_mut(&topic.transaction_hash) {
+            if let Some(part) = transaction.get_mut(&topic.log_idx) {
+                part.push(topic);
+            } else {
+                transaction.insert(topic.log_idx, vec![topic]);
+            }
+        } else {
+            partitions.insert(topic.transaction_hash.clone(), HashMap::new());
         }
     }
     partitions
