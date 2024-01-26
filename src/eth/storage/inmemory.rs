@@ -98,7 +98,7 @@ impl EthStorage for InMemoryStorage {
 
     // -------------------------------------------------------------------------
     // State operations
-    // -------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");

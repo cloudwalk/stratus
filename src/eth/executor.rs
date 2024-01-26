@@ -6,9 +6,11 @@
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
 use std::sync::Arc;
+use std::thread;
 
 use anyhow::anyhow;
 use nonempty::NonEmpty;
+use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -145,24 +147,30 @@ impl EthExecutor {
     }
 }
 
+// for each evm, spawn a new thread that runs in an infinite loop executing transactions.
 fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> crossbeam_channel::Sender<EvmTask> {
-    // create tokio runtime to run evms
-    let threadpool = rayon::ThreadPoolBuilder::new().num_threads(evms.len()).build().unwrap();
-
-    // for each evm, spawn a new blocking task that runs in an infinite loop executing tasks
     let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
-    for mut evm in evms {
-        let evm_rx = evm_rx.clone();
 
-        threadpool.spawn(move || {
+    for mut evm in evms {
+        // clone shared resources for thread
+        let evm_rx = evm_rx.clone();
+        let tokio = Handle::current();
+
+        // prepare thread
+        let t = thread::Builder::new().name("evm".into());
+        t.spawn(move || {
+            // make tokio runtime available to this thread
+            let _tokio_guard = tokio.enter();
+
+            // keep executing transactions until the channel is closed
             while let Ok((input, tx)) = evm_rx.recv() {
                 if let Err(e) = tx.send(evm.execute(input)) {
                     tracing::error!(reason = ?e, "failed to send evm execution result");
                 };
             }
             tracing::warn!("stopping evm thread because task channel was closed");
-        });
+        })
+        .expect("spawning evm threads should not fail");
     }
-
     evm_tx
 }
