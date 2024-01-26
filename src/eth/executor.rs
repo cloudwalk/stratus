@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use nonempty::NonEmpty;
-use tokio::runtime::Runtime;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -24,7 +23,6 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
-use crate::ext::new_tokio_runtime;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -35,11 +33,8 @@ type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<TransactionExecution>>)
 /// It holds references to the EVM, block miner, and storage, managing the overall process of
 /// transaction execution, block production, and state management.
 pub struct EthExecutor {
-    // Tokio runtime where background EVMs are executed (keep reference because it cannot be dropped).
-    _runtime_guard: Runtime,
-
     // Channel to send transactions to background EVMs.
-    evm_tx: async_channel::Sender<EvmTask>,
+    evm_tx: crossbeam_channel::Sender<EvmTask>,
 
     // Mutex-wrapped miner for creating new blockchain blocks.
     miner: Mutex<BlockMiner>,
@@ -55,10 +50,9 @@ pub struct EthExecutor {
 impl EthExecutor {
     /// Creates a new executor.
     pub fn new(evms: NonEmpty<Box<dyn Evm>>, eth_storage: Arc<dyn EthStorage>) -> Self {
-        let (runtime, evm_tx) = spawn_background_evms(evms);
+        let evm_tx = spawn_background_evms(evms);
 
         Self {
-            _runtime_guard: runtime,
             evm_tx,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&eth_storage))),
             eth_storage,
@@ -136,7 +130,7 @@ impl EthExecutor {
     /// Submits a transaction to the EVM and awaits for its execution.
     async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<TransactionExecution> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<TransactionExecution>>();
-        self.evm_tx.send((evm_input, execution_tx)).await?;
+        self.evm_tx.send((evm_input, execution_tx))?;
         execution_rx.await?
     }
 
@@ -151,28 +145,24 @@ impl EthExecutor {
     }
 }
 
-fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> (Runtime, async_channel::Sender<EvmTask>) {
-    // create tokio runtime to run evm
-    let runtime = new_tokio_runtime("tokio-evm", 1, evms.len());
+fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> crossbeam_channel::Sender<EvmTask> {
+    // create tokio runtime to run evms
+    let threadpool = rayon::ThreadPoolBuilder::new().num_threads(evms.len()).build().unwrap();
 
     // for each evm, spawn a new blocking task that runs in an infinite loop executing tasks
-    let (evm_tx, evm_rx) = async_channel::unbounded::<EvmTask>();
+    let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
     for mut evm in evms {
         let evm_rx = evm_rx.clone();
 
-        runtime.spawn_blocking(move || loop {
-            let (input, tx) = match evm_rx.recv_blocking() {
-                Ok((input, tx)) => (input, tx),
-                Err(e) => {
-                    tracing::error!(reason = ?e, "failed to receive evm task");
-                    continue;
-                }
-            };
-            if let Err(e) = tx.send(evm.execute(input)) {
-                tracing::error!(reason = ?e, "failed to send evm execution result");
-            };
+        threadpool.spawn(move || {
+            while let Ok((input, tx)) = evm_rx.recv() {
+                if let Err(e) = tx.send(evm.execute(input)) {
+                    tracing::error!(reason = ?e, "failed to send evm execution result");
+                };
+            }
+            tracing::warn!("stopping evm thread because task channel was closed");
         });
     }
 
-    (runtime, evm_tx)
+    evm_tx
 }

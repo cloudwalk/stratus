@@ -1,6 +1,7 @@
 use std::cmp::max;
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use clap::Parser;
 use nonempty::NonEmpty;
@@ -12,16 +13,27 @@ use stratus::eth::rpc::serve_rpc;
 use stratus::eth::storage::EthStorage;
 use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
-use stratus::ext::new_tokio_runtime;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
+use tokio::runtime::Builder;
+use tokio::runtime::Runtime;
 
 fn main() -> anyhow::Result<()> {
-    let runtime = new_tokio_runtime("tokio-main", 1, 1); // TODO: make this value configurable
-    runtime.block_on(run_application())
+    let runtime = init_async_runtime();
+    runtime.block_on(run_rpc_server())
 }
 
-async fn run_application() -> anyhow::Result<()> {
+pub fn init_async_runtime() -> Runtime {
+    Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(1)
+        .max_blocking_threads(1)
+        .thread_keep_alive(Duration::from_secs(u64::MAX))
+        .build()
+        .expect("failed to build tokio runtime")
+}
+
+async fn run_rpc_server() -> anyhow::Result<()> {
     // parse cli configs
     let config = Config::parse();
 
