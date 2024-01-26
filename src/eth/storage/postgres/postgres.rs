@@ -1,5 +1,6 @@
-use async_trait::async_trait;
+use std::collections::HashMap;
 
+use async_trait::async_trait;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -207,13 +208,14 @@ impl EthStorage for Postgres {
                 // TODO: there's probably a more efficient way of doing this
                 let _old_logs: Vec<PostgresLog> = vec![];
                 let _old_topics: Vec<PostgresTopic> = vec![];
-
+                let mut log_partitions = partition_logs(logs);
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         // let current_tx_logs = logs.clone().into_iter().filter(|log| log.transaction_hash == tx.hash).collect();
                         // let current_tx_topics = topics.clone().into_iter().filter(|topic| topic.transaction_hash == tx.hash).collect();
-                        let (this_tx_logs, _old_logs) = logs.clone().partition(|log| log.transaction_hash == tx.hash);
+
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
                         let (this_tx_topics, _old_topics) = topics.clone().partition(|topic| topic.transaction_hash == tx.hash);
                         tx.into_transaction_mined(this_tx_logs, this_tx_topics)
                     })
@@ -297,4 +299,16 @@ impl EthStorage for Postgres {
 
         Ok(block_number)
     }
+}
+
+fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, Vec<PostgresLog>> {
+    let mut partitions: HashMap<Hash, Vec<PostgresLog>> = HashMap::new();
+    for log in logs {
+        if let Some(part) = partitions.get_mut(&log.transaction_hash) {
+            part.push(log);
+        } else {
+            partitions.insert(log.transaction_hash.clone(), vec![log]);
+        }
+    }
+    partitions
 }
