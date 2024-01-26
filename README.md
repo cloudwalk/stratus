@@ -15,9 +15,10 @@ Check our `CONTRIBUTING.md` to get started.
 
 > Ensure you have installed the dependencies
 
-- Rust
-- Just system
-- Node.js and NPM
+- [Rust](https://www.rust-lang.org/tools/install)
+- [just](https://github.com/casey/just)
+- [asdf version manager](https://asdf-vm.com/)
+- Node.js (we recommend you use asdf to install it)
 
 ## License
 
