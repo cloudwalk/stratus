@@ -206,20 +206,15 @@ impl EthStorage for Postgres {
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
 
-                // TODO: there's probably a more efficient way of doing this
-                let _old_logs: Vec<PostgresLog> = vec![];
-                let _old_topics: Vec<PostgresTopic> = vec![];
                 // We're still cloning the hashes, maybe create a HashMap structure like this
                 // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
                 // so that we don't have to clone the hashes
+                // TODO: remove unwrap()
                 let mut log_partitions = partition_logs(logs);
                 let mut topic_partitions = partition_topics(topics);
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
-                        // let current_tx_logs = logs.clone().into_iter().filter(|log| log.transaction_hash == tx.hash).collect();
-                        // let current_tx_topics = topics.clone().into_iter().filter(|topic| topic.transaction_hash == tx.hash).collect();
-
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
                         let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
                         tx.into_transaction_mined(this_tx_logs, this_tx_topics)

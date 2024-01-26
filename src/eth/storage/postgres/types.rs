@@ -43,6 +43,7 @@ pub struct PostgresTransaction {
 
 impl PostgresTransaction {
     pub fn into_transaction_mined(self, logs: Vec<PostgresLog>, mut topics: HashMap<Index, Vec<PostgresTopic>>) -> TransactionMined {
+        // TODO: remove unwrap()
         let mined_logs: Vec<LogMined> = logs
             .into_iter()
             .map(|log| {
