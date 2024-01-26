@@ -147,7 +147,7 @@ e2e-stratus:
     fi
 
     echo "-> Starting Stratus"
-    RUST_LOG=info just run -r 0.0.0.0:3000 &
+    RUST_LOG=info just run -a 0.0.0.0:3000 &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
