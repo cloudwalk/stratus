@@ -18,6 +18,7 @@ use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
 use crate::infra::postgres::Postgres;
+use itertools::Itertools;
 
 #[async_trait]
 impl EthStorage for Postgres {
@@ -68,12 +69,12 @@ impl EthStorage for Postgres {
         let slot = sqlx::query_as!(
             Slot,
             r#"
-                        SELECT
-                            idx as "index: _",
-                            value as "value: _"
-                        FROM account_slots
-                        WHERE account_address = $1 AND idx = $2 AND block_number = $3
-                    "#,
+                SELECT
+                    idx as "index: _",
+                    value as "value: _"
+                FROM account_slots
+                WHERE account_address = $1 AND idx = $2 AND block_number = $3
+            "#,
             address.as_ref(),
             slot_index.as_ref(),
             block_number,
@@ -155,7 +156,7 @@ impl EthStorage for Postgres {
                             ,result as "result: _"
                         FROM transactions
                         WHERE hash = $1
-                        "#,
+                    "#,
                     hash.as_ref()
                 )
                 .fetch_all(&self.connection_pool);
@@ -173,7 +174,7 @@ impl EthStorage for Postgres {
                             ,block_hash as "block_hash: _"
                         FROM logs
                         WHERE block_hash = $1
-                        "#,
+                    "#,
                     hash.as_ref()
                 )
                 .fetch_all(&self.connection_pool);
@@ -190,7 +191,7 @@ impl EthStorage for Postgres {
                             ,block_hash as "block_hash: _"
                         FROM topics
                         WHERE block_hash = $1
-                        "#,
+                    "#,
                     hash.as_ref()
                 )
                 .fetch_all(&self.connection_pool);
@@ -198,25 +199,31 @@ impl EthStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                // let (header, transactions, logs, topics) = tokio::join!(header_query, transactions_query, logs_query, topics_query);
                 let header = res.0?;
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
-
+                
                 // TODO: there's probably a more efficient way of doing this
-                let transactions = transactions
-                    .into_iter()
-                    .map(|tx| {
-                        let current_tx_logs = logs.clone().filter(|log| log.transaction_hash == tx.hash).collect();
-                        let current_tx_topics = topics.clone().filter(|topic| topic.transaction_hash == tx.hash).collect();
-                        tx.into_transaction_mined(current_tx_logs, current_tx_topics)
-                    })
-                    .collect();
+                let mut old_logs: Vec<PostgresLog> = vec![];
+                let mut old_topics: Vec<PostgresTopic> = vec![];
 
-                let block = Block { header, transactions };
+                
+                let transactions = transactions.into_iter().map(|tx| {
+                    // let current_tx_logs = logs.clone().into_iter().filter(|log| log.transaction_hash == tx.hash).collect();
+                    // let current_tx_topics = topics.clone().into_iter().filter(|topic| topic.transaction_hash == tx.hash).collect();
+                    let (this_tx_logs, old_logs) = logs.clone().partition(|log| log.transaction_hash == tx.hash);
+                    let (this_tx_topics, old_topics) = topics.clone().partition(|topic| topic.transaction_hash == tx.hash);
+                    tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                }).collect();
 
-                Ok::<Option<Block>, anyhow::Error>(Some(block))
+
+                let block = Block {
+                    header,
+                    transactions
+                };
+
+                Ok::<Block, Box<dyn std::error::Error>>(block)
             }
 
             BlockSelection::Number(number) => {

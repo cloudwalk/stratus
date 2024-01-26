@@ -8,6 +8,8 @@
 
 use ethereum_types::{U256, U64};
 use sqlx::database::HasValueRef;
+use ethereum_types::U256;
+use ethereum_types::U64;
 use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
