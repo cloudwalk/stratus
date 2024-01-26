@@ -1,9 +1,11 @@
 use std::cmp::max;
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use clap::Parser;
 use nonempty::NonEmpty;
+use stratus::config;
 use stratus::config::Config;
 use stratus::config::StorageConfig;
 use stratus::eth::evm::revm::Revm;
@@ -15,29 +17,9 @@ use stratus::eth::EthExecutor;
 use stratus::ext::new_tokio_runtime;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
+use tokio::task::JoinError;
 
 fn main() -> anyhow::Result<()> {
-    let runtime = new_tokio_runtime("tokio-main", 1, 1); // TODO: make this value configurable
-    runtime.block_on(async {
-        let rpc_handle = tokio::spawn(async {
-            if let Err(e) = run_rpc_server().await {
-                tracing::error!("Error running application: {}", e);
-            }
-        });
-
-        let p2p_handle = tokio::spawn(async {
-            if let Err(e) = run_p2p_server().await {
-                tracing::error!("Error running P2P: {}", e);
-            }
-        });
-
-        tokio::try_join!(rpc_handle, p2p_handle)?;
-
-        Ok(())
-    })
-}
-
-async fn run_rpc_server() -> anyhow::Result<()> {
     // parse cli configs
     let config = Config::parse();
 
@@ -45,6 +27,30 @@ async fn run_rpc_server() -> anyhow::Result<()> {
     infra::init_tracing();
     infra::init_metrics();
 
+    let runtime = new_tokio_runtime("tokio-main", 2, 2); // TODO: make this value configurable
+
+    runtime.block_on(async {
+        let rpc_handle = tokio::spawn(run_rpc_server(config));
+        let p2p_handle = tokio::spawn(run_p2p_server());
+
+        match tokio::try_join!(rpc_handle, p2p_handle) {
+            Ok((rpc_result, p2p_result)) => {
+                dbg!(&rpc_result);
+                rpc_result?;
+                p2p_result?;
+                Ok(())
+            },
+            Err(e) => {
+              tracing::error!("An error occurred: {:?}", e);
+              Err(anyhow::Error::new(e))
+            }
+        }
+    })
+}
+
+async fn run_rpc_server(config: Config) -> anyhow::Result<()> {
+    tracing::info!("Starting RPC server");
+    return Err(anyhow::anyhow!("An error occurred for debugging purposes"));
     // init services
     let storage: Arc<dyn EthStorage> = match config.storage {
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
@@ -57,6 +63,7 @@ async fn run_rpc_server() -> anyhow::Result<()> {
 
     // start rpc server
     serve_rpc(executor, storage, config.address).await?;
+    tracing::info!("RPC server started");
     Ok(())
 }
 
@@ -78,7 +85,21 @@ fn init_evms(storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
 }
 
 async fn run_p2p_server() -> anyhow::Result<()> {
+    tracing::info!("Starting P2P server");
     let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
 
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    tracing::info!("P2P server started");
     Ok(())
 }
