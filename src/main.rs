@@ -18,10 +18,26 @@ use stratus::infra::postgres::Postgres;
 
 fn main() -> anyhow::Result<()> {
     let runtime = new_tokio_runtime("tokio-main", 1, 1); // TODO: make this value configurable
-    runtime.block_on(run_application())
+    runtime.block_on(async {
+        let rpc_handle = tokio::spawn(async {
+            if let Err(e) = run_rpc_server().await {
+                tracing::error!("Error running application: {}", e);
+            }
+        });
+
+        let p2p_handle = tokio::spawn(async {
+            if let Err(e) = run_p2p_server().await {
+                tracing::error!("Error running P2P: {}", e);
+            }
+        });
+
+        tokio::try_join!(rpc_handle, p2p_handle)?;
+
+        Ok(())
+    })
 }
 
-async fn run_application() -> anyhow::Result<()> {
+async fn run_rpc_server() -> anyhow::Result<()> {
     // parse cli configs
     let config = Config::parse();
 
@@ -59,4 +75,10 @@ fn init_evms(storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
     }
     tracing::info!(evms = %num_evms, "evms initialized");
     NonEmpty::from_vec(evms).unwrap()
+}
+
+async fn run_p2p_server() -> anyhow::Result<()> {
+    let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
+
+    Ok(())
 }
