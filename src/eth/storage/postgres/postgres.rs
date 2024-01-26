@@ -161,7 +161,7 @@ impl EthStorage for Postgres {
                 .fetch_all(&self.connection_pool);
 
                 let logs_query = sqlx::query_as!(
-                    PostgresLogs,
+                    PostgresLog,
                     r#"
                         SELECT
                             address as "address: _"
@@ -199,26 +199,26 @@ impl EthStorage for Postgres {
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
                 // let (header, transactions, logs, topics) = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0.map_err(|_| EthError::UnexpectedStorageError)?;
-                let transactions = res.1.map_err(|_| EthError::UnexpectedStorageError)?;
-                let logs = res.2.map_err(|_| EthError::UnexpectedStorageError)?.into_iter();
-                let topics = res.3.map_err(|_| EthError::UnexpectedStorageError)?.into_iter();
+                let header = res.0?;
+                let transactions = res.1?;
+                let logs = res.2?.into_iter();
+                let topics = res.3?.into_iter();
 
                 // TODO: there's probably a more efficient way of doing this
-                let transactions = transactions.into_iter().map(|tx| {
-                    let current_tx_logs = logs.clone().filter(|log| log.transaction_hash == tx.hash).collect();
-                    let current_tx_topics = topics.clone().filter(|topic| topic.transaction_hash == tx.hash).collect();
-                    tx.into_transaction_mined(current_tx_logs, current_tx_topics)
-                }).collect();
+                let transactions = transactions
+                    .into_iter()
+                    .map(|tx| {
+                        let current_tx_logs = logs.clone().filter(|log| log.transaction_hash == tx.hash).collect();
+                        let current_tx_topics = topics.clone().filter(|topic| topic.transaction_hash == tx.hash).collect();
+                        tx.into_transaction_mined(current_tx_logs, current_tx_topics)
+                    })
+                    .collect();
 
-                let block = Block {
-                    header,
-                    transactions
-                };
+                let block = Block { header, transactions };
 
-                Ok::<Option<Block>, EthError>(Some(block))
+                Ok::<Option<Block>, anyhow::Error>(Some(block))
             }
-    
+
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number)?;
 
@@ -239,13 +239,12 @@ impl EthStorage for Postgres {
                 )
                 .fetch_one(&self.connection_pool)
                 .await;
+                todo!()
             }
             BlockSelection::Earliest => {
                 todo!()
             }
-        };
-
-        todo!();
+        }
     }
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {

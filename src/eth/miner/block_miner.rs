@@ -20,7 +20,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
-use crate::eth::EthError;
 use crate::ext::not;
 
 pub struct BlockMiner {

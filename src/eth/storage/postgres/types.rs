@@ -91,7 +91,7 @@ pub struct PostgresLog {
 
 impl PostgresLog {
     pub fn into_log_mined(self, topics: Vec<PostgresTopic>) -> LogMined {
-        let topics: Vec<LogTopic> = topics.into_iter().map(|topic| LogTopic::from(topic)).collect();
+        let topics: Vec<LogTopic> = topics.into_iter().map(LogTopic::from).collect();
         let log = Log {
             data: self.data,
             address: self.address,
