@@ -21,6 +21,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilterInput;
+use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
@@ -118,6 +119,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // subscriptions
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
+
+    // storage
+    module.register_async_method("eth_getStorageAt", eth_get_storage_at)?;
 
     Ok(module)
 }
@@ -315,6 +319,19 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     Ok(())
 }
 
+// Storage
+async fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let (params, index) = next_rpc_param::<SlotIndex>(params)?;
+    let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
+
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
+    let slot = ctx.storage.read_slot(&address, &index, &point_in_time).await?;
+
+    // It must be padded, even if it is zero.
+    Ok(hex_num_zero_padded(slot.value.as_u256()))
+}
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -326,6 +343,12 @@ fn hex_data<T: AsRef<[u8]>>(value: T) -> String {
 #[inline(always)]
 fn hex_num(value: impl Into<U256>) -> String {
     format!("{:#x}", value.into())
+}
+
+#[inline(always)]
+fn hex_num_zero_padded(value: impl Into<U256>) -> String {
+    let width = 64 + 2; //the prefix is included in the total width
+    format!("{:#0width$x}", value.into(), width = width)
 }
 
 fn hex_zero() -> String {

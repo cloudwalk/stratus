@@ -106,6 +106,12 @@ impl From<SlotIndex> for [u8; 32] {
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(U256);
 
+impl SlotValue {
+    pub fn as_u256(&self) -> U256 {
+        self.0
+    }
+}
+
 impl Display for SlotValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:#x}", self.0)
