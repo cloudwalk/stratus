@@ -19,7 +19,9 @@ setup:
 
 # Stratus: Run locally with debug options
 run *args="":
+    #!/bin/bash
     RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run -- {{args}}
+    exit 0
 
 # Stratus: Run locally with release options
 run-release *args="":

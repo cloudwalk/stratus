@@ -175,6 +175,22 @@ describe("Transaction: serial requests", () => {
         (await rpc.sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_ADD] }])).length(2);
         (await rpc.sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_SUB] }])).length(1);
     });
+
+    it("Check storage", async () => {
+
+        const charlieBalance = await _contract.get(CHARLIE.address);
+        const expectedStorageValue = rpc.toPaddedHex(charlieBalance, 32);
+
+        // Calculate Charlie's position in balances mapping
+        const balancesSlot = 0;
+        const charlieStoragePosition = rpc.calculateAddressStoragePosition(CHARLIE.address, balancesSlot);
+
+        const actualStorageValue = await rpc.send(
+            "eth_getStorageAt", [_contract.target, charlieStoragePosition, "latest"]
+        );
+        
+        expect(actualStorageValue).eq(expectedStorageValue);
+    });
 });
 
 // -----------------------------------------------------------------------------

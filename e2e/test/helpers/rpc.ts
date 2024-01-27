@@ -1,6 +1,6 @@
 import axios from "axios";
 import { expect } from "chai";
-import { JsonRpcProvider } from "ethers";
+import { JsonRpcProvider, keccak256 } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 
@@ -88,6 +88,23 @@ export async function deployTestContract(): Promise<TestContract> {
 // Converts a number to Blockchain hex representation (prefixed with 0x).
 export function toHex(number: number | bigint): string {
     return "0x" + number.toString(16);
+}
+
+export function toPaddedHex(number: number | bigint, bytes: number): string {
+    return "0x" + number.toString(16).padStart(bytes * 2, "0");
+}
+
+// Calculate the storage position of an address key in a mapping.
+// See https://docs.soliditylang.org/en/v0.8.6/internals/layout_in_storage.html#mappings-and-dynamic-arrays
+export function calculateAddressStoragePosition(address: string, slot: number): string {
+    // Convert slot number and address key to 32-byte hexadecimal values
+    const paddedSlotHex = slot.toString(16).padStart(64, "0");
+    const paddedAddress = address.substring(2).padStart(64, "0");
+
+    // Hash the address key with the slot to find the storage position
+    const storagePosition = keccak256("0x" + paddedAddress + paddedSlotHex);
+
+    return storagePosition;
 }
 
 // -----------------------------------------------------------------------------
