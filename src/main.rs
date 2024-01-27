@@ -14,18 +14,31 @@ use stratus::eth::rpc::serve_rpc;
 use stratus::eth::storage::EthStorage;
 use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
-use stratus::ext::new_tokio_runtime;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
 use tokio::sync::broadcast;
 use tokio::select;
+use tokio::runtime::Builder;
+use tokio::runtime::Runtime;
+
+
+pub fn init_async_runtime() -> Runtime {
+    Builder::new_multi_thread()
+        .enable_all()
+        .thread_name("tokio")
+        .worker_threads(1)
+        .max_blocking_threads(1)
+        .thread_keep_alive(Duration::from_secs(u64::MAX))
+        .build()
+        .expect("failed to build tokio runtime")
+}
 
 fn main() -> anyhow::Result<()> {
     let config = Config::parse();
     infra::init_tracing();
     infra::init_metrics();
 
-    let runtime = new_tokio_runtime("tokio-main", 2, 2);
+    let runtime = init_async_runtime();
     let (tx, _) = broadcast::channel::<()>(1);
 
     runtime.block_on(async {

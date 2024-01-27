@@ -14,6 +14,7 @@ use serde_json::Value as JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogTopic;
 
@@ -27,10 +28,10 @@ pub struct LogMined {
     pub transaction_hash: Hash,
 
     /// Position of the transaction that emitted this log inside the block.
-    pub transaction_index: usize,
+    pub transaction_index: Index,
 
     /// Position of the log inside the block.
-    pub log_index: usize,
+    pub log_index: Index,
 
     /// Block number where the log was mined.
     pub block_number: BlockNumber,

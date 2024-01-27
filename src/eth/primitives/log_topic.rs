@@ -15,6 +15,12 @@ use revm::primitives::B256 as RevmB256;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LogTopic(H256);
 
+impl LogTopic {
+    pub fn new(inner: H256) -> Self {
+        Self(inner)
+    }
+}
+
 impl Dummy<Faker> for LogTopic {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(H256::random_using(rng))

@@ -12,6 +12,8 @@ pub fn init_tracing() {
     tracing_subscriber::fmt()
         .compact()
         .with_target(false)
+        .with_thread_ids(true)
+        .with_thread_names(true)
         .with_env_filter(EnvFilter::from_default_env())
         .try_init()
         .expect("Tracing initialization failed");

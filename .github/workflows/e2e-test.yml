@@ -1,0 +1,43 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  e2e-stratus:
+    name: Stratus e2e tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - name: Set up Just
+        uses: extractions/setup-just@v1
+
+      - name: Set up ASDF Version Manager
+        uses: asdf-vm/actions/setup@v3
+
+      - name: Install Node.js
+        run: |
+            asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
+            asdf install nodejs 20.10.0
+            asdf global nodejs 20.10.0
+
+      - name: Set up Test Dependencies
+        run: |
+            cargo install killport
+            cargo install wait-service
+
+      - name: Run e2e tests
+        run: just e2e-stratus no-kill
