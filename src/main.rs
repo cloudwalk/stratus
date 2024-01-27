@@ -26,6 +26,7 @@ fn main() -> anyhow::Result<()> {
 pub fn init_async_runtime() -> Runtime {
     Builder::new_multi_thread()
         .enable_all()
+        .thread_name("tokio")
         .worker_threads(1)
         .max_blocking_threads(1)
         .thread_keep_alive(Duration::from_secs(u64::MAX))
