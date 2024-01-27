@@ -74,3 +74,11 @@ impl TryFrom<UnixTime> for i64 {
         timestamp_in_secs.0.try_into()
     }
 }
+
+impl TryFrom<UnixTime> for i32 {
+    type Error = TryFromIntError;
+
+    fn try_from(timestamp_in_secs: UnixTime) -> Result<i32, TryFromIntError> {
+        timestamp_in_secs.0.try_into()
+    }
+}

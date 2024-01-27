@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use sqlx::types::BigDecimal;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -35,6 +36,8 @@ impl EthStorage for Postgres {
 
         let block_number = i64::try_from(block)?;
 
+        // This query is overflowing on the second transaction when the evm tries to read the account
+        // reading address=0x00000000000000000000000000000000000000ff
         let account = sqlx::query_as!(
             Account,
             r#"
@@ -50,7 +53,13 @@ impl EthStorage for Postgres {
             block_number,
         )
         .fetch_one(&self.connection_pool)
-        .await?;
+        .await
+        .unwrap_or(Account {
+            address: address.clone(),
+            ..Account::default()
+        });
+
+        tracing::debug!(%address, "Account read");
 
         Ok(account)
     }
@@ -150,7 +159,6 @@ impl EthStorage for Postgres {
                             ,block_number as "block_number: _"
                             ,block_hash as "block_hash: _"
                             ,output as "output: _"
-                            ,block_timestamp as "block_timestamp: _"
                             ,value as "value: _"
                             ,v as "v: _"
                             ,s as "s: _"
@@ -209,7 +217,6 @@ impl EthStorage for Postgres {
                 // We're still cloning the hashes, maybe create a HashMap structure like this
                 // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
                 // so that we don't have to clone the hashes
-                // TODO: remove unwrap()
                 let mut log_partitions = partition_logs(logs);
                 let mut topic_partitions = partition_topics(topics);
                 let transactions = transactions
@@ -263,9 +270,106 @@ impl EthStorage for Postgres {
         Ok(Vec::new())
     }
 
+    // The types conversions are ugly, but they are acting as a placeholder until we decide if we'll use
+    // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
+    // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
+    //either worked for some reason I was not able to determine at this time)
     async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         tracing::debug!(block = ?block, "saving block");
-        todo!()
+        sqlx::query!(
+            "INSERT INTO blocks(hash, transactions_root, gas, logs_bloom, timestamp_in_secs, created_at)
+            VALUES ($1, $2, $3, $4, $5, current_timestamp)",
+            block.header.hash.as_ref(),
+            block.header.transactions_root.as_ref(),
+            BigDecimal::from(block.header.gas),
+            block.header.bloom.as_ref(),
+            i32::try_from(block.header.timestamp_in_secs)?
+        )
+        .execute(&self.connection_pool)
+        .await?;
+
+        for transaction in block.transactions {
+            for change in transaction.execution.changes {
+                let nonce = change.nonce.take().unwrap_or(0.into());
+                let balance = change.balance.take().unwrap_or(0.into());
+                let bytecode = change.bytecode.take().unwrap_or(None).map(|val| val.as_ref().to_owned());
+                sqlx::query!(
+                    r#"
+                INSERT INTO accounts
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (address) DO UPDATE
+                SET nonce = EXCLUDED.nonce,
+                    balance = EXCLUDED.balance,
+                    bytecode = EXCLUDED.bytecode"#,
+                    change.address.as_ref(),
+                    BigDecimal::from(nonce),
+                    BigDecimal::from(balance),
+                    bytecode,
+                    i64::try_from(block.header.number)?
+                )
+                .execute(&self.connection_pool)
+                .await?;
+            }
+
+            for log in transaction.logs {
+                let tx_hash = log.transaction_hash.as_ref();
+                let tx_idx = i32::from(log.transaction_index);
+                let lg_idx = i32::from(log.log_index);
+                let b_number = i64::try_from(log.block_number)?;
+                let b_hash = log.block_hash.as_ref();
+                sqlx::query!(
+                    "INSERT INTO logs VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    log.log.address.as_ref(),
+                    *log.log.data,
+                    tx_hash,
+                    tx_idx,
+                    lg_idx,
+                    b_number,
+                    b_hash
+                )
+                .execute(&self.connection_pool)
+                .await?;
+                for topic in log.log.topics {
+                    sqlx::query!(
+                        "INSERT INTO topics VALUES ($1, $2, $3, $4, $5, $6)",
+                        topic.as_ref(),
+                        tx_hash,
+                        tx_idx,
+                        lg_idx,
+                        b_number,
+                        b_hash
+                    )
+                    .execute(&self.connection_pool)
+                    .await?;
+                }
+            }
+
+            sqlx::query!(
+                "INSERT INTO transactions
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+                transaction.input.hash.as_ref(),
+                transaction.input.signer.as_ref(),
+                BigDecimal::from(transaction.input.nonce),
+                transaction.input.signer.as_ref(),
+                transaction.input.to.unwrap_or_default().as_ref().to_owned(),
+                *transaction.input.input,
+                *transaction.execution.output,
+                BigDecimal::from(transaction.execution.gas),
+                BigDecimal::from(transaction.input.gas_price),
+                i32::from(transaction.transaction_index),
+                i64::try_from(transaction.block_number)?,
+                transaction.block_hash.as_ref(),
+                &<[u8; 8]>::from(transaction.input.v),
+                &<[u8; 32]>::from(transaction.input.r),
+                &<[u8; 32]>::from(transaction.input.s),
+                BigDecimal::from(transaction.input.value),
+                transaction.execution.result.to_string()
+            )
+            .execute(&self.connection_pool)
+            .await?;
+        }
+
+        Ok(())
     }
 
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
@@ -273,14 +377,14 @@ impl EthStorage for Postgres {
 
         let currval: i64 = sqlx::query_scalar!(
             r#"
-                        SELECT CURRVAL('block_number_seq') as "n!: _"
+                SELECT MAX(number) as "n!: _" FROM blocks
                     "#
         )
         .fetch_one(&self.connection_pool)
-        .await?;
+        .await
+        .unwrap_or(0);
 
         let block_number = BlockNumber::from(currval);
-
         Ok(block_number)
     }
 
@@ -289,11 +393,13 @@ impl EthStorage for Postgres {
 
         let nextval: i64 = sqlx::query_scalar!(
             r#"
-                        SELECT NEXTVAL('block_number_seq') as "n!: _"
-                    "#
+                SELECT MAX(number) as "n!: _" FROM blocks
+            "#
         )
         .fetch_one(&self.connection_pool)
-        .await?;
+        .await
+        .unwrap_or(0)
+            + 1;
 
         let block_number = BlockNumber::from(nextval);
 

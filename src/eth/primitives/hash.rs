@@ -82,6 +82,19 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
     }
 }
 
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Hash {
+    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull
+    where
+        Self: Sized,
+    {
+        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
+    }
+
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull {
+        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
+    }
+}
+
 impl sqlx::Type<sqlx::Postgres> for Hash {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("BYTEA")

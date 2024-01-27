@@ -54,6 +54,19 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Nonce {
     }
 }
 
+impl<'r> sqlx::Encode<'r, sqlx::Postgres> for Nonce {
+    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'r>>::ArgumentBuffer) -> sqlx::encode::IsNull
+    where
+        Self: Sized,
+    {
+        BigDecimal::parse_bytes(&<[u8; 32]>::from(self.0), 10).encode(buf)
+    }
+
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'r>>::ArgumentBuffer) -> sqlx::encode::IsNull {
+        BigDecimal::parse_bytes(&<[u8; 32]>::from(self.0), 10).encode(buf)
+    }
+}
+
 impl sqlx::Type<sqlx::Postgres> for Nonce {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
@@ -72,5 +85,11 @@ impl From<Nonce> for u64 {
 impl From<Nonce> for U256 {
     fn from(value: Nonce) -> Self {
         value.0
+    }
+}
+
+impl From<Nonce> for BigDecimal {
+    fn from(value: Nonce) -> Self {
+        BigDecimal::parse_bytes(&<[u8; 32]>::from(U256::from(value)), 10).unwrap_or(BigDecimal::from(0))
     }
 }

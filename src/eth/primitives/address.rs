@@ -10,6 +10,7 @@
 //! for receiving block rewards).
 
 use std::fmt::Display;
+use std::ops::Deref;
 
 use ethabi::Token;
 use ethereum_types::H160;
@@ -65,6 +66,13 @@ impl Dummy<Faker> for Address {
     }
 }
 
+impl Deref for Address {
+    type Target = H160;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
@@ -103,7 +111,7 @@ impl sqlx::Type<sqlx::Postgres> for Address {
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
-        &self.0 .0
+        self.0.as_bytes()
     }
 }
 

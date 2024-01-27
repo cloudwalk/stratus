@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO transactions\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Numeric",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Numeric",
+        "Numeric",
+        "Int4",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Numeric",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "39787bed8fd1948e70b1271a4faf57170ec1bd4336e683bdaabc9ec449d65838"
+}

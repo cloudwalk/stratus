@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                        SELECT CURRVAL('block_number_seq') as \"n!: _\"\n                    ",
+  "query": "\n                SELECT MAX(number) as \"n!: _\" FROM blocks\n                    ",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       null
     ]
   },
-  "hash": "6b6552bb23e0e45302eb825393e8e2769630ad676b614413829a0aa1e775920d"
+  "hash": "dce06bfd0754daebe09068ce74dbf6f62308ee0366d6a185307c5fbf6f7c56c9"
 }

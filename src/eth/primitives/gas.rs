@@ -15,6 +15,7 @@ use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
+use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 
@@ -71,5 +72,11 @@ impl From<Gas> for U256 {
 impl From<Gas> for usize {
     fn from(value: Gas) -> Self {
         value.0.as_usize()
+    }
+}
+
+impl From<Gas> for BigDecimal {
+    fn from(value: Gas) -> Self {
+        BigDecimal::parse_bytes(&<[u8; 32]>::from(U256::from(value)), 10).unwrap_or(BigDecimal::from(0))
     }
 }
