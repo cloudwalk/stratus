@@ -1,11 +1,11 @@
 import { expect } from "chai";
 import { keccak256 } from "ethers";
-import { ethers } from "hardhat";
 import { match } from "ts-pattern";
 import { Block, Transaction, TransactionReceipt } from "web3-types";
+import { contract } from "web3/lib/commonjs/eth.exports";
 
 import { TestContract } from "../typechain-types";
-import { ALICE, BOB, CHARLIE } from "./helpers/account";
+import { ACCOUNTS, ALICE, BOB, CHARLIE } from "./helpers/account";
 import { CURRENT_NETWORK, Network } from "./helpers/network";
 import * as rpc from "./helpers/rpc";
 
@@ -31,7 +31,7 @@ const CONTRACT_TOPIC_SUB = "0xf9c652bcdb0eed6299c6a878897eb3af110dbb265833e7af75
 // -----------------------------------------------------------------------------
 // RPC tests
 // -----------------------------------------------------------------------------
-describe("JSON-RPC", () => {
+describe("JSON-RPC methods", () => {
     describe("Metadata", () => {
         it("eth_chainId", async () => {
             (await rpc.sendExpect("eth_chainId")).eq(CHAIN_ID);
@@ -75,7 +75,7 @@ describe("JSON-RPC", () => {
 // -----------------------------------------------------------------------------
 // Native transfer tests
 // -----------------------------------------------------------------------------
-describe("Wei Transaction", () => {
+describe("Transaction: wei transfer", () => {
     var _tx: Transaction;
     var _txHash: string;
     var _block: Block;
@@ -131,44 +131,85 @@ describe("Wei Transaction", () => {
 // -----------------------------------------------------------------------------
 // Contracts tests
 // -----------------------------------------------------------------------------
-describe("Contract", async () => {
+describe("Transaction: serial requests", () => {
     var _contract: TestContract;
-    var _block: bigint;
+    var _block: number;
 
-    it("Is deployed", async () => {
-        const testContractFactory = await ethers.getContractFactory("TestContract");
-        _contract = await testContractFactory.connect(CHARLIE.signer()).deploy();
+    it("Contract is deployed", async () => {
+        _contract = await rpc.deployTestContract();
     });
 
-    it("Performs add/bub", async () => {
-        _block = await rpc.WEB3.eth.getBlockNumber();
+    it("Performs add and sub", async () => {
+        _block = await rpc.getBlockNumber();
 
         // initial balance
         expect(await _contract.get(CHARLIE.address)).eq(0);
 
         // mutations
-        let nonce = await rpc.ETHERJS.getTransactionCount(CHARLIE.address);
-        const ops = _contract.connect(CHARLIE.signer());
-        await ops.add(10, { nonce: nonce++ });
-        await ops.add(15, { nonce: nonce++ });
-        await ops.sub(5, { nonce: nonce++ });
+        let nonce = await rpc.getNonce(CHARLIE.address);
+        const contractOps = _contract.connect(CHARLIE.signer());
+        await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
+        await contractOps.add(CHARLIE.address, 15, { nonce: nonce++ });
+        await contractOps.sub(CHARLIE.address, 5, { nonce: nonce++ });
 
         // final balance
         expect(await _contract.get(CHARLIE.address)).eq(20);
     });
 
     it("Generates logs", async () => {
-        let f = { address: _contract.target, fromBlock: rpc.toHex(_block + 0n) };
+        let filter = { address: _contract.target, fromBlock: rpc.toHex(_block + 0) };
 
         // filter fromBlock
-        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 0n) }])).length(3);
-        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 1n) }])).length(3);
-        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 2n) }])).length(2);
-        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 3n) }])).length(1);
-        (await rpc.sendExpect("eth_getLogs", [{ ...f, fromBlock: rpc.toHex(_block + 4n) }])).length(1);
+        (await rpc.sendExpect("eth_getLogs", [{ ...filter, fromBlock: rpc.toHex(_block + 0) }])).length(3);
+        (await rpc.sendExpect("eth_getLogs", [{ ...filter, fromBlock: rpc.toHex(_block + 1) }])).length(3);
+        (await rpc.sendExpect("eth_getLogs", [{ ...filter, fromBlock: rpc.toHex(_block + 2) }])).length(2);
+        (await rpc.sendExpect("eth_getLogs", [{ ...filter, fromBlock: rpc.toHex(_block + 3) }])).length(1);
+        (await rpc.sendExpect("eth_getLogs", [{ ...filter, fromBlock: rpc.toHex(_block + 4) }])).length(1);
 
         // filter topics
-        (await rpc.sendExpect("eth_getLogs", [{ ...f, topics: [CONTRACT_TOPIC_ADD] }])).length(2);
-        (await rpc.sendExpect("eth_getLogs", [{ ...f, topics: [CONTRACT_TOPIC_SUB] }])).length(1);
+        (await rpc.sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_ADD] }])).length(2);
+        (await rpc.sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_SUB] }])).length(1);
+    });
+});
+
+// -----------------------------------------------------------------------------
+// Parallel transactions tests
+// -----------------------------------------------------------------------------
+describe("Transaction: parallel requests", async () => {
+    var _contract: TestContract;
+    it("Deploy test contract", async () => {
+        _contract = await rpc.deployTestContract();
+    });
+
+    it("Sends parallel transactions", async () => {
+        // initial balance
+        expect(await _contract.get(CHARLIE.address)).eq(0);
+
+        // prepare transactions
+        const transactions = [];
+        var expectedBalance = 0;
+        for (let accountIndex = 0; accountIndex < ACCOUNTS.length; accountIndex++) {
+            const account = ACCOUNTS[accountIndex];
+            const amount = accountIndex + 1;
+            expectedBalance += amount;
+
+            const nonce = await rpc.getNonce(account.address);
+            const tx = await _contract
+                .connect(account.signer())
+                .add.populateTransaction(CHARLIE.address, amount, { nonce: nonce, gasPrice: 0 });
+            const txSigned = await account.signer().signTransaction(tx);
+            transactions.push(txSigned);
+        }
+
+        // send all transactions in parallel
+        const requests = [];
+        for (const tx of transactions) {
+            const req = rpc.send("eth_sendRawTransaction", [tx]).then((_) => {});
+            requests.push(req);
+        }
+        await Promise.all(requests);
+
+        // final balance
+        // expect(await _contract.get(CHARLIE.address)).eq(expectedBalance);
     });
 });

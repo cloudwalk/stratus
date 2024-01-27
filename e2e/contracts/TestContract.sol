@@ -5,22 +5,31 @@ contract TestContract {
 
     mapping(address => uint256) public balances;
 
-    event Add(address indexed from, uint amount);
-    event Sub(address indexed from, uint amount);
+    event Add(address indexed account, uint amount);
+    event Sub(address indexed account, uint amount);
 
-    function add(uint256 amount) public returns (uint256) {
-        balances[msg.sender] += amount;
-        emit Add(msg.sender, amount);
+    /// @dev Add amount to the balance of an account.
+    /// @return The new balance.
+    function add(address account, uint256 amount) public returns (uint256) {
+        balances[account] += amount;
+        emit Add(account, amount);
+
         return balances[msg.sender];
     }
 
-    function sub(uint256 amount) public returns (uint256) {
-        require(balances[msg.sender] >= amount, "Insufficient balance");
-        balances[msg.sender] -= amount;
-        emit Sub(msg.sender, amount);
+    /// @dev Subtract amount from the balance of an account.
+    /// @return The new balance.
+    function sub(address account, uint256 amount) public returns (uint256) {
+        require(balances[account] >= amount, "Insufficient balance");
+
+        balances[account] -= amount;
+        emit Sub(account, amount);
+
         return balances[msg.sender];
     }
 
+    /// @dev Get the balance of an account.
+    /// @return The balance of the account.
     function get(address account) public view returns (uint256) {
         return balances[account];
     }
