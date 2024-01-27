@@ -8,6 +8,7 @@
 //! hash manipulation within the Ethereum ecosystem.
 
 use std::fmt::Display;
+use std::ops::Deref;
 use std::str::FromStr;
 
 use anyhow::anyhow;
@@ -53,6 +54,13 @@ impl AsRef<[u8]> for Hash {
     }
 }
 
+impl Deref for Hash {
+    type Target = H256;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
@@ -79,6 +87,19 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Hash {
+    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull
+    where
+        Self: Sized,
+    {
+        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.as_fixed_bytes(), buf)
+    }
+
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull {
+        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.as_fixed_bytes(), buf)
     }
 }
 

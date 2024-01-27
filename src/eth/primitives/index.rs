@@ -67,3 +67,9 @@ impl From<Index> for U256 {
         value.0.into()
     }
 }
+
+impl From<Index> for i32 {
+    fn from(value: Index) -> Self {
+        value.0.into()
+    }
+}

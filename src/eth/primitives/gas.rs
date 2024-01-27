@@ -9,12 +9,14 @@
 //! execution.
 
 use std::fmt::Display;
+use std::ops::Deref;
 
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
+use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 
@@ -35,6 +37,13 @@ impl Display for Gas {
 impl Dummy<Faker> for Gas {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
+    }
+}
+
+impl Deref for Gas {
+    type Target = U256;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -71,5 +80,11 @@ impl From<Gas> for U256 {
 impl From<Gas> for usize {
     fn from(value: Gas) -> Self {
         value.0.as_usize()
+    }
+}
+
+impl From<Gas> for BigDecimal {
+    fn from(value: Gas) -> Self {
+        BigDecimal::parse_bytes(&<[u8; 32]>::from(U256::from(value)), 10).unwrap_or(BigDecimal::from(0))
     }
 }

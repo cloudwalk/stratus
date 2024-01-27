@@ -17,7 +17,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionResult;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 
 pub struct PostgresTransaction {
@@ -33,7 +32,7 @@ pub struct PostgresTransaction {
     pub block_number: BlockNumber,
     pub block_hash: Hash,
     pub result: TransactionExecutionResult,
-    pub block_timestamp: UnixTime,
+    // pub block_timestamp: UnixTime,
     pub output: Bytes,
     pub value: Wei,
     pub r: EcdsaRs,
@@ -55,7 +54,7 @@ impl PostgresTransaction {
         let execution = TransactionExecution {
             gas: self.gas.clone(),
             output: self.output,
-            block_timestamp_in_secs: *self.block_timestamp,
+            block_timestamp_in_secs: 0, //*self.block_timestamp,
             result: self.result,
             logs: inner_logs,
             // TODO: do this correctly

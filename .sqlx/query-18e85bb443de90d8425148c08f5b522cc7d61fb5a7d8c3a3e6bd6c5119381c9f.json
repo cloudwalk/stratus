@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                        SELECT NEXTVAL('block_number_seq') as \"n!: _\"\n                    ",
+  "query": "\n                SELECT MAX(number) as \"n!: _\" FROM blocks\n            ",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       null
     ]
   },
-  "hash": "a7f9dcaec73bf5253ba7c5308fdcc42c3f427ef7c6cad1e71ad7b55550efdca3"
+  "hash": "18e85bb443de90d8425148c08f5b522cc7d61fb5a7d8c3a3e6bd6c5119381c9f"
 }
