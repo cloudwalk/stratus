@@ -17,65 +17,55 @@ use stratus::eth::EthExecutor;
 use stratus::ext::new_tokio_runtime;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
-use tokio::task::JoinError;
+use tokio::sync::broadcast;
+use tokio::select;
 
 fn main() -> anyhow::Result<()> {
-    // parse cli configs
     let config = Config::parse();
-
-    // init infra
     infra::init_tracing();
     infra::init_metrics();
 
-    let runtime = new_tokio_runtime("tokio-main", 2, 2); // TODO: make this value configurable
+    let runtime = new_tokio_runtime("tokio-main", 2, 2);
+    let (tx, _) = broadcast::channel::<()>(1);
 
     runtime.block_on(async {
-        let rpc_handle = tokio::spawn(run_rpc_server(config));
-        let p2p_handle = tokio::spawn(run_p2p_server());
+        let rpc_handle = tokio::spawn(run_rpc_server(config, tx.subscribe()));
+        let p2p_handle = tokio::spawn(run_p2p_server(tx.subscribe()));
 
-        match tokio::try_join!(rpc_handle, p2p_handle) {
-            Ok((rpc_result, p2p_result)) => {
-                dbg!(&rpc_result);
-                rpc_result?;
-                p2p_result?;
-                Ok(())
-            },
-            Err(e) => {
-              tracing::error!("An error occurred: {:?}", e);
-              Err(anyhow::Error::new(e))
-            }
+        if let Err(e) = rpc_handle.await? {
+            tx.send(()).unwrap(); // Send cancellation signal
+            return Err(e);
         }
+
+        if let Err(e) = p2p_handle.await? {
+            tx.send(()).unwrap(); // Send cancellation signal
+            return Err(e);
+        }
+
+        Ok(())
     })
 }
 
-async fn run_rpc_server(config: Config) -> anyhow::Result<()> {
+async fn run_rpc_server(config: Config, mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting RPC server");
-    return Err(anyhow::anyhow!("An error occurred for debugging purposes"));
-    // init services
+
     let storage: Arc<dyn EthStorage> = match config.storage {
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
         StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
     };
-
-    // init executor
     let evms = init_evms(Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
-    // start rpc server
     serve_rpc(executor, storage, config.address).await?;
+
     tracing::info!("RPC server started");
     Ok(())
 }
 
-/// Inits EVMs that will executes transactions in parallel.
-///
-/// TODO: The number of EVMs may be configurable instead of assuming a value based on number of processors.
 fn init_evms(storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
-    // calculate the number of EVMs
     let cpu_cores = thread::available_parallelism().unwrap();
-    let num_evms = max(1, cpu_cores.get() - 2); // TODO: make this value configurable
+    let num_evms = max(1, cpu_cores.get() - 2);
 
-    // create EVMs
     let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(10);
     for _ in 1..=num_evms {
         evms.push(Box::new(Revm::new(Arc::clone(&storage))));
@@ -84,22 +74,24 @@ fn init_evms(storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
     NonEmpty::from_vec(evms).unwrap()
 }
 
-async fn run_p2p_server() -> anyhow::Result<()> {
+async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting P2P server");
     let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
 
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+    //XXX return Err(anyhow::anyhow!("An error occurred for debugging purposes"));
 
-    tracing::info!("P2P server started");
+    loop {
+        select! {
+            _ = cancel_signal.recv() => {
+                tracing::info!("P2P task cancelled");
+                break;
+            }
+            _ = tokio::time::sleep(Duration::from_millis(1000)) => {
+                tracing::info!("P2P task running");
+            }
+        }
+    }
+
+    tracing::info!("P2P server stopped");
     Ok(())
 }
