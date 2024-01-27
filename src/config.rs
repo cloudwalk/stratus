@@ -17,6 +17,18 @@ pub struct Config {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    /// Number of EVM instances to run.
+    #[arg(long = "evms", env = "EVMS", default_value = "1")]
+    pub num_evms: usize,
+
+    /// Number of threads to execute global async tasks.
+    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "1")]
+    pub num_async_threads: usize,
+
+    /// Number of threads to execute global blocking tasks.
+    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "1")]
+    pub num_blocking_threads: usize,
 }
 
 /// Storage configuration.

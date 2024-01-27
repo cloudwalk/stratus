@@ -1,6 +1,4 @@
-use std::cmp::max;
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
 use clap::Parser;
@@ -19,37 +17,43 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 fn main() -> anyhow::Result<()> {
-    let runtime = init_async_runtime();
-    runtime.block_on(run_rpc_server())
-}
-
-pub fn init_async_runtime() -> Runtime {
-    Builder::new_multi_thread()
-        .enable_all()
-        .thread_name("tokio")
-        .worker_threads(1)
-        .max_blocking_threads(1)
-        .thread_keep_alive(Duration::from_secs(u64::MAX))
-        .build()
-        .expect("failed to build tokio runtime")
-}
-
-async fn run_rpc_server() -> anyhow::Result<()> {
-    // parse cli configs
     let config = Config::parse();
 
-    // init infra
     infra::init_tracing();
     infra::init_metrics();
 
+    let runtime = init_async_runtime(&config);
+    runtime.block_on(run_rpc_server(&config))
+}
+
+pub fn init_async_runtime(config: &Config) -> Runtime {
+    let runtime = Builder::new_multi_thread()
+        .enable_all()
+        .thread_name("tokio")
+        .worker_threads(config.num_async_threads)
+        .max_blocking_threads(config.num_blocking_threads)
+        .thread_keep_alive(Duration::from_secs(u64::MAX))
+        .build()
+        .expect("failed to build tokio runtime");
+
+    tracing::info!(
+        async_threads = %config.num_async_threads,
+        blocking_threads = %config.num_blocking_threads,
+        "async runtime initialized"
+    );
+
+    runtime
+}
+
+async fn run_rpc_server(config: &Config) -> anyhow::Result<()> {
     // init services
-    let storage: Arc<dyn EthStorage> = match config.storage {
+    let storage: Arc<dyn EthStorage> = match &config.storage {
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
-        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
+        StorageConfig::Postgres { url } => Arc::new(Postgres::new(url).await?.metrified()),
     };
 
     // init executor
-    let evms = init_evms(Arc::clone(&storage));
+    let evms = init_evms(config, Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
     // start rpc server
@@ -60,16 +64,11 @@ async fn run_rpc_server() -> anyhow::Result<()> {
 /// Inits EVMs that will executes transactions in parallel.
 ///
 /// TODO: The number of EVMs may be configurable instead of assuming a value based on number of processors.
-fn init_evms(storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
-    // calculate the number of EVMs
-    let cpu_cores = thread::available_parallelism().unwrap();
-    let num_evms = max(1, cpu_cores.get() - 2); // TODO: make this value configurable
-
-    // create EVMs
-    let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(10);
-    for _ in 1..=num_evms {
+fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
+    let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(config.num_evms);
+    for _ in 1..=config.num_evms {
         evms.push(Box::new(Revm::new(Arc::clone(&storage))));
     }
-    tracing::info!(evms = %num_evms, "evms initialized");
+    tracing::info!(evms = %config.num_evms, "evms initialized");
     NonEmpty::from_vec(evms).unwrap()
 }
