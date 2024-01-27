@@ -6,10 +6,14 @@ on:
       - '*'
 
 jobs:
-  unit_tests:
+  doc_unit_tests:
     name: Documentation Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout code
