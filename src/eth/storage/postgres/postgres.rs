@@ -61,7 +61,6 @@ impl EthStorage for Postgres {
 
         tracing::debug!(%address, "Account read");
 
-
         Ok(account)
     }
     async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {

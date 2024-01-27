@@ -6,7 +6,6 @@
 //! of log topics and provides functionality for handling and converting these
 //! identifiers, essential for log filtering and retrieval.
 
-
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
@@ -27,7 +26,6 @@ impl Dummy<Faker> for LogTopic {
         Self(H256::random_using(rng))
     }
 }
-
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
