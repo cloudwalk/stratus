@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 
 use crate::eth::primitives::Account;
@@ -7,13 +9,14 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::postgres::types::PostgresLogs;
+use crate::eth::storage::postgres::types::PostgresLog;
 use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
@@ -68,12 +71,12 @@ impl EthStorage for Postgres {
         let slot = sqlx::query_as!(
             Slot,
             r#"
-                        SELECT
-                            idx as "index: _",
-                            value as "value: _"
-                        FROM account_slots
-                        WHERE account_address = $1 AND idx = $2 AND block_number = $3
-                    "#,
+                SELECT
+                    idx as "index: _",
+                    value as "value: _"
+                FROM account_slots
+                WHERE account_address = $1 AND idx = $2 AND block_number = $3
+            "#,
             address.as_ref(),
             slot_index.as_ref(),
             block_number,
@@ -142,18 +145,26 @@ impl EthStorage for Postgres {
                             ,address_to as "address_to: _"
                             ,input as "input: _"
                             ,gas as "gas: _"
+                            ,gas_price as "gas_price: _"
                             ,idx_in_block as "idx_in_block: _"
                             ,block_number as "block_number: _"
                             ,block_hash as "block_hash: _"
+                            ,output as "output: _"
+                            ,block_timestamp as "block_timestamp: _"
+                            ,value as "value: _"
+                            ,v as "v: _"
+                            ,s as "s: _"
+                            ,r as "r: _"
+                            ,result as "result: _"
                         FROM transactions
                         WHERE hash = $1
-                        "#,
+                    "#,
                     hash.as_ref()
                 )
                 .fetch_all(&self.connection_pool);
 
                 let logs_query = sqlx::query_as!(
-                    PostgresLogs,
+                    PostgresLog,
                     r#"
                         SELECT
                             address as "address: _"
@@ -165,7 +176,7 @@ impl EthStorage for Postgres {
                             ,block_hash as "block_hash: _"
                         FROM logs
                         WHERE block_hash = $1
-                        "#,
+                    "#,
                     hash.as_ref()
                 )
                 .fetch_all(&self.connection_pool);
@@ -182,30 +193,39 @@ impl EthStorage for Postgres {
                             ,block_hash as "block_hash: _"
                         FROM topics
                         WHERE block_hash = $1
-                        "#,
+                    "#,
                     hash.as_ref()
                 )
                 .fetch_all(&self.connection_pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let _res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                // let header = res.0?;
-                // let transactions = res.1?;
-                // let logs = res.2?;
-                // let topics = res.3?;
+                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let header = res.0?;
+                let transactions = res.1?;
+                let logs = res.2?.into_iter();
+                let topics = res.3?.into_iter();
 
-                // let block: Block = Block::new_with_capacity(BlockNumber::default(), 1, 1);
+                // We're still cloning the hashes, maybe create a HashMap structure like this
+                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
+                // so that we don't have to clone the hashes
+                // TODO: remove unwrap()
+                let mut log_partitions = partition_logs(logs);
+                let mut topic_partitions = partition_topics(topics);
+                let transactions = transactions
+                    .into_iter()
+                    .map(|tx| {
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
+                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                    })
+                    .collect();
 
-                // let block = Block {
-                //     header,
-                //     transactions
-                // };
+                let block = Block { header, transactions };
 
-                // Ok(block)
-
-                todo!()
+                Ok::<Option<Block>, anyhow::Error>(Some(block))
             }
+
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number)?;
 
@@ -226,13 +246,12 @@ impl EthStorage for Postgres {
                 )
                 .fetch_one(&self.connection_pool)
                 .await;
+                todo!()
             }
             BlockSelection::Earliest => {
                 todo!()
             }
-        };
-
-        todo!();
+        }
     }
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
@@ -280,4 +299,32 @@ impl EthStorage for Postgres {
 
         Ok(block_number)
     }
+}
+
+fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, Vec<PostgresLog>> {
+    let mut partitions: HashMap<Hash, Vec<PostgresLog>> = HashMap::new();
+    for log in logs {
+        if let Some(part) = partitions.get_mut(&log.transaction_hash) {
+            part.push(log);
+        } else {
+            partitions.insert(log.transaction_hash.clone(), vec![log]);
+        }
+    }
+    partitions
+}
+
+fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> {
+    let mut partitions: HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> = HashMap::new();
+    for topic in topics {
+        if let Some(transaction) = partitions.get_mut(&topic.transaction_hash) {
+            if let Some(part) = transaction.get_mut(&topic.log_idx) {
+                part.push(topic);
+            } else {
+                transaction.insert(topic.log_idx, vec![topic]);
+            }
+        } else {
+            partitions.insert(topic.transaction_hash.clone(), HashMap::new());
+        }
+    }
+    partitions
 }

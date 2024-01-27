@@ -70,7 +70,7 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8]);
+gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8], [u8; 32]);
 
 impl From<EthersBytes> for Bytes {
     fn from(value: EthersBytes) -> Self {

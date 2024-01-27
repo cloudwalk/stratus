@@ -14,7 +14,7 @@ use fake::Faker;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(U256);
 
 impl Display for ChainId {
@@ -26,6 +26,12 @@ impl Display for ChainId {
 impl Dummy<Faker> for ChainId {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
+    }
+}
+
+impl Default for ChainId {
+    fn default() -> Self {
+        ChainId(2008.into())
     }
 }
 

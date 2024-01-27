@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     ,transactions_root BYTEA NOT NULL CHECK (LENGTH(transactions_root) = 32)
     ,gas NUMERIC NOT NULL CHECK (gas >= 0)
     ,logs_bloom BYTEA NOT NULL CHECK (LENGTH(logs_bloom) = 256)
-    ,timestamp_in_secs INTEGER NOT NULL CHECK (timestamp_in_secs >= 0)
+    ,timestamp_in_secs INTEGER NOT NULL CHECK (timestamp_in_secs >= 0) UNIQUE
     ,created_at TIMESTAMP NOT NULL
     ,PRIMARY KEY (number, hash)
 );
@@ -33,12 +33,20 @@ CREATE TABLE IF NOT EXISTS transactions (
     nonce NUMERIC NOT NULL CHECK (nonce >= 0),
     address_from BYTEA NOT NULL CHECK (LENGTH(address_from) = 20),
     address_to BYTEA CHECK (LENGTH(address_to) = 20),
-    input BYTEA NOT NULL CHECK (LENGTH(input) <= 24000),
-    gas NUMERIC NOT NULL CHECK (gas >= 0),
-    idx_in_block SERIAL NOT NULL CHECK (idx_in_block >= 0) UNIQUE,
-    block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0),
-    block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32),
-    PRIMARY KEY (hash)
+    input BYTEA NOT NULL CHECK (LENGTH(input) <= 24000)
+    ,output BYTEA NOT NULL
+    ,gas NUMERIC NOT NULL CHECK (gas >= 0)
+    ,gas_price NUMERIC NOT NULL CHECK (gas_price >= 0)
+    ,idx_in_block SERIAL NOT NULL CHECK (idx_in_block >= 0) UNIQUE
+    ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
+    ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
+    ,block_timestamp INTEGER REFERENCES blocks(timestamp_in_secs) NOT NULL CHECK (block_timestamp >= 0)
+    ,v BYTEA NOT NULL CHECK (v >= 0)
+    ,r BYTEA NOT NULL CHECK (r >= 0)
+    ,s BYTEA NOT NULL CHECK (s >= 0)
+    ,value NUMERIC NOT NULL CHECK (value >= 0)
+    ,result TEXT NOT NULL
+    ,PRIMARY KEY (hash)
 );
 
 CREATE TABLE IF NOT EXISTS logs (

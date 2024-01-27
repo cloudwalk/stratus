@@ -8,12 +8,15 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::str::FromStr;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::State as RevmState;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -33,7 +36,7 @@ pub type ExecutionChanges = HashMap<Address, TransactionExecutionAccountChanges>
 // -----------------------------------------------------------------------------
 
 /// Indicates how a transaction was finished.
-#[derive(Debug, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString)]
 #[serde(rename_all = "snake_case")]
 pub enum TransactionExecutionResult {
     /// Transaction execution finished normally (RETURN).
@@ -47,6 +50,22 @@ pub enum TransactionExecutionResult {
     /// Transaction execution did not finish.
     #[strum(serialize = "halted")]
     Halted { reason: String },
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx -> Self
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for TransactionExecutionResult {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(TransactionExecutionResult::from_str(value)?)
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for TransactionExecutionResult {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("TEXT")
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -68,6 +87,7 @@ pub struct TransactionExecution {
     pub gas: Gas,
 
     /// Assumed block timestamp during the execution.
+    // TODO: use UnixTime type
     pub block_timestamp_in_secs: u64,
 
     /// Storage changes that happened during the transaction execution.
