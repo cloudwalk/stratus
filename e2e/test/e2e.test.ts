@@ -69,6 +69,10 @@ describe("JSON-RPC", () => {
             let block: Block = await rpc.send("eth_getBlockByNumber", [ZERO, true]);
             expect(block.transactions.length).eq(0);
         });
+        it("eth_getUncleByBlockHashAndIndex", async function () {
+            let block: Block = await rpc.send("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO]);
+            expect(block).eq(null);
+        });
     });
 });
 
