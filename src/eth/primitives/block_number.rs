@@ -88,6 +88,6 @@ impl TryFrom<BlockNumber> for i64 {
     type Error = TryFromIntError;
 
     fn try_from(block_number: BlockNumber) -> Result<i64, TryFromIntError> {
-        block_number.0 .0[0].try_into()
+        i64::try_from(block_number.0.as_u64())
     }
 }

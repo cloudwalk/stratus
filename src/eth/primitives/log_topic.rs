@@ -6,7 +6,6 @@
 //! of log topics and provides functionality for handling and converting these
 //! identifiers, essential for log filtering and retrieval.
 
-use std::ops::Deref;
 
 use ethereum_types::H256;
 use fake::Dummy;
@@ -29,12 +28,6 @@ impl Dummy<Faker> for LogTopic {
     }
 }
 
-impl Deref for LogTopic {
-    type Target = H256;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self

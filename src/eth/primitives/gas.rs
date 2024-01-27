@@ -9,7 +9,6 @@
 //! execution.
 
 use std::fmt::Display;
-use std::ops::Deref;
 
 use ethereum_types::U256;
 use fake::Dummy;
@@ -40,12 +39,6 @@ impl Dummy<Faker> for Gas {
     }
 }
 
-impl Deref for Gas {
-    type Target = U256;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ops::Deref;
 
 use async_trait::async_trait;
 use sqlx::types::BigDecimal;
@@ -37,6 +36,8 @@ impl EthStorage for Postgres {
 
         let block_number = i64::try_from(block)?;
 
+        // This query is overflowing on the second transaction when the evm tries to read the account
+        // reading address=0x00000000000000000000000000000000000000ff
         let account = sqlx::query_as!(
             Account,
             r#"
@@ -48,7 +49,7 @@ impl EthStorage for Postgres {
                         FROM accounts
                         WHERE address = $1 AND block_number = $2
                     "#,
-            address.as_bytes(),
+            address.as_ref(),
             block_number,
         )
         .fetch_one(&self.connection_pool)
@@ -57,6 +58,9 @@ impl EthStorage for Postgres {
             address: address.clone(),
             ..Account::default()
         });
+
+        tracing::debug!(%address, "Account read");
+
 
         Ok(account)
     }
@@ -276,10 +280,10 @@ impl EthStorage for Postgres {
         sqlx::query!(
             "INSERT INTO blocks(hash, transactions_root, gas, logs_bloom, timestamp_in_secs, created_at)
             VALUES ($1, $2, $3, $4, $5, current_timestamp)",
-            block.header.hash.as_bytes(),
-            block.header.transactions_root.as_bytes(),
+            block.header.hash.as_ref(),
+            block.header.transactions_root.as_ref(),
             BigDecimal::from(block.header.gas),
-            block.header.bloom.as_bytes(),
+            block.header.bloom.as_ref(),
             i32::try_from(block.header.timestamp_in_secs)?
         )
         .execute(&self.connection_pool)
@@ -289,7 +293,7 @@ impl EthStorage for Postgres {
             for change in transaction.execution.changes {
                 let nonce = change.nonce.take().unwrap_or(0.into());
                 let balance = change.balance.take().unwrap_or(0.into());
-                let bytecode = change.bytecode.take().unwrap_or(None).map(|val| val.deref().to_owned());
+                let bytecode = change.bytecode.take().unwrap_or(None).map(|val| val.as_ref().to_owned());
                 sqlx::query!(
                     r#"
                 INSERT INTO accounts
@@ -298,7 +302,7 @@ impl EthStorage for Postgres {
                 SET nonce = EXCLUDED.nonce,
                     balance = EXCLUDED.balance,
                     bytecode = EXCLUDED.bytecode"#,
-                    change.address.as_bytes(),
+                    change.address.as_ref(),
                     BigDecimal::from(nonce),
                     BigDecimal::from(balance),
                     bytecode,
@@ -309,14 +313,14 @@ impl EthStorage for Postgres {
             }
 
             for log in transaction.logs {
-                let tx_hash = log.transaction_hash.as_bytes();
+                let tx_hash = log.transaction_hash.as_ref();
                 let tx_idx = i32::from(log.transaction_index);
                 let lg_idx = i32::from(log.log_index);
                 let b_number = i64::try_from(log.block_number)?;
-                let b_hash = log.block_hash.as_bytes();
+                let b_hash = log.block_hash.as_ref();
                 sqlx::query!(
                     "INSERT INTO logs VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                    log.log.address.as_bytes(),
+                    log.log.address.as_ref(),
                     *log.log.data,
                     tx_hash,
                     tx_idx,
@@ -329,7 +333,7 @@ impl EthStorage for Postgres {
                 for topic in log.log.topics {
                     sqlx::query!(
                         "INSERT INTO topics VALUES ($1, $2, $3, $4, $5, $6)",
-                        topic.as_bytes(),
+                        topic.as_ref(),
                         tx_hash,
                         tx_idx,
                         lg_idx,
@@ -344,18 +348,18 @@ impl EthStorage for Postgres {
             sqlx::query!(
                 "INSERT INTO transactions
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
-                transaction.input.hash.as_bytes(),
-                transaction.input.signer.as_bytes(),
+                transaction.input.hash.as_ref(),
+                transaction.input.signer.as_ref(),
                 BigDecimal::from(transaction.input.nonce),
-                transaction.input.from.as_bytes(),
-                transaction.input.to.unwrap_or_default().as_bytes().to_owned(),
+                transaction.input.signer.as_ref(),
+                transaction.input.to.unwrap_or_default().as_ref().to_owned(),
                 *transaction.input.input,
                 *transaction.execution.output,
                 BigDecimal::from(transaction.execution.gas),
                 BigDecimal::from(transaction.input.gas_price),
                 i32::from(transaction.transaction_index),
                 i64::try_from(transaction.block_number)?,
-                transaction.block_hash.as_bytes(),
+                transaction.block_hash.as_ref(),
                 &<[u8; 8]>::from(transaction.input.v),
                 &<[u8; 32]>::from(transaction.input.r),
                 &<[u8; 32]>::from(transaction.input.s),
