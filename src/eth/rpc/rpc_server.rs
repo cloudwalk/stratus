@@ -99,6 +99,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("eth_blockNumber", eth_block_number)?;
     module.register_async_method("eth_getBlockByNumber", eth_get_block_by_selector)?;
     module.register_async_method("eth_getBlockByHash", eth_get_block_by_selector)?;
+    module.register_async_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
     module.register_async_method("eth_getTransactionCount", eth_get_transaction_count)?;
@@ -167,6 +168,10 @@ async fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>) -> 
         (Some(block), false) => Ok(block.to_json_rpc_with_transactions_hashes()),
         (None, _) => Ok(JsonValue::Null),
     }
+}
+
+async fn eth_get_uncle_by_block_hash_and_index(_params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(JsonValue::Null)
 }
 
 // Transaction
