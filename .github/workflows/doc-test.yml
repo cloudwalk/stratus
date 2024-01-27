@@ -6,7 +6,7 @@ on:
       - '*'
 
 jobs:
-  unit_tests:
+  doc_unit_tests:
     name: Documentation Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
