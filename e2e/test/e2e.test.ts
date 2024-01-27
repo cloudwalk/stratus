@@ -177,21 +177,18 @@ describe("Transaction: serial requests", () => {
 
     it("Check storage", async () => {
 
-        const mappingSlot = 0;
-        const addressKey = CHARLIE.address;
+        const charlieBalance = await _contract.get(CHARLIE.address);
+        const expectedStorageValue = rpc.toPaddedHex(charlieBalance, 32);
 
-        // Convert slot number and address key to 32-byte hexadecimal values
-        const slotHexString = mappingSlot.toString(16).padStart(64, "0");
-        const keyHexString = addressKey.substring(2).padStart(64, "0");
+        // Calculate Charlie's position in balances mapping
+        const balancesSlot = 0;
+        const charlieStoragePosition = rpc.calculateAddressStoragePosition(CHARLIE.address, balancesSlot);
 
-        // Hash the key with the slot to find the storage position
-        const storagePosition = keccak256("0x" + keyHexString + slotHexString);
-
-        // Retrieve the value from storage
-        const storageValue = await rpc.send("eth_getStorageAt", [_contract.target, storagePosition, "latest"]);
+        const actualStorageValue = await rpc.send(
+            "eth_getStorageAt", [_contract.target, charlieStoragePosition, "latest"]
+        );
         
-        const expectedValue = "0x" + (await _contract.get(CHARLIE.address)).toString(16).padStart(64, "0");
-        expect(storageValue).eq(expectedValue);
+        expect(actualStorageValue).eq(expectedStorageValue);
     });
 });
 
