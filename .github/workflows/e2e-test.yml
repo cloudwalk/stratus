@@ -40,4 +40,4 @@ jobs:
             cargo install wait-service
 
       - name: Run e2e tests
-        run: just e2e-stratus no-kill
+        run: just e2e-stratus
