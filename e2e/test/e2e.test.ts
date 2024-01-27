@@ -174,6 +174,25 @@ describe("Transaction: serial requests", () => {
         (await rpc.sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_ADD] }])).length(2);
         (await rpc.sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_SUB] }])).length(1);
     });
+
+    it("Check storage", async () => {
+
+        const mappingSlot = 0;
+        const addressKey = CHARLIE.address;
+
+        // Convert slot number and address key to 32-byte hexadecimal values
+        const slotHexString = mappingSlot.toString(16).padStart(64, "0");
+        const keyHexString = addressKey.substring(2).padStart(64, "0");
+
+        // Hash the key with the slot to find the storage position
+        const storagePosition = keccak256("0x" + keyHexString + slotHexString);
+
+        // Retrieve the value from storage
+        const storageValue = await rpc.send("eth_getStorageAt", [_contract.target, storagePosition, "latest"]);
+        
+        const expectedValue = "0x" + (await _contract.get(CHARLIE.address)).toString(16).padStart(64, "0");
+        expect(storageValue).eq(expectedValue);
+    });
 });
 
 // -----------------------------------------------------------------------------
