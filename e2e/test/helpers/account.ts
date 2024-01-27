@@ -47,4 +47,12 @@ export const FERDIE = new Account(
     "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
 );
 
-export const ACCOUNTS = [ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE];
+/// Generates N random accounts.
+export function randomAccounts(n: number): Account[] {
+    const wallets: Account[] = [];
+    for (let i = 0; i < n; i++) {
+        let wallet = Wallet.createRandom();
+        wallets.push(new Account(wallet.address, wallet.privateKey));
+    }
+    return wallets;
+}

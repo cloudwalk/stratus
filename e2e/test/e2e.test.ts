@@ -1,11 +1,12 @@
 import { expect } from "chai";
 import { keccak256 } from "ethers";
 import { match } from "ts-pattern";
+import { string } from "ts-pattern/dist/patterns";
 import { Block, Transaction, TransactionReceipt } from "web3-types";
 import { contract } from "web3/lib/commonjs/eth.exports";
 
 import { TestContract } from "../typechain-types";
-import { ACCOUNTS, ALICE, BOB, CHARLIE } from "./helpers/account";
+import { ALICE, BOB, CHARLIE, randomAccounts } from "./helpers/account";
 import { CURRENT_NETWORK, Network } from "./helpers/network";
 import * as rpc from "./helpers/rpc";
 
@@ -203,33 +204,49 @@ describe("Transaction: parallel requests", async () => {
 
     it("Sends parallel transactions", async () => {
         // initial balance
+        expect(await _contract.get(ALICE.address)).eq(0);
+        expect(await _contract.get(BOB.address)).eq(0);
         expect(await _contract.get(CHARLIE.address)).eq(0);
 
         // prepare transactions
-        const transactions = [];
-        var expectedBalance = 0;
-        for (let accountIndex = 0; accountIndex < ACCOUNTS.length; accountIndex++) {
-            const account = ACCOUNTS[accountIndex];
-            const amount = accountIndex + 1;
-            expectedBalance += amount;
+        const expectedBalances: Record<string, number> = {};
+        expectedBalances[ALICE.address] = 0;
+        expectedBalances[BOB.address] = 0;
+        expectedBalances[CHARLIE.address] = 0;
 
-            const nonce = await rpc.getNonce(account.address);
+        const senders = randomAccounts(50);
+        const signedTransactions = [];
+        for (let accountIndex = 0; accountIndex < senders.length; accountIndex++) {
+            // prepare transaction params
+            let account = ALICE.address;
+            if (accountIndex % 2 == 0) {
+                account = BOB.address;
+            } else if (accountIndex % 3 == 0) {
+                account = CHARLIE.address;
+            }
+            const amount = accountIndex + 1;
+            expectedBalances[account] += amount;
+
+            // sign transaction
+            const sender = senders[accountIndex];
+            const nonce = await rpc.getNonce(sender.address);
             const tx = await _contract
-                .connect(account.signer())
-                .add.populateTransaction(CHARLIE.address, amount, { nonce: nonce, gasPrice: 0 });
-            const txSigned = await account.signer().signTransaction(tx);
-            transactions.push(txSigned);
+                .connect(sender.signer())
+                .add.populateTransaction(account, amount, { nonce: nonce, gasPrice: 0 });
+            signedTransactions.push(await sender.signer().signTransaction(tx));
         }
 
         // send all transactions in parallel
         const requests = [];
-        for (const tx of transactions) {
-            const req = rpc.send("eth_sendRawTransaction", [tx]).then((_) => {});
+        for (const signedTx of signedTransactions) {
+            const req = rpc.send("eth_sendRawTransaction", [signedTx]);
             requests.push(req);
         }
         await Promise.all(requests);
 
         // final balance
-        // expect(await _contract.get(CHARLIE.address)).eq(expectedBalance);
+        // expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address]);
+        // expect(await _contract.get(BOB.address)).eq(expectedBalances[BOB.address]);
+        // expect(await _contract.get(CHARLIE.address)).eq(expectedBalances[CHARLIE.address]);
     });
 });
