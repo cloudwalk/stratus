@@ -4,7 +4,7 @@ import { JsonRpcProvider, keccak256 } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 
-import { TestContract } from "../../typechain-types";
+import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
 import { CURRENT_NETWORK } from "./network";
 
@@ -79,9 +79,15 @@ export async function sendExpect(method: string, params: any[] = []): Promise<Ch
     return expect(await send(method, params));
 }
 
-// Deploys the TestContract. Each time the function is called a new instance is deployed.
-export async function deployTestContract(): Promise<TestContract> {
-    const testContractFactory = await ethers.getContractFactory("TestContract");
+// Deploys the TestContractBalances.
+export async function deployTestContractBalances(): Promise<TestContractBalances> {
+    const testContractFactory = await ethers.getContractFactory("TestContractBalances");
+    return await testContractFactory.connect(CHARLIE.signer()).deploy();
+}
+
+// Deploys the TestContractCounter.
+export async function deployTestContractCounter(): Promise<TestContractCounter> {
+    const testContractFactory = await ethers.getContractFactory("TestContractCounter");
     return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 
@@ -110,6 +116,11 @@ export function calculateAddressStoragePosition(address: string, slot: number): 
 // -----------------------------------------------------------------------------
 // RPC methods wrappers
 // -----------------------------------------------------------------------------
+
+/// Retrieves the current nonce of an account.
+export async function sendRawTransaction(signed: string): Promise<string> {
+    return await send("eth_sendRawTransaction", [signed]);
+}
 
 /// Retrieves the current nonce of an account.
 export async function getNonce(address: string): Promise<number> {
