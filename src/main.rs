@@ -91,8 +91,6 @@ async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::R
     tracing::info!("Starting P2P server");
     let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
 
-    //XXX return Err(anyhow::anyhow!("An error occurred for debugging purposes"));
-
     loop {
         select! {
             _ = cancel_signal.recv() => {
@@ -100,7 +98,6 @@ async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::R
                 break;
             }
             _ = tokio::time::sleep(Duration::from_millis(1000)) => {
-                tracing::info!("P2P task running");
             }
         }
     }
