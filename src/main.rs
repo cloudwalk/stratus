@@ -13,10 +13,10 @@ use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
-use tokio::sync::broadcast;
-use tokio::select;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
+use tokio::select;
+use tokio::sync::broadcast;
 
 fn main() -> anyhow::Result<()> {
     let config = Arc::new(Config::parse());
@@ -70,7 +70,7 @@ async fn run_rpc_server(config: Arc<Config>, mut cancel_signal: broadcast::Recei
     tracing::info!("Starting RPC server");
 
     let storage: Arc<dyn EthStorage> = match &config.storage {
-    // init services
+        // init services
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
         StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
     };
