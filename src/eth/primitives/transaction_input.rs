@@ -122,8 +122,8 @@ impl TryFrom<EthersTransaction> for TransactionInput {
         let gas_price: Wei = match value.gas_price {
             Some(wei) => wei.into(),
             None => {
-                tracing::warn!(reason = %"transaction without wei");
-                return Err(ConversionError::NoWei(anyhow!("Transaction sent without wei is not allowed.")));
+                tracing::warn!(reason = %"transaction without gasPrice");
+                return Err(ConversionError::NoWei(anyhow!("Transaction sent without gasPrice is not allowed.")));
             }
         };
 

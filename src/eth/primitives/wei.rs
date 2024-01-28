@@ -96,3 +96,9 @@ impl From<Wei> for U256 {
         value.0
     }
 }
+
+impl From<Wei> for BigDecimal {
+    fn from(value: Wei) -> Self {
+        BigDecimal::parse_bytes(&<[u8; 32]>::from(U256::from(value)), 10).unwrap_or(BigDecimal::from(0))
+    }
+}

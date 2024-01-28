@@ -19,11 +19,13 @@ setup:
 
 # Stratus: Run locally with debug options
 run *args="":
-    RUST_LOG=stratus=info cargo run -- {{args}}
+    #!/bin/bash
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run -- {{args}}
+    exit 0
 
 # Stratus: Run locally with release options
 run-release *args="":
-    RUST_LOG=info cargo run --release -- {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release -- {{args}}
 
 # Stratus: Compile with debug options
 build:
@@ -91,7 +93,7 @@ test-int name="":
 # ------------------------------------------------------------------------------
 
 # E2E: Execute Hardhat tests in the specified network
-e2e network="stratus":
+e2e network="stratus" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -99,10 +101,15 @@ e2e network="stratus":
     if [ ! -d node_modules ]; then
         npm install
     fi
-    npx hardhat test test/*.test.ts --network {{network}}
+
+    if [ -z "{{test}}" ]; then
+        npx hardhat test test/*.test.ts --network {{network}}
+    else
+        npx hardhat test test/*.test.ts --network {{network}} --grep {{test}}
+    fi
 
 # E2E: Starts and execute Hardhat tests in Anvil
-e2e-anvil:
+e2e-anvil test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -115,13 +122,13 @@ e2e-anvil:
     wait-service --tcp localhost:8546 -- echo
 
     echo "-> Running E2E tests"
-    just e2e anvil
+    just e2e anvil {{test}}
 
     echo "-> Killing Anvil"
     killport 8546
 
 # E2E: Starts and execute Hardhat tests in Hardhat
-e2e-hardhat:
+e2e-hardhat test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -134,13 +141,13 @@ e2e-hardhat:
     wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
-    just e2e hardhat
+    just e2e hardhat {{test}}
 
     echo "-> Killing Hardhat"
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus no-kill="":
+e2e-stratus test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -153,10 +160,7 @@ e2e-stratus no-kill="":
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus
-
-    # Do not kill Stratus if no-kill is set
-    [ "{{no-kill}}" ] && exit 0
+    just e2e stratus {{test}}
 
     echo "-> Killing Stratus"
     killport 3000
