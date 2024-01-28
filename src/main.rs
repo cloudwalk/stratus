@@ -15,15 +15,36 @@ use stratus::infra;
 use stratus::infra::postgres::Postgres;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
+use tokio::select;
+use tokio::sync::broadcast;
 
 fn main() -> anyhow::Result<()> {
-    let config = Config::parse();
+    let config = Arc::new(Config::parse());
 
     infra::init_tracing();
     infra::init_metrics();
 
+    let config_clone_for_rpc = Arc::clone(&config);
+
     let runtime = init_async_runtime(&config);
-    runtime.block_on(run_rpc_server(&config))
+    let (tx, _) = broadcast::channel::<()>(1);
+
+    runtime.block_on(async {
+        let rpc_handle = tokio::spawn(run_rpc_server(config_clone_for_rpc, tx.subscribe()));
+        let p2p_handle = tokio::spawn(run_p2p_server(tx.subscribe()));
+
+        if let Err(e) = rpc_handle.await? {
+            tx.send(()).unwrap(); // Send cancellation signal
+            return Err(e);
+        }
+
+        if let Err(e) = p2p_handle.await? {
+            tx.send(()).unwrap(); // Send cancellation signal
+            return Err(e);
+        }
+
+        Ok(())
+    })
 }
 
 pub fn init_async_runtime(config: &Config) -> Runtime {
@@ -45,19 +66,21 @@ pub fn init_async_runtime(config: &Config) -> Runtime {
     runtime
 }
 
-async fn run_rpc_server(config: &Config) -> anyhow::Result<()> {
-    // init services
-    let storage: Arc<dyn EthStorage> = match &config.storage {
-        StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
-        StorageConfig::Postgres { url } => Arc::new(Postgres::new(url).await?.metrified()),
-    };
+async fn run_rpc_server(config: Arc<Config>, mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
+    tracing::info!("Starting RPC server");
 
+    let storage: Arc<dyn EthStorage> = match &config.storage {
+        // init services
+        StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
+        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
+    };
     // init executor
-    let evms = init_evms(config, Arc::clone(&storage));
+    let evms = init_evms(&*config, Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
-    // start rpc server
     serve_rpc(executor, storage, config.address).await?;
+
+    tracing::info!("RPC server started");
     Ok(())
 }
 
@@ -71,4 +94,23 @@ fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn 
     }
     tracing::info!(evms = %config.num_evms, "evms initialized");
     NonEmpty::from_vec(evms).unwrap()
+}
+
+async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
+    tracing::info!("Starting P2P server");
+    let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
+
+    loop {
+        select! {
+            _ = cancel_signal.recv() => {
+                tracing::info!("P2P task cancelled");
+                break;
+            }
+            _ = tokio::time::sleep(Duration::from_millis(1000)) => {
+            }
+        }
+    }
+
+    tracing::info!("P2P server stopped");
+    Ok(())
 }
