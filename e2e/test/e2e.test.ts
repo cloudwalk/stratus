@@ -1,11 +1,9 @@
 import { expect } from "chai";
 import { keccak256 } from "ethers";
 import { match } from "ts-pattern";
-import { string } from "ts-pattern/dist/patterns";
 import { Block, Transaction, TransactionReceipt } from "web3-types";
-import { contract } from "web3/lib/commonjs/eth.exports";
 
-import { TestContract } from "../typechain-types";
+import { TestContractBalances, TestContractCounter } from "../typechain-types";
 import { ALICE, BOB, CHARLIE, randomAccounts } from "./helpers/account";
 import { CURRENT_NETWORK, Network } from "./helpers/network";
 import * as rpc from "./helpers/rpc";
@@ -93,7 +91,7 @@ describe("Transaction: wei transfer", () => {
             gasPrice: 0,
             gasLimit: 500_000,
         });
-        _txHash = await rpc.send("eth_sendRawTransaction", [txSigned]);
+        _txHash = await rpc.sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
     });
     it("Transaction is created", async () => {
@@ -137,11 +135,11 @@ describe("Transaction: wei transfer", () => {
 // Contracts tests
 // -----------------------------------------------------------------------------
 describe("Transaction: serial requests", () => {
-    var _contract: TestContract;
+    var _contract: TestContractBalances;
     var _block: number;
 
     it("Contract is deployed", async () => {
-        _contract = await rpc.deployTestContract();
+        _contract = await rpc.deployTestContractBalances();
     });
 
     it("Performs add and sub", async () => {
@@ -177,7 +175,6 @@ describe("Transaction: serial requests", () => {
     });
 
     it("Check storage", async () => {
-
         const charlieBalance = await _contract.get(CHARLIE.address);
         const expectedStorageValue = rpc.toPaddedHex(charlieBalance, 32);
 
@@ -185,10 +182,12 @@ describe("Transaction: serial requests", () => {
         const balancesSlot = 0;
         const charlieStoragePosition = rpc.calculateAddressStoragePosition(CHARLIE.address, balancesSlot);
 
-        const actualStorageValue = await rpc.send(
-            "eth_getStorageAt", [_contract.target, charlieStoragePosition, "latest"]
-        );
-        
+        const actualStorageValue = await rpc.send("eth_getStorageAt", [
+            _contract.target,
+            charlieStoragePosition,
+            "latest",
+        ]);
+
         expect(actualStorageValue).eq(expectedStorageValue);
     });
 });
@@ -196,10 +195,10 @@ describe("Transaction: serial requests", () => {
 // -----------------------------------------------------------------------------
 // Parallel transactions tests
 // -----------------------------------------------------------------------------
-describe("Transaction: parallel requests", async () => {
-    var _contract: TestContract;
-    it("Deploy test contract", async () => {
-        _contract = await rpc.deployTestContract();
+describe("Transaction: TestContractBalances", async () => {
+    var _contract: TestContractBalances;
+    it("Deploy TestContractBalances", async () => {
+        _contract = await rpc.deployTestContractBalances();
     });
 
     it("Sends parallel transactions", async () => {
@@ -215,7 +214,7 @@ describe("Transaction: parallel requests", async () => {
         expectedBalances[CHARLIE.address] = 0;
 
         const senders = randomAccounts(50);
-        const signedTransactions = [];
+        const signedTxs = [];
         for (let accountIndex = 0; accountIndex < senders.length; accountIndex++) {
             // prepare transaction params
             let account = ALICE.address;
@@ -233,20 +232,68 @@ describe("Transaction: parallel requests", async () => {
             const tx = await _contract
                 .connect(sender.signer())
                 .add.populateTransaction(account, amount, { nonce: nonce, gasPrice: 0 });
-            signedTransactions.push(await sender.signer().signTransaction(tx));
+            signedTxs.push(await sender.signer().signTransaction(tx));
         }
 
         // send all transactions in parallel
         const requests = [];
-        for (const signedTx of signedTransactions) {
-            const req = rpc.send("eth_sendRawTransaction", [signedTx]);
+        for (const signedTx of signedTxs) {
+            const req = rpc.sendRawTransaction(signedTx);
             requests.push(req);
         }
         await Promise.all(requests);
 
-        // final balance
+        // verify (enable only after conflict detection is implemented in stratus)
         // expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address]);
         // expect(await _contract.get(BOB.address)).eq(expectedBalances[BOB.address]);
         // expect(await _contract.get(CHARLIE.address)).eq(expectedBalances[CHARLIE.address]);
+    });
+});
+
+describe("Transaction: TestContractCounter", async () => {
+    var _contract: TestContractCounter;
+    it("Deploy TestContractCounter", async () => {
+        _contract = await rpc.deployTestContractCounter();
+    });
+
+    it("Sends parallel transactions", async () => {
+        // initial balance
+        expect(await _contract.getCounter()).eq(0);
+        expect(await _contract.getDoubleCounter()).eq(0);
+
+        const incSender = ALICE;
+        const doubleSender = BOB;
+
+        // send pair of inc and double requests
+        for (let i = 0; i < 20; i++) {
+            // calculate expected double counter
+            const doubleCounter = Number(await _contract.getDoubleCounter());
+            const expectedDoubleCounter = [BigInt(doubleCounter + i * 2), BigInt(doubleCounter + (i + 1) * 2)];
+
+            // sign transactions
+            const incNonce = await rpc.getNonce(incSender.address);
+            const incTx = await _contract
+                .connect(incSender.signer())
+                .inc.populateTransaction({ nonce: incNonce, gasPrice: 0 });
+            const incSignedTx = await incSender.signer().signTransaction(incTx);
+
+            const doubleNonce = await rpc.getNonce(doubleSender.address);
+            const doubleTx = await _contract
+                .connect(doubleSender.signer())
+                .double.populateTransaction({ nonce: doubleNonce, gasPrice: 0 });
+            const doubleSignedTx = await doubleSender.signer().signTransaction(doubleTx);
+
+            // send transactions in random order
+            let signedTxs = [incSignedTx, doubleSignedTx];
+            if (Math.random() > 0.5) {
+                signedTxs = signedTxs.reverse();
+            }
+            const requests = [rpc.sendRawTransaction(signedTxs[0]), rpc.sendRawTransaction(signedTxs[1])];
+            await Promise.all(requests);
+
+            // verify (enable only after conflict detection is implemented in stratus)
+            // expect(await _contract.getCounter()).eq(i + 1);
+            // expect(await _contract.getDoubleCounter()).oneOf(expectedDoubleCounter);
+        }
     });
 });
