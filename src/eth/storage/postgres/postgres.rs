@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use sqlx::types::BigDecimal;
-use sqlx::query_builder::QueryBuilder;
 use sqlx::postgres::PgRow;
+use sqlx::query_builder::QueryBuilder;
+use sqlx::types::BigDecimal;
 use sqlx::Row;
 
 use crate::eth::primitives::Account;
@@ -312,9 +312,6 @@ impl EthStorage for Postgres {
     }
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        // from_block -> to_block
-        // search for addresses
-        // search for topics
         let from: i64 = filter.from_block.try_into().unwrap();
         let to: i64;
         let query = r#"
@@ -327,17 +324,18 @@ impl EthStorage for Postgres {
                 , block_hash as "block_hash:  "
             FROM logs
             WHERE block_number >= $1
-        "#.to_owned();
+        "#
+        .to_owned();
         let builder = &mut QueryBuilder::new(query);
         builder.push_bind(from);
 
         // verifies if to_block exists
         if let Some(block_number) = filter.to_block {
-            builder.push(&" AND block_number <= $2");
+            builder.push(" AND block_number <= $2");
             to = block_number.try_into().unwrap();
             builder.push_bind(to.to_owned());
         }
-        
+
         let query = builder.build();
         let result = query
             .map(|row: PgRow| LogMined {
@@ -352,8 +350,8 @@ impl EthStorage for Postgres {
                 block_number: row.get("block_number"),
                 block_hash: row.get("block_hash"),
             })
-	    	.fetch_all(&self.connection_pool)
-		    .await?
+            .fetch_all(&self.connection_pool)
+            .await?
             .iter()
             .filter(|log| filter.matches(log))
             .cloned()
