@@ -40,7 +40,10 @@ gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i3
 
 impl From<BigDecimal> for Nonce {
     fn from(value: BigDecimal) -> Self {
-        value.into()
+        // This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
+        let (integer, _) = value.as_bigint_and_exponent();
+        let (_, bytes) = integer.to_bytes_be();
+        Nonce(U256::from_big_endian(&bytes))
     }
 }
 

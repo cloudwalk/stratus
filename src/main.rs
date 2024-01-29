@@ -33,14 +33,24 @@ fn main() -> anyhow::Result<()> {
         let rpc_handle = tokio::spawn(run_rpc_server(config_clone_for_rpc, tx.subscribe()));
         let p2p_handle = tokio::spawn(run_p2p_server(tx.subscribe()));
 
-        if let Err(e) = rpc_handle.await? {
-            tx.send(()).unwrap(); // Send cancellation signal
-            return Err(e);
-        }
-
-        if let Err(e) = p2p_handle.await? {
-            tx.send(()).unwrap(); // Send cancellation signal
-            return Err(e);
+        tokio::select! {
+            result = rpc_handle => {
+                let inner_result = result.unwrap();
+                if let Err(e) = inner_result {
+                    tracing::error!("RPC server failed: {:?}", e);
+                    tx.send(()).unwrap(); // Send cancellation signal
+                    //TODO wait for p2p_handle to finish before moving on
+                }
+            }
+            result = p2p_handle => {
+                tracing::error!("P2P server failed: {:?}", result);
+                let inner_result = result.unwrap();
+                if let Err(e) = inner_result {
+                    tracing::error!("P2P server failed: {:?}", e);
+                    tx.send(()).unwrap(); // Send cancellation signal
+                    //TODO wait for rpc_handle to finish before moving on
+                }
+            }
         }
 
         Ok(())
@@ -66,7 +76,7 @@ pub fn init_async_runtime(config: &Config) -> Runtime {
     runtime
 }
 
-async fn run_rpc_server(config: Arc<Config>, _: broadcast::Receiver<()>) -> anyhow::Result<()> {
+async fn run_rpc_server(config: Arc<Config>, cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting RPC server");
 
     let storage: Arc<dyn EthStorage> = match &config.storage {
@@ -74,11 +84,12 @@ async fn run_rpc_server(config: Arc<Config>, _: broadcast::Receiver<()>) -> anyh
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
         StorageConfig::Postgres { url } => Arc::new(Postgres::new(url).await?.metrified()),
     };
+
     // init executor
     let evms = init_evms(&config, Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
-    serve_rpc(executor, storage, config.address).await?;
+    serve_rpc(executor, storage, config.address, cancel_signal).await?;
 
     tracing::info!("RPC server started");
     Ok(())
@@ -98,17 +109,10 @@ async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::R
     tracing::info!("Starting P2P server");
     let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
 
-    loop {
-        select! {
-            _ = cancel_signal.recv() => {
-                tracing::info!("P2P task cancelled");
-                break;
-            }
-            _ = tokio::time::sleep(Duration::from_millis(1000)) => {
-            }
+    select! {
+        _ = cancel_signal.recv() => {
+            tracing::info!("P2P task cancelled");
+            Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"))
         }
     }
-
-    tracing::info!("P2P server stopped");
-    Ok(())
 }
