@@ -33,7 +33,6 @@ fn main() -> anyhow::Result<()> {
         let rpc_handle = tokio::spawn(run_rpc_server(config_clone_for_rpc, tx.subscribe()));
         let p2p_handle = tokio::spawn(run_p2p_server(tx.subscribe()));
 
-
         tokio::select! {
             result = rpc_handle => {
                 let inner_result = result.unwrap();
@@ -77,7 +76,7 @@ pub fn init_async_runtime(config: &Config) -> Runtime {
     runtime
 }
 
-async fn run_rpc_server(config: Arc<Config>, mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
+async fn run_rpc_server(config: Arc<Config>, cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting RPC server");
 
     let storage: Arc<dyn EthStorage> = match &config.storage {
