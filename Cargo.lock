@@ -4493,7 +4493,6 @@ dependencies = [
  "clap",
  "const-hex",
  "crossbeam-channel",
- "dashmap",
  "derive-new",
  "derive_more",
  "ethabi",

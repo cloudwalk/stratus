@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.31"
 const-hex = "1.10.0"
-dashmap = "5.5.3"
 derive_more = "0.99.17"
 derive-new = "0.6.0"
 ethabi = "18.0.0"
