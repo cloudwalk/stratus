@@ -49,7 +49,7 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
 
 impl sqlx::Type<sqlx::Postgres> for Index {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("SERIAL")
+        sqlx::postgres::PgTypeInfo::with_name("INT4") // Actually SERIAL, sqlx was panicking
     }
 }
 
