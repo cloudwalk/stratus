@@ -15,6 +15,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
+use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
@@ -339,7 +340,7 @@ impl EthStorage for Postgres {
         let query = builder.build();
         let result = query
             .map(|row: PgRow| LogMined {
-                log: crate::eth::primitives::Log {
+                log: Log {
                     address: row.get("address"),
                     data: row.get("data"),
                     topics: vec![],
