@@ -396,6 +396,41 @@ impl EthStorage for Postgres {
                 }
             }
 
+            for log in transaction.logs {
+                let tx_hash = log.transaction_hash.as_ref();
+                let tx_idx = i32::from(log.transaction_index);
+                let lg_idx = i32::from(log.log_index);
+                let b_number = i64::try_from(log.block_number).context("failed to convert block number")?;
+                let b_hash = log.block_hash.as_ref();
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_log.sql",
+                    log.log.address.as_ref(),
+                    *log.log.data,
+                    tx_hash,
+                    tx_idx,
+                    lg_idx,
+                    b_number,
+                    b_hash
+                )
+                .execute(&self.connection_pool)
+                .await
+                .context("failed to insert log")?;
+                for topic in log.log.topics {
+                    sqlx::query_file!(
+                        "src/eth/storage/postgres/queries/insert_topic.sql",
+                        topic.as_ref(),
+                        tx_hash,
+                        tx_idx,
+                        lg_idx,
+                        b_number,
+                        b_hash
+                    )
+                    .execute(&self.connection_pool)
+                    .await
+                    .context("failed to insert topic")?;
+                }
+            }
+
             sqlx::query_file!(
                 "src/eth/storage/postgres/queries/insert_transaction.sql",
                 transaction.input.hash.as_ref(),
