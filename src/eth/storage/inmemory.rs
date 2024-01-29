@@ -23,10 +23,13 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionConflicts;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::EthStorageError;
 
 /// In-memory implementation using maps.
 #[derive(Debug)]
@@ -99,6 +102,11 @@ impl EthStorage for InMemoryStorage {
     // -------------------------------------------------------------------------
     // State operations
     // ------------------------------------------------------------------------
+
+    async fn check_conflicts(&self, execution: &TransactionExecution) -> anyhow::Result<TransactionExecutionConflicts> {
+        let state_lock = self.state.read().await;
+        Ok(check_conflicts(&state_lock, execution))
+    }
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
@@ -209,8 +217,16 @@ impl EthStorage for InMemoryStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let mut state_lock = self.lock_write().await;
+
+        // check conflicts
+        for transaction in &block.transactions {
+            let conflicts = check_conflicts(&state_lock, &transaction.execution);
+            if conflicts.any() {
+                return Err(EthStorageError::Conflict(conflicts));
+            }
+        }
 
         // save block
         tracing::debug!(number = %block.header.number, "saving block");
@@ -277,4 +293,56 @@ impl EthStorage for InMemoryStorage {
         }
         Ok(())
     }
+}
+
+fn check_conflicts(state: &InMemoryStorageState, execution: &TransactionExecution) -> TransactionExecutionConflicts {
+    let mut conflicts = TransactionExecutionConflicts::default();
+
+    for change in &execution.changes {
+        let address = &change.address;
+
+        // check account info conflicts
+        match state.accounts.get(address) {
+            Some((account, _)) => {
+                if let Some(touched_nonce) = change.nonce.take_original_ref() {
+                    if *touched_nonce != account.nonce {
+                        conflicts.add_nonce(address.clone(), account.nonce.clone(), touched_nonce.clone());
+                    }
+                }
+                if let Some(touched_balance) = change.balance.take_original_ref() {
+                    if *touched_balance != account.balance {
+                        conflicts.add_balance(address.clone(), account.balance.clone(), touched_balance.clone());
+                    }
+                }
+            }
+            None => {
+                // todo: handle account creation conflicts
+            }
+        }
+
+        // check slots conflicts
+        match state.account_slots.get(address) {
+            Some(slots) => {
+                for (touched_slot_index, touched_slot) in &change.slots {
+                    match slots.get(touched_slot_index) {
+                        Some(slot) =>
+                            if let Some(touched_slot) = touched_slot.take_original_ref() {
+                                let slot_value = slot.get_current().value;
+                                if touched_slot.value != slot_value {
+                                    conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
+                                }
+                            },
+                        None => {
+                            // todo: handle slot creation conflict
+                        }
+                    }
+                }
+            }
+            None => {
+                // todo: handle account creation scenarios
+            }
+        }
+    }
+
+    conflicts
 }
