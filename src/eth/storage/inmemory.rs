@@ -16,6 +16,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::HistoricalValues;
 use crate::eth::primitives::LogFilter;
@@ -23,8 +25,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionConflicts;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::test_accounts;
@@ -103,7 +103,7 @@ impl EthStorage for InMemoryStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn check_conflicts(&self, execution: &TransactionExecution) -> anyhow::Result<TransactionExecutionConflicts> {
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
         let state_lock = self.state.read().await;
         Ok(check_conflicts(&state_lock, execution))
     }
@@ -254,19 +254,19 @@ impl EthStorage for InMemoryStorage {
                     .or_insert_with(|| (Account::default(), HistoricalValues::new(BlockNumber::ZERO, Wei::ZERO)));
 
                 // nonce
-                if let Some(nonce) = changes.nonce.take_if_modified() {
+                if let Some(nonce) = changes.nonce.take_modified() {
                     account.nonce = nonce;
                 }
 
                 // balance
-                if let Some(balance) = changes.balance.take_if_modified() {
+                if let Some(balance) = changes.balance.take_modified() {
                     account.balance = balance.clone();
                     account_balances.push(block.header.number, balance);
                 }
 
                 // bytecode
                 if is_success {
-                    if let Some(Some(bytecode)) = changes.bytecode.take_if_modified() {
+                    if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
                         tracing::trace!(bytecode_len = %bytecode.len(), "saving bytecode");
                         account.bytecode = Some(bytecode);
                     }
@@ -276,7 +276,7 @@ impl EthStorage for InMemoryStorage {
                 if is_success {
                     let account_slots = state_lock.account_slots.entry(changes.address).or_default();
                     for (slot_index, slot) in changes.slots {
-                        if let Some(slot) = slot.take_if_modified() {
+                        if let Some(slot) = slot.take_modified() {
                             tracing::trace!(%slot, "saving slot");
                             match account_slots.get_mut(&slot_index) {
                                 Some(slot_history) => {
@@ -295,8 +295,8 @@ impl EthStorage for InMemoryStorage {
     }
 }
 
-fn check_conflicts(state: &InMemoryStorageState, execution: &TransactionExecution) -> TransactionExecutionConflicts {
-    let mut conflicts = TransactionExecutionConflicts::default();
+fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> ExecutionConflicts {
+    let mut conflicts = ExecutionConflicts::default();
 
     for change in &execution.changes {
         let address = &change.address;
