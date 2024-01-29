@@ -352,9 +352,8 @@ impl EthStorage for Postgres {
             })
             .fetch_all(&self.connection_pool)
             .await?
-            .iter()
+            .into_iter()
             .filter(|log| filter.matches(log))
-            .cloned()
             .collect();
 
         Ok(result)
