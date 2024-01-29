@@ -42,12 +42,11 @@ pub struct PostgresTransaction {
 
 impl PostgresTransaction {
     pub fn into_transaction_mined(self, logs: Vec<PostgresLog>, mut topics: HashMap<Index, Vec<PostgresTopic>>) -> TransactionMined {
-        // TODO: remove unwrap()
         let mined_logs: Vec<LogMined> = logs
             .into_iter()
             .map(|log| {
                 let log_idx = log.log_idx;
-                log.into_log_mined(topics.remove(&log_idx).unwrap())
+                log.into_log_mined(topics.remove(&log_idx).unwrap_or_default())
             })
             .collect();
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();

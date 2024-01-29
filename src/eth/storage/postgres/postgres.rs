@@ -241,8 +241,8 @@ impl EthStorage for Postgres {
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
-                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or(Vec::new());
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or(HashMap::new());
                         tx.into_transaction_mined(this_tx_logs, this_tx_topics)
                     })
                     .collect();
@@ -305,22 +305,54 @@ impl EthStorage for Postgres {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        todo!()
+        let transaction = sqlx::query_file_as!(
+            PostgresTransaction,
+            "src/eth/storage/postgres/queries/select_transaction_by_hash.sql",
+            hash.as_ref()
+        )
+        .fetch_one(&self.connection_pool)
+        .await
+        .map_err(|err| {
+            tracing::debug!(?err);
+            err
+        })?;
+
+        let logs = sqlx::query_file_as!(
+            PostgresLog,
+            "src/eth/storage/postgres/queries/select_logs_by_transaction_hash.sql",
+            hash.as_ref()
+        )
+        .fetch_all(&self.connection_pool)
+        .await?;
+
+        let topics = sqlx::query_file_as!(
+            PostgresTopic,
+            "src/eth/storage/postgres/queries/select_topics_by_transaction_hash.sql",
+            hash.as_ref()
+        )
+        .fetch_all(&self.connection_pool)
+        .await?;
+
+        let mut topic_partitions = partition_topics(topics);
+
+        Ok(Some(
+            transaction.into_transaction_mined(logs, topic_partitions.remove(hash).unwrap_or(HashMap::new())),
+        ))
     }
 
     async fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         Ok(Vec::new())
     }
 
-    // The types conversions are ugly, but they are acting as a placeholder until we decide if we'll use
+    // The type conversions are ugly, but they are acting as a placeholder until we decide if we'll use
     // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
-    //either worked for some reason I was not able to determine at this time)
+    // neither worked for some reason I was not able to determine at this time)
+    // TODO: save slots
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         tracing::debug!(block = ?block, "saving block");
-        sqlx::query!(
-            "INSERT INTO blocks(hash, transactions_root, gas, logs_bloom, timestamp_in_secs, created_at)
-            VALUES ($1, $2, $3, $4, $5, current_timestamp)",
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_block.sql",
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
             BigDecimal::from(block.header.gas),
@@ -350,14 +382,8 @@ impl EthStorage for Postgres {
                             None
                         })
                         .map(|val| val.as_ref().to_owned());
-                    sqlx::query!(
-                        r#"
-                INSERT INTO accounts
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (address) DO UPDATE
-                SET nonce = EXCLUDED.nonce,
-                    balance = EXCLUDED.balance,
-                    bytecode = EXCLUDED.bytecode"#,
+                    sqlx::query_file!(
+                        "src/eth/storage/postgres/queries/insert_account.sql",
                         change.address.as_ref(),
                         BigDecimal::from(nonce),
                         BigDecimal::from(balance),
@@ -366,13 +392,47 @@ impl EthStorage for Postgres {
                     )
                     .execute(&self.connection_pool)
                     .await
+                    .context("failed to insert account")?;
+                }
+            }
+
+            for log in transaction.logs {
+                let tx_hash = log.transaction_hash.as_ref();
+                let tx_idx = i32::from(log.transaction_index);
+                let lg_idx = i32::from(log.log_index);
+                let b_number = i64::try_from(log.block_number).context("failed to convert block number")?;
+                let b_hash = log.block_hash.as_ref();
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_log.sql",
+                    log.log.address.as_ref(),
+                    *log.log.data,
+                    tx_hash,
+                    tx_idx,
+                    lg_idx,
+                    b_number,
+                    b_hash
+                )
+                .execute(&self.connection_pool)
+                .await
+                .context("failed to insert log")?;
+                for topic in log.log.topics {
+                    sqlx::query_file!(
+                        "src/eth/storage/postgres/queries/insert_topic.sql",
+                        topic.as_ref(),
+                        tx_hash,
+                        tx_idx,
+                        lg_idx,
+                        b_number,
+                        b_hash
+                    )
+                    .execute(&self.connection_pool)
+                    .await
                     .context("failed to insert topic")?;
                 }
             }
 
-            sqlx::query!(
-                "INSERT INTO transactions
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_transaction.sql",
                 transaction.input.hash.as_ref(),
                 transaction.input.signer.as_ref(),
                 BigDecimal::from(transaction.input.nonce),

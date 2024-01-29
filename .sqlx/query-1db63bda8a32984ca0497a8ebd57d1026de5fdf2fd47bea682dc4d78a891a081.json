@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO accounts\nVALUES ($1, $2, $3, $4, $5)\nON CONFLICT (address) DO UPDATE\nSET nonce = EXCLUDED.nonce,\n    balance = EXCLUDED.balance,\n    bytecode = EXCLUDED.bytecode\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Numeric",
+        "Numeric",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1db63bda8a32984ca0497a8ebd57d1026de5fdf2fd47bea682dc4d78a891a081"
+}
