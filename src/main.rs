@@ -85,8 +85,6 @@ async fn run_rpc_server(config: Arc<Config>, mut cancel_signal: broadcast::Recei
 }
 
 /// Inits EVMs that will executes transactions in parallel.
-///
-/// TODO: The number of EVMs may be configurable instead of assuming a value based on number of processors.
 fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
     let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(config.num_evms);
     for _ in 1..=config.num_evms {

@@ -308,14 +308,14 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     match kind.deref() {
         // new block emitted
         "newHeads" => {
-            ctx.subs.add_new_heads(pending.accept().await?);
+            ctx.subs.add_new_heads(pending.accept().await?).await;
         }
 
         // transaction logs emitted
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage).await?;
-            ctx.subs.add_logs(pending.accept().await?, filter);
+            ctx.subs.add_logs(pending.accept().await?, filter).await;
         }
 
         // unsupported
