@@ -1,16 +1,17 @@
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::thread;
 
-use dashmap::DashMap;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use tokio::sync::broadcast;
+use tokio::sync::RwLock;
 use tokio::time::Duration;
 
 use crate::eth::primitives::Block;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::ext::not;
 
 /// Frequency of cleaning up closed subscriptions.
 const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
@@ -24,10 +25,10 @@ type SubscriptionId = usize;
 #[derive(Debug, Default)]
 pub struct RpcSubscriptions {
     /// Subscribers of `newHeads` event.
-    pub new_heads: DashMap<SubscriptionId, SubscriptionSink>,
+    pub new_heads: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
 
     /// Subscribers of `logs` event.
-    pub logs: DashMap<SubscriptionId, (SubscriptionSink, LogFilter)>,
+    pub logs: RwLock<HashMap<SubscriptionId, (SubscriptionSink, LogFilter)>>,
 }
 
 impl RpcSubscriptions {
@@ -35,14 +36,14 @@ impl RpcSubscriptions {
     ///
     /// Runs in a blocking thread because DashMap was preventing Tokio tasks to progress due to some internal locking.
     pub fn spawn_subscriptions_cleaner(self: Arc<Self>) {
-        tokio::task::spawn_blocking(move || loop {
-            for closed_sub in self.new_heads.iter().filter(|sub| sub.is_closed()) {
-                self.new_heads.remove(closed_sub.key());
-            }
-            for closed_sub in self.logs.iter().filter(|sub| sub.0.is_closed()) {
-                self.logs.remove(closed_sub.key());
-            }
-            thread::sleep(CLEANING_FREQUENCY);
+        tokio::spawn(async move {
+            let mut new_heads_subs = self.new_heads.write().await;
+            new_heads_subs.retain(|_, sub| not(sub.is_closed()));
+
+            let mut logs_subs = self.logs.write().await;
+            logs_subs.retain(|_, (sub, _)| not(sub.is_closed()));
+
+            tokio::time::sleep(CLEANING_FREQUENCY).await;
         });
     }
 
@@ -52,8 +53,10 @@ impl RpcSubscriptions {
             loop {
                 let block = rx.recv().await.expect("newHeads notifier channel should never be closed");
                 let msg = SubscriptionMessage::from(block.header);
-                for sub in &self.new_heads {
-                    notify(&sub, msg.clone()).await;
+
+                let new_heads_subs = self.new_heads.read().await;
+                for sub in new_heads_subs.values() {
+                    notify(sub, msg.clone()).await;
                 }
             }
         });
@@ -65,9 +68,11 @@ impl RpcSubscriptions {
             loop {
                 let log = rx.recv().await.expect("logs notifier channel should never be closed");
 
-                let interested_subs = self.logs.iter().filter(|sub| sub.1.matches(&log)).collect_vec();
+                let logs_subs = self.logs.read().await;
+                let logs_interested_subs = logs_subs.values().filter(|(_, filter)| filter.matches(&log)).collect_vec();
+
                 let msg = SubscriptionMessage::from(log);
-                for sub in interested_subs {
+                for sub in logs_interested_subs {
                     notify(&sub.0, msg.clone()).await;
                 }
             }
@@ -79,13 +84,13 @@ impl RpcSubscriptions {
     // -------------------------------------------------------------------------
 
     /// Adds a new subscriber to `newHeads` event.
-    pub fn add_new_heads(&self, sink: SubscriptionSink) {
-        self.new_heads.insert(sink.connection_id(), sink);
+    pub async fn add_new_heads(&self, sink: SubscriptionSink) {
+        self.new_heads.write().await.insert(sink.connection_id(), sink);
     }
 
     /// Adds a new subscriber to `logs` event.
-    pub fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
-        self.logs.insert(sink.connection_id(), (sink, filter));
+    pub async fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
+        self.logs.write().await.insert(sink.connection_id(), (sink, filter));
     }
 }
 

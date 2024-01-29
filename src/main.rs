@@ -66,16 +66,16 @@ pub fn init_async_runtime(config: &Config) -> Runtime {
     runtime
 }
 
-async fn run_rpc_server(config: Arc<Config>, mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
+async fn run_rpc_server(config: Arc<Config>, _: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting RPC server");
 
     let storage: Arc<dyn EthStorage> = match &config.storage {
         // init services
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
-        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
+        StorageConfig::Postgres { url } => Arc::new(Postgres::new(url).await?.metrified()),
     };
     // init executor
-    let evms = init_evms(&*config, Arc::clone(&storage));
+    let evms = init_evms(&config, Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
     serve_rpc(executor, storage, config.address).await?;
@@ -85,8 +85,6 @@ async fn run_rpc_server(config: Arc<Config>, mut cancel_signal: broadcast::Recei
 }
 
 /// Inits EVMs that will executes transactions in parallel.
-///
-/// TODO: The number of EVMs may be configurable instead of assuming a value based on number of processors.
 fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
     let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(config.num_evms);
     for _ in 1..=config.num_evms {
