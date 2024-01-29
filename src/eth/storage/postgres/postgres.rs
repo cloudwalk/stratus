@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use async_trait::async_trait;
+use sqlx::postgres::PgRow;
+use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
+use sqlx::Row;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -12,6 +15,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
+use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
@@ -340,8 +344,42 @@ impl EthStorage for Postgres {
         ))
     }
 
-    async fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        Ok(Vec::new())
+    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        let from: i64 = filter.from_block.try_into()?;
+        let query = include_str!("queries/select_logs.sql");
+
+        let builder = &mut QueryBuilder::new(query);
+        builder.push("AND block_number >= $1");
+        builder.push_bind(from);
+
+        // verifies if to_block exists
+        if let Some(block_number) = filter.to_block {
+            builder.push(" AND block_number <= $2");
+            let to: i64 = block_number.try_into()?;
+            builder.push_bind(to);
+        }
+
+        let query = builder.build();
+        let result = query
+            .map(|row: PgRow| LogMined {
+                log: Log {
+                    address: row.get("address"),
+                    data: row.get("data"),
+                    topics: vec![],
+                },
+                transaction_hash: row.get("transaction_hash"),
+                transaction_index: row.get("transaction_idx"),
+                log_index: row.get("log_idx"),
+                block_number: row.get("block_number"),
+                block_hash: row.get("block_hash"),
+            })
+            .fetch_all(&self.connection_pool)
+            .await?
+            .into_iter()
+            .filter(|log| filter.matches(log))
+            .collect();
+
+        Ok(result)
     }
 
     // The type conversions are ugly, but they are acting as a placeholder until we decide if we'll use
