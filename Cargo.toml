@@ -43,6 +43,7 @@ async-channel = "2.1.1"
 libp2p = { version = "0.52", features = ["tcp", "tls", "dns", "tokio", "noise", "yamux", "websocket", "ping", "macros"] }
 futures = "0.3.21"
 crossbeam-channel = "0.5.11"
+thiserror = "1.0.56"
 
 [dev-dependencies]
 binary_macros = "1.0.0"

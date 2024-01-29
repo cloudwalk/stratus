@@ -82,11 +82,11 @@ async fn run_rpc_server(config: Arc<Config>, cancel_signal: broadcast::Receiver<
     let storage: Arc<dyn EthStorage> = match &config.storage {
         // init services
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
-        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
+        StorageConfig::Postgres { url } => Arc::new(Postgres::new(url).await?.metrified()),
     };
 
     // init executor
-    let evms = init_evms(&*config, Arc::clone(&storage));
+    let evms = init_evms(&config, Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
     serve_rpc(executor, storage, config.address, cancel_signal).await?;
@@ -112,7 +112,7 @@ async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::R
     select! {
         _ = cancel_signal.recv() => {
             tracing::info!("P2P task cancelled");
-            return Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"));
+            Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"))
         }
     }
 }
