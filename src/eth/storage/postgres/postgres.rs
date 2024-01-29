@@ -305,30 +305,9 @@ impl EthStorage for Postgres {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let transaction = sqlx::query_as!(
+        let transaction = sqlx::query_file_as!(
             PostgresTransaction,
-            r#"
-                SELECT
-                    hash as "hash: _"
-                    ,signer_address as "signer_address: _"
-                    ,nonce as "nonce: _"
-                    ,address_from as "address_from: _"
-                    ,address_to as "address_to: _"
-                    ,input as "input: _"
-                    ,gas as "gas: _"
-                    ,gas_price as "gas_price: _"
-                    ,idx_in_block as "idx_in_block: _"
-                    ,block_number as "block_number: _"
-                    ,block_hash as "block_hash: _"
-                    ,output as "output: _"
-                    ,value as "value: _"
-                    ,v as "v: _"
-                    ,s as "s: _"
-                    ,r as "r: _"
-                    ,result as "result: _"
-                FROM transactions
-                WHERE hash = $1
-            "#,
+            "src/eth/storage/postgres/queries/select_transaction_by_hash.sql",
             hash.as_ref()
         )
         .fetch_one(&self.connection_pool)
@@ -338,38 +317,17 @@ impl EthStorage for Postgres {
             err
         })?;
 
-        let logs = sqlx::query_as!(
+        let logs = sqlx::query_file_as!(
             PostgresLog,
-            r#"
-                SELECT
-                    address as "address: _"
-                    ,data as "data: _"
-                    ,transaction_hash as "transaction_hash: _"
-                    ,transaction_idx as "transaction_idx: _"
-                    ,log_idx as "log_idx: _"
-                    ,block_number as "block_number: _"
-                    ,block_hash as "block_hash: _"
-                FROM logs
-                WHERE transaction_hash = $1
-            "#,
+            "src/eth/storage/postgres/queries/select_logs_by_transaction_hash.sql",
             hash.as_ref()
         )
         .fetch_all(&self.connection_pool)
         .await?;
 
-        let topics = sqlx::query_as!(
+        let topics = sqlx::query_file_as!(
             PostgresTopic,
-            r#"
-                SELECT
-                    topic as "topic: _"
-                    ,transaction_hash as "transaction_hash: _"
-                    ,transaction_idx as "transaction_idx: _"
-                    ,log_idx as "log_idx: _"
-                    ,block_number as "block_number: _"
-                    ,block_hash as "block_hash: _"
-                FROM topics
-                WHERE transaction_hash = $1
-            "#,
+            "src/eth/storage/postgres/queries/select_topics_by_transaction_hash.sql",
             hash.as_ref()
         )
         .fetch_all(&self.connection_pool)
@@ -393,9 +351,8 @@ impl EthStorage for Postgres {
     // TODO: save slots
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         tracing::debug!(block = ?block, "saving block");
-        sqlx::query!(
-            "INSERT INTO blocks(hash, transactions_root, gas, logs_bloom, timestamp_in_secs, created_at)
-            VALUES ($1, $2, $3, $4, $5, current_timestamp)",
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_block.sql",
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
             BigDecimal::from(block.header.gas),
@@ -425,14 +382,8 @@ impl EthStorage for Postgres {
                             None
                         })
                         .map(|val| val.as_ref().to_owned());
-                    sqlx::query!(
-                        r#"
-                INSERT INTO accounts
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (address) DO UPDATE
-                SET nonce = EXCLUDED.nonce,
-                    balance = EXCLUDED.balance,
-                    bytecode = EXCLUDED.bytecode"#,
+                    sqlx::query_file!(
+                        "src/eth/storage/postgres/queries/insert_account.sql",
                         change.address.as_ref(),
                         BigDecimal::from(nonce),
                         BigDecimal::from(balance),
@@ -441,13 +392,12 @@ impl EthStorage for Postgres {
                     )
                     .execute(&self.connection_pool)
                     .await
-                    .context("failed to insert topic")?;
+                    .context("failed to insert account")?;
                 }
             }
 
-            sqlx::query!(
-                "INSERT INTO transactions
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_transaction.sql",
                 transaction.input.hash.as_ref(),
                 transaction.input.signer.as_ref(),
                 BigDecimal::from(transaction.input.nonce),
