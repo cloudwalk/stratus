@@ -295,11 +295,12 @@ impl EthStorage for Postgres {
             "#,
             hash.as_ref()
         )
-        .fetch_one(&self.connection_pool).await.map_err(|err| {
+        .fetch_one(&self.connection_pool)
+        .await
+        .map_err(|err| {
             tracing::debug!(?err);
             err
         })?;
-        tracing::debug!("1");
 
         let logs = sqlx::query_as!(
             PostgresLog,
@@ -317,8 +318,9 @@ impl EthStorage for Postgres {
             "#,
             hash.as_ref()
         )
-        .fetch_all(&self.connection_pool).await?;
-        tracing::debug!("2");
+        .fetch_all(&self.connection_pool)
+        .await?;
+
         let topics = sqlx::query_as!(
             PostgresTopic,
             r#"
@@ -334,13 +336,14 @@ impl EthStorage for Postgres {
             "#,
             hash.as_ref()
         )
-        .fetch_all(&self.connection_pool).await?;
-        tracing::debug!("3");
+        .fetch_all(&self.connection_pool)
+        .await?;
 
         let mut topic_partitions = partition_topics(topics);
-        tracing::debug!("4");
 
-        Ok(Some(transaction.into_transaction_mined(logs, topic_partitions.remove(&hash).unwrap_or(HashMap::new()))))
+        Ok(Some(
+            transaction.into_transaction_mined(logs, topic_partitions.remove(hash).unwrap_or(HashMap::new())),
+        ))
     }
 
     async fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
@@ -352,7 +355,7 @@ impl EthStorage for Postgres {
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
     // neither worked for some reason I was not able to determine at this time)
     // TODO: save slots
-    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         tracing::debug!(block = ?block, "saving block");
         sqlx::query!(
             "INSERT INTO blocks(hash, transactions_root, gas, logs_bloom, timestamp_in_secs, created_at)

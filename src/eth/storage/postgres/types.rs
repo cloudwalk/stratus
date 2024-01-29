@@ -46,7 +46,7 @@ impl PostgresTransaction {
             .into_iter()
             .map(|log| {
                 let log_idx = log.log_idx;
-                log.into_log_mined(topics.remove(&log_idx).unwrap_or(Vec::new()))
+                log.into_log_mined(topics.remove(&log_idx).unwrap_or_default())
             })
             .collect();
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
