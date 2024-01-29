@@ -313,8 +313,7 @@ impl EthStorage for Postgres {
     }
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        let from: i64 = filter.from_block.try_into().unwrap();
-        let to: i64;
+        let from: i64 = filter.from_block.try_into()?;
         let query = r#"
             SELECT
                 address as "address:  "
@@ -333,7 +332,7 @@ impl EthStorage for Postgres {
         // verifies if to_block exists
         if let Some(block_number) = filter.to_block {
             builder.push(" AND block_number <= $2");
-            to = block_number.try_into().unwrap();
+            let to: i64 = block_number.try_into()?;
             builder.push_bind(to.to_owned());
         }
 
