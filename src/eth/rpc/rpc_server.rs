@@ -90,7 +90,7 @@ pub async fn serve_rpc(
         _ = cancel_signal.recv() => {
             tracing::info!("Cancellation signal received, stopping RPC server");
             let _ = handle.stop();
-            return Err(anyhow::anyhow!("Cancellation signal received, stopping RPC server"));
+            Err(anyhow::anyhow!("Cancellation signal received, stopping RPC server"))
         }
     }
 }

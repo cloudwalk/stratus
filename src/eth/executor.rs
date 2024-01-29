@@ -25,6 +25,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::EthStorageError;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -90,13 +91,30 @@ impl EthExecutor {
             return Err(anyhow!("Transaction sent from zero address is not allowed."));
         }
 
-        // execute transaction
-        let execution = self.execute_in_evm(transaction.clone().try_into()?).await?;
+        // execute transaction until no more conflicts
+        // todo: must have a stop condition like timeout or max number of retries
+        let (execution, block) = loop {
+            // execute and check conflicts before mining block
+            let execution = self.execute_in_evm(transaction.clone().try_into()?).await?;
+            let conflicts = self.eth_storage.check_conflicts(&execution).await?;
+            if conflicts.any() {
+                tracing::warn!(?conflicts, "storage conflict detected before mining block");
+                continue;
+            }
 
-        // mine block
-        let mut miner_lock = self.miner.lock().await;
-        let block = miner_lock.mine_with_one_transaction(transaction, execution.clone()).await?;
-        self.eth_storage.save_block(block.clone()).await?;
+            // mine and save block
+            let mut miner_lock = self.miner.lock().await;
+            let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+            match self.eth_storage.save_block(block.clone()).await {
+                Ok(()) => {}
+                Err(EthStorageError::Conflict(conflicts)) => {
+                    tracing::warn!(?conflicts, "storage conflict detected when saving block");
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
+            break (execution, block);
+        };
 
         // notify new blocks
         if let Err(e) = self.block_notifier.send(block.clone()) {

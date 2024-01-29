@@ -243,10 +243,10 @@ describe("Transaction: TestContractBalances", async () => {
         }
         await Promise.all(requests);
 
-        // verify (enable only after conflict detection is implemented in stratus)
-        // expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address]);
-        // expect(await _contract.get(BOB.address)).eq(expectedBalances[BOB.address]);
-        // expect(await _contract.get(CHARLIE.address)).eq(expectedBalances[CHARLIE.address]);
+        // verify
+        expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address]);
+        expect(await _contract.get(BOB.address)).eq(expectedBalances[BOB.address]);
+        expect(await _contract.get(CHARLIE.address)).eq(expectedBalances[CHARLIE.address]);
     });
 });
 
@@ -291,9 +291,9 @@ describe("Transaction: TestContractCounter", async () => {
             const requests = [rpc.sendRawTransaction(signedTxs[0]), rpc.sendRawTransaction(signedTxs[1])];
             await Promise.all(requests);
 
-            // verify (enable only after conflict detection is implemented in stratus)
-            // expect(await _contract.getCounter()).eq(i + 1);
-            // expect(await _contract.getDoubleCounter()).oneOf(expectedDoubleCounter);
+            // verify
+            expect(await _contract.getCounter()).eq(i + 1);
+            expect(await _contract.getDoubleCounter()).oneOf(expectedDoubleCounter);
         }
     });
 });
