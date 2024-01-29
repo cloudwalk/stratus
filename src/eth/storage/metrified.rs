@@ -13,8 +13,11 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionConflicts;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::EthStorageError;
 use crate::infra::metrics;
 
 /// Proxy storage that tracks metrics.
@@ -30,10 +33,17 @@ impl<T: EthStorage> MetrifiedStorage<T> {
 
 #[async_trait]
 impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
+    /// TODO: track metric
+    async fn check_conflicts(&self, execution: &TransactionExecution) -> anyhow::Result<TransactionExecutionConflicts> {
+        self.inner.check_conflicts(execution).await
+    }
+
+    /// TODO: track metric
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         self.inner.read_current_block_number().await
     }
 
+    /// TODO: track metric
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         self.inner.increment_block_number().await
     }
@@ -73,7 +83,7 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         result
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let start = Instant::now();
         let result = self.inner.save_block(block).await;
         metrics::inc_storage_blocks_written(start.elapsed(), result.is_ok());

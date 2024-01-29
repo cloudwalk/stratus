@@ -298,7 +298,7 @@ impl<T> TransactionExecutionValueChange<T>
 where
     T: PartialEq,
 {
-    /// Create a new `TransactionValueChange` only with original value.
+    /// Creates a new `TransactionValueChange` only with original value.
     pub fn from_original(value: T) -> Self {
         Self {
             original: TransactionExecutionValueChangeState::Set(value),
@@ -306,7 +306,7 @@ where
         }
     }
 
-    /// Create a new `TransactionValueChange` only with modified value.
+    /// Creates a new `TransactionValueChange` only with modified value.
     pub fn from_modified(value: T) -> Self {
         Self {
             original: TransactionExecutionValueChangeState::NotSet,
@@ -314,7 +314,7 @@ where
         }
     }
 
-    /// Set the modified value of an original value.
+    /// Sets the modified value of an original value.
     pub fn set_modified(&mut self, value: T) {
         if self.original.is_not_set() {
             tracing::warn!("Setting modified value without original value. Use `new_modified` instead.");
@@ -322,7 +322,16 @@ where
         self.modified = TransactionExecutionValueChangeState::Set(value);
     }
 
-    /// Take the modified value only if the value was modified.
+    /// Takes the original value as reference if it is set.
+    pub fn take_original_ref(&self) -> Option<&T> {
+        if let TransactionExecutionValueChangeState::Set(ref value) = self.original {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    /// Takes the modified value only if the value was modified.
     pub fn take_if_modified(self) -> Option<T> {
         if let TransactionExecutionValueChangeState::Set(value) = self.modified {
             Some(value)
@@ -331,6 +340,7 @@ where
         }
     }
 
+    /// TODO: document.
     pub fn take(self) -> Option<T> {
         if let TransactionExecutionValueChangeState::Set(value) = self.modified {
             Some(value)
