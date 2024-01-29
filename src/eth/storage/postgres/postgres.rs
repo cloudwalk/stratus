@@ -2,6 +2,9 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use sqlx::types::BigDecimal;
+use sqlx::query_builder::QueryBuilder;
+use sqlx::postgres::PgRow;
+use sqlx::Row;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -266,8 +269,55 @@ impl EthStorage for Postgres {
         todo!()
     }
 
-    async fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        Ok(Vec::new())
+    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        // from_block -> to_block
+        // search for addresses
+        // search for topics
+        let from: i64 = filter.from_block.try_into().unwrap();
+        let to: i64;
+        let query = r#"
+            SELECT
+                address as "address:  "
+                , data as "data:  "
+                , transaction_hash as "transaction_hash: "
+                , log_idx as "log_idx:  "
+                , block_number as "block_number:  "
+                , block_hash as "block_hash:  "
+            FROM logs
+            WHERE block_number >= $1
+        "#.to_owned();
+        let builder = &mut QueryBuilder::new(query);
+        builder.push_bind(from);
+
+        // verifies if to_block exists
+        if let Some(block_number) = filter.to_block {
+            builder.push(&" AND block_number <= $2");
+            to = block_number.try_into().unwrap();
+            builder.push_bind(to.to_owned());
+        }
+        
+        let query = builder.build();
+        let result = query
+            .map(|row: PgRow| LogMined {
+                log: crate::eth::primitives::Log {
+                    address: row.get("address"),
+                    data: row.get("data"),
+                    topics: vec![],
+                },
+                transaction_hash: row.get("transaction_hash"),
+                transaction_index: row.get("transaction_idx"),
+                log_index: row.get("log_idx"),
+                block_number: row.get("block_number"),
+                block_hash: row.get("block_hash"),
+            })
+	    	.fetch_all(&self.connection_pool)
+		    .await?
+            .iter()
+            .filter(|log| filter.matches(log))
+            .cloned()
+            .collect();
+
+        Ok(result)
     }
 
     // The types conversions are ugly, but they are acting as a placeholder until we decide if we'll use
