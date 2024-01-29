@@ -64,6 +64,11 @@ _lint fmt-flag="":
 sqlx:
     SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@0.0.0.0:5432/stratus -- --all-targets
 
+# Check outdated crates
+outdated:
+    cargo install --locked cargo-outdated
+    cargo outdated --exit-code 1
+
 # ------------------------------------------------------------------------------
 # Test tasks
 # ------------------------------------------------------------------------------
