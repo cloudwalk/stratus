@@ -17,14 +17,14 @@ impl From<EcdsaV> for U64 {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = EcdsaV, other = i32);
+gen_newtype_from!(self = EcdsaV, other = i32, [u8; 8]);
 
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for EcdsaV {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <i32 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        let value = <[u8; 8] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }

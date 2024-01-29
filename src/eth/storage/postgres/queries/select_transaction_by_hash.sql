@@ -1,0 +1,20 @@
+SELECT
+    hash as "hash: _"
+    ,signer_address as "signer_address: _"
+    ,nonce as "nonce: _"
+    ,address_from as "address_from: _"
+    ,address_to as "address_to: _"
+    ,input as "input: _"
+    ,gas as "gas: _"
+    ,gas_price as "gas_price: _"
+    ,idx_in_block as "idx_in_block: _"
+    ,block_number as "block_number: _"
+    ,block_hash as "block_hash: _"
+    ,output as "output: _"
+    ,value as "value: _"
+    ,v as "v: _"
+    ,s as "s: _"
+    ,r as "r: _"
+    ,result as "result: _"
+FROM transactions
+WHERE hash = $1
