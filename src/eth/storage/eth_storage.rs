@@ -7,14 +7,14 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionConflicts;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::MetrifiedStorage;
 
@@ -38,7 +38,7 @@ pub trait EthStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
 
     /// Checks if the transaction execution conflicts with the current storage state.
-    async fn check_conflicts(&self, execution: &TransactionExecution) -> anyhow::Result<TransactionExecutionConflicts>;
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts>;
 
     /// Retrieves an account from the storage.
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account>;

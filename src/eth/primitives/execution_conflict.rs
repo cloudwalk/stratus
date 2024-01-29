@@ -6,24 +6,24 @@ use crate::eth::primitives::Wei;
 use crate::ext::not;
 
 #[derive(Debug, Default)]
-pub struct TransactionExecutionConflicts {
-    inner: Vec<TransactionExecutionConflict>,
+pub struct ExecutionConflicts {
+    inner: Vec<ExecutionConflict>,
 }
 
-impl TransactionExecutionConflicts {
+impl ExecutionConflicts {
     /// Adds a new nonce conflict to the list of tracked conflicts.
     pub fn add_nonce(&mut self, address: Address, expected: Nonce, actual: Nonce) {
-        self.inner.push(TransactionExecutionConflict::Nonce { address, expected, actual });
+        self.inner.push(ExecutionConflict::Nonce { address, expected, actual });
     }
 
     /// Adds a new balance conflict to the list of tracked conflicts.
     pub fn add_balance(&mut self, address: Address, expected: Wei, actual: Wei) {
-        self.inner.push(TransactionExecutionConflict::Balance { address, expected, actual });
+        self.inner.push(ExecutionConflict::Balance { address, expected, actual });
     }
 
     /// Adds a new slot conflict to the list of tracked conflicts.
     pub fn add_slot(&mut self, address: Address, slot: SlotIndex, expected: SlotValue, actual: SlotValue) {
-        self.inner.push(TransactionExecutionConflict::Slot {
+        self.inner.push(ExecutionConflict::Slot {
             address,
             slot,
             expected,
@@ -38,7 +38,7 @@ impl TransactionExecutionConflicts {
 }
 
 #[derive(Debug, derive_new::new)]
-pub enum TransactionExecutionConflict {
+pub enum ExecutionConflict {
     /// Account nonce mismatch.
     Nonce { address: Address, expected: Nonce, actual: Nonce },
 

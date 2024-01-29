@@ -6,6 +6,8 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EcdsaRs;
 use crate::eth::primitives::EcdsaV;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
@@ -13,8 +15,6 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionResult;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
@@ -31,7 +31,7 @@ pub struct PostgresTransaction {
     pub idx_in_block: Index,
     pub block_number: BlockNumber,
     pub block_hash: Hash,
-    pub result: TransactionExecutionResult,
+    pub result: ExecutionResult,
     // pub block_timestamp: UnixTime,
     pub output: Bytes,
     pub value: Wei,
@@ -51,7 +51,7 @@ impl PostgresTransaction {
             })
             .collect();
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
-        let execution = TransactionExecution {
+        let execution = Execution {
             gas: self.gas.clone(),
             output: self.output,
             block_timestamp_in_secs: 0, //*self.block_timestamp,
