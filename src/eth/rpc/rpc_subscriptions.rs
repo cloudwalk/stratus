@@ -33,17 +33,27 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Spawns a new thread to clean up closed subscriptions from time to time.
-    ///
-    /// Runs in a blocking thread because DashMap was preventing Tokio tasks to progress due to some internal locking.
     pub fn spawn_subscriptions_cleaner(self: Arc<Self>) {
         tokio::spawn(async move {
-            let mut new_heads_subs = self.new_heads.write().await;
-            new_heads_subs.retain(|_, sub| not(sub.is_closed()));
+            loop {
+                let any_new_heads_closed = self.new_heads.read().await.iter().any(|(_, sub)| sub.is_closed());
+                if any_new_heads_closed {
+                    let mut new_heads_subs = self.new_heads.write().await;
+                    let before = new_heads_subs.len();
+                    new_heads_subs.retain(|_, sub| not(sub.is_closed()));
+                    tracing::info!(%before, after = new_heads_subs.len(), "removed newHeads subscriptions");
+                }
 
-            let mut logs_subs = self.logs.write().await;
-            logs_subs.retain(|_, (sub, _)| not(sub.is_closed()));
+                let any_logs_closed = self.logs.read().await.iter().any(|(_, (sub, _))| sub.is_closed());
+                if any_logs_closed {
+                    let mut logs_subs = self.logs.write().await;
+                    let before = logs_subs.len();
+                    logs_subs.retain(|_, (sub, _)| not(sub.is_closed()));
+                    tracing::info!(%before, after = logs_subs.len(), "removed logs subscriptions");
+                }
 
-            tokio::time::sleep(CLEANING_FREQUENCY).await;
+                tokio::time::sleep(CLEANING_FREQUENCY).await;
+            }
         });
     }
 
