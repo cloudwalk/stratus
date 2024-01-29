@@ -1,12 +1,14 @@
 //! Ethereum JSON-RPC server.
 
 mod rpc_context;
+mod rpc_error;
 mod rpc_middleware;
 mod rpc_parser;
 mod rpc_server;
 mod rpc_subscriptions;
 
 use rpc_context::RpcContext;
+pub use rpc_error::RpcError;
 use rpc_middleware::RpcMiddleware;
 use rpc_parser::next_rpc_param;
 use rpc_parser::next_rpc_param_or_default;
