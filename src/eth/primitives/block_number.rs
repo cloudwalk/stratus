@@ -71,8 +71,7 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
 
 impl sqlx::Type<sqlx::Postgres> for BlockNumber {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        // TODO: check this
-        // Actually BIGSERIAL, sqlx was panicking
+        // HACK: Actually BIGSERIAL, sqlx was panicking
         sqlx::postgres::PgTypeInfo::with_name("INT8")
     }
 }

@@ -46,7 +46,7 @@ gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32,
 
 impl From<BigDecimal> for Gas {
     fn from(value: BigDecimal) -> Self {
-        // This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
+        // NOTE: This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
         let (integer, _) = value.as_bigint_and_exponent();
         let (_, bytes) = integer.to_bytes_be();
         Gas(U256::from_big_endian(&bytes))
