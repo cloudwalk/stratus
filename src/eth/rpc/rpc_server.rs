@@ -29,9 +29,9 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
-use crate::eth::rpc::rpc_parser::RpcError;
 use crate::eth::rpc::rpc_parsing_error;
 use crate::eth::rpc::RpcContext;
+use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
@@ -226,7 +226,7 @@ async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::R
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 
         // result is failure
-        Ok(result) => Err(RpcError::Strict(rpc_internal_error(hex_data(result.output)))),
+        Ok(result) => Err(RpcError::Response(rpc_internal_error(hex_data(result.output)))),
 
         // internal error
         Err(e) => {
@@ -263,7 +263,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         Ok(result) if result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(result) => Err(RpcError::Strict(rpc_internal_error(hex_data(result.output)))),
+        Ok(result) => Err(RpcError::Response(rpc_internal_error(hex_data(result.output)))),
 
         // internal error
         Err(e) => {
