@@ -56,10 +56,9 @@ impl From<RevmU256> for Wei {
 
 impl From<BigDecimal> for Wei {
     fn from(value: BigDecimal) -> Self {
-        Wei(U256::from_dec_str(&value.to_string()).unwrap_or_else(|v| {
-            tracing::error!(?v, "Conversion error");
-            U256::zero()
-        }))
+        let (integer, _) = value.as_bigint_and_exponent();
+        let (_, bytes) = integer.to_bytes_be();
+        Wei(U256::from_big_endian(&bytes))
     }
 }
 
