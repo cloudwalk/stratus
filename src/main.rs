@@ -110,15 +110,10 @@ async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::R
     tracing::info!("Starting P2P server");
     let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
 
-    loop {
-        select! {
-            _ = cancel_signal.recv() => {
-                tracing::info!("P2P task cancelled");
-                break;
-            }
+    select! {
+        _ = cancel_signal.recv() => {
+            tracing::info!("P2P task cancelled");
+            return Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"));
         }
     }
-
-    tracing::info!("P2P server stopped");
-    Ok(())
 }
