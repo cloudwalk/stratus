@@ -43,13 +43,6 @@ use crate::eth::EthExecutor;
 
 /// Starts JSON-RPC server.
 pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, address: SocketAddr, mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
-    tokio::select! {
-        _ = cancel_signal.recv() => {
-            tracing::info!("Cancellation signal received, stopping RPC server");
-            return Err(anyhow::anyhow!("Cancellation signal received, stopping RPC server"));
-        }
-    }
-
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     Arc::clone(&subs).spawn_subscriptions_cleaner();
@@ -87,6 +80,14 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
         .build(address)
         .await?;
     let handle = server.start(module);
+
+    tokio::select! {
+        _ = cancel_signal.recv() => {
+            tracing::info!("Cancellation signal received, stopping RPC server");
+            let _ = handle.stop();
+            return Err(anyhow::anyhow!("Cancellation signal received, stopping RPC server"));
+        }
+    }
 
 
     Ok(())
