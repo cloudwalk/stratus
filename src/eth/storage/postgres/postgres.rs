@@ -289,9 +289,22 @@ impl EthStorage for Postgres {
         for transaction in block.transactions {
             if transaction.is_success() {
                 for change in transaction.execution.changes {
-                    let nonce = change.nonce.take().unwrap_or(0.into());
-                    let balance = change.balance.take().unwrap_or(0.into());
-                    let bytecode = change.bytecode.take().unwrap_or(None).map(|val| val.as_ref().to_owned());
+                    let nonce = change.nonce.take().unwrap_or_else(|| {
+                        tracing::debug!("Nonce not set, defaulting to 0");
+                        0.into()
+                    });
+                    let balance = change.balance.take().unwrap_or_else(|| {
+                        tracing::debug!("Balance not set, defaulting to 0");
+                        0.into()
+                    });
+                    let bytecode = change
+                        .bytecode
+                        .take()
+                        .unwrap_or_else(|| {
+                            tracing::debug!("Bytecode not set, defaulting to None");
+                            None
+                        })
+                        .map(|val| val.as_ref().to_owned());
                     sqlx::query!(
                         r#"
                 INSERT INTO accounts

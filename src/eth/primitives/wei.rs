@@ -56,6 +56,7 @@ impl From<RevmU256> for Wei {
 
 impl From<BigDecimal> for Wei {
     fn from(value: BigDecimal) -> Self {
+        // This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
         let (integer, _) = value.as_bigint_and_exponent();
         let (_, bytes) = integer.to_bytes_be();
         Wei(U256::from_big_endian(&bytes))
