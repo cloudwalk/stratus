@@ -163,7 +163,7 @@ impl EthStorage for Postgres {
                             ,r as "r: _"
                             ,result as "result: _"
                         FROM transactions
-                        WHERE hash = $1
+                        WHERE block_hash = $1
                     "#,
                     hash.as_ref()
                 )
@@ -220,8 +220,8 @@ impl EthStorage for Postgres {
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
-                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or(Vec::new());
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or(HashMap::new());
                         tx.into_transaction_mined(this_tx_logs, this_tx_topics)
                     })
                     .collect();
@@ -261,17 +261,89 @@ impl EthStorage for Postgres {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        todo!()
+        let transaction = sqlx::query_as!(
+            PostgresTransaction,
+            r#"
+                SELECT
+                    hash as "hash: _"
+                    ,signer_address as "signer_address: _"
+                    ,nonce as "nonce: _"
+                    ,address_from as "address_from: _"
+                    ,address_to as "address_to: _"
+                    ,input as "input: _"
+                    ,gas as "gas: _"
+                    ,gas_price as "gas_price: _"
+                    ,idx_in_block as "idx_in_block: _"
+                    ,block_number as "block_number: _"
+                    ,block_hash as "block_hash: _"
+                    ,output as "output: _"
+                    ,value as "value: _"
+                    ,v as "v: _"
+                    ,s as "s: _"
+                    ,r as "r: _"
+                    ,result as "result: _"
+                FROM transactions
+                WHERE hash = $1
+            "#,
+            hash.as_ref()
+        )
+        .fetch_one(&self.connection_pool).await.map_err(|err| {
+            tracing::debug!(?err);
+            err
+        })?;
+        tracing::debug!("1");
+
+        let logs = sqlx::query_as!(
+            PostgresLog,
+            r#"
+                SELECT
+                    address as "address: _"
+                    ,data as "data: _"
+                    ,transaction_hash as "transaction_hash: _"
+                    ,transaction_idx as "transaction_idx: _"
+                    ,log_idx as "log_idx: _"
+                    ,block_number as "block_number: _"
+                    ,block_hash as "block_hash: _"
+                FROM logs
+                WHERE transaction_hash = $1
+            "#,
+            hash.as_ref()
+        )
+        .fetch_all(&self.connection_pool).await?;
+        tracing::debug!("2");
+        let topics = sqlx::query_as!(
+            PostgresTopic,
+            r#"
+                SELECT
+                    topic as "topic: _"
+                    ,transaction_hash as "transaction_hash: _"
+                    ,transaction_idx as "transaction_idx: _"
+                    ,log_idx as "log_idx: _"
+                    ,block_number as "block_number: _"
+                    ,block_hash as "block_hash: _"
+                FROM topics
+                WHERE transaction_hash = $1
+            "#,
+            hash.as_ref()
+        )
+        .fetch_all(&self.connection_pool).await?;
+        tracing::debug!("3");
+
+        let mut topic_partitions = partition_topics(topics);
+        tracing::debug!("4");
+
+        Ok(Some(transaction.into_transaction_mined(logs, topic_partitions.remove(&hash).unwrap_or(HashMap::new()))))
     }
 
     async fn read_logs(&self, _: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         Ok(Vec::new())
     }
 
-    // The types conversions are ugly, but they are acting as a placeholder until we decide if we'll use
+    // The type conversions are ugly, but they are acting as a placeholder until we decide if we'll use
     // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
-    //either worked for some reason I was not able to determine at this time)
+    // neither worked for some reason I was not able to determine at this time)
+    // TODO: save slots
     async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         tracing::debug!(block = ?block, "saving block");
         sqlx::query!(
