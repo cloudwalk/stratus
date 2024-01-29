@@ -1,14 +1,10 @@
 //! Helper functions for parsing RPC requests and responses.
 
-use std::fmt::Debug;
-use std::fmt::Display;
-
 use anyhow::anyhow;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::error::PARSE_ERROR_CODE;
 use jsonrpsee::types::error::PARSE_ERROR_MSG;
-use jsonrpsee::types::ErrorObject;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
@@ -55,40 +51,4 @@ pub fn rpc_parsing_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
 /// Creates an RPC internal error response.
 pub fn rpc_internal_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
     ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(message))
-}
-
-/// Helper type so that we can convert anyhow::Error to ErrorObjectOwned
-#[derive(Debug)]
-pub enum RpcError {
-    Strict(ErrorObjectOwned),
-    Generic(anyhow::Error),
-}
-
-impl std::error::Error for RpcError {}
-
-impl Display for RpcError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RpcError::Strict(err) => Display::fmt(err, f),
-            RpcError::Generic(err) => Display::fmt(err, f),
-        }
-    }
-}
-
-impl From<anyhow::Error> for RpcError {
-    fn from(value: anyhow::Error) -> Self {
-        match value.downcast::<ErrorObject>() {
-            Ok(err) => RpcError::Strict(err),
-            Err(err) => RpcError::Generic(err),
-        }
-    }
-}
-
-impl From<RpcError> for ErrorObjectOwned {
-    fn from(value: RpcError) -> Self {
-        match value {
-            RpcError::Strict(err) => err,
-            RpcError::Generic(err) => ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, Some(err.to_string())),
-        }
-    }
 }
