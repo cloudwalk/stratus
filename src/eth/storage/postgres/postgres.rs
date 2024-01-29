@@ -111,82 +111,8 @@ impl EthStorage for Postgres {
 
                 let block_number = i64::try_from(current)?;
 
-                let _header = sqlx::query_file_as!(
-                    BlockHeader,
-                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
-                    block_number,
-                )
-                .fetch_one(&self.connection_pool)
-                .await?;
-
-                todo!()
-            }
-            BlockSelection::Hash(hash) => {
-                let header_query = sqlx::query_file_as!(
-                    BlockHeader,
-                    "src/eth/storage/postgres/queries/select_block_header_by_hash.sql",
-                    hash.as_ref(),
-                )
-                .fetch_one(&self.connection_pool);
-
-                let transactions_query = sqlx::query_file_as!(
-                    PostgresTransaction,
-                    "src/eth/storage/postgres/queries/select_transactions_by_block_hash.sql",
-                    hash.as_ref()
-                )
-                .fetch_all(&self.connection_pool);
-
-                let logs_query = sqlx::query_file_as!(
-                    PostgresLog,
-                    "src/eth/storage/postgres/queries/select_logs_by_block_hash.sql",
-                    hash.as_ref()
-                )
-                .fetch_all(&self.connection_pool);
-
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres/queries/select_topics_by_block_hash.sql",
-                    hash.as_ref()
-                )
-                .fetch_all(&self.connection_pool);
-
-                // run queries concurrently, but not in parallel
-                // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
-                let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
-
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
-                let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
-                let transactions = transactions
-                    .into_iter()
-                    .map(|tx| {
-                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
-                    })
-                    .collect();
-
-                let block = Block { header, transactions };
-
-                Ok::<Option<Block>, anyhow::Error>(Some(block))
-
-            }
-
-            BlockSelection::Number(number) => {
-                let block_number = i64::try_from(*number)?;
-
-                let header_query = sqlx::query_file_as!(
-                    BlockHeader,
-                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
-                    block_number,
-                )
-                .fetch_one(&self.connection_pool);
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
+                    .fetch_one(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -195,12 +121,8 @@ impl EthStorage for Postgres {
                 )
                 .fetch_all(&self.connection_pool);
 
-                let logs_query = sqlx::query_file_as!(
-                    PostgresLog,
-                    "src/eth/storage/postgres/queries/select_logs_by_block_number.sql",
-                    block_number
-                )
-                .fetch_all(&self.connection_pool);
+                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
+                    .fetch_all(&self.connection_pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
@@ -234,10 +156,149 @@ impl EthStorage for Postgres {
                 let block = Block { header, transactions };
 
                 Ok::<Option<Block>, anyhow::Error>(Some(block))
-                
+            }
+
+            BlockSelection::Hash(hash) => {
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_hash.sql", hash.as_ref(),)
+                    .fetch_one(&self.connection_pool);
+
+                let transactions_query = sqlx::query_file_as!(
+                    PostgresTransaction,
+                    "src/eth/storage/postgres/queries/select_transactions_by_block_hash.sql",
+                    hash.as_ref()
+                )
+                .fetch_all(&self.connection_pool);
+
+                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_hash.sql", hash.as_ref())
+                    .fetch_all(&self.connection_pool);
+
+                let topics_query = sqlx::query_file_as!(PostgresTopic, "src/eth/storage/postgres/queries/select_topics_by_block_hash.sql", hash.as_ref())
+                    .fetch_all(&self.connection_pool);
+
+                // run queries concurrently, but not in parallel
+                // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
+                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let header = res.0?;
+                let transactions = res.1?;
+                let logs = res.2?.into_iter();
+                let topics = res.3?.into_iter();
+
+                // We're still cloning the hashes, maybe create a HashMap structure like this
+                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
+                // so that we don't have to clone the hashes
+                let mut log_partitions = partition_logs(logs);
+                let mut topic_partitions = partition_topics(topics);
+                let transactions = transactions
+                    .into_iter()
+                    .map(|tx| {
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
+                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                    })
+                    .collect();
+
+                let block = Block { header, transactions };
+
+                Ok::<Option<Block>, anyhow::Error>(Some(block))
+            }
+
+            BlockSelection::Number(number) => {
+                let block_number = i64::try_from(*number)?;
+
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
+                    .fetch_one(&self.connection_pool);
+
+                let transactions_query = sqlx::query_file_as!(
+                    PostgresTransaction,
+                    "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
+                    block_number
+                )
+                .fetch_all(&self.connection_pool);
+
+                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
+                    .fetch_all(&self.connection_pool);
+
+                let topics_query = sqlx::query_file_as!(
+                    PostgresTopic,
+                    "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
+                    block_number
+                )
+                .fetch_all(&self.connection_pool);
+
+                // run queries concurrently, but not in parallel
+                // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
+                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let header = res.0?;
+                let transactions = res.1?;
+                let logs = res.2?.into_iter();
+                let topics = res.3?.into_iter();
+
+                // We're still cloning the hashes, maybe create a HashMap structure like this
+                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
+                // so that we don't have to clone the hashes
+                let mut log_partitions = partition_logs(logs);
+                let mut topic_partitions = partition_topics(topics);
+                let transactions = transactions
+                    .into_iter()
+                    .map(|tx| {
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
+                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                    })
+                    .collect();
+
+                let block = Block { header, transactions };
+
+                Ok::<Option<Block>, anyhow::Error>(Some(block))
             }
             BlockSelection::Earliest => {
-                todo!()
+                let block_number = 0i64;
+
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
+                    .fetch_one(&self.connection_pool);
+
+                let transactions_query = sqlx::query_file_as!(
+                    PostgresTransaction,
+                    "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
+                    block_number
+                )
+                .fetch_all(&self.connection_pool);
+
+                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
+                    .fetch_all(&self.connection_pool);
+
+                let topics_query = sqlx::query_file_as!(
+                    PostgresTopic,
+                    "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
+                    block_number
+                )
+                .fetch_all(&self.connection_pool);
+
+                // run queries concurrently, but not in parallel
+                // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
+                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let header = res.0?;
+                let transactions = res.1?;
+                let logs = res.2?.into_iter();
+                let topics = res.3?.into_iter();
+
+                // We're still cloning the hashes, maybe create a HashMap structure like this
+                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
+                // so that we don't have to clone the hashes
+                let mut log_partitions = partition_logs(logs);
+                let mut topic_partitions = partition_topics(topics);
+                let transactions = transactions
+                    .into_iter()
+                    .map(|tx| {
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
+                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                    })
+                    .collect();
+
+                let block = Block { header, transactions };
+
+                Ok::<Option<Block>, anyhow::Error>(Some(block))
             }
         }
     }
