@@ -56,7 +56,7 @@ impl From<RevmU256> for Wei {
 
 impl From<BigDecimal> for Wei {
     fn from(value: BigDecimal) -> Self {
-        value.into()
+        Wei(U256::from_dec_str(&value.to_string()).unwrap_or(U256::zero()))
     }
 }
 

@@ -40,7 +40,7 @@ gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i3
 
 impl From<BigDecimal> for Nonce {
     fn from(value: BigDecimal) -> Self {
-        value.into()
+        Nonce(U256::from_dec_str(&value.to_string()).unwrap_or(U256::zero()))
     }
 }
 
