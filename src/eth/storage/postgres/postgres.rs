@@ -314,26 +314,17 @@ impl EthStorage for Postgres {
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         let from: i64 = filter.from_block.try_into()?;
-        let query = r#"
-            SELECT
-                address as "address:  "
-                , data as "data:  "
-                , transaction_hash as "transaction_hash: "
-                , log_idx as "log_idx:  "
-                , block_number as "block_number:  "
-                , block_hash as "block_hash:  "
-            FROM logs
-            WHERE block_number >= $1
-        "#
-        .to_owned();
+        let query = include_str!("queries/select_logs.sql");
+
         let builder = &mut QueryBuilder::new(query);
+        builder.push("AND block_number >= $1");
         builder.push_bind(from);
 
         // verifies if to_block exists
         if let Some(block_number) = filter.to_block {
             builder.push(" AND block_number <= $2");
             let to: i64 = block_number.try_into()?;
-            builder.push_bind(to.to_owned());
+            builder.push_bind(to);
         }
 
         let query = builder.build();
