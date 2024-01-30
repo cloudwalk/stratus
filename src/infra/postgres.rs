@@ -49,8 +49,8 @@ impl Postgres {
             sqlx::query_file!(
                 "src/eth/storage/postgres/queries/insert_account.sql",
                 acc.address.as_bytes(),
-                BigDecimal::from(acc.balance),
                 BigDecimal::from(acc.nonce),
+                BigDecimal::from(acc.balance),
                 acc.bytecode.as_deref(),
                 i64::try_from(BlockNumber::ZERO).context("failed to convert block number")?
             )
