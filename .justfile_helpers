@@ -1,0 +1,20 @@
+_lint fmt-flag="":
+    cargo +nightly fmt --all {{fmt-flag}}
+    cargo +nightly clippy --all-targets
+
+[unix]
+_outdated:
+    #!/bin/bash
+    mkdir -p .outdated_tmp
+    cp -p Cargo.lock .outdated_tmp/Cargo.lock
+    cargo update
+    diff -u .outdated_tmp/Cargo.lock Cargo.lock
+    result=$?
+    cp -p .outdated_tmp/Cargo.lock Cargo.lock
+    rm -rf .outdated_tmp
+    if [ $result -eq 0 ]; then
+        echo "No outdated dependencies"
+    else
+        echo "Outdated dependencies, quiting with error code $result"
+    fi
+    exit $result
