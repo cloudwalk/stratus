@@ -54,19 +54,22 @@ CREATE TABLE IF NOT EXISTS logs (
     ,data BYTEA NOT NULL
     ,transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
     ,transaction_idx SERIAL NOT NULL CHECK (transaction_idx >= 0)
-    ,log_idx SERIAL NOT NULL CHECK (log_idx >= 0) UNIQUE
+    ,log_idx SERIAL NOT NULL CHECK (log_idx >= 0)
     ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
     ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
+    ,PRIMARY KEY (block_hash, log_idx)
 );
 
 CREATE TABLE IF NOT EXISTS topics (
     topic BYTEA NOT NULL CHECK (LENGTH(topic) = 32)
     ,transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
     ,transaction_idx SERIAL NOT NULL CHECK (transaction_idx >= 0)
-    ,log_idx SERIAL REFERENCES logs(log_idx) NOT NULL CHECK (log_idx >= 0)
+    ,log_idx SERIAL NOT NULL CHECK (log_idx >= 0)
+    ,topic_idx SERIAL NOT NULL CHECK (topic_idx >= 0)
     ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
     ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
-    ,PRIMARY KEY (topic)
+    ,FOREIGN KEY (block_hash, log_idx) REFERENCES logs (block_hash, log_idx)
+    ,PRIMARY KEY (block_hash, log_idx, topic_idx)
 );
 
 CREATE SEQUENCE IF NOT EXISTS block_number_seq
