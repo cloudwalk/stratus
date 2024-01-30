@@ -3,8 +3,16 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
+use anyhow::Context;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::types::BigDecimal;
 use sqlx::PgPool;
+
+use crate::eth::miner::BlockMiner;
+use crate::eth::primitives::Account;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::storage::test_accounts;
+use crate::eth::storage::EthStorage;
 
 #[derive(Debug, Clone)]
 pub struct Postgres {
@@ -26,6 +34,31 @@ impl Postgres {
                 anyhow!("Failed to connect to postgres")
             })?;
 
-        Ok(Self { connection_pool })
+        let postgres = Self { connection_pool };
+
+        postgres.save_block(BlockMiner::genesis()).await?;
+        postgres.insert_test_accounts_in_genesis(test_accounts()).await?;
+
+        Ok(postgres)
+    }
+
+    async fn insert_test_accounts_in_genesis(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        tracing::debug!("adding test accounts to genesis block");
+
+        for acc in accounts {
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_account.sql",
+                acc.address.as_bytes(),
+                BigDecimal::from(acc.nonce),
+                BigDecimal::from(acc.balance),
+                acc.bytecode.as_deref(),
+                i64::try_from(BlockNumber::ZERO).context("failed to convert block number")?
+            )
+            .execute(&self.connection_pool)
+            .await
+            .context("failed to insert account")?;
+        }
+
+        Ok(())
     }
 }
