@@ -20,6 +20,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -102,7 +103,7 @@ impl EthStorage for InMemoryStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let state_lock = self.state.read().await;
         Ok(check_conflicts(&state_lock, execution))
     }
@@ -222,8 +223,7 @@ impl EthStorage for InMemoryStorage {
 
         // check conflicts
         for transaction in &block.transactions {
-            let conflicts = check_conflicts(&state, &transaction.execution);
-            if conflicts.any() {
+            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
                 return Err(EthStorageError::Conflict(conflicts));
             }
         }
@@ -292,8 +292,8 @@ impl EthStorage for InMemoryStorage {
     }
 }
 
-fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> ExecutionConflicts {
-    let mut conflicts = ExecutionConflicts::default();
+fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Option<ExecutionConflicts> {
+    let mut conflicts = ExecutionConflictsBuilder::default();
 
     for change in &execution.changes {
         let address = &change.address;
@@ -334,5 +334,5 @@ fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Execu
         }
     }
 
-    conflicts
+    conflicts.build()
 }
