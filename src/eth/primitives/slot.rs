@@ -124,6 +124,14 @@ impl Dummy<Faker> for SlotValue {
     }
 }
 
+impl From<SlotValue> for [u8; 32] {
+    fn from(value: SlotValue) -> Self {
+        let mut buf: [u8; 32] = [1; 32];
+        value.0.to_little_endian(&mut buf);
+        buf
+    }
+}
+
 gen_newtype_from!(self = SlotValue, other = u64, U256, [u8; 32]);
 
 impl From<RevmU256> for SlotValue {

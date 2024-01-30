@@ -34,7 +34,8 @@ use crate::infra::postgres::Postgres;
 #[async_trait]
 impl EthStorage for Postgres {
     async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
-        todo!()
+        // TODO: implement conflict resolution
+        Ok(ExecutionConflicts::default())
     }
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
@@ -391,6 +392,7 @@ impl EthStorage for Postgres {
         tracing::debug!(block = ?block, "saving block");
         sqlx::query_file!(
             "src/eth/storage/postgres/queries/insert_block.sql",
+            i64::try_from(block.header.number).context("failed to convert block number")?,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
             BigDecimal::from(block.header.gas),
@@ -431,6 +433,18 @@ impl EthStorage for Postgres {
                     .execute(&self.connection_pool)
                     .await
                     .context("failed to insert account")?;
+                    for (slot_idx, value) in change.slots {
+                        sqlx::query_file!(
+                            "src/eth/storage/postgres/queries/insert_account_slot.sql",
+                            &<[u8; 32]>::from(slot_idx),
+                            &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value), // this should never happen
+                            change.address.as_ref(),
+                            i64::try_from(block.header.number).context("failed to convert block number")?
+                        )
+                        .execute(&self.connection_pool)
+                        .await
+                        .context("failed to insert slot")?;
+                    }
                 }
             }
 
