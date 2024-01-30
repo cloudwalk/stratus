@@ -1,4 +1,4 @@
-use crate::eth::primitives::TransactionExecutionConflicts;
+use crate::eth::primitives::ExecutionConflicts;
 
 #[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum EthStorageError {
@@ -8,5 +8,5 @@ pub enum EthStorageError {
 
     /// State conflict between transaction execution and current storage state.
     #[error("Storage conflict: {0:?}")]
-    Conflict(TransactionExecutionConflicts),
+    Conflict(ExecutionConflicts),
 }

@@ -20,9 +20,9 @@ use crate::eth::evm::EvmInput;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::Execution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
@@ -30,7 +30,7 @@ use crate::eth::storage::EthStorageError;
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
 
-type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<TransactionExecution>>);
+type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<Execution>>);
 
 /// The EthExecutor struct is responsible for orchestrating the execution of Ethereum transactions.
 /// It holds references to the EVM, block miner, and storage, managing the overall process of
@@ -73,7 +73,7 @@ impl EthExecutor {
     /// concluding with broadcasting necessary notifications for the newly created block and associated transaction logs.
     ///
     /// TODO: too much cloning that can be optimized here.
-    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         tracing::info!(
             hash = %transaction.hash,
             nonce = %transaction.nonce,
@@ -134,7 +134,7 @@ impl EthExecutor {
     }
 
     /// Execute a function and return the function output. State changes are ignored.
-    pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<TransactionExecution> {
+    pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
         tracing::info!(
             from = %input.from,
             to = ?input.to,
@@ -148,8 +148,8 @@ impl EthExecutor {
     }
 
     /// Submits a transaction to the EVM and awaits for its execution.
-    async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<TransactionExecution> {
-        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<TransactionExecution>>();
+    async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<Execution> {
+        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<Execution>>();
         self.evm_tx.send((evm_input, execution_tx))?;
         execution_rx.await?
     }

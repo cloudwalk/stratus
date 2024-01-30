@@ -9,12 +9,16 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use chrono::Utc;
+use itertools::Itertools;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::CreateScheme;
+use revm::primitives::ExecutionResult as RevmExecutionResult;
+use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
+use revm::primitives::State as RevmState;
 use revm::primitives::TransactTo;
 use revm::primitives::B256;
 use revm::primitives::U256;
@@ -25,13 +29,19 @@ use tokio::runtime::Handle;
 
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
+use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExecutionResult;
+use crate::eth::primitives::ExecutionValueChange;
+use crate::eth::primitives::Gas;
+use crate::eth::primitives::Log;
+use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionAccountChanges;
-use crate::eth::primitives::TransactionExecutionValueChange;
 use crate::eth::storage::EthStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -61,7 +71,7 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn execute(&mut self, input: EvmInput) -> anyhow::Result<TransactionExecution> {
+    fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution> {
         // init session
         let evm = &mut self.evm;
         let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone());
@@ -93,11 +103,7 @@ impl Evm for Revm {
         match evm_result {
             Ok(result) => {
                 let session = evm.take_db();
-                Ok(TransactionExecution::from_revm_result(
-                    result,
-                    session.block_timestamp_in_secs,
-                    session.storage_changes,
-                )?)
+                Ok(parse_revm_execution(result, session.block_timestamp_in_secs, session.storage_changes)?)
             }
             Err(e) => {
                 tracing::error!(reason = ?e, "unexpected error in evm execution");
@@ -157,10 +163,8 @@ impl Database for RevmDatabaseSession {
         }
 
         // track original value
-        self.storage_changes.insert(
-            account.address.clone(),
-            TransactionExecutionAccountChanges::from_existing_account(account.clone()),
-        );
+        self.storage_changes
+            .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account.clone()));
 
         Ok(Some(account.into()))
     }
@@ -178,7 +182,7 @@ impl Database for RevmDatabaseSession {
         // track original value
         match self.storage_changes.get_mut(&address) {
             Some(account) => {
-                account.slots.insert(index, TransactionExecutionValueChange::from_original(slot.clone()));
+                account.slots.insert(index, ExecutionValueChange::from_original(slot.clone()));
             }
             None => {
                 tracing::error!(reason = "reading slot without account loaded", %address, %index);
@@ -218,4 +222,91 @@ impl Inspector<RevmDatabaseSession> for RevmInspector {
         // }
         InstructionResult::Continue
     }
+}
+
+// -----------------------------------------------------------------------------
+// Conversion
+// -----------------------------------------------------------------------------
+
+fn parse_revm_execution(
+    revm_result: RevmResultAndState,
+    execution_block_timestamp_in_secs: u64,
+    execution_changes: ExecutionChanges,
+) -> anyhow::Result<Execution> {
+    let (result, output, logs, gas) = parse_revm_result(revm_result.result);
+    let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
+
+    tracing::info!(%result, %gas, output_len = %output.len(), %output, "evm executed");
+    Ok(Execution {
+        result,
+        output,
+        logs,
+        gas,
+        block_timestamp_in_secs: execution_block_timestamp_in_secs,
+        changes: execution_changes.into_values().collect(),
+    })
+}
+
+fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
+    match result {
+        RevmExecutionResult::Success { output, gas_used, logs, .. } => {
+            let result = ExecutionResult::Success;
+            let output = Bytes::from(output);
+            let logs = logs.into_iter().map_into().collect();
+            let gas = Gas::from(gas_used);
+            (result, output, logs, gas)
+        }
+        RevmExecutionResult::Revert { output, gas_used } => {
+            let result = ExecutionResult::Reverted;
+            let output = Bytes::from(output);
+            let gas = Gas::from(gas_used);
+            (result, output, Vec::new(), gas)
+        }
+        RevmExecutionResult::Halt { reason, gas_used } => {
+            let result = ExecutionResult::new_halted(format!("{:?}", reason));
+            let output = Bytes::default();
+            let gas = Gas::from(gas_used);
+            (result, output, Vec::new(), gas)
+        }
+    }
+}
+
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> anyhow::Result<ExecutionChanges> {
+    for (revm_address, revm_account) in revm_state {
+        let address: Address = revm_address.into();
+
+        // do not apply state changes to coinbase because we do not charge gas, otherwise it will have to be updated for every transaction
+        if address.is_coinbase() {
+            continue;
+        }
+
+        // apply changes according to account status
+        tracing::debug!(%address, status = ?revm_account.status, slots = %revm_account.storage.len(), "evm account");
+        let (account_created, account_updated) = (revm_account.is_created(), revm_account.is_touched());
+
+        // parse revm to internal representation
+        let account: Account = (revm_address, revm_account.info).into();
+        let account_modified_slots: Vec<Slot> = revm_account
+            .storage
+            .into_iter()
+            .map(|(index, value)| Slot::new(index, value.present_value))
+            .collect();
+
+        // status: created
+        if account_created {
+            execution_changes.insert(
+                account.address.clone(),
+                ExecutionAccountChanges::from_new_account(account, account_modified_slots),
+            );
+        }
+        // status: touched (updated)
+        else if account_updated {
+            let Some(existing_account) = execution_changes.get_mut(&address) else {
+                tracing::error!(keys = ?execution_changes.keys(), reason = "account was updated, but it was not loaded by evm", %address);
+                return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
+            };
+            existing_account.apply_changes(account, account_modified_slots);
+        }
+    }
+    Ok(execution_changes)
 }
