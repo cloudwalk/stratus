@@ -461,7 +461,6 @@ impl EthStorage for Postgres {
                         })
                         .map(|val| val.as_ref().to_owned());
 
-                    tracing::debug!(?nonce, "NOCEE");
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_account.sql",
                         change.address.as_ref(),
