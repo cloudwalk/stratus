@@ -127,6 +127,7 @@ pub use execution::ExecutionChanges;
 pub use execution_account_changes::ExecutionAccountChanges;
 pub use execution_conflict::ExecutionConflict;
 pub use execution_conflict::ExecutionConflicts;
+pub use execution_conflict::ExecutionConflictsBuilder;
 pub use execution_result::ExecutionResult;
 pub use execution_value_change::ExecutionValueChange;
 pub use gas::Gas;
