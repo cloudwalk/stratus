@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-sc-network = { git = "https://github.com/renancloudwalk/substrate", branch = "cloudwalk-polkadot-v0.9.25-aura-upgrade-to-change-authorities" }
+sc-network = { git = "https://github.com/cloudwalk/substrate", branch = "stratus" }
+sc-consensus = { git = "https://github.com/cloudwalk/substrate", branch = "stratus" }
+sp-consensus = { git = "https://github.com/cloudwalk/substrate", branch = "stratus" }
 # stdx
 anyhow = "1.0.79"
 async-trait = "0.1.77"
