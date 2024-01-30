@@ -435,7 +435,7 @@ impl EthStorage for Postgres {
                         sqlx::query_file!(
                             "src/eth/storage/postgres/queries/insert_account_slot.sql",
                             &<[u8; 32]>::from(slot_idx),
-                            &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("no change for slot"))?.value),
+                            &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value), // this should never happen
                             change.address.as_ref(),
                             i64::try_from(block.header.number).context("failed to convert block number")?
                         )
