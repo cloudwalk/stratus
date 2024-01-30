@@ -30,11 +30,13 @@ use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
 use crate::infra::postgres::Postgres;
+use crate::eth::storage::test_accounts;
 
 #[async_trait]
 impl EthStorage for Postgres {
-    async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
-        todo!()
+    async fn check_conflicts(&self, _execution: &TransactionExecution) -> anyhow::Result<TransactionExecutionConflicts> {
+        // TODO: implement conflict resolution
+        Ok(TransactionExecutionConflicts::default())
     }
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
@@ -391,6 +393,7 @@ impl EthStorage for Postgres {
         tracing::debug!(block = ?block, "saving block");
         sqlx::query_file!(
             "src/eth/storage/postgres/queries/insert_block.sql",
+            i64::try_from(block.header.number).context("failed to convert block number")?,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
             BigDecimal::from(block.header.gas),
