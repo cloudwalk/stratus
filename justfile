@@ -178,10 +178,6 @@ e2e-stratus-postgres test="":
         cd e2e
     fi
 
-    echo "-> install wait service and killport"
-    cargo install wait-service
-    cargo install killport
-
     echo "-> Starting Postgres"
     docker-compose down
     docker-compose up -d
