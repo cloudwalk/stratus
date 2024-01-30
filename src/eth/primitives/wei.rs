@@ -101,9 +101,10 @@ impl From<Wei> for U256 {
     }
 }
 
-impl From<Wei> for BigDecimal {
-    fn from(value: Wei) -> Self {
+impl TryFrom<Wei> for BigDecimal {
+    type Error = anyhow::Error;
+    fn try_from(value: Wei) -> Result<Self, Self::Error> {
         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        BigDecimal::from_str(&U256::from(value).to_string()).unwrap_or(BigDecimal::from(0))
+        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
     }
 }
