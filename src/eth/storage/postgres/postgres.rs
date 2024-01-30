@@ -41,7 +41,6 @@ impl EthStorage for Postgres {
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
 
-        // TODO: use HistoricalValue
         let block = match point_in_time {
             StoragePointInTime::Present => self.read_current_block_number().await?,
             StoragePointInTime::Past(number) => *number,
@@ -51,14 +50,14 @@ impl EthStorage for Postgres {
         let account = sqlx::query_as!(
             Account,
             r#"
-                        SELECT
-                            address as "address: _",
-                            nonce as "nonce: _",
-                            balance as "balance: _",
-                            bytecode as "bytecode: _"
-                        FROM accounts
-                        WHERE address = $1 AND block_number = $2
-                    "#,
+                SELECT
+                    address as "address: _",
+                    nonce as "nonce: _",
+                    balance as "balance: _",
+                    bytecode as "bytecode: _"
+                FROM accounts
+                WHERE address = $1 AND block_number = $2
+            "#,
             address.as_ref(),
             block_number,
         )
@@ -82,7 +81,6 @@ impl EthStorage for Postgres {
     async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
-        // TODO: use HistoricalValue
         let block = match point_in_time {
             StoragePointInTime::Present => self.read_current_block_number().await?,
             StoragePointInTime::Past(number) => *number,
@@ -258,8 +256,8 @@ impl EthStorage for Postgres {
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
-                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or(Vec::new());
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or(HashMap::new());
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
                         tx.into_transaction_mined(this_tx_logs, this_tx_topics)
                     })
                     .collect();
@@ -353,7 +351,7 @@ impl EthStorage for Postgres {
         let mut topic_partitions = partition_topics(topics);
 
         Ok(Some(
-            transaction.into_transaction_mined(logs, topic_partitions.remove(hash).unwrap_or(HashMap::new())),
+            transaction.into_transaction_mined(logs, topic_partitions.remove(hash).unwrap_or_default()),
         ))
     }
 
