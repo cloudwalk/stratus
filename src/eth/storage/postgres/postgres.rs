@@ -30,7 +30,6 @@ use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
 use crate::infra::postgres::Postgres;
-use crate::eth::storage::test_accounts;
 
 #[async_trait]
 impl EthStorage for Postgres {

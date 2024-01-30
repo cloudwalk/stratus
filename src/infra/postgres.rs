@@ -1,17 +1,18 @@
 //! PostgreSQL client.
 
-use std::str::FromStr;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
-use ethereum_types::H160;
+use anyhow::anyhow;
+use anyhow::Context;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
 use sqlx::types::BigDecimal;
+use sqlx::PgPool;
 
 use crate::eth::miner::BlockMiner;
-use crate::eth::primitives::{Wei, Address, Account, BlockNumber};
-use crate::eth::storage::{EthStorage, test_accounts};
+use crate::eth::primitives::Account;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::storage::test_accounts;
+use crate::eth::storage::EthStorage;
 
 #[derive(Debug, Clone)]
 pub struct Postgres {
@@ -34,15 +35,16 @@ impl Postgres {
             })?;
 
         let postgres = Self { connection_pool };
-        let block = BlockMiner::genesis();
-        postgres.save_block(block).await;
 
-        postgres.insert_test_accounts_in_genesis(test_accounts()).await;
+        postgres.save_block(BlockMiner::genesis()).await?;
+        postgres.insert_test_accounts_in_genesis(test_accounts()).await?;
 
         Ok(postgres)
     }
 
     async fn insert_test_accounts_in_genesis(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        tracing::debug!("adding test accounts to genesis block");
+
         for acc in accounts {
             sqlx::query_file!(
                 "src/eth/storage/postgres/queries/insert_account.sql",
@@ -50,13 +52,13 @@ impl Postgres {
                 BigDecimal::from(acc.balance),
                 BigDecimal::from(acc.nonce),
                 acc.bytecode.as_deref(),
-                i64::try_from(BlockNumber::ZERO)?
+                i64::try_from(BlockNumber::ZERO).context("failed to convert block number")?
             )
             .execute(&self.connection_pool)
             .await
             .context("failed to insert account")?;
         }
+
         Ok(())
     }
 }
-
