@@ -31,7 +31,7 @@ impl Postgres {
             .await
             .map_err(|e| {
                 tracing::error!(reason = ?e, %url, "failed to connect to postgres");
-                anyhow!("Failed to connect to postgres")
+                anyhow!("failed to connect to postgres")
             })?;
 
         let postgres = Self { connection_pool };
@@ -49,8 +49,8 @@ impl Postgres {
             sqlx::query_file!(
                 "src/eth/storage/postgres/queries/insert_account.sql",
                 acc.address.as_bytes(),
-                BigDecimal::from(acc.nonce),
-                BigDecimal::from(acc.balance),
+                BigDecimal::try_from(acc.nonce)?,
+                BigDecimal::try_from(acc.balance)?,
                 acc.bytecode.as_deref(),
                 i64::try_from(BlockNumber::ZERO).context("failed to convert block number")?
             )

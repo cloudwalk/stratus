@@ -33,9 +33,9 @@ use crate::infra::postgres::Postgres;
 
 #[async_trait]
 impl EthStorage for Postgres {
-    async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
+    async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         // TODO: implement conflict resolution
-        Ok(ExecutionConflicts::default())
+        Ok(None)
     }
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
@@ -47,7 +47,6 @@ impl EthStorage for Postgres {
         };
 
         let block_number = i64::try_from(block)?;
-
         let account = sqlx::query_as!(
             Account,
             r#"
@@ -207,8 +206,8 @@ impl EthStorage for Postgres {
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
-                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
+                        let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
+                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
                         tx.into_transaction_mined(this_tx_logs, this_tx_topics)
                     })
                     .collect();
@@ -406,7 +405,7 @@ impl EthStorage for Postgres {
             i64::try_from(block.header.number).context("failed to convert block number")?,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
-            BigDecimal::from(block.header.gas),
+            BigDecimal::try_from(block.header.gas)?,
             block.header.bloom.as_ref(),
             i32::try_from(block.header.timestamp_in_secs).context("failed to convert block timestamp")?
         )
@@ -415,7 +414,33 @@ impl EthStorage for Postgres {
         .context("failed to insert block")?;
 
         for transaction in block.transactions {
-            if transaction.is_success() {
+            let is_success = transaction.is_success();
+            let to = <[u8; 20]>::from(*transaction.input.to.unwrap_or_default());
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_transaction.sql",
+                transaction.input.hash.as_ref(),
+                transaction.input.signer.as_ref(),
+                BigDecimal::try_from(transaction.input.nonce)?,
+                transaction.input.signer.as_ref(),
+                &to,
+                *transaction.input.input,
+                *transaction.execution.output,
+                BigDecimal::try_from(transaction.execution.gas)?,
+                BigDecimal::try_from(transaction.input.gas_price)?,
+                i32::from(transaction.transaction_index),
+                i64::try_from(transaction.block_number).context("failed to convert block number")?,
+                transaction.block_hash.as_ref(),
+                &<[u8; 8]>::from(transaction.input.v),
+                &<[u8; 32]>::from(transaction.input.r),
+                &<[u8; 32]>::from(transaction.input.s),
+                BigDecimal::try_from(transaction.input.value)?,
+                transaction.execution.result.to_string()
+            )
+            .execute(&self.connection_pool)
+            .await
+            .context("failed to insert transaction")?;
+
+            if is_success {
                 for change in transaction.execution.changes {
                     let nonce = change.nonce.take().unwrap_or_else(|| {
                         tracing::debug!("Nonce not set, defaulting to 0");
@@ -433,11 +458,12 @@ impl EthStorage for Postgres {
                             None
                         })
                         .map(|val| val.as_ref().to_owned());
+
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_account.sql",
                         change.address.as_ref(),
-                        BigDecimal::from(nonce),
-                        BigDecimal::from(balance),
+                        BigDecimal::try_from(nonce)?,
+                        BigDecimal::try_from(balance)?,
                         bytecode,
                         i64::try_from(block.header.number).context("failed to convert block number")?
                     )
@@ -493,30 +519,6 @@ impl EthStorage for Postgres {
                     .context("failed to insert topic")?;
                 }
             }
-
-            sqlx::query_file!(
-                "src/eth/storage/postgres/queries/insert_transaction.sql",
-                transaction.input.hash.as_ref(),
-                transaction.input.signer.as_ref(),
-                BigDecimal::from(transaction.input.nonce),
-                transaction.input.signer.as_ref(),
-                transaction.input.to.unwrap_or_default().as_ref().to_owned(),
-                *transaction.input.input,
-                *transaction.execution.output,
-                BigDecimal::from(transaction.execution.gas),
-                BigDecimal::from(transaction.input.gas_price),
-                i32::from(transaction.transaction_index),
-                i64::try_from(transaction.block_number).context("failed to convert block number")?,
-                transaction.block_hash.as_ref(),
-                &<[u8; 8]>::from(transaction.input.v),
-                &<[u8; 32]>::from(transaction.input.r),
-                &<[u8; 32]>::from(transaction.input.s),
-                BigDecimal::from(transaction.input.value),
-                transaction.execution.result.to_string()
-            )
-            .execute(&self.connection_pool)
-            .await
-            .context("failed to insert transaction")?;
         }
 
         Ok(())

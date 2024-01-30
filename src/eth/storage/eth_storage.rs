@@ -38,7 +38,7 @@ pub trait EthStorage: Send + Sync {
     // -------------------------------------------------------------------------
 
     /// Checks if the transaction execution conflicts with the current storage state.
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts>;
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>>;
 
     /// Retrieves an account from the storage.
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account>;
@@ -56,8 +56,6 @@ pub trait EthStorage: Send + Sync {
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     /// Persist atomically all changes from a block.
-    ///
-    /// Before applying changes, it checks the storage current state matches the transaction previous state.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
     // -------------------------------------------------------------------------
