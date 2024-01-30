@@ -13,3 +13,5 @@ e2e-contracts/repos
 
 # Build
 /target
+
+stratus.log
