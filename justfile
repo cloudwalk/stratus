@@ -171,6 +171,39 @@ e2e-stratus test="":
     echo "-> Killing Stratus"
     killport 3000
 
+# E2E: Starts and execute Hardhat tests in Stratus
+e2e-stratus-postgres test="":
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+
+    echo "-> install wait service and killport"
+    cargo install wait-service
+    cargo install killport
+
+    echo "-> Starting Postgres"
+    docker-compose down
+    docker-compose up -d
+
+    echo "-> Waiting Postgres to start"
+    wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+
+    echo "-> Starting Stratus"
+    RUST_LOG=debug just run -a 0.0.0.0:3000 -s postgres://postgres:123@0.0.0.0:5432/stratus &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+
+    echo "-> Running E2E tests"
+    just e2e stratus {{test}}
+
+    echo "-> Killing Stratus"
+    killport 3000
+
+    echo "-> Killing Postgres"
+    docker-compose down
+
 # E2E: Lint and format code
 e2e-lint:
     #!/bin/bash
