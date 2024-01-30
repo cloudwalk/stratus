@@ -1,8 +1,11 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use sc_consensus::BlockCheckParams;
 use sc_consensus::BlockImport;
 use sc_consensus::BlockImportParams;
+use sc_consensus::ImportResult;
 use sc_consensus::Verifier;
 use sc_network::config::MultiaddrWithPeerId;
 use sc_network::config::NetworkConfiguration;
@@ -16,7 +19,6 @@ use sp_runtime::traits::Block as BlockT;
 use sp_runtime::traits::Header as HeaderT;
 use tracing::info;
 use codec::{Decode, Encode};
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 
 use sp_runtime::traits::{BlakeTwo256, Extrinsic as ExtrinsicT, Verify};
 use sp_core::RuntimeDebug;
@@ -114,19 +116,20 @@ impl Verifier<Block> for SimpleVerifier {
 }
 
 // Your SimpleBlockImport implementation
-//pub struct SimpleBlockImport;
-//
-//#[async_trait::async_trait]
-//impl BlockImport<Block> for SimpleBlockImport {
-//    type Error = ConsensusError;
-//
-//    async fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
-//        info!("Checking block: Number = {:?}, Hash = {:?}", block.number, block.hash);
-//        Ok(ImportResult::imported(false))
-//    }
-//
-//    async fn import_block(&mut self, block: BlockImportParams<Block, ()>, _cache: HashMap<CacheKeyId, Vec<u8>>) -> Result<ImportResult, Self::Error> {
-//        info!("Importing block: Number = {:?}, Hash = {:?}", block.header.number(), block.post_hash);
-//        Ok(ImportResult::imported(true))
-//    }
-//}
+pub struct SimpleBlockImport;
+
+#[async_trait::async_trait]
+impl BlockImport<Block> for SimpleBlockImport {
+	type Error = ConsensusError;
+	type Transaction = ();
+
+    async fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
+        info!("Checking block: Number = {:?}, Hash = {:?}", block.number, block.hash);
+        Ok(ImportResult::imported(false))
+    }
+
+    async fn import_block(&mut self, block: BlockImportParams<Block, ()>, _cache: HashMap<CacheKeyId, Vec<u8>>) -> Result<ImportResult, Self::Error> {
+        info!("Importing block: Number = {:?}, Hash = {:?}", block.header.number(), block.post_hash);
+        Ok(ImportResult::imported(true))
+    }
+}
