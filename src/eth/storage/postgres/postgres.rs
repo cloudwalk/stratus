@@ -402,7 +402,7 @@ impl EthStorage for Postgres {
     // neither worked for some reason I was not able to determine at this time)
     // TODO: save slots
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        println!("saving block {:#?}", block);
+        tracing::debug!(block = ?block, "saving block");
         sqlx::query_file!(
             "src/eth/storage/postgres/queries/insert_block.sql",
             i64::try_from(block.header.number).context("failed to convert block number")?,
