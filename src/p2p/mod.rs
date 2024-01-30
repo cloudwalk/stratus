@@ -1,13 +1,8 @@
 use std::str::FromStr;
 
-use libp2p::swarm::Swarm;
-use libp2p::swarm::SwarmBuilder;
-use sc_network::behaviour::Behaviour;
-use sc_network::bitswap::Bitswap;
 use sc_network::config::MultiaddrWithPeerId;
 use sc_network::config::NetworkConfiguration;
 use sc_network::config::NonReservedPeerMode;
-use sc_network::config::Role;
 use sc_network::config::SyncMode;
 use sc_network::config::TransportConfig;
 use sc_network::Multiaddr;
