@@ -13,6 +13,7 @@ use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
+use stratus::p2p;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 use tokio::select;
@@ -105,9 +106,10 @@ fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn 
     NonEmpty::from_vec(evms).unwrap()
 }
 
-async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
+pub async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting P2P server");
-    let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
+
+    p2p::serve_p2p().await?;
 
     select! {
         _ = cancel_signal.recv() => {
