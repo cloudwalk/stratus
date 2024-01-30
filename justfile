@@ -64,7 +64,7 @@ sqlx:
 
 # Stratus: Check for outdated crates
 outdated:
-    -@just _outdated
+    @just _outdated
 
 # Stratus: Update crates
 update:
