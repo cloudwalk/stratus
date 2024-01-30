@@ -190,7 +190,7 @@ e2e-stratus-postgres test="":
     wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
 
     echo "-> Starting Stratus"
-    RUST_LOG=debug just run -a 0.0.0.0:3000 -s postgres://postgres:123@0.0.0.0:5432/stratus &
+    RUST_LOG=debug just run -a 0.0.0.0:3000 -s postgres://postgres:123@0.0.0.0:5432/stratus > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
@@ -203,6 +203,8 @@ e2e-stratus-postgres test="":
 
     echo "-> Killing Postgres"
     docker-compose down
+
+    echo "** -> Stratus log accessible in ./stratus.log **"
 
 # E2E: Lint and format code
 e2e-lint:
