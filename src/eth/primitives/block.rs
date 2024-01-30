@@ -16,6 +16,7 @@ use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -48,6 +49,11 @@ impl Block {
     /// Returns the block number.
     pub fn number(&self) -> &BlockNumber {
         &self.header.number
+    }
+
+    /// Returns the block hash.
+    pub fn hash(&self) -> &Hash {
+        &self.header.hash
     }
 }
 
