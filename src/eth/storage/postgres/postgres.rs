@@ -432,8 +432,8 @@ impl EthStorage for Postgres {
                     .await
                     .context("failed to insert account")?;
                     for (slot_idx, value) in change.slots {
-                        sqlx::query!(
-                            "INSERT INTO account_slots VALUES ($1, $2, $3, $4) ON CONFLICT (idx, account_address) DO UPDATE SET value = EXCLUDED.value",
+                        sqlx::query_file!(
+                            "src/eth/storage/postgres/queries/insert_account_slot.sql",
                             &<[u8; 32]>::from(slot_idx),
                             &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("no change for slot"))?.value),
                             change.address.as_ref(),
