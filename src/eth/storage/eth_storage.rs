@@ -1,11 +1,14 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 
+use super::EthStorageError;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -34,24 +37,19 @@ pub trait EthStorage: Send + Sync + 'static {
     // State operations
     // -------------------------------------------------------------------------
 
+    /// Checks if the transaction execution conflicts with the current storage state.
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts>;
+
     /// Retrieves an account from the storage.
-    ///
-    /// It should return empty empty account when not found.
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account>;
 
     /// Retrieves an slot from the storage.
-    ///
-    /// It should return empty slot when not found.
     async fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot>;
 
     /// Retrieves a block from the storage.
-    ///
-    /// It should return `None` when not found.
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
 
     /// Retrieves a transaction from the storage.
-    ///
-    /// It should return `None` when not found.
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
 
     /// Retrieves logs from the storage.
@@ -60,7 +58,7 @@ pub trait EthStorage: Send + Sync + 'static {
     /// Persist atomically all changes from a block.
     ///
     /// Before applying changes, it checks the storage current state matches the transaction previous state.
-    async fn save_block(&self, block: Block) -> anyhow::Result<()>;
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
     // -------------------------------------------------------------------------
     // Default operations

@@ -7,13 +7,13 @@ use stratus::config::Config;
 use stratus::config::StorageConfig;
 use stratus::eth::evm::revm::Revm;
 use stratus::eth::evm::Evm;
-use stratus::p2p;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::storage::EthStorage;
 use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
+use stratus::p2p;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 use tokio::select;
@@ -114,7 +114,7 @@ pub async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyho
     select! {
         _ = cancel_signal.recv() => {
             tracing::info!("P2P task cancelled");
-            return Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"));
+            Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"))
         }
     }
 }

@@ -9,6 +9,7 @@
 //! execution.
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use ethereum_types::U256;
 use fake::Dummy;
@@ -44,12 +45,21 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32, [u8; 32]);
 
+impl From<BigDecimal> for Gas {
+    fn from(value: BigDecimal) -> Self {
+        // NOTE: This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
+        let (integer, _) = value.as_bigint_and_exponent();
+        let (_, bytes) = integer.to_bytes_be();
+        Gas(U256::from_big_endian(&bytes))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Gas {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }
@@ -77,6 +87,7 @@ impl From<Gas> for usize {
 
 impl From<Gas> for BigDecimal {
     fn from(value: Gas) -> Self {
-        BigDecimal::parse_bytes(&<[u8; 32]>::from(U256::from(value)), 10).unwrap_or(BigDecimal::from(0))
+        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
+        BigDecimal::from_str(&U256::from(value).to_string()).unwrap_or(BigDecimal::from(0))
     }
 }

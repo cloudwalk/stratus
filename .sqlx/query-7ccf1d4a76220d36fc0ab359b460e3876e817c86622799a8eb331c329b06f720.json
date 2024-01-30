@@ -1,10 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO topics VALUES ($1, $2, $3, $4, $5, $6)",
+  "query": "INSERT INTO logs VALUES ($1, $2, $3, $4, $5, $6, $7)\n",
   "describe": {
     "columns": [],
     "parameters": {
       "Left": [
+        "Bytea",
         "Bytea",
         "Bytea",
         "Int4",
@@ -15,5 +16,5 @@
     },
     "nullable": []
   },
-  "hash": "e529c0747611cbea8634ff7f17498bfb0549982f7b50ad84fe48135b847b0f5e"
+  "hash": "7ccf1d4a76220d36fc0ab359b460e3876e817c86622799a8eb331c329b06f720"
 }

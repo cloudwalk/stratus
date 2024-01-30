@@ -16,6 +16,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::HistoricalValues;
 use crate::eth::primitives::LogFilter;
@@ -27,6 +29,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::EthStorageError;
 
 /// In-memory implementation using maps.
 #[derive(Debug)]
@@ -99,6 +102,11 @@ impl EthStorage for InMemoryStorage {
     // -------------------------------------------------------------------------
     // State operations
     // ------------------------------------------------------------------------
+
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
+        let state_lock = self.state.read().await;
+        Ok(check_conflicts(&state_lock, execution))
+    }
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
@@ -209,8 +217,16 @@ impl EthStorage for InMemoryStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let mut state_lock = self.lock_write().await;
+
+        // check conflicts
+        for transaction in &block.transactions {
+            let conflicts = check_conflicts(&state_lock, &transaction.execution);
+            if conflicts.any() {
+                return Err(EthStorageError::Conflict(conflicts));
+            }
+        }
 
         // save block
         tracing::debug!(number = %block.header.number, "saving block");
@@ -238,19 +254,19 @@ impl EthStorage for InMemoryStorage {
                     .or_insert_with(|| (Account::default(), HistoricalValues::new(BlockNumber::ZERO, Wei::ZERO)));
 
                 // nonce
-                if let Some(nonce) = changes.nonce.take_if_modified() {
+                if let Some(nonce) = changes.nonce.take_modified() {
                     account.nonce = nonce;
                 }
 
                 // balance
-                if let Some(balance) = changes.balance.take_if_modified() {
+                if let Some(balance) = changes.balance.take_modified() {
                     account.balance = balance.clone();
                     account_balances.push(block.header.number, balance);
                 }
 
                 // bytecode
                 if is_success {
-                    if let Some(Some(bytecode)) = changes.bytecode.take_if_modified() {
+                    if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
                         tracing::trace!(bytecode_len = %bytecode.len(), "saving bytecode");
                         account.bytecode = Some(bytecode);
                     }
@@ -260,7 +276,7 @@ impl EthStorage for InMemoryStorage {
                 if is_success {
                     let account_slots = state_lock.account_slots.entry(changes.address).or_default();
                     for (slot_index, slot) in changes.slots {
-                        if let Some(slot) = slot.take_if_modified() {
+                        if let Some(slot) = slot.take_modified() {
                             tracing::trace!(%slot, "saving slot");
                             match account_slots.get_mut(&slot_index) {
                                 Some(slot_history) => {
@@ -277,4 +293,56 @@ impl EthStorage for InMemoryStorage {
         }
         Ok(())
     }
+}
+
+fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> ExecutionConflicts {
+    let mut conflicts = ExecutionConflicts::default();
+
+    for change in &execution.changes {
+        let address = &change.address;
+
+        // check account info conflicts
+        match state.accounts.get(address) {
+            Some((account, _)) => {
+                if let Some(touched_nonce) = change.nonce.take_original_ref() {
+                    if *touched_nonce != account.nonce {
+                        conflicts.add_nonce(address.clone(), account.nonce.clone(), touched_nonce.clone());
+                    }
+                }
+                if let Some(touched_balance) = change.balance.take_original_ref() {
+                    if *touched_balance != account.balance {
+                        conflicts.add_balance(address.clone(), account.balance.clone(), touched_balance.clone());
+                    }
+                }
+            }
+            None => {
+                // todo: handle account creation conflicts
+            }
+        }
+
+        // check slots conflicts
+        match state.account_slots.get(address) {
+            Some(slots) => {
+                for (touched_slot_index, touched_slot) in &change.slots {
+                    match slots.get(touched_slot_index) {
+                        Some(slot) =>
+                            if let Some(touched_slot) = touched_slot.take_original_ref() {
+                                let slot_value = slot.get_current().value;
+                                if touched_slot.value != slot_value {
+                                    conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
+                                }
+                            },
+                        None => {
+                            // todo: handle slot creation conflict
+                        }
+                    }
+                }
+            }
+            None => {
+                // todo: handle account creation scenarios
+            }
+        }
+    }
+
+    conflicts
 }

@@ -9,9 +9,9 @@
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::Execution;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
@@ -19,7 +19,7 @@ use crate::ext::OptionExt;
 /// EVM operations.
 pub trait Evm: Send + Sync + 'static {
     /// Execute a transaction that deploys a contract or call a contract function.
-    fn execute(&mut self, input: EvmInput) -> anyhow::Result<TransactionExecution>;
+    fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution>;
 }
 
 /// EVM input data. Usually derived from a transaction or call.

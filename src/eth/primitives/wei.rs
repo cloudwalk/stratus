@@ -8,6 +8,7 @@
 //! ecosystem.
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use ethabi::Token;
 use ethereum_types::U256;
@@ -56,7 +57,10 @@ impl From<RevmU256> for Wei {
 
 impl From<BigDecimal> for Wei {
     fn from(value: BigDecimal) -> Self {
-        value.into()
+        // NOTE: This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
+        let (integer, _) = value.as_bigint_and_exponent();
+        let (_, bytes) = integer.to_bytes_be();
+        Wei(U256::from_big_endian(&bytes))
     }
 }
 
@@ -99,6 +103,7 @@ impl From<Wei> for U256 {
 
 impl From<Wei> for BigDecimal {
     fn from(value: Wei) -> Self {
-        BigDecimal::parse_bytes(&<[u8; 32]>::from(U256::from(value)), 10).unwrap_or(BigDecimal::from(0))
+        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
+        BigDecimal::from_str(&U256::from(value).to_string()).unwrap_or(BigDecimal::from(0))
     }
 }

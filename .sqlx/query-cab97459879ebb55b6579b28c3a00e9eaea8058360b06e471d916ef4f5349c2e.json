@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                        SELECT\n                            address as \"address: _\"\n                            ,data as \"data: _\"\n                            ,transaction_hash as \"transaction_hash: _\"\n                            ,transaction_idx as \"transaction_idx: _\"\n                            ,log_idx as \"log_idx: _\"\n                            ,block_number as \"block_number: _\"\n                            ,block_hash as \"block_hash: _\"\n                        FROM logs\n                        WHERE block_hash = $1\n                    ",
+  "query": "SELECT\n    address as \"address: _\"\n    ,data as \"data: _\"\n    ,transaction_hash as \"transaction_hash: _\"\n    ,transaction_idx as \"transaction_idx: _\"\n    ,log_idx as \"log_idx: _\"\n    ,block_number as \"block_number: _\"\n    ,block_hash as \"block_hash: _\"\nFROM logs\nWHERE block_number = $1",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,7 @@
     ],
     "parameters": {
       "Left": [
-        "Bytea"
+        "Int8"
       ]
     },
     "nullable": [
@@ -54,5 +54,5 @@
       false
     ]
   },
-  "hash": "6662f9735f6463220d562388c9936c6965ba50c0e78abb85ce7427b5bb05183e"
+  "hash": "cab97459879ebb55b6579b28c3a00e9eaea8058360b06e471d916ef4f5349c2e"
 }
