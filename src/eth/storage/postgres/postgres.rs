@@ -33,9 +33,9 @@ use crate::infra::postgres::Postgres;
 
 #[async_trait]
 impl EthStorage for Postgres {
-    async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
+    async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         // TODO: implement conflict resolution
-        Ok(ExecutionConflicts::default())
+        Ok(None)
     }
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {

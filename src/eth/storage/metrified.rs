@@ -34,7 +34,7 @@ impl<T: EthStorage> MetrifiedStorage<T> {
 #[async_trait]
 impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
     /// TODO: track metric
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         self.inner.check_conflicts(execution).await
     }
 

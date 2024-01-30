@@ -1,29 +1,31 @@
+use nonempty::NonEmpty;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
+
+#[derive(Debug)]
+pub struct ExecutionConflicts(pub NonEmpty<ExecutionConflict>);
 
 #[derive(Debug, Default)]
-pub struct ExecutionConflicts {
-    inner: Vec<ExecutionConflict>,
-}
+pub struct ExecutionConflictsBuilder(Vec<ExecutionConflict>);
 
-impl ExecutionConflicts {
+impl ExecutionConflictsBuilder {
     /// Adds a new nonce conflict to the list of tracked conflicts.
     pub fn add_nonce(&mut self, address: Address, expected: Nonce, actual: Nonce) {
-        self.inner.push(ExecutionConflict::Nonce { address, expected, actual });
+        self.0.push(ExecutionConflict::Nonce { address, expected, actual });
     }
 
     /// Adds a new balance conflict to the list of tracked conflicts.
     pub fn add_balance(&mut self, address: Address, expected: Wei, actual: Wei) {
-        self.inner.push(ExecutionConflict::Balance { address, expected, actual });
+        self.0.push(ExecutionConflict::Balance { address, expected, actual });
     }
 
     /// Adds a new slot conflict to the list of tracked conflicts.
     pub fn add_slot(&mut self, address: Address, slot: SlotIndex, expected: SlotValue, actual: SlotValue) {
-        self.inner.push(ExecutionConflict::Slot {
+        self.0.push(ExecutionConflict::Slot {
             address,
             slot,
             expected,
@@ -31,9 +33,12 @@ impl ExecutionConflicts {
         });
     }
 
-    /// Indicates whether there are any tracked conflicts.
-    pub fn any(&self) -> bool {
-        not(self.inner.is_empty())
+    pub fn build(self) -> Option<ExecutionConflicts> {
+        if self.0.is_empty() {
+            None
+        } else {
+            Some(ExecutionConflicts(NonEmpty::from_vec(self.0).unwrap()))
+        }
     }
 }
 
