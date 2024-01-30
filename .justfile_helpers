@@ -7,7 +7,7 @@ _outdated:
     #!/bin/bash
     mkdir -p .outdated_tmp
     cp -p Cargo.lock .outdated_tmp/Cargo.lock
-    cargo update
+    cargo update stratus
     diff -u .outdated_tmp/Cargo.lock Cargo.lock
     result=$?
     cp -p .outdated_tmp/Cargo.lock Cargo.lock
