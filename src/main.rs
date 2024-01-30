@@ -8,6 +8,7 @@ use stratus::config::StorageConfig;
 use stratus::eth::evm::revm::Revm;
 use stratus::eth::evm::Evm;
 use stratus::eth::rpc::serve_rpc;
+use stratus::eth::p2p;
 use stratus::eth::storage::EthStorage;
 use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
@@ -82,11 +83,11 @@ async fn run_rpc_server(config: Arc<Config>, cancel_signal: broadcast::Receiver<
     let storage: Arc<dyn EthStorage> = match &config.storage {
         // init services
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
-        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?.metrified()),
+        StorageConfig::Postgres { url } => Arc::new(Postgres::new(url).await?.metrified()),
     };
 
     // init executor
-    let evms = init_evms(&*config, Arc::clone(&storage));
+    let evms = init_evms(&config, Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
     serve_rpc(executor, storage, config.address, cancel_signal).await?;
@@ -105,9 +106,10 @@ fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn 
     NonEmpty::from_vec(evms).unwrap()
 }
 
-async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
+pub async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting P2P server");
-    let mut _swarm = libp2p::SwarmBuilder::with_new_identity();
+
+    p2p::serve_p2p().await?;
 
     select! {
         _ = cancel_signal.recv() => {

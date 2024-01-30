@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+sc-network = { git = "https://github.com/renancloudwalk/substrate", branch = "cloudwalk-polkadot-v0.9.25-aura-upgrade-to-change-authorities" }
 chrono = "0.4.31"
 const-hex = "1.10.0"
 derive_more = "0.99.17"
