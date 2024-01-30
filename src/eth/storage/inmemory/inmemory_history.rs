@@ -1,11 +1,3 @@
-//! Historical Value Module
-//!
-//! Manages historical data, particularly tracking changes of a value over
-//! different block numbers. This is crucial for Ethereum's state management,
-//! where understanding the state of a variable at different points in the
-//! blockchain is necessary. It supports querying past states, providing a
-//! history of changes for a particular piece of data.
-
 use std::fmt::Debug;
 
 use nonempty::NonEmpty;
@@ -13,34 +5,30 @@ use nonempty::NonEmpty;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::StoragePointInTime;
 
-/// TODO: document
 #[derive(Debug)]
-pub struct HistoricalValues<T>(NonEmpty<HistoricalValue<T>>)
+pub struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
 where
     T: Clone + Debug;
 
-/// TODO: document
 #[derive(Debug, derive_new::new)]
-pub struct HistoricalValue<T> {
+pub struct InMemoryHistoryValue<T> {
     block_number: BlockNumber,
     value: T,
 }
 
-impl<T> HistoricalValues<T>
+impl<T> InMemoryHistory<T>
 where
     T: Clone + Debug,
 {
     /// Creates a new list of historical values.
     pub fn new(block_number: BlockNumber, value: T) -> Self {
-        let value = HistoricalValue::new(block_number, value);
+        let value = InMemoryHistoryValue::new(block_number, value);
         Self(NonEmpty::new(value))
     }
 
     /// Adds a new historical value to the list.
-    ///
-    /// TODO: should we validate that the block number is greater than the last one?
     pub fn push(&mut self, block_number: BlockNumber, value: T) {
-        let value = HistoricalValue::new(block_number, value);
+        let value = InMemoryHistoryValue::new(block_number, value);
         self.0.push(value);
     }
 
@@ -60,5 +48,10 @@ where
     /// Returns the most recent value.
     pub fn get_current(&self) -> T {
         self.0.last().value.clone()
+    }
+
+    /// Returns the most recent value as reference.
+    pub fn get_current_ref(&self) -> &T {
+        &self.0.last().value
     }
 }
