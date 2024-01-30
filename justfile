@@ -66,9 +66,9 @@ sqlx:
 outdated:
     @just _outdated
 
-# Stratus: Update crates
+# Stratus: Update only the project dependencies
 update:
-    cargo update
+    cargo update stratus
 
 # ------------------------------------------------------------------------------
 # Test tasks
