@@ -10,6 +10,7 @@
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
+use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
@@ -44,7 +45,7 @@ impl BlockHeader {
     pub fn new(number: BlockNumber, _timestamp_in_secs: u64) -> Self {
         Self {
             number,
-            hash: Hash::new_random(),
+            hash: Hash::new(keccak256(<[u8; 8]>::from(number))),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
             bloom: LogsBloom::default(),
