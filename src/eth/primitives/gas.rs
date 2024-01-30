@@ -9,6 +9,7 @@
 //! execution.
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use ethereum_types::U256;
 use fake::Dummy;
@@ -86,6 +87,7 @@ impl From<Gas> for usize {
 
 impl From<Gas> for BigDecimal {
     fn from(value: Gas) -> Self {
-        BigDecimal::parse_bytes(&<[u8; 32]>::from(U256::from(value)), 10).unwrap_or(BigDecimal::from(0))
+        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
+        BigDecimal::from_str(&U256::from(value).to_string()).unwrap_or(BigDecimal::from(0))
     }
 }
