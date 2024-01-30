@@ -7,7 +7,7 @@ use stratus::config::Config;
 use stratus::config::StorageConfig;
 use stratus::eth::evm::revm::Revm;
 use stratus::eth::evm::Evm;
-use stratus::eth::p2p;
+use stratus::p2p;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::storage::EthStorage;
 use stratus::eth::storage::InMemoryStorage;
