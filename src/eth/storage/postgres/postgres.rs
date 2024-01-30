@@ -48,7 +48,6 @@ impl EthStorage for Postgres {
         };
 
         let block_number = i64::try_from(block)?;
-        tracing::debug!(block_number, "Block number:: ");
         let account = sqlx::query_as!(
             Account,
             r#"
