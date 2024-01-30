@@ -1,3 +1,5 @@
+import '.justfile_helpers' # _lint, _outdated
+
 # Project: Show available tasks
 default:
     just --list --unsorted
@@ -56,18 +58,17 @@ lint:
 lint-check:
     @just _lint --check
 
-_lint fmt-flag="":
-    cargo +nightly fmt --all {{fmt-flag}}
-    cargo +nightly clippy --all-targets
-
 # Stratus: Compile SQLx queries
 sqlx:
     SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@0.0.0.0:5432/stratus -- --all-targets
 
 # Stratus: Check for outdated crates
 outdated:
-    cargo install --locked cargo-outdated
-    cargo outdated --exit-code 1
+    -@just _outdated
+
+# Stratus: Update crates
+update:
+    cargo update
 
 # ------------------------------------------------------------------------------
 # Test tasks
