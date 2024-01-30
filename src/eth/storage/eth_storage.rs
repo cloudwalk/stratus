@@ -22,7 +22,7 @@ use crate::eth::storage::MetrifiedStorage;
 ///
 /// TODO: Evaluate if it should be split in multiple traits like EthAccountStorage, EthSlotStorage, EthTransactionStorage, etc.
 #[async_trait]
-pub trait EthStorage: Send + Sync + 'static {
+pub trait EthStorage: Send + Sync {
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------

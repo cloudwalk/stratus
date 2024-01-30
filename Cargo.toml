@@ -48,7 +48,8 @@ triehash = "0.8.4"
 
 # network
 jsonrpsee = { version = "0.21.0", features = ["server"] }
-libp2p = { version = "0.52", features = ["tcp", "tls", "dns", "tokio", "noise", "yamux", "websocket", "ping", "macros"] }
+libp2p = { version = "0.52", features = ["tcp", "tls", "dns", "tokio", "noise", "yamux", "websocket", "ping", "macros"], optional = true }
+sc-network = { git = "https://github.com/cloudwalk/substrate", branch = "stratus", optional = true }
 tower = "0.4.13"
 
 # observability
@@ -62,7 +63,6 @@ sqlx = { version = "0.7.3", features = ["runtime-tokio", "postgres", "bigdecimal
 
 # test
 fake = { version = "2.9.2", features = ["derive"] }
-
 
 [dev-dependencies]
 binary_macros = "1.0.0"
@@ -80,3 +80,7 @@ clone_on_ref_ptr = "warn"
 disallowed_names = "warn"
 manual_let_else = "warn"
 semicolon_if_nothing_returned = "warn"
+
+[features]
+default = []
+p2p-substrate = ["dep:libp2p", "dep:sc-network"]

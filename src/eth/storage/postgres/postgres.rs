@@ -63,19 +63,22 @@ impl EthStorage for Postgres {
             address.as_ref(),
             block_number,
         )
-        .fetch_one(&self.connection_pool)
-        .await
-        .unwrap_or_else(|err| {
-            tracing::debug!(?err);
-            Account {
+        .fetch_optional(&self.connection_pool)
+        .await?;
+
+        // If there is no account, we return
+        // an "empty account"
+        let acc = match account {
+            Some(acc) => acc,
+            None => Account {
                 address: address.clone(),
                 ..Account::default()
-            }
-        });
+            },
+        };
 
         tracing::debug!(%address, "Account read");
 
-        Ok(account)
+        Ok(acc)
     }
     async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, "reading slot");
@@ -104,11 +107,17 @@ impl EthStorage for Postgres {
             slot_index.as_ref(),
             block_number,
         )
-        .fetch_one(&self.connection_pool)
-        .await
-        .unwrap_or(Slot::default());
+        .fetch_optional(&self.connection_pool)
+        .await?;
 
-        Ok(slot)
+        // If there is no slot, we return
+        // an "empty slot"
+        let s = match slot {
+            Some(slot) => slot,
+            None => Slot::default(),
+        };
+
+        Ok(s)
     }
 
     async fn read_block(&self, block: &BlockSelection) -> anyhow::Result<Option<Block>> {
