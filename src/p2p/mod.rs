@@ -1,6 +1,9 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
+use sc_consensus::BlockImport;
+use sc_consensus::BlockImportParams;
+use sc_consensus::Verifier;
 use sc_network::config::MultiaddrWithPeerId;
 use sc_network::config::NetworkConfiguration;
 use sc_network::config::NonReservedPeerMode;
@@ -8,6 +11,50 @@ use sc_network::config::SyncMode;
 use sc_network::config::TransportConfig;
 use sc_network::Multiaddr;
 use sc_network::PeerId;
+use sp_consensus::error::Error as ConsensusError;
+use sp_runtime::traits::Block as BlockT;
+use sp_runtime::traits::Header as HeaderT;
+use tracing::info;
+use codec::{Decode, Encode};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
+
+use sp_runtime::traits::{BlakeTwo256, Extrinsic as ExtrinsicT, Verify};
+use sp_core::RuntimeDebug;
+
+#[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, parity_util_mem::MallocSizeOf)]
+pub enum Extrinsic {
+    IncludeData(Vec<u8>),
+    StorageChange(Vec<u8>, Option<Vec<u8>>),
+}
+
+impl serde::Serialize for Extrinsic {
+    fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error>
+    where
+        S: ::serde::Serializer,
+    {
+        self.using_encoded(|bytes| seq.serialize_bytes(bytes))
+    }
+}
+
+impl ExtrinsicT for Extrinsic {
+    type Call = Extrinsic;
+    type SignaturePayload = ();
+
+    fn is_signed(&self) -> Option<bool> {
+        if let Extrinsic::IncludeData(_) = *self {
+            Some(false)
+        } else {
+            Some(true)
+        }
+    }
+
+    fn new(call: Self::Call, _signature_payload: Option<Self::SignaturePayload>) -> Option<Self> {
+        Some(call)
+    }
+}
+pub type BlockNumber = u64;
+pub type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
+pub type Block = sp_runtime::generic::Block<Header, Extrinsic>;
 
 pub async fn serve_p2p() -> anyhow::Result<()> {
     tracing::info!("connecting to peers");
@@ -15,8 +62,6 @@ pub async fn serve_p2p() -> anyhow::Result<()> {
     let _network_config = get_network_config().await?;
     let client = SimpleClient::new();
     let _chain = Arc::new(client);
-
-    //HERE
 
     Ok(())
 }
@@ -55,3 +100,33 @@ impl SimpleClient {
         SimpleClient {}
     }
 }
+
+// Your SimpleVerifier implementation
+pub struct SimpleVerifier;
+type CacheKeyId = [u8; 4];
+
+#[async_trait::async_trait]
+impl Verifier<Block> for SimpleVerifier {
+    async fn verify(&mut self, block: BlockImportParams<Block, ()>) -> Result<(BlockImportParams<Block, ()>, Option<Vec<(CacheKeyId, Vec<u8>)>>), String> {
+        info!("Verifying block: Number = {:?}, Hash = {:?}", block.header.number(), block.post_hash);
+        Ok((block, None))
+    }
+}
+
+// Your SimpleBlockImport implementation
+//pub struct SimpleBlockImport;
+//
+//#[async_trait::async_trait]
+//impl BlockImport<Block> for SimpleBlockImport {
+//    type Error = ConsensusError;
+//
+//    async fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
+//        info!("Checking block: Number = {:?}, Hash = {:?}", block.number, block.hash);
+//        Ok(ImportResult::imported(false))
+//    }
+//
+//    async fn import_block(&mut self, block: BlockImportParams<Block, ()>, _cache: HashMap<CacheKeyId, Vec<u8>>) -> Result<ImportResult, Self::Error> {
+//        info!("Importing block: Number = {:?}, Hash = {:?}", block.header.number(), block.post_hash);
+//        Ok(ImportResult::imported(true))
+//    }
+//}
