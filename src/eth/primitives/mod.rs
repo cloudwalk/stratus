@@ -187,4 +187,12 @@ mod tests {
     gen_test_serde!(TransactionInput);
     gen_test_serde!(TransactionMined);
     gen_test_serde!(Wei);
+
+    #[test]
+    fn block_hash_calculation() {
+        let number: BlockNumber = 0x0.into();
+        let timestamp_in_secs = 1234567890;
+        let b = BlockHeader::new(number, timestamp_in_secs);
+        assert_eq!(b.hash.to_string(), "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce");
+    }
 }
