@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use codec::Decode;
+use codec::Encode;
 use sc_consensus::BlockCheckParams;
 use sc_consensus::BlockImport;
 use sc_consensus::BlockImportParams;
@@ -15,13 +17,13 @@ use sc_network::config::TransportConfig;
 use sc_network::Multiaddr;
 use sc_network::PeerId;
 use sp_consensus::error::Error as ConsensusError;
-use sp_runtime::traits::Block as BlockT;
-use sp_runtime::traits::Header as HeaderT;
-use tracing::info;
-use codec::{Decode, Encode};
-
-use sp_runtime::traits::{BlakeTwo256, Extrinsic as ExtrinsicT, Verify};
 use sp_core::RuntimeDebug;
+use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::traits::Block as BlockT;
+use sp_runtime::traits::Extrinsic as ExtrinsicT;
+use sp_runtime::traits::Header as HeaderT;
+use sp_runtime::traits::Verify;
+use tracing::info;
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, parity_util_mem::MallocSizeOf)]
 pub enum Extrinsic {
@@ -120,8 +122,8 @@ pub struct SimpleBlockImport;
 
 #[async_trait::async_trait]
 impl BlockImport<Block> for SimpleBlockImport {
-	type Error = ConsensusError;
-	type Transaction = ();
+    type Error = ConsensusError;
+    type Transaction = ();
 
     async fn check_block(&mut self, block: BlockCheckParams<Block>) -> Result<ImportResult, Self::Error> {
         info!("Checking block: Number = {:?}, Hash = {:?}", block.number, block.hash);
