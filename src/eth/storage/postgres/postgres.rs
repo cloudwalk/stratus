@@ -431,6 +431,18 @@ impl EthStorage for Postgres {
                     .execute(&self.connection_pool)
                     .await
                     .context("failed to insert account")?;
+                    for (slot_idx, value) in change.slots {
+                        sqlx::query_file!(
+                            "src/eth/storage/postgres/queries/insert_account_slot.sql",
+                            &<[u8; 32]>::from(slot_idx),
+                            &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value), // this should never happen
+                            change.address.as_ref(),
+                            i64::try_from(block.header.number).context("failed to convert block number")?
+                        )
+                        .execute(&self.connection_pool)
+                        .await
+                        .context("failed to insert slot")?;
+                    }
                 }
             }
 
