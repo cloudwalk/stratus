@@ -31,6 +31,7 @@ pub enum Extrinsic {
     StorageChange(Vec<u8>, Option<Vec<u8>>),
 }
 
+// used by Verifier, holds data that is external to the blockchain and included in a block
 impl serde::Serialize for Extrinsic {
     fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error>
     where
