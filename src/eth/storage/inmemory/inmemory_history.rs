@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use itertools::Itertools;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::BlockNumber;
@@ -10,7 +11,7 @@ pub struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
 where
     T: Clone + Debug;
 
-#[derive(Debug, derive_new::new)]
+#[derive(Clone, Debug, derive_new::new)]
 pub struct InMemoryHistoryValue<T> {
     block_number: BlockNumber,
     value: T,
@@ -21,6 +22,11 @@ where
     T: Clone + Debug,
 {
     /// Creates a new list of historical values.
+    pub fn new_at_zero(value: T) -> Self {
+        Self::new(BlockNumber::ZERO, value)
+    }
+
+    /// Creates a new list of historical values.
     pub fn new(block_number: BlockNumber, value: T) -> Self {
         let value = InMemoryHistoryValue::new(block_number, value);
         Self(NonEmpty::new(value))
@@ -30,6 +36,16 @@ where
     pub fn push(&mut self, block_number: BlockNumber, value: T) {
         let value = InMemoryHistoryValue::new(block_number, value);
         self.0.push(value);
+    }
+
+    /// Resets changes to the specified block number.
+    pub fn reset(&self, block_number: BlockNumber) -> Option<InMemoryHistory<T>> {
+        let history = self.0.iter().filter(|x| x.block_number <= block_number).cloned().collect_vec();
+        if history.is_empty() {
+            None
+        } else {
+            Some(Self(NonEmpty::from_vec(history).unwrap()))
+        }
     }
 
     /// Returns the value at the given point in time.

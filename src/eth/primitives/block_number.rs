@@ -13,11 +13,13 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 use ethereum_types::U64;
+use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
+use super::Hash;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
@@ -26,6 +28,20 @@ pub struct BlockNumber(U64);
 
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());
+
+    // Returns the keccak256 hash of the block number
+    pub fn hash(&self) -> Hash {
+        Hash::new(keccak256(<[u8; 8]>::from(*self)))
+    }
+
+    // Returns the previous block number
+    pub fn predecessor(&self) -> Option<Self> {
+        if self.0.is_zero() {
+            None
+        } else {
+            Some(Self(self.0 - 1))
+        }
+    }
 }
 
 impl Display for BlockNumber {
@@ -86,10 +102,22 @@ impl From<BlockNumber> for U64 {
     }
 }
 
+impl From<BlockNumber> for u64 {
+    fn from(block_number: BlockNumber) -> Self {
+        block_number.0.as_u64()
+    }
+}
+
 impl TryFrom<BlockNumber> for i64 {
     type Error = TryFromIntError;
 
     fn try_from(block_number: BlockNumber) -> Result<i64, TryFromIntError> {
         i64::try_from(block_number.0.as_u64())
+    }
+}
+
+impl From<BlockNumber> for [u8; 8] {
+    fn from(block_number: BlockNumber) -> Self {
+        block_number.0.as_u64().to_be_bytes()
     }
 }
