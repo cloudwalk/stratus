@@ -117,7 +117,7 @@ fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn 
 pub async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting P2P server");
 
-    p2p::serve_p2p().await?;
+    p2p::serve_p2p::<sp_core::H256>().await?;
 
     tokio::select! {
         _ = cancel_signal.recv() => {

@@ -79,7 +79,7 @@ pub type BlockNumber = u64;
 pub type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = sp_runtime::generic::Block<Header, Extrinsic>;
 
-pub async fn serve_p2p() -> anyhow::Result<()> {
+pub async fn serve_p2p<H: std::marker::Sync + std::marker::Send + std::clone::Clone + std::fmt::Debug + std::cmp::Eq + std::hash::Hash + std::default::Default + 'static>() -> anyhow::Result<()> {
     tracing::info!("connecting to peers");
 
     let network_config = get_network_config().await?;
@@ -119,7 +119,7 @@ pub async fn serve_p2p() -> anyhow::Result<()> {
         protocol_config
     };
 
-    let network_params = sc_network::config::Params {
+    let network_params: sc_network::config::Params<sp_runtime::generic::Block<sp_runtime::generic::Header<u64, BlakeTwo256>, Extrinsic>, H, SimpleClient> = sc_network::config::Params {
         role: Role::Light,
         executor: {
             Some(Box::new(|fut| {
