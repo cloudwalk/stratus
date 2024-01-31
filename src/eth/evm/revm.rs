@@ -162,9 +162,11 @@ impl Database for RevmDatabaseSession {
             }
         }
 
-        // track original value
-        self.storage_changes
-            .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account.clone()));
+        // track original value, except if ignored address
+        if not(account.address.is_ignored()) {
+            self.storage_changes
+                .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account.clone()));
+        }
 
         Ok(Some(account.into()))
     }
@@ -179,16 +181,18 @@ impl Database for RevmDatabaseSession {
         let index: SlotIndex = revm_index.into();
         let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.storage_point_in_time))?;
 
-        // track original value
-        match self.storage_changes.get_mut(&address) {
-            Some(account) => {
-                account.slots.insert(index, ExecutionValueChange::from_original(slot.clone()));
-            }
-            None => {
-                tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
-            }
-        };
+        // track original value, except if ignored address
+        if not(address.is_ignored()) {
+            match self.storage_changes.get_mut(&address) {
+                Some(account) => {
+                    account.slots.insert(index, ExecutionValueChange::from_original(slot.clone()));
+                }
+                None => {
+                    tracing::error!(reason = "reading slot without account loaded", %address, %index);
+                    return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
+                }
+            };
+        }
 
         Ok(slot.value.into())
     }
@@ -274,14 +278,19 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
 fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> anyhow::Result<ExecutionChanges> {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
-
-        // do not apply state changes to coinbase because we do not charge gas, otherwise it will have to be updated for every transaction
-        if address.is_coinbase() {
+        if address.is_ignored() {
             continue;
         }
 
         // apply changes according to account status
-        tracing::debug!(%address, status = ?revm_account.status, slots = %revm_account.storage.len(), "evm account");
+        tracing::debug!(
+            %address,
+            status = ?revm_account.status,
+            balance = %revm_account.info.balance,
+            nonce = %revm_account.info.nonce,
+            slots = %revm_account.storage.len(),
+            "evm account"
+        );
         let (account_created, account_updated) = (revm_account.is_created(), revm_account.is_touched());
 
         // parse revm to internal representation

@@ -326,38 +326,29 @@ fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Optio
     for change in &execution.changes {
         let address = &change.address;
 
-        match state.accounts.get(address) {
-            Some(account) => {
-                // check account info conflicts
-                if let Some(touched_nonce) = change.nonce.take_original_ref() {
-                    if touched_nonce != account.nonce.get_current_ref() {
-                        conflicts.add_nonce(address.clone(), account.nonce.get_current(), touched_nonce.clone());
-                    }
+        if let Some(account) = state.accounts.get(address) {
+            // check account info conflicts
+            if let Some(touched_nonce) = change.nonce.take_original_ref() {
+                if touched_nonce != account.nonce.get_current_ref() {
+                    conflicts.add_nonce(address.clone(), account.nonce.get_current(), touched_nonce.clone());
                 }
-                if let Some(touched_balance) = change.balance.take_original_ref() {
-                    if touched_balance != account.balance.get_current_ref() {
-                        conflicts.add_balance(address.clone(), account.balance.get_current(), touched_balance.clone());
-                    }
+            }
+            if let Some(touched_balance) = change.balance.take_original_ref() {
+                if touched_balance != account.balance.get_current_ref() {
+                    conflicts.add_balance(address.clone(), account.balance.get_current(), touched_balance.clone());
                 }
+            }
 
-                // check slots conflicts
-                for (touched_slot_index, touched_slot) in &change.slots {
-                    match account.slots.get(touched_slot_index) {
-                        Some(slot) =>
-                            if let Some(touched_slot) = touched_slot.take_original_ref() {
-                                let slot_value = slot.get_current().value;
-                                if touched_slot.value != slot_value {
-                                    conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
-                                }
-                            },
-                        None => {
-                            // todo: handle slot creation conflict
+            // check slots conflicts
+            for (touched_slot_index, touched_slot) in &change.slots {
+                if let Some(slot) = account.slots.get(touched_slot_index) {
+                    if let Some(touched_slot) = touched_slot.take_original_ref() {
+                        let slot_value = slot.get_current().value;
+                        if touched_slot.value != slot_value {
+                            conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
                         }
                     }
                 }
-            }
-            None => {
-                // todo: handle account creation conflicts
             }
         }
     }

@@ -33,6 +33,7 @@ impl ExecutionConflictsBuilder {
         });
     }
 
+    /// Builds the list of tracked conflicts into a non-empty list of conflicts.
     pub fn build(self) -> Option<ExecutionConflicts> {
         if self.0.is_empty() {
             None
@@ -42,7 +43,7 @@ impl ExecutionConflictsBuilder {
     }
 }
 
-#[derive(Debug, derive_new::new)]
+#[derive(Debug)]
 pub enum ExecutionConflict {
     /// Account nonce mismatch.
     Nonce { address: Address, expected: Nonce, actual: Nonce },

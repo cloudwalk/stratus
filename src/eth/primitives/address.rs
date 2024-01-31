@@ -43,14 +43,22 @@ impl Address {
         Self(H160(bytes))
     }
 
-    /// Check if current address is the zero address.
+    /// Checks if current address is the zero address.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
     }
 
-    /// Check if current address is the coinbase address.
+    /// Checks if current address is the coinbase address.
     pub fn is_coinbase(&self) -> bool {
         self == &Self::COINBASE
+    }
+
+    /// Checks if current address should have their updates ignored.
+    ///
+    /// * Coinbase is ignored because we do not charge gas, otherwise it will have to be updated for every transaction.
+    /// * Not sure if zero address should be ignored or not.
+    pub fn is_ignored(&self) -> bool {
+        self.is_coinbase() || self.is_zero()
     }
 }
 
