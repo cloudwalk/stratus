@@ -119,7 +119,7 @@ pub async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyho
 
     p2p::serve_p2p().await?;
 
-    select! {
+    tokio::select! {
         _ = cancel_signal.recv() => {
             tracing::info!("P2P task cancelled");
             Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"))
