@@ -96,7 +96,6 @@ async fn get_network_config() -> anyhow::Result<NetworkConfiguration> {
     Ok(network_config)
 }
 
-#[derive(Default)]
 pub struct SimpleClient {}
 
 impl Default for SimpleClient {
