@@ -462,6 +462,8 @@ impl EthStorage for Postgres {
             }
 
             for log in transaction.logs {
+                let addr = log.log.address.as_ref();
+                let data = log.log.data;
                 let tx_hash = log.transaction_hash.as_ref();
                 let tx_idx = i32::from(log.transaction_index);
                 let lg_idx = i32::from(log.log_index);
@@ -469,8 +471,8 @@ impl EthStorage for Postgres {
                 let b_hash = log.block_hash.as_ref();
                 sqlx::query_file!(
                     "src/eth/storage/postgres/queries/insert_log.sql",
-                    log.log.address.as_ref(),
-                    *log.log.data,
+                    addr,
+                    *data,
                     tx_hash,
                     tx_idx,
                     lg_idx,
@@ -480,13 +482,14 @@ impl EthStorage for Postgres {
                 .execute(&self.connection_pool)
                 .await
                 .context("failed to insert log")?;
-                for topic in log.log.topics {
+                for (idx, topic) in log.log.topics.into_iter().enumerate() {
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_topic.sql",
                         topic.as_ref(),
                         tx_hash,
                         tx_idx,
                         lg_idx,
+                        i32::try_from(idx).context("Failed to convert topic idx")?,
                         b_number,
                         b_hash
                     )
