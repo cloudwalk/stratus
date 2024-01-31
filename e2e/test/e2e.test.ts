@@ -31,9 +31,18 @@ const CONTRACT_TOPIC_SUB = "0xf9c652bcdb0eed6299c6a878897eb3af110dbb265833e7af75
 // RPC tests
 // -----------------------------------------------------------------------------
 describe("JSON-RPC methods", () => {
+    describe("State", () => {
+        it("debug_setHead", async () => {
+            (await rpc.sendExpect("debug_setHead", [ZERO])).eq(ZERO);
+        });
+    });
+
     describe("Metadata", () => {
         it("eth_chainId", async () => {
             (await rpc.sendExpect("eth_chainId")).eq(CHAIN_ID);
+        });
+        it("net_listening", async () => {
+            (await rpc.sendExpect("net_listening")).eq("true");
         });
         it("net_version", async () => {
             (await rpc.sendExpect("net_version")).eq(CHAIN_ID_DEC + "");
@@ -83,6 +92,9 @@ describe("Transaction: wei transfer", () => {
     var _txHash: string;
     var _block: Block;
 
+    it("Resets blockchain", async () => {
+        await rpc.reset();
+    });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signer().signTransaction({
             chainId: CHAIN_ID_DEC,
@@ -138,6 +150,9 @@ describe("Transaction: serial requests", () => {
     var _contract: TestContractBalances;
     var _block: number;
 
+    it("Resets blockchain", async () => {
+        await rpc.reset();
+    });
     it("Contract is deployed", async () => {
         _contract = await rpc.deployTestContractBalances();
     });
@@ -197,6 +212,11 @@ describe("Transaction: serial requests", () => {
 // -----------------------------------------------------------------------------
 describe("Transaction: TestContractBalances", async () => {
     var _contract: TestContractBalances;
+
+    it("Resets blockchain", async () => {
+        await rpc.reset();
+    });
+
     it("Deploy TestContractBalances", async () => {
         _contract = await rpc.deployTestContractBalances();
     });
@@ -252,6 +272,11 @@ describe("Transaction: TestContractBalances", async () => {
 
 describe("Transaction: TestContractCounter", async () => {
     var _contract: TestContractCounter;
+
+    it("Resets blockchain", async () => {
+        await rpc.reset();
+    });
+
     it("Deploy TestContractCounter", async () => {
         _contract = await rpc.deployTestContractCounter();
     });

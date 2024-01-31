@@ -560,6 +560,11 @@ impl EthStorage for Postgres {
 
         Ok(block_number)
     }
+
+    /// TODO
+    async fn reset(&self, _number: BlockNumber) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, Vec<PostgresLog>> {

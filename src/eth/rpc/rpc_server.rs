@@ -17,6 +17,7 @@ use serde_json::Value as JsonValue;
 use tokio::sync::broadcast;
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -96,11 +97,12 @@ pub async fn serve_rpc(
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
-    // status
-    module.register_async_method("net_listening", net_listening)?;
+    // debug
+    module.register_async_method("debug_setHead", debug_set_head)?;
 
     // blockchain
     module.register_async_method("net_version", net_version)?;
+    module.register_async_method("net_listening", net_listening)?;
     module.register_async_method("eth_chainId", eth_chain_id)?;
     module.register_async_method("web3_clientVersion", web3_client_version)?;
 
@@ -140,6 +142,13 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 // -----------------------------------------------------------------------------
 // Handlers
 // -----------------------------------------------------------------------------
+
+// Debug
+async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
+    ctx.storage.reset(number).await?;
+    Ok(serde_json::to_value(number).unwrap())
+}
 
 // Status
 async fn net_listening(_: Params<'_>, _: Arc<RpcContext>) -> &'static str {
