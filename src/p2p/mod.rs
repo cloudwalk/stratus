@@ -1,12 +1,13 @@
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use std::pin::Pin;
-use futures::task::{Context, Poll};
 use codec::Decode;
 use codec::Encode;
 use futures::future::FutureExt;
+use futures::task::Context;
+use futures::task::Poll;
 use futures::Future;
 use sc_client_api::BlockBackend;
 use sc_client_api::ChildInfo;
@@ -79,7 +80,9 @@ pub type BlockNumber = u64;
 pub type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
 pub type Block = sp_runtime::generic::Block<Header, Extrinsic>;
 
-pub async fn serve_p2p<H: std::marker::Sync + std::marker::Send + std::clone::Clone + std::fmt::Debug + std::cmp::Eq + std::hash::Hash + std::default::Default + 'static>() -> anyhow::Result<()> {
+pub async fn serve_p2p<
+    H: std::marker::Sync + std::marker::Send + std::clone::Clone + std::fmt::Debug + std::cmp::Eq + std::hash::Hash + std::default::Default + 'static,
+>() -> anyhow::Result<()> {
     tracing::info!("connecting to peers");
 
     let network_config = get_network_config().await?;
@@ -119,30 +122,31 @@ pub async fn serve_p2p<H: std::marker::Sync + std::marker::Send + std::clone::Cl
         protocol_config
     };
 
-    let network_params: sc_network::config::Params<sp_runtime::generic::Block<sp_runtime::generic::Header<u64, BlakeTwo256>, Extrinsic>, H, SimpleClient> = sc_network::config::Params {
-        role: Role::Light,
-        executor: {
-            Some(Box::new(|fut| {
-                tokio::spawn(fut);
-            }))
-        },
-        transactions_handler_executor: {
-            Box::new(|fut| {
-                tokio::spawn(fut);
-            })
-        },
-        network_config,
-        chain,
-        transaction_pool: Arc::new(EmptyTransactionPool),
-        protocol_id,
-        import_queue,
-        block_announce_validator: Box::new(sp_consensus::block_validation::DefaultBlockAnnounceValidator),
-        metrics_registry: None,
-        block_request_protocol_config,
-        state_request_protocol_config,
-        light_client_request_protocol_config,
-        warp_sync: None,
-    };
+    let network_params: sc_network::config::Params<sp_runtime::generic::Block<sp_runtime::generic::Header<u64, BlakeTwo256>, Extrinsic>, H, SimpleClient> =
+        sc_network::config::Params {
+            role: Role::Light,
+            executor: {
+                Some(Box::new(|fut| {
+                    tokio::spawn(fut);
+                }))
+            },
+            transactions_handler_executor: {
+                Box::new(|fut| {
+                    tokio::spawn(fut);
+                })
+            },
+            network_config,
+            chain,
+            transaction_pool: Arc::new(EmptyTransactionPool),
+            protocol_id,
+            import_queue,
+            block_announce_validator: Box::new(sp_consensus::block_validation::DefaultBlockAnnounceValidator),
+            metrics_registry: None,
+            block_request_protocol_config,
+            state_request_protocol_config,
+            light_client_request_protocol_config,
+            warp_sync: None,
+        };
 
     let network_worker = sc_network::NetworkWorker::new(network_params)?;
     let network_service = network_worker.service().clone();
@@ -157,8 +161,8 @@ pub async fn serve_p2p<H: std::marker::Sync + std::marker::Send + std::clone::Cl
                 Poll::Ready(()) => {
                     info!("NetworkWorker has finished its execution.");
                     break; // NetworkWorker is finished
-                },
-                Poll::Pending => {},
+                }
+                Poll::Pending => {}
             }
         }
     });
@@ -186,7 +190,10 @@ async fn get_network_config() -> anyhow::Result<NetworkConfiguration> {
         skip_proofs: true,
         storage_chain_mode: false,
     };
-    network_config.transport = TransportConfig::Normal { enable_mdns: false, allow_private_ipv4: true };
+    network_config.transport = TransportConfig::Normal {
+        enable_mdns: false,
+        allow_private_ipv4: true,
+    };
     network_config.listen_addresses = vec![multiaddr.clone()];
     network_config.allow_non_globals_in_dht = true;
 
@@ -366,8 +373,8 @@ impl ProofProvider<Block> for SimpleClient {
     }
 }
 
-use sp_blockchain::HeaderMetadata;
 use sp_blockchain::CachedHeaderMetadata;
+use sp_blockchain::HeaderMetadata;
 
 impl HeaderMetadata<Block> for SimpleClient {
     type Error = BlockchainError;
@@ -376,11 +383,11 @@ impl HeaderMetadata<Block> for SimpleClient {
         info!("Called SimpleClient header_metadata() with hash: {:?}", hash);
         // Return a default or mock CachedHeaderMetadata
         let metadata = CachedHeaderMetadata {
-            hash: Default::default(), // Dummy hash value
-            number: 0,                // Dummy block number
-            parent: Default::default(), // Dummy parent hash
+            hash: Default::default(),       // Dummy hash value
+            number: 0,                      // Dummy block number
+            parent: Default::default(),     // Dummy parent hash
             state_root: Default::default(), // Dummy state root hash
-            ancestor: Default::default(), // Dummy ancestor hash
+            ancestor: Default::default(),   // Dummy ancestor hash
         };
         Ok(metadata)
     }
