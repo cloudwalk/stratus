@@ -64,6 +64,14 @@ sqlx = { version = "0.7.3", features = ["runtime-tokio", "postgres", "bigdecimal
 # test
 fake = { version = "2.9.2", features = ["derive"] }
 
+# p2p
+sp-consensus = { git = "https://github.com/cloudwalk/substrate", branch = "stratus", optional = true  }
+sc-consensus = { git = "https://github.com/cloudwalk/substrate", branch = "stratus", optional = true  }
+sp-runtime = { git = "https://github.com/cloudwalk/substrate", branch = "stratus", optional = true  }
+sp-core = { git = "https://github.com/cloudwalk/substrate", branch = "stratus", optional = true  }
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"], optional = true }
+parity-util-mem = { version = "0.11.0", default-features = false, features = ["primitive-types"], optional = true  }
+
 [dev-dependencies]
 binary_macros = "1.0.0"
 serial_test = "2.0.0"
@@ -82,5 +90,5 @@ manual_let_else = "warn"
 semicolon_if_nothing_returned = "warn"
 
 [features]
-default = []
-p2p-substrate = ["dep:libp2p", "dep:sc-network"]
+default = ["p2p-substrate"]
+p2p-substrate = ["dep:libp2p", "dep:sc-network", "dep:sc-consensus", "dep:sp-consensus", "dep:sp-runtime", "dep:sp-core", "dep:codec", "dep:parity-util-mem"]
