@@ -513,7 +513,7 @@ impl EthStorage for Postgres {
                         tx_hash,
                         tx_idx,
                         lg_idx,
-                        i32::try_from(idx).context("Failed to convert topic idx")?,
+                        i32::try_from(idx).context("failed to convert topic idx")?,
                         b_number,
                         b_hash
                     )
