@@ -7478,6 +7478,7 @@ dependencies = [
  "sp-consensus",
  "sp-core",
  "sp-runtime",
+ "sp-version",
  "sqlx",
  "stringreader",
  "strum",

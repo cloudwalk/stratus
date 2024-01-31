@@ -5,7 +5,9 @@ use std::sync::Arc;
 use codec::Decode;
 use codec::Encode;
 use futures::future::FutureExt;
+use sc_client_api::backend;
 use sc_client_api::BlockBackend;
+use sc_client_api::BlockchainEvents;
 use sc_client_api::ChildInfo;
 use sc_client_api::CompactProof;
 use sc_client_api::HeaderBackend;
@@ -18,10 +20,12 @@ use sc_consensus::BlockImport;
 use sc_consensus::BlockImportParams;
 use sc_consensus::ImportResult;
 use sc_consensus::Verifier;
+use sc_network::config::EmptyTransactionPool;
 use sc_network::config::MultiaddrWithPeerId;
 use sc_network::config::NetworkConfiguration;
 use sc_network::config::NonReservedPeerMode;
 use sc_network::config::ProtocolId;
+use sc_network::config::Role;
 use sc_network::config::SyncMode;
 use sc_network::config::TransportConfig;
 use sc_network::Multiaddr;
@@ -37,6 +41,7 @@ use sp_runtime::traits::BlakeTwo256;
 use sp_runtime::traits::Extrinsic as ExtrinsicT;
 use sp_runtime::traits::Header as HeaderT;
 use sp_runtime::traits::NumberFor;
+use sp_runtime::traits::Verify;
 use tracing::info;
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, parity_util_mem::MallocSizeOf)]
@@ -77,7 +82,7 @@ pub type Block = sp_runtime::generic::Block<Header, Extrinsic>;
 pub async fn serve_p2p() -> anyhow::Result<()> {
     tracing::info!("connecting to peers");
 
-    let _network_config = get_network_config().await?;
+    let network_config = get_network_config().await?;
     let client = SimpleClient::new();
     let chain = Arc::new(client);
 
@@ -86,7 +91,7 @@ pub async fn serve_p2p() -> anyhow::Result<()> {
     let block_import = SimpleBlockImport;
 
     // Create the import queue using BasicQueue
-    let _import_queue = Box::new(sc_consensus::BasicQueue::new(
+    let import_queue = Box::new(sc_consensus::BasicQueue::new(
         verifier,
         Box::new(block_import),
         None,                                   // Assuming no justification_import for simplicity
@@ -96,23 +101,51 @@ pub async fn serve_p2p() -> anyhow::Result<()> {
 
     let protocol_id = ProtocolId::from("test-protocol-name");
 
-    let _block_request_protocol_config = {
+    let block_request_protocol_config = {
         let (handler, protocol_config) = sc_network::block_request_handler::BlockRequestHandler::new(&protocol_id, chain.clone(), 50);
         tokio::spawn(handler.run().boxed());
         protocol_config
     };
 
-    let _state_request_protocol_config = {
+    let state_request_protocol_config = {
         let (handler, protocol_config) = sc_network::state_request_handler::StateRequestHandler::new(&protocol_id, chain.clone(), 50);
         tokio::spawn(handler.run().boxed());
         protocol_config
     };
 
-    let _light_client_request_protocol_config = {
+    let light_client_request_protocol_config = {
         let (handler, protocol_config) = sc_network::light_client_requests::handler::LightClientRequestHandler::new(&protocol_id, chain.clone());
         tokio::spawn(handler.run().boxed());
         protocol_config
     };
+
+    let network_params = sc_network::config::Params {
+        role: Role::Light,
+        executor: {
+            Some(Box::new(|fut| {
+                tokio::spawn(fut);
+            }))
+        },
+        transactions_handler_executor: {
+            Box::new(|fut| {
+                tokio::spawn(fut);
+            })
+        },
+        network_config,
+        chain,
+        transaction_pool: Arc::new(EmptyTransactionPool),
+        protocol_id,
+        import_queue,
+        block_announce_validator: Box::new(sp_consensus::block_validation::DefaultBlockAnnounceValidator),
+        metrics_registry: None,
+        block_request_protocol_config,
+        state_request_protocol_config,
+        light_client_request_protocol_config,
+        warp_sync: None,
+    };
+
+    let network = sc_network::NetworkWorker::new(network_params);
+
     tracing::info!("p2p server exiting");
     Ok(())
 }
@@ -150,12 +183,6 @@ pub struct SimpleClient {}
 impl SimpleClient {
     pub fn new() -> Self {
         SimpleClient {}
-    }
-}
-
-impl Default for SimpleClient {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -274,12 +301,12 @@ impl BlockBackend<Block> for SimpleClient {
 }
 
 impl ProofProvider<Block> for SimpleClient {
-    fn read_proof(&self, id: &BlockId<Block>, _keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
+    fn read_proof(&self, id: &BlockId<Block>, keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
         info!("Called SimpleClient read_proof() with id: {:?}", id);
         Ok(StorageProof::new(Vec::new()))
     }
 
-    fn read_child_proof(&self, id: &BlockId<Block>, child_info: &ChildInfo, _keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
+    fn read_child_proof(&self, id: &BlockId<Block>, child_info: &ChildInfo, keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
         info!("Called SimpleClient read_child_proof() with id: {:?} and child_info: {:?}", id, child_info);
         Ok(StorageProof::new(Vec::new()))
     }
@@ -315,5 +342,35 @@ impl ProofProvider<Block> for SimpleClient {
             root, proof, start_keys
         );
         Ok((KeyValueStates(vec![]), 0))
+    }
+}
+
+use sp_blockchain::HeaderMetadata;
+use sp_blockchain::CachedHeaderMetadata;
+
+impl HeaderMetadata<Block> for SimpleClient {
+    type Error = BlockchainError;
+
+    fn header_metadata(&self, hash: sp_core::H256) -> Result<CachedHeaderMetadata<Block>, Self::Error> {
+        info!("Called SimpleClient header_metadata() with hash: {:?}", hash);
+        // Return a default or mock CachedHeaderMetadata
+        let metadata = CachedHeaderMetadata {
+            hash: Default::default(), // Dummy hash value
+            number: 0,                // Dummy block number
+            parent: Default::default(), // Dummy parent hash
+            state_root: Default::default(), // Dummy state root hash
+            ancestor: Default::default(), // Dummy ancestor hash
+        };
+        Ok(metadata)
+    }
+
+    fn insert_header_metadata(&self, hash: sp_core::H256, metadata: CachedHeaderMetadata<Block>) {
+        info!("Called SimpleClient insert_header_metadata() with hash: {:?}, metadata: {:?}", hash, metadata);
+        // Implement logic to insert header metadata
+    }
+
+    fn remove_header_metadata(&self, hash: sp_core::H256) {
+        info!("Called SimpleClient remove_header_metadata() with hash: {:?}", hash);
+        // Implement logic to remove header metadata
     }
 }
