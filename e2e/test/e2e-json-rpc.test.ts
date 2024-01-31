@@ -4,7 +4,7 @@ import { Block, Transaction, TransactionReceipt } from "web3-types";
 
 import { ALICE } from "./helpers/account";
 import { CURRENT_NETWORK, Network } from "./helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, ZERO, send, sendExpect } from "./helpers/rpc";
+import { CHAIN_ID, CHAIN_ID_DEC, MAX, ZERO, send, sendExpect } from "./helpers/rpc";
 
 describe("JSON-RPC", () => {
     describe("State", () => {
@@ -42,6 +42,10 @@ describe("JSON-RPC", () => {
         it("eth_getTransactionCount", async () => {
             (await sendExpect("eth_getTransactionCount", [ALICE])).eq(ZERO);
             (await sendExpect("eth_getTransactionCount", [ALICE, "latest"])).eq(ZERO);
+        });
+        it("eth_getBalance", async () => {
+            (await sendExpect("eth_getBalance", [ALICE])).eq(MAX);
+            (await sendExpect("eth_getBalance", [ALICE, "latest"])).eq(MAX);
         });
     });
 

@@ -7,6 +7,7 @@ import {
     deployTestContractCounter,
     sendGetNonce,
     sendRawTransaction,
+    sendRawTransactions,
     sendReset,
 } from "./helpers/rpc";
 
@@ -55,13 +56,8 @@ describe("Transaction: parallel TestContractBalances", async () => {
             signedTxs.push(await sender.signer().signTransaction(tx));
         }
 
-        // send all transactions in parallel
-        const requests = [];
-        for (const signedTx of signedTxs) {
-            const req = sendRawTransaction(signedTx);
-            requests.push(req);
-        }
-        await Promise.all(requests);
+        // send transactions in parallel
+        await sendRawTransactions(signedTxs);
 
         // verify
         expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address]);
@@ -108,13 +104,8 @@ describe("Transaction: parallel TestContractCounter", async () => {
                 .double.populateTransaction({ nonce: doubleNonce, gasPrice: 0 });
             const doubleSignedTx = await doubleSender.signer().signTransaction(doubleTx);
 
-            // send transactions in random order
-            let signedTxs = [incSignedTx, doubleSignedTx];
-            if (Math.random() > 0.5) {
-                signedTxs = signedTxs.reverse();
-            }
-            const requests = [sendRawTransaction(signedTxs[0]), sendRawTransaction(signedTxs[1])];
-            await Promise.all(requests);
+            // send transactions in parallel
+            await sendRawTransactions([incSignedTx, doubleSignedTx]);
 
             // verify
             expect(await _contract.getCounter()).eq(i + 1);
