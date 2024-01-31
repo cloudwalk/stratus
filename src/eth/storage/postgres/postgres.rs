@@ -56,7 +56,8 @@ impl EthStorage for Postgres {
                     balance as "balance: _",
                     bytecode as "bytecode: _"
                 FROM accounts
-                WHERE address = $1 AND block_number = $2
+                WHERE address = $1 AND block_number <= $2
+                ORDER BY block_number DESC
             "#,
             address.as_ref(),
             block_number,
@@ -569,12 +570,13 @@ impl EthStorage for Postgres {
         )
         .fetch_one(&self.connection_pool)
         .await
-        .unwrap_or(0)
+        .unwrap_or_else(|err|{
+            tracing::error!(?err, "Failed to get block number");
+            0
+        })
             + 1;
 
-        let block_number = BlockNumber::from(nextval);
-
-        Ok(block_number)
+        Ok(nextval.into())
     }
 
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
