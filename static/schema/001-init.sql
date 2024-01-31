@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
-    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) UNIQUE,
+    address BYTEA NOT NULL CHECK (LENGTH(address) = 20),
     nonce NUMERIC NOT NULL CHECK (nonce >= 0),
     balance NUMERIC NOT NULL CHECK (balance >= 0),
     bytecode BYTEA CHECK (LENGTH(bytecode) <= 24000),
@@ -22,8 +22,9 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE TABLE IF NOT EXISTS account_slots (
     idx BYTEA NOT NULL CHECK (LENGTH(idx) = 32),
     value BYTEA NOT NULL CHECK (LENGTH(value) = 32),
-    account_address BYTEA NOT NULL REFERENCES accounts (address),
+    account_address BYTEA NOT NULL,
     block_number BIGSERIAL NOT NULL CHECK (block_number >= 0),
+    FOREIGN KEY (account_address, block_number) REFERENCES accounts (address, block_number),
     PRIMARY KEY (idx, account_address, block_number)
 );
 
@@ -54,19 +55,22 @@ CREATE TABLE IF NOT EXISTS logs (
     ,data BYTEA NOT NULL
     ,transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
     ,transaction_idx SERIAL NOT NULL CHECK (transaction_idx >= 0)
-    ,log_idx SERIAL NOT NULL CHECK (log_idx >= 0) UNIQUE
+    ,log_idx SERIAL NOT NULL CHECK (log_idx >= 0)
     ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
     ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
+    ,PRIMARY KEY (block_hash, log_idx)
 );
 
 CREATE TABLE IF NOT EXISTS topics (
     topic BYTEA NOT NULL CHECK (LENGTH(topic) = 32)
     ,transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
     ,transaction_idx SERIAL NOT NULL CHECK (transaction_idx >= 0)
-    ,log_idx SERIAL REFERENCES logs(log_idx) NOT NULL CHECK (log_idx >= 0)
+    ,log_idx SERIAL NOT NULL CHECK (log_idx >= 0)
+    ,topic_idx SERIAL NOT NULL CHECK (topic_idx >= 0)
     ,block_number BIGSERIAL REFERENCES blocks(number) NOT NULL CHECK (block_number >= 0)
     ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
-    ,PRIMARY KEY (topic)
+    ,FOREIGN KEY (block_hash, log_idx) REFERENCES logs (block_hash, log_idx)
+    ,PRIMARY KEY (block_hash, log_idx, topic_idx)
 );
 
 CREATE SEQUENCE IF NOT EXISTS block_number_seq
