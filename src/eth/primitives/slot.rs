@@ -94,7 +94,7 @@ impl sqlx::Type<sqlx::Postgres> for SlotIndex {
 impl From<SlotIndex> for [u8; 32] {
     fn from(value: SlotIndex) -> [u8; 32] {
         let mut buf: [u8; 32] = [1; 32];
-        U256::from(value).to_little_endian(&mut buf);
+        U256::from(value).to_big_endian(&mut buf);
         buf
     }
 }
@@ -127,7 +127,7 @@ impl Dummy<Faker> for SlotValue {
 impl From<SlotValue> for [u8; 32] {
     fn from(value: SlotValue) -> Self {
         let mut buf: [u8; 32] = [1; 32];
-        value.0.to_little_endian(&mut buf);
+        value.0.to_big_endian(&mut buf);
         buf
     }
 }
