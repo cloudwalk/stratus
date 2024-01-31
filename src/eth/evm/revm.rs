@@ -158,7 +158,7 @@ impl Database for RevmDatabaseSession {
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.to {
             if &address == to_address && not(account.is_contract()) {
-                tracing::warn!(%address, "evm to account does not have bytecode");
+                tracing::warn!(%address, "evm to_account does not have bytecode");
             }
         }
 

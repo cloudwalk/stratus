@@ -85,9 +85,10 @@ impl From<Gas> for usize {
     }
 }
 
-impl From<Gas> for BigDecimal {
-    fn from(value: Gas) -> Self {
+impl TryFrom<Gas> for BigDecimal {
+    type Error = anyhow::Error;
+    fn try_from(value: Gas) -> Result<Self, Self::Error> {
         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        BigDecimal::from_str(&U256::from(value).to_string()).unwrap_or(BigDecimal::from(0))
+        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
     }
 }

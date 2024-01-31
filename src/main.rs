@@ -13,10 +13,10 @@ use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
+#[cfg(feature = "p2p-substrate")]
 use stratus::p2p;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
-use tokio::select;
 use tokio::sync::broadcast;
 
 fn main() -> anyhow::Result<()> {
@@ -32,7 +32,14 @@ fn main() -> anyhow::Result<()> {
 
     runtime.block_on(async {
         let rpc_handle = tokio::spawn(run_rpc_server(config_clone_for_rpc, tx.subscribe()));
+
+        #[cfg(feature = "p2p-substrate")]
         let p2p_handle = tokio::spawn(run_p2p_server(tx.subscribe()));
+        #[cfg(not(feature = "p2p-substrate"))]
+        let p2p_handle = tokio::spawn(async {
+            tokio::time::sleep(Duration::MAX).await;
+            Result::<_, ()>::Ok(())
+        });
 
         tokio::select! {
             result = rpc_handle => {
@@ -106,12 +113,13 @@ fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn 
     NonEmpty::from_vec(evms).unwrap()
 }
 
+#[cfg(feature = "p2p-substrate")]
 pub async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
     tracing::info!("Starting P2P server");
 
     p2p::serve_p2p().await?;
 
-    select! {
+    tokio::select! {
         _ = cancel_signal.recv() => {
             tracing::info!("P2P task cancelled");
             Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"))
