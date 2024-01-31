@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n    number as \"number: _\"\n    ,hash as \"hash: _\"\n    ,transactions_root as \"transactions_root: _\"\n    ,gas as \"gas: _\"\n    ,logs_bloom as \"bloom: _\"\n    ,timestamp_in_secs as \"timestamp_in_secs: _\"\n    ,parent_hash as \"parent_hash: _\"\nFROM blocks\nWHERE hash = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "number: _",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "hash: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "transactions_root: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "gas: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "bloom: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "timestamp_in_secs: _",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "parent_hash: _",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d5a625e8c1272a44bf40c9a33fd8928bde879c2325f207e58325d6b109f83592"
+}
