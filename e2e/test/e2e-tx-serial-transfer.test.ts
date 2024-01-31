@@ -24,13 +24,7 @@ describe("Transaction: serial transfer", () => {
         await sendReset();
     });
     it("Send transaction", async () => {
-        let txSigned = await ALICE.signer().signTransaction({
-            chainId: CHAIN_ID_DEC,
-            to: BOB,
-            value: 0,
-            gasPrice: 0,
-            gasLimit: 500_000,
-        });
+        let txSigned = await ALICE.signWeiTransfer(BOB.address, 0);
         _txHash = await sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
     });
