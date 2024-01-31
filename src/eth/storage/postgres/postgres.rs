@@ -570,11 +570,10 @@ impl EthStorage for Postgres {
         )
         .fetch_one(&self.connection_pool)
         .await
-        .unwrap_or_else(|err|{
+        .unwrap_or_else(|err| {
             tracing::error!(?err, "Failed to get block number");
             0
-        })
-            + 1;
+        }) + 1;
 
         Ok(nextval.into())
     }
