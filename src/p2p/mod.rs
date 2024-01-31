@@ -2,6 +2,15 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use sc_client_api::ProofProvider;
+use sc_client_api::ChildInfo;
+use sc_client_api::StorageProof;
+use sc_client_api::CompactProof;
+use sc_client_api::KeyValueStates;
+use sc_client_api::KeyValueStorageLevel;
+use sp_runtime::traits::NumberFor;
+use sp_runtime::generic::BlockId;
+use sp_runtime::generic::SignedBlock;
 use codec::Decode;
 use codec::Encode;
 use sc_consensus::BlockCheckParams;
@@ -9,20 +18,22 @@ use sc_consensus::BlockImport;
 use sc_consensus::BlockImportParams;
 use sc_consensus::ImportResult;
 use sc_consensus::Verifier;
+use sc_network::config::{Role, SyncMode, EmptyTransactionPool, ProtocolId};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_network::config::NetworkConfiguration;
 use sc_network::config::NonReservedPeerMode;
-use sc_network::config::SyncMode;
 use sc_network::config::TransportConfig;
 use sc_network::Multiaddr;
 use sc_network::PeerId;
 use sp_consensus::error::Error as ConsensusError;
 use sp_core::RuntimeDebug;
 use sp_runtime::traits::BlakeTwo256;
-use sp_runtime::traits::Block as BlockT;
 use sp_runtime::traits::Extrinsic as ExtrinsicT;
 use sp_runtime::traits::Header as HeaderT;
 use sp_runtime::traits::Verify;
+use sc_client_api::{backend, BlockBackend, BlockchainEvents, HeaderBackend};
+use sp_blockchain::{Error as BlockchainError, Info};
+use sp_blockchain::BlockStatus;
 use tracing::info;
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, parity_util_mem::MallocSizeOf)]
@@ -63,10 +74,73 @@ pub type Block = sp_runtime::generic::Block<Header, Extrinsic>;
 pub async fn serve_p2p() -> anyhow::Result<()> {
     tracing::info!("connecting to peers");
 
-    let _network_config = get_network_config().await?;
+    let network_config = get_network_config().await?;
     let client = SimpleClient::new();
-    let _chain = Arc::new(client);
+    let chain = Arc::new(client);
 
+    // Instantiate the SimpleVerifier and SimpleBlockImport
+    let verifier = SimpleVerifier;
+    let block_import = SimpleBlockImport;
+
+    // Create the import queue using BasicQueue
+    let import_queue = Box::new(sc_consensus::BasicQueue::new(
+        verifier,
+        Box::new(block_import),
+        None, // Assuming no justification_import for simplicity
+        &sp_core::testing::TaskExecutor::new(), // Adjust according to your async runtime
+        None, // Prometheus registry, if you have one
+    ));
+
+    let protocol_id = ProtocolId::from("test-protocol-name");
+
+    // let block_request_protocol_config = {
+    //     let (handler, protocol_config) =
+    //         sc_network::block_request_handler::BlockRequestHandler::new(&protocol_id, chain.clone(), 50);
+    //     tokio::spawn(handler.run().boxed());
+    //     protocol_config
+    // };
+    // let state_request_protocol_config = {
+    //     let (handler, protocol_config) =
+    //         sc_network::state_request_handler::StateRequestHandler::new(&protocol_id, chain.clone(), 50);
+    //     tokio::spawn(handler.run().boxed());
+    //     protocol_config
+    // };
+
+    // let light_client_request_protocol_config = {
+    //     let (handler, protocol_config) =
+    //         sc_network::light_client_requests::handler::LightClientRequestHandler::new(&protocol_id, chain.clone());
+    //     tokio::spawn(handler.run().boxed());
+    //     protocol_config
+    // };
+
+    //let warp_sync = Arc::new(TestWarpSyncProvider(client.clone()));
+
+    //let network_params = sc_network::config::Params {
+    //    role: Role::Light,
+    //    executor: {
+    //        Some(Box::new(|fut| {
+    //            tokio::spawn(fut);
+    //        }))
+    //    },
+    //    transactions_handler_executor: {
+    //        Box::new(|fut| {
+    //            tokio::spawn(fut);
+    //        })
+    //    },
+    //    network_config,
+    //    chain,
+    //    transaction_pool: Arc::new(EmptyTransactionPool),
+    //    protocol_id,
+    //    import_queue,
+    //    block_announce_validator: Box::new(sp_consensus::block_validation::DefaultBlockAnnounceValidator),
+    //    metrics_registry: None,
+    //    block_request_protocol_config,
+    //    state_request_protocol_config,
+    //    light_client_request_protocol_config,
+    //    warp_sync: Some((warp_sync, warp_protocol_config)),
+    //};
+
+    tracing::info!("p2p server exiting");
     Ok(())
 }
 
@@ -97,6 +171,7 @@ async fn get_network_config() -> anyhow::Result<NetworkConfiguration> {
     Ok(network_config)
 }
 
+#[derive(Clone, Debug)]
 pub struct SimpleClient {}
 
 impl SimpleClient {
@@ -135,3 +210,152 @@ impl BlockImport<Block> for SimpleBlockImport {
         Ok(ImportResult::imported(true))
     }
 }
+
+impl HeaderBackend<Block> for SimpleClient {
+    fn info(&self) -> Info<Block> {
+        info!("Called SimpleClient info()");
+        Info {
+            best_hash: Default::default(),
+            best_number: 0,
+            genesis_hash: Default::default(),
+            finalized_hash: Default::default(),
+            finalized_number: 0,
+            finalized_state: None,
+            number_leaves: 0,
+            block_gap: None,
+        }
+    }
+
+    fn header(&self, id: BlockId<Block>) -> Result<Option<sp_runtime::generic::Header<u64, BlakeTwo256>>, BlockchainError> {
+        info!("Called SimpleClient header() with id: {:?}", id);
+        Ok(None)
+    }
+
+    fn number(&self, hash: sp_core::H256) -> Result<Option<BlockNumber>, BlockchainError> {
+        info!("Called SimpleClient number() with hash: {:?}", hash);
+        Ok(None)
+    }
+
+    fn hash(&self, number: BlockNumber) -> Result<Option<sp_core::H256>, BlockchainError> {
+        info!("Called SimpleClient hash() with number: {}", number);
+        Ok(None)
+    }
+
+    fn status(&self, id: BlockId<Block>) -> Result<BlockStatus, BlockchainError> {
+        info!("Called SimpleClient status() with id: {:?}", id);
+        Ok(BlockStatus::Unknown)  // Return a default status
+    }
+}
+
+impl BlockBackend<Block> for SimpleClient {
+    fn block_body(&self, id: &BlockId<Block>) -> sp_blockchain::Result<Option<Vec<Extrinsic>>> {
+        info!("Called SimpleClient block_body() with id: {:?}", id);
+        Ok(Some(Vec::new()))
+    }
+
+    fn block_indexed_body(&self, id: &BlockId<Block>) -> sp_blockchain::Result<Option<Vec<Vec<u8>>>> {
+        info!("Called SimpleClient block_indexed_body() with id: {:?}", id);
+        Ok(Some(Vec::new()))
+    }
+
+    fn block(&self, id: &BlockId<Block>) -> sp_blockchain::Result<Option<SignedBlock<Block>>> {
+        info!("Called SimpleClient block() with id: {:?}", id);
+        Ok(None)
+    }
+
+    fn block_status(&self, id: &BlockId<Block>) -> sp_blockchain::Result<sp_consensus::BlockStatus> {
+        info!("Called SimpleClient block_status() with id: {:?}", id);
+        Ok(sp_consensus::BlockStatus::Unknown)
+    }
+
+    fn justifications(&self, id: &BlockId<Block>) -> sp_blockchain::Result<Option<sp_runtime::Justifications>> {
+        info!("Called SimpleClient justifications() with id: {:?}", id);
+        Ok(None)
+    }
+
+    fn block_hash(&self, number: NumberFor<Block>) -> sp_blockchain::Result<Option<sp_core::H256>> {
+        info!("Called SimpleClient block_hash() with number: {}", number);
+        Ok(None)
+    }
+
+    fn indexed_transaction(&self, hash: &sp_core::H256) -> sp_blockchain::Result<Option<Vec<u8>>> {
+        info!("Called SimpleClient indexed_transaction() with hash: {:?}", hash);
+        Ok(None)
+    }
+
+    fn has_indexed_transaction(&self, hash: &sp_core::H256) -> sp_blockchain::Result<bool> {
+        info!("Called SimpleClient has_indexed_transaction() with hash: {:?}", hash);
+        Ok(false)
+    }
+
+    fn requires_full_sync(&self) -> bool {
+        info!("Called SimpleClient requires_full_sync()");
+        true
+    }
+}
+
+impl ProofProvider<Block> for SimpleClient {
+    fn read_proof(
+        &self,
+        id: &BlockId<Block>,
+        keys: &mut dyn Iterator<Item = &[u8]>,
+    ) -> sp_blockchain::Result<StorageProof> {
+        info!("Called SimpleClient read_proof() with id: {:?}", id);
+        Ok(StorageProof::new(Vec::new()))
+    }
+
+    fn read_child_proof(
+        &self,
+        id: &BlockId<Block>,
+        child_info: &ChildInfo,
+        keys: &mut dyn Iterator<Item = &[u8]>,
+    ) -> sp_blockchain::Result<StorageProof> {
+        info!("Called SimpleClient read_child_proof() with id: {:?} and child_info: {:?}", id, child_info);
+        Ok(StorageProof::new(Vec::new()))
+    }
+
+    fn execution_proof(
+        &self,
+        id: &BlockId<Block>,
+        method: &str,
+        call_data: &[u8],
+    ) -> sp_blockchain::Result<(Vec<u8>, StorageProof)> {
+        info!("Called SimpleClient execution_proof() with id: {:?}, method: {}, call_data: {:?}", id, method, call_data);
+        Ok((Vec::new(), StorageProof::new(Vec::new())))
+    }
+
+    fn read_proof_collection(
+        &self,
+        id: &BlockId<Block>,
+        start_keys: &[Vec<u8>],
+        size_limit: usize,
+    ) -> sp_blockchain::Result<(CompactProof, u32)> {
+        info!("Called SimpleClient read_proof_collection() with id: {:?}, start_keys: {:?}, size_limit: {}", id, start_keys, size_limit);
+        let compact_proof = CompactProof {
+            encoded_nodes: Vec::new(),
+        };
+        Ok((compact_proof, 0))
+    }
+
+    fn storage_collection(
+        &self,
+        id: &BlockId<Block>,
+        start_key: &[Vec<u8>],
+        size_limit: usize,
+    ) -> sp_blockchain::Result<Vec<(KeyValueStorageLevel, bool)>> {
+        info!("Called SimpleClient storage_collection() with id: {:?}, start_key: {:?}, size_limit: {}", id, start_key, size_limit);
+        Ok(Vec::new())
+    }
+
+    fn verify_range_proof(
+        &self,
+        root: sp_core::H256,
+        proof: CompactProof,
+        start_keys: &[Vec<u8>],
+    ) -> sp_blockchain::Result<(KeyValueStates, usize)> {
+        info!("Called SimpleClient verify_range_proof() with root: {:?}, proof: {:?}, start_keys: {:?}", root, proof, start_keys);
+        Ok((KeyValueStates(vec![]), 0))
+    }
+}
+
+
