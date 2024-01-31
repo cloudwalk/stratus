@@ -99,6 +99,12 @@ async fn get_network_config() -> anyhow::Result<NetworkConfiguration> {
 #[derive(Default)]
 pub struct SimpleClient {}
 
+impl Default for SimpleClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimpleClient {
     pub fn new() -> Self {
         SimpleClient {}

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use sqlx::postgres::PgRow;
 use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
 use sqlx::Row;
@@ -20,6 +19,7 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -356,41 +356,56 @@ impl EthStorage for Postgres {
     }
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        tracing::debug!(filter = ?filter, "Reading logs");
         let from: i64 = filter.from_block.try_into()?;
         let query = include_str!("queries/select_logs.sql");
 
-        let builder = &mut QueryBuilder::new(query);
-        builder.push("AND block_number >= $1");
-        builder.push_bind(from);
+        let log_query_builder = &mut QueryBuilder::new(query);
+        log_query_builder.push(" AND block_number >= ");
+        log_query_builder.push_bind(from);
 
         // verifies if to_block exists
         if let Some(block_number) = filter.to_block {
-            builder.push(" AND block_number <= $2");
+            log_query_builder.push(" AND block_number <= ");
             let to: i64 = block_number.try_into()?;
-            builder.push_bind(to);
+            log_query_builder.push_bind(to);
         }
 
-        let query = builder.build();
-        let result = query
-            .map(|row: PgRow| LogMined {
+        let log_query = log_query_builder.build();
+
+        let query_result = log_query.fetch_all(&self.connection_pool).await?;
+
+        let mut result = vec![];
+
+        for row in query_result {
+            let block_hash: &[u8] = row.get("block_hash");
+            let log_idx: i32 = row.get("log_idx");
+            let topics = sqlx::query_file_as!(
+                PostgresTopic,
+                "src/eth/storage/postgres/queries/select_topics_by_block_hash_log_idx.sql",
+                block_hash,
+                log_idx
+            )
+            .fetch_all(&self.connection_pool)
+            .await?;
+
+            let log = LogMined {
                 log: Log {
                     address: row.get("address"),
                     data: row.get("data"),
-                    topics: vec![],
+                    topics: topics.into_iter().map(LogTopic::from).collect(),
                 },
                 transaction_hash: row.get("transaction_hash"),
                 transaction_index: row.get("transaction_idx"),
                 log_index: row.get("log_idx"),
                 block_number: row.get("block_number"),
                 block_hash: row.get("block_hash"),
-            })
-            .fetch_all(&self.connection_pool)
-            .await?
-            .into_iter()
-            .filter(|log| filter.matches(log))
-            .collect();
+            };
+            result.push(log);
+        }
 
-        Ok(result)
+        tracing::debug!(logs = ?result, "Read logs");
+        Ok(result.into_iter().filter(|log| filter.matches(log)).collect())
     }
 
     // The type conversions are ugly, but they are acting as a placeholder until we decide if we'll use
@@ -487,6 +502,8 @@ impl EthStorage for Postgres {
             }
 
             for log in transaction.logs {
+                let addr = log.log.address.as_ref();
+                let data = log.log.data;
                 let tx_hash = log.transaction_hash.as_ref();
                 let tx_idx = i32::from(log.transaction_index);
                 let lg_idx = i32::from(log.log_index);
@@ -494,8 +511,8 @@ impl EthStorage for Postgres {
                 let b_hash = log.block_hash.as_ref();
                 sqlx::query_file!(
                     "src/eth/storage/postgres/queries/insert_log.sql",
-                    log.log.address.as_ref(),
-                    *log.log.data,
+                    addr,
+                    *data,
                     tx_hash,
                     tx_idx,
                     lg_idx,
@@ -505,13 +522,14 @@ impl EthStorage for Postgres {
                 .execute(&self.connection_pool)
                 .await
                 .context("failed to insert log")?;
-                for topic in log.log.topics {
+                for (idx, topic) in log.log.topics.into_iter().enumerate() {
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_topic.sql",
                         topic.as_ref(),
                         tx_hash,
                         tx_idx,
                         lg_idx,
+                        i32::try_from(idx).context("failed to convert topic idx")?,
                         b_number,
                         b_hash
                     )
@@ -557,6 +575,11 @@ impl EthStorage for Postgres {
         let block_number = BlockNumber::from(nextval);
 
         Ok(block_number)
+    }
+
+    /// TODO
+    async fn reset(&self, _number: BlockNumber) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
