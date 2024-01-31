@@ -9,6 +9,21 @@ import { Account, CHARLIE } from "./account";
 import { CURRENT_NETWORK } from "./network";
 
 // -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+export const CHAIN_ID_DEC = 2008;
+export const CHAIN_ID = toHex(CHAIN_ID_DEC);
+
+// Special numbers
+export const ZERO = "0x0";
+export const ONE = "0x1";
+export const MAX = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+
+// Special hashes
+export const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";
+export const HASH_EMPTY_TRANSACTIONS = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
+
+// -----------------------------------------------------------------------------
 // Initialization
 // -----------------------------------------------------------------------------
 
@@ -102,7 +117,7 @@ export function toPaddedHex(number: number | bigint, bytes: number): string {
 
 // Calculate the storage position of an address key in a mapping.
 // See https://docs.soliditylang.org/en/v0.8.6/internals/layout_in_storage.html#mappings-and-dynamic-arrays
-export function calculateAddressStoragePosition(address: string, slot: number): string {
+export function calculateSlotPosition(address: string, slot: number): string {
     // Convert slot number and address key to 32-byte hexadecimal values
     const paddedSlotHex = slot.toString(16).padStart(64, "0");
     const paddedAddress = address.substring(2).padStart(64, "0");
@@ -117,19 +132,44 @@ export function calculateAddressStoragePosition(address: string, slot: number): 
 // RPC methods wrappers
 // -----------------------------------------------------------------------------
 
-/// Retrieves the current nonce of an account.
+/// Sends a single signed transaction.
 export async function sendRawTransaction(signed: string): Promise<string> {
     return await send("eth_sendRawTransaction", [signed]);
 }
 
+/// Sends multiple signed transactions in parallel.
+export async function sendRawTransactions(signedTxs: string[]): Promise<string[]> {
+    // shuffle
+    signedTxs.sort(() => Math.random() - 0.5);
+
+    // send
+    const txHashes = [];
+    for (const signedTx of signedTxs) {
+        const txHash = sendRawTransaction(signedTx);
+        txHashes.push(txHash);
+    }
+    return Promise.all(txHashes);
+}
+
+/// Resets the blockchain state to the specified block number.
+export async function sendReset(blockNumber: number = 0): Promise<void> {
+    await send("debug_setHead", [toHex(blockNumber)]);
+}
+
 /// Retrieves the current nonce of an account.
-export async function getNonce(address: string): Promise<number> {
+export async function sendGetBalance(address: string | Account): Promise<number> {
+    const result = await send("eth_getBalance", [address]);
+    return parseInt(result, 16);
+}
+
+/// Retrieves the current nonce of an account.
+export async function sendGetNonce(address: string | Account): Promise<number> {
     const result = await send("eth_getTransactionCount", [address]);
     return parseInt(result, 16);
 }
 
 /// Retrieves the current block number of the blockchain.
-export async function getBlockNumber(): Promise<number> {
+export async function sendGetBlockNumber(): Promise<number> {
     const result = await send("eth_blockNumber");
     return parseInt(result, 16);
 }

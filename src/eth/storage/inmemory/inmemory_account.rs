@@ -14,7 +14,7 @@ pub struct InMemoryAccount {
     pub address: Address,
     pub balance: InMemoryHistory<Wei>,
     pub nonce: InMemoryHistory<Nonce>,
-    pub bytecode: Option<Bytes>,
+    pub bytecode: InMemoryHistory<Option<Bytes>>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
@@ -24,15 +24,32 @@ impl InMemoryAccount {
         Self::new_with_balance(address, Wei::ZERO)
     }
 
-    /// Creates a new account with initial balanec.
+    /// Creates a new account with initial balance.
     pub fn new_with_balance(address: Address, balance: Wei) -> Self {
         Self {
             address,
-            balance: InMemoryHistory::new(BlockNumber::ZERO, balance),
-            nonce: InMemoryHistory::new(BlockNumber::ZERO, Nonce::ZERO),
-            bytecode: None,
+            balance: InMemoryHistory::new_at_zero(balance),
+            nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
+            bytecode: InMemoryHistory::new_at_zero(None),
             slots: Default::default(),
         }
+    }
+
+    /// Resets all account changes to the specified block number.
+    pub fn reset(&mut self, block_number: BlockNumber) {
+        // SAFETY: ok to unwrap because all historical values starts at block 0
+        self.balance = self.balance.reset(block_number).expect("never empty");
+        self.nonce = self.nonce.reset(block_number).expect("never empty");
+        self.bytecode = self.bytecode.reset(block_number).expect("never empty");
+
+        // SAFETY: not ok to unwrap because slot value does not start at block 0
+        let mut new_slots = HashMap::with_capacity(self.slots.len());
+        for (slot_index, slot_history) in self.slots.iter() {
+            if let Some(new_slot_history) = slot_history.reset(block_number) {
+                new_slots.insert(slot_index.clone(), new_slot_history);
+            }
+        }
+        self.slots = new_slots;
     }
 
     /// Sets a new balance for the account tracking the history change.
@@ -46,7 +63,7 @@ impl InMemoryAccount {
     }
 
     /// Sets the account bytecode. Does not keep track because bytecode is set only during account creation.
-    pub fn set_bytecode(&mut self, bytecode: Bytes) {
-        self.bytecode = Some(bytecode);
+    pub fn set_bytecode(&mut self, block_number: BlockNumber, bytecode: Bytes) {
+        self.bytecode.push(block_number, Some(bytecode));
     }
 }

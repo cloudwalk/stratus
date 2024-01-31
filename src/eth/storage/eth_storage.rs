@@ -58,6 +58,9 @@ pub trait EthStorage: Send + Sync {
     /// Persist atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
+    /// Resets all state to a specific block number.
+    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+
     // -------------------------------------------------------------------------
     // Default operations
     // -------------------------------------------------------------------------
@@ -105,6 +108,8 @@ pub fn test_accounts() -> Vec<Account> {
         hex!("70997970c51812dc3a010c7d01b50e0d17dc79c8"),
         hex!("3c44cdddb6a900fa2b585dd299e03d12fa4293bc"),
         hex!("15d34aaf54267db7d7c367839aaf71a00a2c6a65"),
+        hex!("9965507d1a55bcc2695c58ba16fb37d819b0a4dc"),
+        hex!("976ea74026e726554db657fa54763abd0c3a0aa9"),
     ]
     .into_iter()
     .map(|address| Account {

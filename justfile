@@ -92,8 +92,6 @@ test-unit name="":
 test-int name="":
     cargo test --test '*' {{name}} -- --nocapture
 
-
-
 # ------------------------------------------------------------------------------
 # E2E tasks
 # ------------------------------------------------------------------------------
@@ -111,7 +109,7 @@ e2e network="stratus" test="":
     if [ -z "{{test}}" ]; then
         npx hardhat test test/*.test.ts --network {{network}}
     else
-        npx hardhat test test/*.test.ts --network {{network}} --grep {{test}}
+        npx hardhat test test/*.test.ts --network {{network}} --grep "{{test}}"
     fi
 
 # E2E: Starts and execute Hardhat tests in Anvil
