@@ -2,12 +2,13 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use std::pin::Pin;
+use futures::task::{Context, Poll};
 use codec::Decode;
 use codec::Encode;
 use futures::future::FutureExt;
-use sc_client_api::backend;
+use futures::Future;
 use sc_client_api::BlockBackend;
-use sc_client_api::BlockchainEvents;
 use sc_client_api::ChildInfo;
 use sc_client_api::CompactProof;
 use sc_client_api::HeaderBackend;
@@ -41,7 +42,6 @@ use sp_runtime::traits::BlakeTwo256;
 use sp_runtime::traits::Extrinsic as ExtrinsicT;
 use sp_runtime::traits::Header as HeaderT;
 use sp_runtime::traits::NumberFor;
-use sp_runtime::traits::Verify;
 use tracing::info;
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, parity_util_mem::MallocSizeOf)]
@@ -144,7 +144,27 @@ pub async fn serve_p2p<H: std::marker::Sync + std::marker::Send + std::clone::Cl
         warp_sync: None,
     };
 
-    let network = sc_network::NetworkWorker::new(network_params);
+    let network_worker = sc_network::NetworkWorker::new(network_params)?;
+    let network_service = network_worker.service().clone();
+
+    tokio::spawn(async move {
+        let mut network_worker = network_worker;
+        let waker = futures::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+
+        loop {
+            match Pin::new(&mut network_worker).poll(&mut context) {
+                Poll::Ready(()) => {
+                    info!("NetworkWorker has finished its execution.");
+                    break; // NetworkWorker is finished
+                },
+                Poll::Pending => {},
+            }
+        }
+    });
+
+    let num_connected = network_service.num_connected();
+    tracing::debug!("Number of connected peers: {}", num_connected);
 
     tracing::info!("p2p server exiting");
     Ok(())
@@ -166,13 +186,14 @@ async fn get_network_config() -> anyhow::Result<NetworkConfiguration> {
         skip_proofs: true,
         storage_chain_mode: false,
     };
-    network_config.transport = TransportConfig::MemoryOnly;
+    network_config.transport = TransportConfig::Normal { enable_mdns: false, allow_private_ipv4: true };
     network_config.listen_addresses = vec![multiaddr.clone()];
     network_config.allow_non_globals_in_dht = true;
 
     let addrs = vec![MultiaddrWithPeerId { peer_id, multiaddr }];
-    network_config.default_peers_set.reserved_nodes = addrs;
+    network_config.default_peers_set.reserved_nodes = addrs.clone();
     network_config.default_peers_set.non_reserved_mode = NonReservedPeerMode::Deny;
+    network_config.boot_nodes = addrs;
 
     Ok(network_config)
 }
@@ -301,12 +322,12 @@ impl BlockBackend<Block> for SimpleClient {
 }
 
 impl ProofProvider<Block> for SimpleClient {
-    fn read_proof(&self, id: &BlockId<Block>, keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
+    fn read_proof(&self, id: &BlockId<Block>, _keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
         info!("Called SimpleClient read_proof() with id: {:?}", id);
         Ok(StorageProof::new(Vec::new()))
     }
 
-    fn read_child_proof(&self, id: &BlockId<Block>, child_info: &ChildInfo, keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
+    fn read_child_proof(&self, id: &BlockId<Block>, child_info: &ChildInfo, _keys: &mut dyn Iterator<Item = &[u8]>) -> sp_blockchain::Result<StorageProof> {
         info!("Called SimpleClient read_child_proof() with id: {:?} and child_info: {:?}", id, child_info);
         Ok(StorageProof::new(Vec::new()))
     }
