@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n    number as \"number: _\"\n    ,hash as \"hash: _\"\n    ,transactions_root as \"transactions_root: _\"\n    ,gas as \"gas: _\"\n    ,logs_bloom as \"bloom: _\"\n    ,timestamp_in_secs as \"timestamp_in_secs: _\"\nFROM blocks\nWHERE number = $1",
+  "query": "SELECT\n    number as \"number: _\"\n    ,hash as \"hash: _\"\n    ,transactions_root as \"transactions_root: _\"\n    ,gas as \"gas: _\"\n    ,logs_bloom as \"bloom: _\"\n    ,timestamp_in_secs as \"timestamp_in_secs: _\"\n    ,parent_hash as \"parent_hash: _\"\nFROM blocks\nWHERE number = $1",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,11 @@
         "ordinal": 5,
         "name": "timestamp_in_secs: _",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "parent_hash: _",
+        "type_info": "Bytea"
       }
     ],
     "parameters": {
@@ -45,8 +50,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "d03fca0da19bfe8bd67a96d4445324a8ae91711b868dfc13e6c2bf4146e0df76"
+  "hash": "bd1b3ba714c5a4b3b2caea9e9a66c5227b097c9d9ce8b73e62d3cf67b41352b2"
 }

@@ -5,5 +5,6 @@ SELECT
     ,gas as "gas: _"
     ,logs_bloom as "bloom: _"
     ,timestamp_in_secs as "timestamp_in_secs: _"
+    ,parent_hash as "parent_hash: _"
 FROM blocks
 WHERE number = $1
