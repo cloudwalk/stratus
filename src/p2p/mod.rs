@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use futures::future::FutureExt;
+
 use sc_client_api::ProofProvider;
 use sc_client_api::ChildInfo;
 use sc_client_api::StorageProof;
@@ -93,25 +95,26 @@ pub async fn serve_p2p() -> anyhow::Result<()> {
 
     let protocol_id = ProtocolId::from("test-protocol-name");
 
-    // let block_request_protocol_config = {
-    //     let (handler, protocol_config) =
-    //         sc_network::block_request_handler::BlockRequestHandler::new(&protocol_id, chain.clone(), 50);
-    //     tokio::spawn(handler.run().boxed());
-    //     protocol_config
-    // };
-    // let state_request_protocol_config = {
-    //     let (handler, protocol_config) =
-    //         sc_network::state_request_handler::StateRequestHandler::new(&protocol_id, chain.clone(), 50);
-    //     tokio::spawn(handler.run().boxed());
-    //     protocol_config
-    // };
+    let block_request_protocol_config = {
+        let (handler, protocol_config) =
+            sc_network::block_request_handler::BlockRequestHandler::new(&protocol_id, chain.clone(), 50);
+        tokio::spawn(handler.run().boxed());
+        protocol_config
+    };
 
-    // let light_client_request_protocol_config = {
-    //     let (handler, protocol_config) =
-    //         sc_network::light_client_requests::handler::LightClientRequestHandler::new(&protocol_id, chain.clone());
-    //     tokio::spawn(handler.run().boxed());
-    //     protocol_config
-    // };
+    let state_request_protocol_config = {
+        let (handler, protocol_config) =
+            sc_network::state_request_handler::StateRequestHandler::new(&protocol_id, chain.clone(), 50);
+        tokio::spawn(handler.run().boxed());
+        protocol_config
+    };
+
+    let light_client_request_protocol_config = {
+        let (handler, protocol_config) =
+            sc_network::light_client_requests::handler::LightClientRequestHandler::new(&protocol_id, chain.clone());
+        tokio::spawn(handler.run().boxed());
+        protocol_config
+    };
 
     //let warp_sync = Arc::new(TestWarpSyncProvider(client.clone()));
 
