@@ -89,4 +89,9 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         metrics::inc_storage_blocks_written(start.elapsed(), result.is_ok());
         result
     }
+
+    // TODO: track metric
+    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+        self.inner.reset(number).await
+    }
 }

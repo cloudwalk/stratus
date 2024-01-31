@@ -92,8 +92,6 @@ test-unit name="":
 test-int name="":
     cargo test --test '*' {{name}} -- --nocapture
 
-
-
 # ------------------------------------------------------------------------------
 # E2E tasks
 # ------------------------------------------------------------------------------
@@ -111,7 +109,7 @@ e2e network="stratus" test="":
     if [ -z "{{test}}" ]; then
         npx hardhat test test/*.test.ts --network {{network}}
     else
-        npx hardhat test test/*.test.ts --network {{network}} --grep {{test}}
+        npx hardhat test test/*.test.ts --network {{network}} --grep "{{test}}"
     fi
 
 # E2E: Starts and execute Hardhat tests in Anvil
@@ -226,3 +224,19 @@ contracts-compile:
 contracts-test:
     cd e2e-contracts && ./test-contracts.sh
 alias e2e-contracts := contracts-test
+
+# Contracts: Run BRLCToken contract tests
+contracts-test-brlc-token:
+    cd e2e-contracts && ./test-contracts.sh -t
+
+# Contracts: Run BRLCPeriphery contract tests
+contracts-test-brlc-periphery:
+    cd e2e-contracts && ./test-contracts.sh -p
+
+# Contracts: Run BRLCMultisig contract tests
+contracts-test-brlc-multisig:
+    cd e2e-contracts && ./test-contracts.sh -m
+
+# Contracts: Run CompoundPeriphery contract tests
+contracts-test-brlc-compound:
+    cd e2e-contracts && ./test-contracts.sh -c

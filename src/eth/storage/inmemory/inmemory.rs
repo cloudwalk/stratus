@@ -1,12 +1,12 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
+use metrics::atomics::AtomicU64;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
@@ -37,7 +37,7 @@ use crate::eth::storage::EthStorageError;
 #[derive(Debug)]
 pub struct InMemoryStorage {
     state: RwLock<InMemoryStorageState>,
-    block_number: AtomicUsize,
+    block_number: AtomicU64,
 }
 
 impl InMemoryStorage {
@@ -120,7 +120,7 @@ impl EthStorage for InMemoryStorage {
                     address: address.clone(),
                     balance: account.balance.get_at_point(point_in_time).unwrap_or_default(),
                     nonce: account.nonce.get_at_point(point_in_time).unwrap_or_default(),
-                    bytecode: account.bytecode.clone(),
+                    bytecode: account.bytecode.get_at_point(point_in_time).unwrap_or_default(),
                 };
                 tracing::trace!(%address, ?account, "account found");
                 Ok(account)
@@ -267,7 +267,7 @@ impl EthStorage for InMemoryStorage {
                 // bytecode
                 if is_success {
                     if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                        account.set_bytecode(bytecode);
+                        account.set_bytecode(*block.number(), bytecode);
                     }
                 }
 
@@ -290,6 +290,34 @@ impl EthStorage for InMemoryStorage {
         }
         Ok(())
     }
+
+    async fn reset(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        // reset block number
+        let block_number_u64: u64 = block_number.into();
+        let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+            if block_number_u64 <= current {
+                Some(block_number_u64)
+            } else {
+                None
+            }
+        });
+
+        // remove blocks
+        let mut state = self.lock_write().await;
+        state.blocks_by_hash.retain(|_, b| *b.number() <= block_number);
+        state.blocks_by_number.retain(|_, b| *b.number() <= block_number);
+
+        // remove transactions and logs
+        state.transactions.retain(|_, t| t.block_number <= block_number);
+        state.logs.retain(|l| l.block_number <= block_number);
+
+        // remove account changes
+        for account in state.accounts.values_mut() {
+            account.reset(block_number);
+        }
+
+        Ok(())
+    }
 }
 
 fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Option<ExecutionConflicts> {
@@ -298,38 +326,29 @@ fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Optio
     for change in &execution.changes {
         let address = &change.address;
 
-        match state.accounts.get(address) {
-            Some(account) => {
-                // check account info conflicts
-                if let Some(touched_nonce) = change.nonce.take_original_ref() {
-                    if touched_nonce != account.nonce.get_current_ref() {
-                        conflicts.add_nonce(address.clone(), account.nonce.get_current(), touched_nonce.clone());
-                    }
+        if let Some(account) = state.accounts.get(address) {
+            // check account info conflicts
+            if let Some(touched_nonce) = change.nonce.take_original_ref() {
+                if touched_nonce != account.nonce.get_current_ref() {
+                    conflicts.add_nonce(address.clone(), account.nonce.get_current(), touched_nonce.clone());
                 }
-                if let Some(touched_balance) = change.balance.take_original_ref() {
-                    if touched_balance != account.balance.get_current_ref() {
-                        conflicts.add_balance(address.clone(), account.balance.get_current(), touched_balance.clone());
-                    }
+            }
+            if let Some(touched_balance) = change.balance.take_original_ref() {
+                if touched_balance != account.balance.get_current_ref() {
+                    conflicts.add_balance(address.clone(), account.balance.get_current(), touched_balance.clone());
                 }
+            }
 
-                // check slots conflicts
-                for (touched_slot_index, touched_slot) in &change.slots {
-                    match account.slots.get(touched_slot_index) {
-                        Some(slot) =>
-                            if let Some(touched_slot) = touched_slot.take_original_ref() {
-                                let slot_value = slot.get_current().value;
-                                if touched_slot.value != slot_value {
-                                    conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
-                                }
-                            },
-                        None => {
-                            // todo: handle slot creation conflict
+            // check slots conflicts
+            for (touched_slot_index, touched_slot) in &change.slots {
+                if let Some(slot) = account.slots.get(touched_slot_index) {
+                    if let Some(touched_slot) = touched_slot.take_original_ref() {
+                        let slot_value = slot.get_current().value;
+                        if touched_slot.value != slot_value {
+                            conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
                         }
                     }
                 }
-            }
-            None => {
-                // todo: handle account creation conflicts
             }
         }
     }

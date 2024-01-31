@@ -37,6 +37,7 @@ pub struct BlockHeader {
     pub gas: Gas,
     pub bloom: LogsBloom,
     pub timestamp_in_secs: UnixTime,
+    pub parent_hash: Hash,
 }
 
 impl BlockHeader {
@@ -44,11 +45,12 @@ impl BlockHeader {
     pub fn new(number: BlockNumber, _timestamp_in_secs: u64) -> Self {
         Self {
             number,
-            hash: Hash::new_random(),
+            hash: number.hash(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
             bloom: LogsBloom::default(),
             timestamp_in_secs: UnixTime::ZERO,
+            parent_hash: number.predecessor().map(|n| n.hash()).unwrap_or(Hash::zero()),
         }
     }
 }
@@ -62,6 +64,7 @@ impl Dummy<Faker> for BlockHeader {
             gas: faker.fake_with_rng(rng),
             bloom: Default::default(),
             timestamp_in_secs: faker.fake_with_rng(rng),
+            parent_hash: faker.fake_with_rng(rng),
         }
     }
 }
@@ -83,6 +86,7 @@ where
             uncles_hash: HASH_EMPTY_UNCLES.into(),
             uncles: Vec::new(),
             parent_beacon_block_root: None,
+            parent_hash: header.parent_hash.into(),
 
             // mining: identifiers
             timestamp: (*header.timestamp_in_secs).into(),
@@ -109,9 +113,7 @@ where
             extra_data: Default::default(),
 
             // TODO
-            ..Default::default() // parent_hash: todo!(),
-                                 // state_root: todo!(),
-
+            ..Default::default() // state_root: todo!(),
                                  // seal_fields: todo!(),
                                  // transactions: todo!(),
                                  // size: todo!(),

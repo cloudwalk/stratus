@@ -1,6 +1,6 @@
 import { Addressable, Signer, Wallet } from "ethers";
 
-import { ETHERJS } from "./rpc";
+import { CHAIN_ID_DEC, ETHERJS } from "./rpc";
 
 export class Account implements Addressable {
     constructor(
@@ -14,6 +14,16 @@ export class Account implements Addressable {
 
     signer(): Signer {
         return new Wallet(this.privateKey, ETHERJS);
+    }
+
+    async signWeiTransfer(counterParty: string, amount: number): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 0,
+            gasLimit: 1_000_000,
+        });
     }
 }
 
@@ -46,6 +56,8 @@ export const FERDIE = new Account(
     "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
     "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
 );
+
+export const TEST_ACCOUNTS = [ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE];
 
 /// Generates N random accounts.
 export function randomAccounts(n: number): Account[] {
