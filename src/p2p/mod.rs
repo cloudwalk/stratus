@@ -98,19 +98,19 @@ pub async fn serve_p2p() -> anyhow::Result<()> {
     let protocol_id = ProtocolId::from("test-protocol-name");
 
     let _block_request_protocol_config = {
-        let (handler, protocol_config) = sc_network::block_request_handler::BlockRequestHandler::new(&protocol_id, chain.clone(), 50);
+        let (handler, protocol_config) = sc_network::block_request_handler::BlockRequestHandler::new(&protocol_id, Arc::clone(&chain), 50);
         tokio::spawn(handler.run().boxed());
         protocol_config
     };
 
     let _state_request_protocol_config = {
-        let (handler, protocol_config) = sc_network::state_request_handler::StateRequestHandler::new(&protocol_id, chain.clone(), 50);
+        let (handler, protocol_config) = sc_network::state_request_handler::StateRequestHandler::new(&protocol_id, Arc::clone(&chain), 50);
         tokio::spawn(handler.run().boxed());
         protocol_config
     };
 
     let _light_client_request_protocol_config = {
-        let (handler, protocol_config) = sc_network::light_client_requests::handler::LightClientRequestHandler::new(&protocol_id, chain.clone());
+        let (handler, protocol_config) = sc_network::light_client_requests::handler::LightClientRequestHandler::new(&protocol_id, Arc::clone(&chain));
         tokio::spawn(handler.run().boxed());
         protocol_config
     };
