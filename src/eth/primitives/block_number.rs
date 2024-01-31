@@ -118,6 +118,6 @@ impl TryFrom<BlockNumber> for i64 {
 
 impl From<BlockNumber> for [u8; 8] {
     fn from(block_number: BlockNumber) -> Self {
-        block_number.0.as_u64().to_le_bytes()
+        block_number.0.as_u64().to_be_bytes()
     }
 }
