@@ -33,6 +33,11 @@ impl Hash {
     pub fn new_random() -> Self {
         Self(H256::random())
     }
+
+    // Returns the zero hash
+    pub fn zero() -> Self {
+        Self(H256::zero())
+    }
 }
 
 impl Display for Hash {

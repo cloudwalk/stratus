@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     ,gas NUMERIC NOT NULL CHECK (gas >= 0)
     ,logs_bloom BYTEA NOT NULL CHECK (LENGTH(logs_bloom) = 256)
     ,timestamp_in_secs INTEGER NOT NULL CHECK (timestamp_in_secs >= 0) -- UNIQUE
+    ,parent_hash BYTEA NOT NULL CHECK (LENGTH(parent_hash) = 32) UNIQUE
     ,created_at TIMESTAMP NOT NULL
     ,PRIMARY KEY (number, hash)
 );
