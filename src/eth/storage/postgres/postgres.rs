@@ -578,8 +578,8 @@ impl EthStorage for Postgres {
 
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
         sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
-        .execute(&self.connection_pool)
-        .await?;
+            .execute(&self.connection_pool)
+            .await?;
         Ok(())
     }
 }
