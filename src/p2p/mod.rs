@@ -19,10 +19,8 @@ use sc_network::PeerId;
 use sp_consensus::error::Error as ConsensusError;
 use sp_core::RuntimeDebug;
 use sp_runtime::traits::BlakeTwo256;
-use sp_runtime::traits::Block as BlockT;
 use sp_runtime::traits::Extrinsic as ExtrinsicT;
 use sp_runtime::traits::Header as HeaderT;
-use sp_runtime::traits::Verify;
 use tracing::info;
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, parity_util_mem::MallocSizeOf)]
@@ -98,6 +96,7 @@ async fn get_network_config() -> anyhow::Result<NetworkConfiguration> {
     Ok(network_config)
 }
 
+#[derive(Default)]
 pub struct SimpleClient {}
 
 impl SimpleClient {
