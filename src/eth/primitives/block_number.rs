@@ -86,6 +86,12 @@ impl From<BlockNumber> for U64 {
     }
 }
 
+impl From<BlockNumber> for u64 {
+    fn from(block_number: BlockNumber) -> Self {
+        block_number.0.as_u64()
+    }
+}
+
 impl TryFrom<BlockNumber> for i64 {
     type Error = TryFromIntError;
 

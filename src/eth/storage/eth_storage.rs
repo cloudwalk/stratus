@@ -58,6 +58,9 @@ pub trait EthStorage: Send + Sync {
     /// Persist atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
+    /// Resets all state to a specific block number.
+    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+
     // -------------------------------------------------------------------------
     // Default operations
     // -------------------------------------------------------------------------

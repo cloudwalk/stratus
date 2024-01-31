@@ -117,9 +117,14 @@ export function calculateAddressStoragePosition(address: string, slot: number): 
 // RPC methods wrappers
 // -----------------------------------------------------------------------------
 
-/// Retrieves the current nonce of an account.
+/// Sends a signed transaction to the blockchain.
 export async function sendRawTransaction(signed: string): Promise<string> {
     return await send("eth_sendRawTransaction", [signed]);
+}
+
+/// Resets the blockchain state to the specified block number.
+export async function reset(blockNumber: number = 0): Promise<void> {
+    await send("debug_setHead", [toHex(blockNumber)]);
 }
 
 /// Retrieves the current nonce of an account.
