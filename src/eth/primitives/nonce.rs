@@ -22,6 +22,10 @@ use crate::gen_newtype_from;
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U256);
 
+impl Nonce {
+    pub const ZERO: Nonce = Nonce(U256::zero());
+}
+
 impl Display for Nonce {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
@@ -79,9 +83,10 @@ impl From<Nonce> for U256 {
     }
 }
 
-impl From<Nonce> for BigDecimal {
-    fn from(value: Nonce) -> Self {
+impl TryFrom<Nonce> for BigDecimal {
+    type Error = anyhow::Error;
+    fn try_from(value: Nonce) -> Result<Self, Self::Error> {
         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        BigDecimal::from_str(&U256::from(value).to_string()).unwrap_or(BigDecimal::from(0))
+        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
     }
 }

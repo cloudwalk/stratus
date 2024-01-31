@@ -59,7 +59,7 @@
 //! - `Hash` and `BlockSelection`: Utilized for block identification and selection in various contexts.
 //!
 //! ### State Management
-//! - `HistoricalValue` and `StoragePointInTime`: Track changes in account states and contract storage over time.
+//! - `InMemoryValue`, `InMemoryHistory, and `StoragePointInTime`: Track changes in account states and contract storage over time.
 //! - `Slot`, `Nonce`, `Wei`: Represent specific state variables like storage slots, account nonces, and balances.
 //! - `LogFilter` and `LogFilterInput`: Enable the querying of historical logs based on specific criteria.
 //!
@@ -93,7 +93,6 @@ mod execution_result;
 mod execution_value_change;
 mod gas;
 mod hash;
-mod historical_value;
 mod index;
 mod log;
 mod log_filter;
@@ -128,12 +127,11 @@ pub use execution::ExecutionChanges;
 pub use execution_account_changes::ExecutionAccountChanges;
 pub use execution_conflict::ExecutionConflict;
 pub use execution_conflict::ExecutionConflicts;
+pub use execution_conflict::ExecutionConflictsBuilder;
 pub use execution_result::ExecutionResult;
 pub use execution_value_change::ExecutionValueChange;
 pub use gas::Gas;
 pub use hash::Hash;
-pub use historical_value::HistoricalValue;
-pub use historical_value::HistoricalValues;
 pub use index::Index;
 pub use log::Log;
 pub use log_filter::LogFilter;

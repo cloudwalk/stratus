@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
@@ -10,6 +11,7 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
+use super::InMemoryAccount;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -18,15 +20,15 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::HistoricalValues;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::Wei;
+use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
@@ -52,11 +54,10 @@ impl InMemoryStorage {
 
 #[derive(Debug, Default)]
 struct InMemoryStorageState {
-    accounts: HashMap<Address, (Account, HistoricalValues<Wei>)>,
-    account_slots: HashMap<Address, HashMap<SlotIndex, HistoricalValues<Slot>>>,
+    accounts: HashMap<Address, InMemoryAccount>,
     transactions: HashMap<Hash, TransactionMined>,
-    blocks_by_number: IndexMap<BlockNumber, Block>,
-    blocks_by_hash: IndexMap<Hash, Block>,
+    blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
+    blocks_by_hash: IndexMap<Hash, Arc<Block>>,
     logs: Vec<LogMined>,
 }
 
@@ -65,16 +66,15 @@ impl Default for InMemoryStorage {
         let mut state = InMemoryStorageState::default();
 
         // add genesis block to state
-        let genesis = BlockMiner::genesis();
-        state.blocks_by_hash.insert(genesis.header.hash.clone(), genesis.clone());
-        state.blocks_by_number.insert(genesis.header.number, genesis);
+        let genesis = Arc::new(BlockMiner::genesis());
+        state.blocks_by_number.insert(*genesis.number(), Arc::clone(&genesis));
+        state.blocks_by_hash.insert(genesis.hash().clone(), Arc::clone(&genesis));
 
         // add test accounts to state
         for account in test_accounts() {
-            let balance = account.balance.clone();
             state
                 .accounts
-                .insert(account.address.clone(), (account.clone(), HistoricalValues::new(BlockNumber::ZERO, balance)));
+                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
         }
 
         Self {
@@ -103,7 +103,7 @@ impl EthStorage for InMemoryStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<ExecutionConflicts> {
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let state_lock = self.state.read().await;
         Ok(check_conflicts(&state_lock, execution))
     }
@@ -111,18 +111,19 @@ impl EthStorage for InMemoryStorage {
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
 
-        let state_lock = self.lock_read().await;
+        let state = self.lock_read().await;
 
-        match state_lock.accounts.get(address) {
+        match state.accounts.get(address) {
             // account found
-            Some((account, balance_history)) => {
-                let balance = balance_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %balance, "account found");
-                Ok(Account {
+            Some(account) => {
+                let account = Account {
                     address: address.clone(),
-                    balance,
-                    ..account.clone()
-                })
+                    balance: account.balance.get_at_point(point_in_time).unwrap_or_default(),
+                    nonce: account.nonce.get_at_point(point_in_time).unwrap_or_default(),
+                    bytecode: account.bytecode.clone(),
+                };
+                tracing::trace!(%address, ?account, "account found");
+                Ok(account)
             }
 
             // account not found
@@ -139,13 +140,13 @@ impl EthStorage for InMemoryStorage {
     async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
-        let state_lock = self.lock_read().await;
-        let Some(slots) = state_lock.account_slots.get(address) else {
-            tracing::trace!(%address, "account slot not found");
+        let state = self.lock_read().await;
+        let Some(account) = state.accounts.get(address) else {
+            tracing::trace!(%address, "account not found");
             return Ok(Default::default());
         };
 
-        match slots.get(slot_index) {
+        match account.slots.get(slot_index) {
             // slot exists and block NOT specified
             Some(slot_history) => {
                 let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
@@ -174,7 +175,7 @@ impl EthStorage for InMemoryStorage {
         match block {
             Some(block) => {
                 tracing::trace!(?selection, ?block, "block found");
-                Ok(Some(block.clone()))
+                Ok(Some((*block).clone()))
             }
             None => {
                 tracing::trace!(?selection, "block not found");
@@ -218,72 +219,68 @@ impl EthStorage for InMemoryStorage {
     }
 
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        let mut state_lock = self.lock_write().await;
+        let mut state = self.lock_write().await;
 
         // check conflicts
         for transaction in &block.transactions {
-            let conflicts = check_conflicts(&state_lock, &transaction.execution);
-            if conflicts.any() {
+            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
                 return Err(EthStorageError::Conflict(conflicts));
             }
         }
 
         // save block
-        tracing::debug!(number = %block.header.number, "saving block");
-        state_lock.blocks_by_number.insert(block.header.number, block.clone());
-        state_lock.blocks_by_hash.insert(block.header.hash.clone(), block.clone());
+        tracing::debug!(number = %block.number(), "saving block");
+        let block = Arc::new(block);
+        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
+        state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
 
         // save transactions
-        for transaction in block.transactions {
+        for transaction in block.transactions.clone() {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
-            state_lock.transactions.insert(transaction.input.hash.clone(), transaction.clone());
+            state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
             let is_success = transaction.is_success();
 
             // save logs
             if is_success {
                 for log in transaction.logs {
-                    state_lock.logs.push(log);
+                    state.logs.push(log);
                 }
             }
 
             // save execution changes
             for changes in transaction.execution.changes {
-                let (account, account_balances) = state_lock
+                let account = state
                     .accounts
                     .entry(changes.address.clone())
-                    .or_insert_with(|| (Account::default(), HistoricalValues::new(BlockNumber::ZERO, Wei::ZERO)));
+                    .or_insert_with(|| InMemoryAccount::new(changes.address));
 
                 // nonce
                 if let Some(nonce) = changes.nonce.take_modified() {
-                    account.nonce = nonce;
+                    account.set_nonce(*block.number(), nonce);
                 }
 
                 // balance
                 if let Some(balance) = changes.balance.take_modified() {
-                    account.balance = balance.clone();
-                    account_balances.push(block.header.number, balance);
+                    account.set_balance(*block.number(), balance);
                 }
 
                 // bytecode
                 if is_success {
                     if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                        tracing::trace!(bytecode_len = %bytecode.len(), "saving bytecode");
-                        account.bytecode = Some(bytecode);
+                        account.set_bytecode(bytecode);
                     }
                 }
 
                 // slots
                 if is_success {
-                    let account_slots = state_lock.account_slots.entry(changes.address).or_default();
                     for (slot_index, slot) in changes.slots {
                         if let Some(slot) = slot.take_modified() {
-                            tracing::trace!(%slot, "saving slot");
-                            match account_slots.get_mut(&slot_index) {
+                            match account.slots.get_mut(&slot_index) {
                                 Some(slot_history) => {
-                                    slot_history.push(block.header.number, slot);
+                                    slot_history.push(*block.number(), slot);
                                 }
                                 None => {
-                                    account_slots.insert(slot_index, HistoricalValues::new(block.header.number, slot));
+                                    account.slots.insert(slot_index, InMemoryHistory::new(*block.number(), slot));
                                 }
                             };
                         }
@@ -295,36 +292,29 @@ impl EthStorage for InMemoryStorage {
     }
 }
 
-fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> ExecutionConflicts {
-    let mut conflicts = ExecutionConflicts::default();
+fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Option<ExecutionConflicts> {
+    let mut conflicts = ExecutionConflictsBuilder::default();
 
     for change in &execution.changes {
         let address = &change.address;
 
-        // check account info conflicts
         match state.accounts.get(address) {
-            Some((account, _)) => {
+            Some(account) => {
+                // check account info conflicts
                 if let Some(touched_nonce) = change.nonce.take_original_ref() {
-                    if *touched_nonce != account.nonce {
-                        conflicts.add_nonce(address.clone(), account.nonce.clone(), touched_nonce.clone());
+                    if touched_nonce != account.nonce.get_current_ref() {
+                        conflicts.add_nonce(address.clone(), account.nonce.get_current(), touched_nonce.clone());
                     }
                 }
                 if let Some(touched_balance) = change.balance.take_original_ref() {
-                    if *touched_balance != account.balance {
-                        conflicts.add_balance(address.clone(), account.balance.clone(), touched_balance.clone());
+                    if touched_balance != account.balance.get_current_ref() {
+                        conflicts.add_balance(address.clone(), account.balance.get_current(), touched_balance.clone());
                     }
                 }
-            }
-            None => {
-                // todo: handle account creation conflicts
-            }
-        }
 
-        // check slots conflicts
-        match state.account_slots.get(address) {
-            Some(slots) => {
+                // check slots conflicts
                 for (touched_slot_index, touched_slot) in &change.slots {
-                    match slots.get(touched_slot_index) {
+                    match account.slots.get(touched_slot_index) {
                         Some(slot) =>
                             if let Some(touched_slot) = touched_slot.take_original_ref() {
                                 let slot_value = slot.get_current().value;
@@ -339,10 +329,10 @@ fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Execu
                 }
             }
             None => {
-                // todo: handle account creation scenarios
+                // todo: handle account creation conflicts
             }
         }
     }
 
-    conflicts
+    conflicts.build()
 }

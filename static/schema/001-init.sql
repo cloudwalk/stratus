@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS account_slots (
     PRIMARY KEY (idx, account_address, block_number)
 );
 
-
 CREATE TABLE IF NOT EXISTS transactions (
     hash BYTEA NOT NULL CHECK (LENGTH(hash) = 32) UNIQUE,
     signer_address BYTEA NOT NULL CHECK (LENGTH(signer_address) = 20),
