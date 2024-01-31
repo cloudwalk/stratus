@@ -59,7 +59,7 @@
 //! - `Hash` and `BlockSelection`: Utilized for block identification and selection in various contexts.
 //!
 //! ### State Management
-//! - `HistoricalValue` and `StoragePointInTime`: Track changes in account states and contract storage over time.
+//! - `InMemoryValue`, `InMemoryHistory, and `StoragePointInTime`: Track changes in account states and contract storage over time.
 //! - `Slot`, `Nonce`, `Wei`: Represent specific state variables like storage slots, account nonces, and balances.
 //! - `LogFilter` and `LogFilterInput`: Enable the querying of historical logs based on specific criteria.
 //!

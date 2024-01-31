@@ -83,9 +83,10 @@ impl From<Nonce> for U256 {
     }
 }
 
-impl From<Nonce> for BigDecimal {
-    fn from(value: Nonce) -> Self {
+impl TryFrom<Nonce> for BigDecimal {
+    type Error = anyhow::Error;
+    fn try_from(value: Nonce) -> Result<Self, Self::Error> {
         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        BigDecimal::from_str(&U256::from(value).to_string()).unwrap_or(BigDecimal::from(0))
+        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
     }
 }
