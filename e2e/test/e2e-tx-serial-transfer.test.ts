@@ -54,6 +54,10 @@ describe("Transaction: serial transfer", () => {
         // Timestamp is within transaction sending time and now
         expect(fromHexTimestamp(_block.timestamp)).gte(_txTimestampInSeconds);
         expect(fromHexTimestamp(_block.timestamp)).lte(Date.now());
+
+        // ParentHash is the previous block's hash
+        let parentBlock = await send("eth_getBlockByNumber", [ZERO, true]);
+        expect(_block.parentHash).eq(parentBlock.hash);
     });
     it("Receipt is created", async () => {
         let receipt: TransactionReceipt = await send("eth_getTransactionReceipt", [_txHash]);
