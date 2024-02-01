@@ -47,6 +47,8 @@ impl EthStorage for Postgres {
         };
 
         let block_number = i64::try_from(block)?;
+
+        // We have to get the account information closest to the block with the given block_number
         let account = sqlx::query_as!(
             Account,
             r#"
@@ -92,6 +94,7 @@ impl EthStorage for Postgres {
         // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
+        // We have to get the slot information closest to the block with the given block_number
         let slot = sqlx::query_as!(
             Slot,
             r#"
