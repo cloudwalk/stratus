@@ -15,7 +15,8 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::Index;
+use crate::eth::primitives::Hash as TransactionHash;
+use crate::eth::primitives::Index as LogIndex;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -592,8 +593,8 @@ impl EthStorage for Postgres {
     }
 }
 
-fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, Vec<PostgresLog>> {
-    let mut partitions: HashMap<Hash, Vec<PostgresLog>> = HashMap::new();
+fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<TransactionHash, Vec<PostgresLog>> {
+    let mut partitions: HashMap<TransactionHash, Vec<PostgresLog>> = HashMap::new();
     for log in logs {
         if let Some(part) = partitions.get_mut(&log.transaction_hash) {
             part.push(log);
@@ -604,8 +605,8 @@ fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, 
     partitions
 }
 
-fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> {
-    let mut partitions: HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> = HashMap::new();
+fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> {
+    let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
         match partitions.get_mut(&topic.transaction_hash) {
             Some(transaction_logs) =>
