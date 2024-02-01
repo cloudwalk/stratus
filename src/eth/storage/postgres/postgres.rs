@@ -99,7 +99,8 @@ impl EthStorage for Postgres {
                     idx as "index: _",
                     value as "value: _"
                 FROM account_slots
-                WHERE account_address = $1 AND idx = $2 AND block_number = $3
+                WHERE account_address = $1 AND idx = $2 AND block_number <= $3
+                ORDER BY block_number DESC
             "#,
             address.as_ref(),
             slot_index.as_ref(),
