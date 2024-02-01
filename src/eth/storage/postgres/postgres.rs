@@ -325,7 +325,7 @@ impl EthStorage for Postgres {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let transaction_result = sqlx::query_file_as!(
+        let transaction_query = sqlx::query_file_as!(
             PostgresTransaction,
             "src/eth/storage/postgres/queries/select_transaction_by_hash.sql",
             hash.as_ref()
@@ -333,10 +333,10 @@ impl EthStorage for Postgres {
         .fetch_one(&self.connection_pool)
         .await;
 
-        let transaction: PostgresTransaction = match transaction_result {
+        let transaction: PostgresTransaction = match transaction_query {
             Ok(res) => res,
             Err(sqlx::Error::RowNotFound) => return Ok(None),
-            err => err?
+            err => err?,
         };
 
         let logs = sqlx::query_file_as!(
