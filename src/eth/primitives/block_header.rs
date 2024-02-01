@@ -42,14 +42,14 @@ pub struct BlockHeader {
 
 impl BlockHeader {
     /// Creates a new block header with the given number.
-    pub fn new(number: BlockNumber, _timestamp_in_secs: u64) -> Self {
+    pub fn new(number: BlockNumber, timestamp_in_secs: u64) -> Self {
         Self {
             number,
             hash: number.hash(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
             bloom: LogsBloom::default(),
-            timestamp_in_secs: UnixTime::ZERO,
+            timestamp_in_secs: UnixTime::from(timestamp_in_secs),
             parent_hash: number.predecessor().map(|n| n.hash()).unwrap_or(Hash::zero()),
         }
     }
