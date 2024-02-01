@@ -84,7 +84,10 @@ impl Evm for Revm {
 
         // configure evm params
         let tx = &mut evm.env.tx;
-        tx.caller = input.from.into();
+        tx.caller = match input.from {
+            Some(from) => from.into(),
+            None => Address::default().into(),
+        };
         tx.transact_to = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create(CreateScheme::Create),

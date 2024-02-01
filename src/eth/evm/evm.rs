@@ -28,8 +28,9 @@ pub struct EvmInput {
     ///
     /// It can be:
     /// * Transaction signer when executing an `eth_sendRawTransaction`.
-    /// * Address present in the `from` field when performing an `eth_call`.
-    pub from: Address,
+    /// * Placeholder when performing an `eth_call`
+    /// * Not specified when performing an `eth_call`
+    pub from: Option<Address>,
 
     /// Operation counterparty address.
     ///
@@ -71,7 +72,7 @@ impl TryFrom<TransactionInput> for EvmInput {
 
     fn try_from(value: TransactionInput) -> anyhow::Result<Self> {
         Ok(Self {
-            from: value.signer,
+            from: Some(value.signer),
             to: value.to,
             value: value.value,
             data: value.input,
@@ -84,7 +85,7 @@ impl TryFrom<TransactionInput> for EvmInput {
 impl From<(CallInput, StoragePointInTime)> for EvmInput {
     fn from(value: (CallInput, StoragePointInTime)) -> Self {
         Self {
-            from: value.0.from,
+            from: value.0.from.map_into(),
             to: value.0.to.map_into(),
             value: value.0.value,
             data: value.0.data,
