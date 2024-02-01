@@ -10,6 +10,7 @@ import {
     HASH_EMPTY_UNCLES,
     ONE,
     ZERO,
+    fromHexTimestamp,
     send,
     sendRawTransaction,
     sendReset,
@@ -19,12 +20,14 @@ describe("Transaction: serial transfer", () => {
     var _tx: Transaction;
     var _txHash: string;
     var _block: Block;
+    var _txTimestampInSeconds: number;
 
     it("Resets blockchain", async () => {
         await sendReset();
     });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signWeiTransfer(BOB.address, 0);
+        _txTimestampInSeconds = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
     });
@@ -47,6 +50,14 @@ describe("Transaction: serial transfer", () => {
 
         expect(_block.transactions.length).eq(1);
         expect(_block.transactions[0] as Transaction).deep.eq(_tx);
+
+        // Timestamp is within transaction sending time and now
+        expect(fromHexTimestamp(_block.timestamp)).gte(_txTimestampInSeconds);
+        expect(fromHexTimestamp(_block.timestamp)).lte(Date.now());
+
+        // ParentHash is the previous block's hash
+        let parentBlock = await send("eth_getBlockByNumber", [ZERO, true]);
+        expect(_block.parentHash).eq(parentBlock.hash);
     });
     it("Receipt is created", async () => {
         let receipt: TransactionReceipt = await send("eth_getTransactionReceipt", [_txHash]);
