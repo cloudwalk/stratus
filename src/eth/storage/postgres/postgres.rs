@@ -335,7 +335,8 @@ impl EthStorage for Postgres {
 
         let transaction: PostgresTransaction = match transaction_result {
             Ok(res) => res,
-            Err(_) => return Ok(None),
+            Err(sqlx::Error::RowNotFound) => return Ok(None),
+            err => err?
         };
 
         let logs = sqlx::query_file_as!(
