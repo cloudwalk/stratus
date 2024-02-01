@@ -12,7 +12,7 @@ use crate::eth::primitives::Wei;
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct CallInput {
-    pub from: Address,
+    pub from: Option<Address>,
     pub to: Option<Address>,
 
     #[serde(default)]
