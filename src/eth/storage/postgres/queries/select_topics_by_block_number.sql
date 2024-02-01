@@ -7,3 +7,4 @@ SELECT
     ,block_hash as "block_hash: _"
 FROM topics
 WHERE block_number = $1
+ORDER BY topic_idx

@@ -47,6 +47,8 @@ impl EthStorage for Postgres {
         };
 
         let block_number = i64::try_from(block)?;
+
+        // We have to get the account information closest to the block with the given block_number
         let account = sqlx::query_as!(
             Account,
             r#"
@@ -56,7 +58,8 @@ impl EthStorage for Postgres {
                     balance as "balance: _",
                     bytecode as "bytecode: _"
                 FROM accounts
-                WHERE address = $1 AND block_number = $2
+                WHERE address = $1 AND block_number <= $2
+                ORDER BY block_number DESC
             "#,
             address.as_ref(),
             block_number,
@@ -91,6 +94,7 @@ impl EthStorage for Postgres {
         // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
+        // We have to get the slot information closest to the block with the given block_number
         let slot = sqlx::query_as!(
             Slot,
             r#"
@@ -98,7 +102,8 @@ impl EthStorage for Postgres {
                     idx as "index: _",
                     value as "value: _"
                 FROM account_slots
-                WHERE account_address = $1 AND idx = $2 AND block_number = $3
+                WHERE account_address = $1 AND idx = $2 AND block_number <= $3
+                ORDER BY block_number DESC
             "#,
             address.as_ref(),
             slot_index.as_ref(),
@@ -569,12 +574,12 @@ impl EthStorage for Postgres {
         )
         .fetch_one(&self.connection_pool)
         .await
-        .unwrap_or(0)
-            + 1;
+        .unwrap_or_else(|err| {
+            tracing::error!(?err, "failed to get block number");
+            0
+        }) + 1;
 
-        let block_number = BlockNumber::from(nextval);
-
-        Ok(block_number)
+        Ok(nextval.into())
     }
 
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {

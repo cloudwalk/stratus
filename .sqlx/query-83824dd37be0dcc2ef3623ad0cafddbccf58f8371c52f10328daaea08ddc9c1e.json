@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n    topic as \"topic: _\"\n    ,transaction_hash as \"transaction_hash: _\"\n    ,transaction_idx as \"transaction_idx: _\"\n    ,log_idx as \"log_idx: _\"\n    ,block_number as \"block_number: _\"\n    ,block_hash as \"block_hash: _\"\nFROM topics\nWHERE transaction_hash = $1\n",
+  "query": "SELECT\n    topic as \"topic: _\"\n    ,transaction_hash as \"transaction_hash: _\"\n    ,transaction_idx as \"transaction_idx: _\"\n    ,log_idx as \"log_idx: _\"\n    ,block_number as \"block_number: _\"\n    ,block_hash as \"block_hash: _\"\nFROM topics\nWHERE block_hash = $1 AND log_idx = $2\nORDER BY topic_idx\n",
   "describe": {
     "columns": [
       {
@@ -36,7 +36,8 @@
     ],
     "parameters": {
       "Left": [
-        "Bytea"
+        "Bytea",
+        "Int4"
       ]
     },
     "nullable": [
@@ -48,5 +49,5 @@
       false
     ]
   },
-  "hash": "b372990a2d255a37e1c0b6ae8cc191466cf4299e4ff354ee3ee2bcf468bf30cc"
+  "hash": "83824dd37be0dcc2ef3623ad0cafddbccf58f8371c52f10328daaea08ddc9c1e"
 }
