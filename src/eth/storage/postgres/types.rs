@@ -23,7 +23,7 @@ pub struct PostgresTransaction {
     pub hash: Hash,
     pub signer_address: Address,
     pub nonce: Nonce,
-    pub address_from: Option<Address>,
+    pub address_from: Address,
     pub address_to: Option<Address>,
     pub input: Bytes,
     pub gas: Gas,

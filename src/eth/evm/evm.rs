@@ -85,7 +85,7 @@ impl TryFrom<TransactionInput> for EvmInput {
 impl From<(CallInput, StoragePointInTime)> for EvmInput {
     fn from(value: (CallInput, StoragePointInTime)) -> Self {
         Self {
-            from: value.0.from.unwrap_or(Address::default()),
+            from: value.0.from.unwrap_or(Address::ZERO),
             to: value.0.to.map_into(),
             value: value.0.value,
             data: value.0.data,
