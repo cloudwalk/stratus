@@ -325,17 +325,18 @@ impl EthStorage for Postgres {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let transaction = sqlx::query_file_as!(
+        let transaction_result = sqlx::query_file_as!(
             PostgresTransaction,
             "src/eth/storage/postgres/queries/select_transaction_by_hash.sql",
             hash.as_ref()
         )
         .fetch_one(&self.connection_pool)
-        .await
-        .map_err(|err| {
-            tracing::debug!(?err);
-            err
-        })?;
+        .await;
+
+        let transaction: PostgresTransaction = match transaction_result {
+            Ok(res) => res,
+            Err(_) => return Ok(None)
+        };
 
         let logs = sqlx::query_file_as!(
             PostgresLog,
@@ -605,14 +606,17 @@ fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, 
 fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> {
     let mut partitions: HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
-        if let Some(transaction) = partitions.get_mut(&topic.transaction_hash) {
-            if let Some(part) = transaction.get_mut(&topic.log_idx) {
-                part.push(topic);
-            } else {
-                transaction.insert(topic.log_idx, vec![topic]);
+        match partitions.get_mut(&topic.transaction_hash) {
+            Some(transaction_logs) => {
+                if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
+                    part.push(topic);
+                } else {
+                    transaction_logs.insert(topic.log_idx, vec![topic]);
+                }
+            },
+            None => {
+                partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
             }
-        } else {
-            partitions.insert(topic.transaction_hash.clone(), HashMap::new());
         }
     }
     partitions
