@@ -10,7 +10,7 @@ COPY Cargo.toml /app/Cargo.toml
 COPY Cargo.lock /app/Cargo.lock
 
 RUN apt update
-RUN apt-get install -y libclang-dev
+RUN apt-get install -y libclang-dev cmake
 
 RUN cargo build --release
 
