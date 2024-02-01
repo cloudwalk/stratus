@@ -15,7 +15,8 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::Index;
+use crate::eth::primitives::Hash as TransactionHash;
+use crate::eth::primitives::Index as LogIndex;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -325,17 +326,19 @@ impl EthStorage for Postgres {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let transaction = sqlx::query_file_as!(
+        let transaction_query = sqlx::query_file_as!(
             PostgresTransaction,
             "src/eth/storage/postgres/queries/select_transaction_by_hash.sql",
             hash.as_ref()
         )
         .fetch_one(&self.connection_pool)
-        .await
-        .map_err(|err| {
-            tracing::debug!(?err);
-            err
-        })?;
+        .await;
+
+        let transaction: PostgresTransaction = match transaction_query {
+            Ok(res) => res,
+            Err(sqlx::Error::RowNotFound) => return Ok(None),
+            err => err?,
+        };
 
         let logs = sqlx::query_file_as!(
             PostgresLog,
@@ -590,8 +593,8 @@ impl EthStorage for Postgres {
     }
 }
 
-fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, Vec<PostgresLog>> {
-    let mut partitions: HashMap<Hash, Vec<PostgresLog>> = HashMap::new();
+fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<TransactionHash, Vec<PostgresLog>> {
+    let mut partitions: HashMap<TransactionHash, Vec<PostgresLog>> = HashMap::new();
     for log in logs {
         if let Some(part) = partitions.get_mut(&log.transaction_hash) {
             part.push(log);
@@ -602,17 +605,19 @@ fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Hash, 
     partitions
 }
 
-fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> {
-    let mut partitions: HashMap<Hash, HashMap<Index, Vec<PostgresTopic>>> = HashMap::new();
+fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> {
+    let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
-        if let Some(transaction) = partitions.get_mut(&topic.transaction_hash) {
-            if let Some(part) = transaction.get_mut(&topic.log_idx) {
-                part.push(topic);
-            } else {
-                transaction.insert(topic.log_idx, vec![topic]);
+        match partitions.get_mut(&topic.transaction_hash) {
+            Some(transaction_logs) =>
+                if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
+                    part.push(topic);
+                } else {
+                    transaction_logs.insert(topic.log_idx, vec![topic]);
+                },
+            None => {
+                partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
             }
-        } else {
-            partitions.insert(topic.transaction_hash.clone(), HashMap::new());
         }
     }
     partitions
