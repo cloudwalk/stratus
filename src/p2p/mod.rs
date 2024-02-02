@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::pin::Pin;
+
 use std::str::FromStr;
 use std::sync::Arc;
 
 use codec::Decode;
 use codec::Encode;
 use futures::future::FutureExt;
-use futures::task::Context;
-use futures::task::Poll;
-use futures::Future;
+
+
+
 use futures::StreamExt;
 use sc_client_api::BlockBackend;
 use sc_client_api::ChildInfo;
@@ -210,6 +210,12 @@ async fn get_network_config() -> anyhow::Result<NetworkConfiguration> {
 
 #[derive(Clone, Debug)]
 pub struct SimpleClient {}
+
+impl Default for SimpleClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SimpleClient {
     pub fn new() -> Self {
