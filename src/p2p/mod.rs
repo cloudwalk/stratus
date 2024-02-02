@@ -6,6 +6,7 @@ use std::sync::Arc;
 use codec::Decode;
 use codec::Encode;
 use futures::future::FutureExt;
+use futures::StreamExt;
 use futures::task::Context;
 use futures::task::Poll;
 use futures::Future;
@@ -151,21 +152,23 @@ pub async fn serve_p2p<
     let network_worker = sc_network::NetworkWorker::new(network_params)?;
     let network_service = network_worker.service().clone();
 
-    tokio::spawn(async move {
-        let mut network_worker = network_worker;
-        let waker = futures::task::noop_waker();
-        let mut context = Context::from_waker(&waker);
-
-        loop {
-            match Pin::new(&mut network_worker).poll(&mut context) {
-                Poll::Ready(()) => {
-                    info!("NetworkWorker has finished its execution.");
-                    break; // NetworkWorker is finished
-                }
-                Poll::Pending => {}
-            }
-        }
-    });
+    //XXX tokio::spawn(async move {
+    //XXX     let mut network_worker = network_worker;
+    //XXX     let waker = futures::task::noop_waker();
+    //XXX     let mut context = Context::from_waker(&waker);
+    //XXX     loop {
+    //XXX         match Pin::new(&mut network_worker).poll(&mut context) {
+    //XXX             Poll::Ready(()) => {
+    //XXX                 info!("NetworkWorker has finished its execution.");
+    //XXX                 break; // NetworkWorker is finished
+    //XXX             }
+    //XXX             Poll::Pending => {
+    //XXX                 tracing::debug!("NetworkWorker is still running.");
+    //XXX                 tracing::debug!("{:?}", network_worker.network_state());
+    //XXX             }
+    //XXX         }
+    //XXX     }
+    //XXX });
 
     let num_connected = network_service.num_connected();
     tracing::debug!("Number of connected peers: {}", num_connected);
