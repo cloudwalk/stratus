@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT\n                        accounts.address as \"address: _\",\n                        historical_nonces.nonce as \"nonce: _\",\n                        historical_balances.balance as \"balance: _\",\n                        bytecode as \"bytecode: _\"\n                    FROM accounts\n                    JOIN historical_nonces\n                    ON accounts.address = historical_nonces.address\n                    JOIN historical_balances\n                    ON accounts.address = historical_balances.address\n                    WHERE accounts.address = $1\n                    AND historical_nonces.block_number = (SELECT MAX(block_number)\n                                                            FROM historical_nonces\n                                                            WHERE block_number <= $2\n                                                            AND address = $1)\n                    AND historical_balances.block_number = (SELECT MAX(block_number)\n                                                            FROM historical_balances\n                                                            WHERE block_number <= $2\n                                                            AND address = $1)\n                            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "address: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "nonce: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "balance: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "bytecode: _",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "deba05872f3e10f1c786038e6a2fe9b49f8d6eda6afba855c20b769b658f8298"
+}

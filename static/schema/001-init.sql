@@ -20,23 +20,30 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 
 CREATE TABLE IF NOT EXISTS historical_balances (
-    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) REFERENCES accounts (address),
+    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) REFERENCES accounts (address) ON DELETE CASCADE,
     balance NUMERIC NOT NULL CHECK (balance >= 0),
     block_number BIGSERIAL NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
     PRIMARY KEY (address, block_number)
 );
 
 CREATE TABLE IF NOT EXISTS historical_nonces (
-    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) REFERENCES accounts (address),
+    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) REFERENCES accounts (address) ON DELETE CASCADE,
     nonce NUMERIC NOT NULL CHECK (nonce >= 0),
     block_number BIGSERIAL NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
     PRIMARY KEY (address, block_number)
 );
 
+CREATE TABLE IF NOT EXISTS account_slots (
+    idx BYTEA NOT NULL CHECK (LENGTH(idx) = 32),
+    value BYTEA NOT NULL CHECK (LENGTH(value) = 32),
+    account_address BYTEA NOT NULL REFERENCES accounts (address) ON DELETE CASCADE,
+    PRIMARY KEY (idx, account_address)
+);
+
 CREATE TABLE IF NOT EXISTS historical_slots (
     idx BYTEA NOT NULL CHECK (LENGTH(idx) = 32),
     value BYTEA NOT NULL CHECK (LENGTH(value) = 32),
-    account_address BYTEA NOT NULL REFERENCES accounts (address),
+    account_address BYTEA NOT NULL REFERENCES accounts (address) ON DELETE CASCADE,
     block_number BIGSERIAL NOT NULL CHECK (block_number >= 0) REFERENCES blocks (number) ON DELETE CASCADE,
     PRIMARY KEY (idx, account_address, block_number)
 );

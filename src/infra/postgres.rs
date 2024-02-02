@@ -51,8 +51,7 @@ impl Postgres {
                 acc.address.as_bytes(),
                 BigDecimal::try_from(acc.nonce)?,
                 BigDecimal::try_from(acc.balance)?,
-                acc.bytecode.as_deref(),
-                i64::try_from(BlockNumber::ZERO).context("failed to convert block number")?
+                acc.bytecode.as_deref()
             )
             .execute(&self.connection_pool)
             .await

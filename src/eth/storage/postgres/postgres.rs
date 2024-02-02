@@ -93,12 +93,6 @@ impl EthStorage for Postgres {
                 .await?
             }
         };
-        let block = match point_in_time {
-            StoragePointInTime::Present => self.read_current_block_number().await?,
-            StoragePointInTime::Past(number) => *number,
-        };
-
-        let block_number = i64::try_from(block)?;
 
         // If there is no account, we return
         // an "empty account"
@@ -114,40 +108,55 @@ impl EthStorage for Postgres {
 
         Ok(acc)
     }
+
     async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, "reading slot");
-
-        let block = match point_in_time {
-            StoragePointInTime::Present => self.read_current_block_number().await?,
-            StoragePointInTime::Past(number) => *number,
-        };
-
-        let block_number = i64::try_from(block)?;
 
         // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
-        // We have to get the slot information closest to the block with the given block_number
-        let slot = sqlx::query_as!(
-            Slot,
-            r#"
-                SELECT
-                    idx as "index: _",
-                    value as "value: _"
-                FROM historical_slots
-                WHERE account_address = $1
-                AND idx = $2
-                AND block_number <= (SELECT MAX(block_number)
-                                        FROM historical_slots
-                                        WHERE block_number <= $3
-                                        AND account_address = $1)
-            "#,
-            address.as_ref(),
-            slot_index.as_ref(),
-            block_number,
-        )
-        .fetch_optional(&self.connection_pool)
-        .await?;
+        let slot = match point_in_time {
+            StoragePointInTime::Present => {
+                sqlx::query_as!(
+                    Slot,
+                    r#"
+                        SELECT
+                            idx as "index: _",
+                            value as "value: _"
+                        FROM account_slots
+                        WHERE account_address = $1
+                        AND idx = $2
+                    "#,
+                    address.as_ref(),
+                    slot_index.as_ref()
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?
+            }
+            StoragePointInTime::Past(number) => {
+                let block_number: i64 = (*number).try_into()?;
+                sqlx::query_as!(
+                    Slot,
+                    r#"
+                        SELECT
+                            idx as "index: _",
+                            value as "value: _"
+                        FROM historical_slots
+                        WHERE account_address = $1
+                        AND idx = $2
+                        AND block_number <= (SELECT MAX(block_number)
+                                                FROM historical_slots
+                                                WHERE block_number <= $3
+                                                AND account_address = $1)
+                    "#,
+                    address.as_ref(),
+                    slot_index.as_ref(),
+                    block_number,
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?
+            }
+        };
 
         // If there is no slot, we return
         // an "empty slot"
@@ -456,7 +465,6 @@ impl EthStorage for Postgres {
     // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
     // neither worked for some reason I was not able to determine at this time)
-    // TODO: save slots
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         tracing::debug!(block = ?block, "saving block");
         sqlx::query_file!(
@@ -519,28 +527,65 @@ impl EthStorage for Postgres {
                         })
                         .map(|val| val.as_ref().to_owned());
 
+                    let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
+                    let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+                    let balance = BigDecimal::try_from(balance)?;
+                    let nonce = BigDecimal::try_from(nonce)?;
+
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_account.sql",
                         change.address.as_ref(),
-                        BigDecimal::try_from(nonce)?,
-                        BigDecimal::try_from(balance)?,
+                        nonce,
+                        balance,
                         bytecode,
-                        i64::try_from(block.header.number).context("failed to convert block number")?
                     )
-                    .execute(&self.connection_pool)
+                    .execute(&mut *tx)
                     .await
                     .context("failed to insert account")?;
+
+                    sqlx::query!(
+                        "INSERT INTO historical_balances (address, balance, block_number) VALUES ($1, $2, $3)",
+                        change.address.as_ref(),
+                        balance,
+                        block_number
+                    )
+                    .execute(&mut *tx)
+                    .await
+                    .context("failed to insert balance")?;
+
+                    sqlx::query!(
+                        "INSERT INTO historical_nonces (address, nonce, block_number) VALUES ($1, $2, $3)",
+                        change.address.as_ref(),
+                        nonce,
+                        block_number
+                    )
+                    .execute(&mut *tx)
+                    .await
+                    .context("failed to insert nonce")?;
+
+                    tx.commit().await.context("Failed to commit transaction")?;
+
                     for (slot_idx, value) in change.slots {
+                        let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
+                        let idx = &<[u8; 32]>::from(slot_idx);
+                        let val = &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value); // the or condition should never happen
+                        sqlx::query_file!("src/eth/storage/postgres/queries/insert_account_slot.sql", idx, val, change.address.as_ref(),)
+                            .execute(&mut *tx)
+                            .await
+                            .context("failed to insert slot")?;
+
                         sqlx::query_file!(
-                            "src/eth/storage/postgres/queries/insert_account_slot.sql",
-                            &<[u8; 32]>::from(slot_idx),
-                            &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value), // this should never happen
+                            "src/eth/storage/postgres/queries/insert_historical_slot.sql",
+                            idx,
+                            val,
                             change.address.as_ref(),
                             i64::try_from(block.header.number).context("failed to convert block number")?
                         )
-                        .execute(&self.connection_pool)
+                        .execute(&mut *tx)
                         .await
-                        .context("failed to insert slot")?;
+                        .context("failed to insert slot to history")?;
+
+                        tx.commit().await.context("failed to commit transaction")?;
                     }
                 }
             }
@@ -622,9 +667,37 @@ impl EthStorage for Postgres {
     }
 
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+        // TODO: Fixthis
         sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
             .execute(&self.connection_pool)
             .await?;
+
+        sqlx::query!(
+            r#"UPDATE accounts
+            SET latest_balance = (SELECT balance
+                FROM accounts
+                JOIN (SELECT address, MAX(block_number) as block_number
+                                    FROM historical_balances
+                                    GROUP BY address) as block_numbers ON block_numbers.address = accounts.address
+                LEFT JOIN historical_balances on accounts.address = historical_balances.address
+                AND block_numbers.block_number = historical_balances.block_number)"#
+        )
+        .execute(&self.connection_pool)
+        .await?;
+
+        sqlx::query!(
+            r#"UPDATE accounts
+            SET latest_nonce = (SELECT nonce
+                FROM accounts
+                JOIN (SELECT address, MAX(block_number) as block_number
+                                    FROM historical_nonces
+                                    GROUP BY address) as block_numbers ON block_numbers.address = accounts.address
+                LEFT JOIN historical_nonces on accounts.address = historical_nonces.address
+                AND block_numbers.block_number = historical_nonces.block_number)"#
+        )
+        .execute(&self.connection_pool)
+        .await?;
+
         Ok(())
     }
 }

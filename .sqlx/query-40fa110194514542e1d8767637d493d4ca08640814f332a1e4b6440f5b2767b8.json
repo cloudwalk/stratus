@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO historical_slots VALUES ($1, $2, $3)\nON CONFLICT (idx, account_address)\nDO UPDATE SET value = EXCLUDED.value\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "40fa110194514542e1d8767637d493d4ca08640814f332a1e4b6440f5b2767b8"
+}
