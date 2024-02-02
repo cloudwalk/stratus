@@ -13,11 +13,8 @@ use stratus::eth::storage::InMemoryStorage;
 use stratus::eth::EthExecutor;
 use stratus::infra;
 use stratus::infra::postgres::Postgres;
-#[cfg(feature = "p2p-substrate")]
-use stratus::p2p;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
-use tokio::sync::broadcast;
 
 fn main() -> anyhow::Result<()> {
     let config = Arc::new(Config::parse());
@@ -28,41 +25,8 @@ fn main() -> anyhow::Result<()> {
     let config_clone_for_rpc = Arc::clone(&config);
 
     let runtime = init_async_runtime(&config);
-    let (tx, _) = broadcast::channel::<()>(1);
 
-    runtime.block_on(async {
-        let rpc_handle = tokio::spawn(run_rpc_server(config_clone_for_rpc, tx.subscribe()));
-
-        #[cfg(feature = "p2p-substrate")]
-        let p2p_handle = tokio::spawn(run_p2p_server(tx.subscribe()));
-        #[cfg(not(feature = "p2p-substrate"))]
-        let p2p_handle = tokio::spawn(async {
-            tokio::time::sleep(Duration::MAX).await;
-            Result::<_, ()>::Ok(())
-        });
-
-        tokio::select! {
-            result = rpc_handle => {
-                let inner_result = result.unwrap();
-                if let Err(e) = inner_result {
-                    tracing::error!("RPC server failed: {:?}", e);
-                    tx.send(()).unwrap(); // Send cancellation signal
-                    //TODO wait for p2p_handle to finish before moving on
-                }
-            }
-            result = p2p_handle => {
-                tracing::error!("P2P server failed: {:?}", result);
-                let inner_result = result.unwrap();
-                if let Err(e) = inner_result {
-                    tracing::error!("P2P server failed: {:?}", e);
-                    tx.send(()).unwrap(); // Send cancellation signal
-                    //TODO wait for rpc_handle to finish before moving on
-                }
-            }
-        }
-
-        Ok(())
-    })
+    runtime.block_on(run_rpc_server(config_clone_for_rpc))
 }
 
 pub fn init_async_runtime(config: &Config) -> Runtime {
@@ -84,7 +48,7 @@ pub fn init_async_runtime(config: &Config) -> Runtime {
     runtime
 }
 
-async fn run_rpc_server(config: Arc<Config>, cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
+async fn run_rpc_server(config: Arc<Config>) -> anyhow::Result<()> {
     tracing::info!("Starting RPC server");
 
     let storage: Arc<dyn EthStorage> = match &config.storage {
@@ -97,7 +61,7 @@ async fn run_rpc_server(config: Arc<Config>, cancel_signal: broadcast::Receiver<
     let evms = init_evms(&config, Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
-    serve_rpc(executor, storage, config.address, cancel_signal).await?;
+    serve_rpc(executor, storage, config.address).await?;
 
     tracing::info!("RPC server started");
     Ok(())
@@ -113,16 +77,3 @@ fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn 
     NonEmpty::from_vec(evms).unwrap()
 }
 
-#[cfg(feature = "p2p-substrate")]
-pub async fn run_p2p_server(mut cancel_signal: broadcast::Receiver<()>) -> anyhow::Result<()> {
-    tracing::info!("Starting P2P server");
-
-    p2p::serve_p2p::<sp_core::H256>().await?;
-
-    tokio::select! {
-        _ = cancel_signal.recv() => {
-            tracing::info!("P2P task cancelled");
-            Err(anyhow::anyhow!("Cancellation signal received, stopping P2P server"))
-        }
-    }
-}
