@@ -77,7 +77,7 @@ impl EthExecutor {
         tracing::info!(
             hash = %transaction.hash,
             nonce = %transaction.nonce,
-            from = %transaction.from,
+            from = ?transaction.from,
             signer = %transaction.signer,
             to = ?transaction.to,
             data_len = %transaction.input.len(),
@@ -92,7 +92,7 @@ impl EthExecutor {
         }
 
         // execute transaction until no more conflicts
-        // todo: must have a stop condition like timeout or max number of retries
+        // TODO: must have a stop condition like timeout or max number of retries
         let (execution, block) = loop {
             // execute and check conflicts before mining block
             let execution = self.execute_in_evm(transaction.clone().try_into()?).await?;
@@ -135,7 +135,7 @@ impl EthExecutor {
     /// Execute a function and return the function output. State changes are ignored.
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
         tracing::info!(
-            from = %input.from,
+            from = ?input.from,
             to = ?input.to,
             data_len = input.data.len(),
             data = %input.data,

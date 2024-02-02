@@ -7,6 +7,7 @@ import { HttpNetworkConfig } from "hardhat/types";
 import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
 import { CURRENT_NETWORK } from "./network";
+import { Numbers } from "web3-types";
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -113,6 +114,15 @@ export function toHex(number: number | bigint): string {
 
 export function toPaddedHex(number: number | bigint, bytes: number): string {
     return "0x" + number.toString(16).padStart(bytes * 2, "0");
+}
+
+// Converts a hex string timestamp into unix time in seconds
+export function fromHexTimestamp(timestamp: Numbers):  number {
+    let value = timestamp.valueOf();
+    if (typeof value == "string")
+        return parseInt(value, 16);
+    else 
+        throw new Error("Expected block timestamp to be a hexstring. Got: " + timestamp.valueOf());
 }
 
 // Calculate the storage position of an address key in a mapping.
