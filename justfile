@@ -22,12 +22,12 @@ setup:
 # Stratus: Run locally with debug options
 run *args="":
     #!/bin/bash
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run -- {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- {{args}}
     exit 0
 
 # Stratus: Run locally with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release -- {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- {{args}}
 
 # Stratus: Compile with debug options
 build:

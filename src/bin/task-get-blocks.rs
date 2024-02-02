@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
     // await threadpool to finish or error to be produced
     loop {
         if let Ok(e) = rx_error.recv_timeout(Duration::from_secs(1)) {
+            tracing::error!(reason = ?e, "received error from threadpool");
             return Err(e);
         }
 
@@ -92,27 +93,34 @@ impl Task {
         let mut current = self.start + self.downloaded_blocks().unwrap_or(0);
         tracing::info!(start = %self.start, current = %current, end = %self.end, "starting");
 
-        // prepare output
+        // prepare output file
         let mut file = match OpenOptions::new().create(true).append(true).open(self.filename.clone()) {
             Ok(file) => file,
             Err(e) => {
-                tracing::error!(%e, filename = %self.filename.clone(), "failed to open file for appending");
+                tracing::error!(reason = ?e, filename = %self.filename.clone(), "failed to open file for appending");
                 return Err(e).context(format!("failed to open file \"{}\" for appending", self.filename.clone()));
             }
         };
 
-        // download
+        // download blocks
+        let tokio = Handle::current();
         while current < self.end {
             tracing::debug!(start = %self.start, current = %current, end = %self.end, "downloading");
-            match Handle::current().block_on(self.chain.get_block_by_number(current)) {
-                Ok(block) => {
-                    let block_json = serde_json::to_string(&block).unwrap();
-                    writeln!(file, "{}", block_json)?;
+
+            // keep trying to download until success
+            loop {
+                match tokio.block_on(self.chain.get_block_by_number(current)) {
+                    Ok(block) => {
+                        let block_json = serde_json::to_string(&block).unwrap();
+                        writeln!(file, "{}", block_json)?;
+                        break;
+                    }
+                    Err(_) => {
+                        tracing::warn!("retrying block download");
+                    }
                 }
-                Err(_) => {
-                    // RETRY HOW MANY TIMES?
-                }
-            };
+            }
+
             current = current.next();
         }
         Ok(())
@@ -122,11 +130,10 @@ impl Task {
         let file = match OpenOptions::new().read(true).open(self.filename.clone()) {
             Ok(file) => file,
             Err(e) => {
-                tracing::error!(%e, filename = %self.filename.clone(), "failed to open file for reading");
+                tracing::error!(reason = ?e, filename = %self.filename.clone(), "failed to open file for reading");
                 return Err(e).context(format!("failed to open file \"{}\" for reading", self.filename.clone()));
             }
         };
-
         Ok(BufReader::new(file).lines().count())
     }
 }
