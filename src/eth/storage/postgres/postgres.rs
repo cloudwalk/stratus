@@ -41,32 +41,64 @@ impl EthStorage for Postgres {
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
-
+        let account = match point_in_time {
+            StoragePointInTime::Present => {
+                // We have to get the account information closest to the block with the given block_number
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    SELECT
+                        address as "address: _",
+                        latest_nonce as "nonce: _",
+                        latest_balance as "balance: _",
+                        bytecode as "bytecode: _"
+                    FROM accounts
+                    WHERE address = $1
+                    "#,
+                    address.as_ref()
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?
+            }
+            StoragePointInTime::Past(number) => {
+                let block_number: i64 = (*number).try_into()?;
+                // We have to get the account information closest to the block with the given block_number
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    SELECT
+                        accounts.address as "address: _",
+                        historical_nonces.nonce as "nonce: _",
+                        historical_balances.balance as "balance: _",
+                        bytecode as "bytecode: _"
+                    FROM accounts
+                    JOIN historical_nonces
+                    ON accounts.address = historical_nonces.address
+                    JOIN historical_balances
+                    ON accounts.address = historical_balances.address
+                    WHERE accounts.address = $1
+                    AND historical_nonces.block_number = (SELECT MAX(block_number)
+                                                            FROM historical_nonces
+                                                            WHERE block_number <= $2
+                                                            AND address = $1)
+                    AND historical_balances.block_number = (SELECT MAX(block_number)
+                                                            FROM historical_balances
+                                                            WHERE block_number <= $2
+                                                            AND address = $1)
+                            "#,
+                    address.as_ref(),
+                    block_number,
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?
+            }
+        };
         let block = match point_in_time {
             StoragePointInTime::Present => self.read_current_block_number().await?,
             StoragePointInTime::Past(number) => *number,
         };
 
         let block_number = i64::try_from(block)?;
-
-        // We have to get the account information closest to the block with the given block_number
-        let account = sqlx::query_as!(
-            Account,
-            r#"
-                SELECT
-                    address as "address: _",
-                    nonce as "nonce: _",
-                    balance as "balance: _",
-                    bytecode as "bytecode: _"
-                FROM accounts
-                WHERE address = $1 AND block_number <= $2
-                ORDER BY block_number DESC
-            "#,
-            address.as_ref(),
-            block_number,
-        )
-        .fetch_optional(&self.connection_pool)
-        .await?;
 
         // If there is no account, we return
         // an "empty account"
@@ -102,9 +134,13 @@ impl EthStorage for Postgres {
                 SELECT
                     idx as "index: _",
                     value as "value: _"
-                FROM account_slots
-                WHERE account_address = $1 AND idx = $2 AND block_number <= $3
-                ORDER BY block_number DESC
+                FROM historical_slots
+                WHERE account_address = $1
+                AND idx = $2
+                AND block_number <= (SELECT MAX(block_number)
+                                        FROM historical_slots
+                                        WHERE block_number <= $3
+                                        AND account_address = $1)
             "#,
             address.as_ref(),
             slot_index.as_ref(),
@@ -609,12 +645,13 @@ fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<
     let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
         match partitions.get_mut(&topic.transaction_hash) {
-            Some(transaction_logs) =>
+            Some(transaction_logs) => {
                 if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
                     part.push(topic);
                 } else {
                     transaction_logs.insert(topic.log_idx, vec![topic]);
-                },
+                }
+            }
             None => {
                 partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
             }
