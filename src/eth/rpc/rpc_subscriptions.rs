@@ -6,6 +6,7 @@ use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 use crate::eth::primitives::Block;
@@ -33,7 +34,7 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Spawns a new thread to clean up closed subscriptions from time to time.
-    pub fn spawn_subscriptions_cleaner(self: Arc<Self>) {
+    pub fn spawn_subscriptions_cleaner(self: Arc<Self>) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
             loop {
                 let any_new_heads_closed = self.new_heads.read().await.iter().any(|(_, sub)| sub.is_closed());
@@ -54,11 +55,11 @@ impl RpcSubscriptions {
 
                 tokio::time::sleep(CLEANING_FREQUENCY).await;
             }
-        });
+        })
     }
 
     /// Spawns a new thread that notifies subscribers about new created blocks.
-    pub fn spawn_new_heads_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<Block>) {
+    pub fn spawn_new_heads_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<Block>) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
             loop {
                 let block = rx.recv().await.expect("newHeads notifier channel should never be closed");
@@ -69,11 +70,11 @@ impl RpcSubscriptions {
                     notify(sub, msg.clone()).await;
                 }
             }
-        });
+        })
     }
 
     /// Spawns a new thread that notifies subscribers about new transactions logs.
-    pub fn spawn_logs_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<LogMined>) {
+    pub fn spawn_logs_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
             loop {
                 let log = rx.recv().await.expect("logs notifier channel should never be closed");
@@ -86,7 +87,7 @@ impl RpcSubscriptions {
                     notify(&sub.0, msg.clone()).await;
                 }
             }
-        });
+        })
     }
 
     // -------------------------------------------------------------------------
