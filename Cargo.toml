@@ -47,7 +47,7 @@ revm = "3.5.0"
 triehash = "0.8.4"
 
 # network
-jsonrpsee = { version = "0.21.0", features = ["server"] }
+jsonrpsee = { version = "0.21.0", features = ["server", "client"] }
 libp2p = { version = "0.52", features = ["tcp", "tls", "dns", "tokio", "noise", "yamux", "websocket", "ping", "macros"], optional = true }
 tower = "0.4.13"
 
@@ -76,6 +76,7 @@ sp-version = { git = "https://github.com/cloudwalk/substrate", branch = "stratus
 
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"], optional = true }
 parity-util-mem = { version = "0.11.0", default-features = false, features = ["primitive-types"], optional = true  }
+threadpool = "1.8.1"
 
 
 [dev-dependencies]
@@ -89,6 +90,18 @@ glob = "0.3.1"
 nom = "7.1.3"
 phf_codegen = "0.11.2"
 
+# ------------------------------------------------------------------------------
+# Binaries
+# ------------------------------------------------------------------------------
+
+[[bin]]
+name = "task-get-blocks"
+path = "src/bin/task-get-blocks.rs"
+
+# ------------------------------------------------------------------------------
+# Lints
+# ------------------------------------------------------------------------------
+
 [lints.clippy]
 clone_on_ref_ptr = "warn"
 disallowed_names = "warn"
@@ -96,6 +109,6 @@ manual_let_else = "warn"
 semicolon_if_nothing_returned = "warn"
 
 [features]
-default = ["p2p-substrate"]
+default = []
 p2p-substrate = ["dep:libp2p", "dep:sc-network", "dep:sc-client-api", "dep:sp-blockchain", "dep:sc-consensus", "dep:sp-consensus", "dep:sp-runtime", "dep:sp-core", "dep:codec", "dep:parity-util-mem"]
 
