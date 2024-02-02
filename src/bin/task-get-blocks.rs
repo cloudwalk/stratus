@@ -4,25 +4,28 @@ use std::fs::OpenOptions;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
+use futures::StreamExt;
+use futures::TryStreamExt;
 use stratus::eth::primitives::BlockNumber;
-use stratus::ext::not;
 use stratus::infra::init_tracing;
 use stratus::infra::BlockchainClient;
-use tokio::runtime::Handle;
+use tokio::time::timeout;
 
-/// Number of workers to spawn.
+/// Number of parallel downloads to execute.
 const WORKERS: usize = 5;
 
-/// Number of blocks each block will process.
+/// Number of blocks each parallel download will process.
 const WORKER_BLOCKS: usize = 10_000;
 
-#[tokio::main]
+/// Timeout for network operations.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(2);
+
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     // init services
     init_tracing();
@@ -39,40 +42,23 @@ async fn main() -> anyhow::Result<()> {
     let mut tasks = Vec::new();
     while task_start < current_block {
         let task_end = min(task_start + WORKER_BLOCKS, current_block);
-        tasks.push(Task::new(Arc::clone(&chain), task_start, task_end)?);
+        tasks.push(Task::new(Arc::clone(&chain), task_start, task_end)?.execute());
         task_start += WORKER_BLOCKS;
     }
 
     // execute tasks in threadpool
     tracing::info!(tasks = %tasks.len(), "submitting tasks");
-    let (tx_error, rx_error) = mpsc::channel();
-    let tp = threadpool::Builder::new().thread_name("block-poller".to_string()).num_threads(WORKERS).build();
-    for task in tasks {
-        let tx_error_for_task = tx_error.clone();
-        let tokio = Handle::current();
-        tp.execute(move || {
-            let _tokio_guard = tokio.enter();
-            if let Err(e) = task.execute() {
-                let _ = tx_error_for_task.send(e);
-            }
-        });
-    }
-
-    // await threadpool to finish or error to be produced
-    loop {
-        if let Ok(e) = rx_error.recv_timeout(Duration::from_secs(1)) {
-            tracing::error!(reason = ?e, "received error from threadpool");
-            return Err(e);
+    let result = futures::stream::iter(tasks).buffer_unordered(WORKERS).try_collect::<Vec<()>>().await;
+    match result {
+        Ok(_) => {
+            tracing::info!("tasks finished");
+            Ok(())
         }
-
-        let running = tp.active_count() > 0 || tp.queued_count() > 0;
-        if not(running) {
-            tracing::info!("finished all tasks");
-            break;
+        Err(e) => {
+            tracing::error!(reason = ?e, "tasks failed");
+            Err(e)
         }
     }
-
-    Ok(())
 }
 
 struct Task {
@@ -88,7 +74,7 @@ impl Task {
         Ok(Self { chain, start, end, filename })
     }
 
-    pub fn execute(self) -> anyhow::Result<()> {
+    pub async fn execute(self) -> anyhow::Result<()> {
         // calculate current block
         let mut current = self.start + self.downloaded_blocks().unwrap_or(0);
         tracing::info!(start = %self.start, current = %current, end = %self.end, "starting");
@@ -103,20 +89,35 @@ impl Task {
         };
 
         // download blocks
-        let tokio = Handle::current();
         while current < self.end {
             tracing::debug!(start = %self.start, current = %current, end = %self.end, "downloading");
 
             // keep trying to download until success
             loop {
-                match tokio.block_on(self.chain.get_block_by_number(current)) {
-                    Ok(block) => {
-                        let block_json = serde_json::to_string(&block).unwrap();
-                        writeln!(file, "{}", block_json)?;
+                match timeout(NETWORK_TIMEOUT, self.chain.get_block_by_number(current)).await {
+                    // write block to file
+                    // abort process in case of failure because we don't want to lose data
+                    Ok(Ok(block)) => {
+                        let block_json = match serde_json::to_string(&block) {
+                            Ok(json) => json,
+                            Err(e) => {
+                                tracing::error!("failed to serialize block to json");
+                                return Err(e).context("failed to serialize block to json");
+                            }
+                        };
+                        if let Err(e) = writeln!(file, "{}", block_json) {
+                            tracing::error!(filename = %self.filename.clone(), "failed to write block to file");
+                            return Err(e).context("failed to write block to file");
+                        };
                         break;
                     }
-                    Err(_) => {
-                        tracing::warn!("retrying block download");
+                    // just retry because it is timeout
+                    Err(e) => {
+                        tracing::warn!(reason = ?e, "retrying block download");
+                    }
+                    // just retry because it is network error
+                    Ok(Err(e)) => {
+                        tracing::warn!(reason = ?e, "retrying block download");
                     }
                 }
             }
