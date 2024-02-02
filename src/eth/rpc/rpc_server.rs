@@ -3,7 +3,6 @@
 use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::Duration;
 
 use ethereum_types::U256;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
@@ -15,7 +14,6 @@ use jsonrpsee::types::Params;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
-use tokio::sync::broadcast;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;

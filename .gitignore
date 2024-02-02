@@ -2,6 +2,9 @@
 .vscode
 .tool-versions
 
+# Data
+data/*.json
+
 # E2E (Stratus)
 e2e/artifacts
 e2e/typechain-types
