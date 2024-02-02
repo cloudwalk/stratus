@@ -76,4 +76,3 @@ fn init_evms(config: &Config, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn 
     tracing::info!(evms = %config.num_evms, "evms initialized");
     NonEmpty::from_vec(evms).unwrap()
 }
-

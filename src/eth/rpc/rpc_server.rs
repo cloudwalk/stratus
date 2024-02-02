@@ -44,16 +44,12 @@ use crate::eth::EthExecutor;
 // -----------------------------------------------------------------------------
 
 /// Starts JSON-RPC server.
-pub async fn serve_rpc(
-    executor: EthExecutor,
-    eth_storage: Arc<dyn EthStorage>,
-    address: SocketAddr,
-) -> anyhow::Result<()> {
+pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, address: SocketAddr) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     let subscriptions_cleaner_handle = Arc::clone(&subs).spawn_subscriptions_cleaner();
     let logs_notifier_handle = Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
-    let heads_notifier_handle =  Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
+    let heads_notifier_handle = Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
 
     // configure context
     let ctx = RpcContext {
