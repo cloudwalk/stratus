@@ -1,3 +1,3 @@
 INSERT INTO account_slots VALUES ($1, $2, $3, $4)
-ON CONFLICT (idx, account_address, block_number)
+ON CONFLICT (idx, account_address)
 DO UPDATE SET value = EXCLUDED.value
