@@ -1,16 +1,9 @@
-use std::cmp::min;
 use std::env;
-use std::fs::OpenOptions;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use futures::StreamExt;
-use futures::TryStreamExt;
 use stratus::eth::primitives::BlockNumber;
 use stratus::infra::init_tracing;
 use stratus::infra::BlockchainClient;
@@ -40,7 +33,6 @@ async fn main() -> anyhow::Result<()> {
         sleep(POLL_LATENCY).await;
     }
 }
-
 
 async fn block_json(chain: Arc<BlockchainClient>, current: BlockNumber) -> anyhow::Result<String> {
     // keep trying to download until success
