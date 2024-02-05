@@ -58,7 +58,7 @@ impl BlockchainClient {
     }
 
     pub async fn get_transaction_receipt(&self, transaction_hash: Hash) -> anyhow::Result<JsonValue> {
-        tracing::debug!(%transaction_hash, "retrieving block");
+        tracing::debug!(%transaction_hash, "retrieving transaction receipt");
 
         let serde_transaction_hash = serde_json::to_value(transaction_hash)?;
         match self
@@ -68,26 +68,26 @@ impl BlockchainClient {
         {
             Ok(block) => Ok(block),
             Err(e) => {
-                tracing::error!(reason = ?e, "failed to retrieve block by transactionHash");
-                Err(e).context("failed to retrieve block by number")
+                tracing::error!(reason = ?e, "failed to retrieve block by transaction hash");
+                Err(e).context("failed to retrieve transaction hash")
             }
         }
     }
 
     pub async fn get_transaction_slots(&self, contract_hash: Address, number: BlockNumber) -> anyhow::Result<JsonValue> {
-        let serde_transaction_hash = serde_json::to_value(contract_hash)?;
+        let serde_contract_hash = serde_json::to_value(contract_hash)?;
         let serde_slot = serde_json::to_value(Hash::new(hex!("0000000000000000000000000000000000000000000000000000000000000000")))?;
         let serde_number = serde_json::to_value(number)?;
 
         match self
             .http
-            .request::<JsonValue, Vec<JsonValue>>("eth_getStorageAt", vec![serde_transaction_hash, serde_slot, serde_number])
+            .request::<JsonValue, Vec<JsonValue>>("eth_getStorageAt", vec![serde_contract_hash, serde_slot, serde_number])
             .await
         {
             Ok(block) => Ok(block),
             Err(e) => {
-                tracing::error!(reason = ?e, "failed to retrieve block by transactionHash");
-                Err(e).context("failed to retrieve block by number")
+                tracing::error!(reason = ?e, "failed to retrieve block by transaction slot");
+                Err(e).context("failed to retrieve transaction slot")
             }
         }
     }
