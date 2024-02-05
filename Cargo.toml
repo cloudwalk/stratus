@@ -85,6 +85,10 @@ phf_codegen = "0.11.2"
 name = "task-get-blocks"
 path = "src/bin/task-get-blocks.rs"
 
+[[bin]]
+name = "rpc-server-poller"
+path = "src/bin/rpc_server_poller.rs"
+
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------
