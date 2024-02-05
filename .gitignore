@@ -4,6 +4,7 @@
 
 # Data
 data/*.json
+data/*.db
 
 # E2E (Stratus)
 e2e/artifacts

@@ -82,8 +82,8 @@ phf_codegen = "0.11.2"
 # ------------------------------------------------------------------------------
 
 [[bin]]
-name = "task-get-blocks"
-path = "src/bin/task-get-blocks.rs"
+name = "fetch-rpc"
+path = "src/bin/importer/fetch_rpc.rs"
 
 [[bin]]
 name = "rpc-server-poller"
