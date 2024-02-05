@@ -44,13 +44,11 @@ impl Postgres {
         let genesis = sqlx::query!("SELECT number FROM blocks WHERE number = 0")
             .fetch_optional(&self.connection_pool)
             .await?;
-        match genesis {
-            Some(_) => {}
-            None => {
-                self.save_block(BlockMiner::genesis()).await?;
-                self.insert_test_accounts_in_genesis(test_accounts()).await?;
-            }
-        };
+
+        if genesis.is_none() {
+            self.save_block(BlockMiner::genesis()).await?;
+            self.insert_test_accounts_in_genesis(test_accounts()).await?;
+        }
 
         Ok(())
     }
