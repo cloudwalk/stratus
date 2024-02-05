@@ -50,7 +50,7 @@ impl BlockHeader {
             gas: Gas::ZERO,
             bloom: LogsBloom::default(),
             timestamp_in_secs: UnixTime::from(timestamp_in_secs),
-            parent_hash: number.predecessor().map(|n| n.hash()).unwrap_or(Hash::zero()),
+            parent_hash: number.prev().map(|n| n.hash()).unwrap_or(Hash::zero()),
         }
     }
 }

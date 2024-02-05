@@ -9,6 +9,8 @@
 
 use std::fmt::Display;
 use std::num::TryFromIntError;
+use std::ops::Add;
+use std::ops::AddAssign;
 use std::str::FromStr;
 
 use anyhow::anyhow;
@@ -29,18 +31,23 @@ pub struct BlockNumber(U64);
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());
 
-    // Returns the keccak256 hash of the block number
+    /// Calculates the keccak256 hash of the block number.
     pub fn hash(&self) -> Hash {
         Hash::new(keccak256(<[u8; 8]>::from(*self)))
     }
 
-    // Returns the previous block number
-    pub fn predecessor(&self) -> Option<Self> {
+    /// Returns the previous block number.
+    pub fn prev(&self) -> Option<Self> {
         if self.0.is_zero() {
             None
         } else {
             Some(Self(self.0 - 1))
         }
+    }
+
+    /// Returns the next block number.
+    pub fn next(&self) -> Self {
+        Self(self.0 + 1)
     }
 }
 
@@ -53,6 +60,24 @@ impl Display for BlockNumber {
 impl Dummy<Faker> for BlockNumber {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Math
+// -----------------------------------------------------------------------------
+
+impl Add<usize> for BlockNumber {
+    type Output = BlockNumber;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl AddAssign<usize> for BlockNumber {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 = self.0 + rhs;
     }
 }
 

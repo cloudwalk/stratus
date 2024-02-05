@@ -14,7 +14,6 @@ use jsonrpsee::types::Params;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
-use tokio::sync::broadcast;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -43,17 +42,12 @@ use crate::eth::EthExecutor;
 // -----------------------------------------------------------------------------
 
 /// Starts JSON-RPC server.
-pub async fn serve_rpc(
-    executor: EthExecutor,
-    eth_storage: Arc<dyn EthStorage>,
-    address: SocketAddr,
-    mut cancel_signal: broadcast::Receiver<()>,
-) -> anyhow::Result<()> {
+pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, address: SocketAddr) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
-    Arc::clone(&subs).spawn_subscriptions_cleaner();
-    Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
-    Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
+    let subscriptions_cleaner_handle = Arc::clone(&subs).spawn_subscriptions_cleaner();
+    let logs_notifier_handle = Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
+    let heads_notifier_handle = Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
 
     // configure context
     let ctx = RpcContext {
@@ -85,15 +79,21 @@ pub async fn serve_rpc(
         .set_id_provider(RandomStringIdProvider::new(8))
         .build(address)
         .await?;
-    let handle = server.start(module);
+    let _server_handle = server.start(module);
 
     tokio::select! {
-        _ = cancel_signal.recv() => {
-            tracing::info!("Cancellation signal received, stopping RPC server");
-            let _ = handle.stop();
-            Err(anyhow::anyhow!("Cancellation signal received, stopping RPC server"))
+        _ = subscriptions_cleaner_handle => {
+            tracing::info!("subscriptions cleaner stopped");
+        }
+        _ = logs_notifier_handle => {
+            tracing::info!("logs notifier stopped");
+        }
+        _ = heads_notifier_handle => {
+            tracing::info!("heads notifier stopped");
         }
     }
+
+    Ok(())
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
