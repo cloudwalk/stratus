@@ -15,12 +15,13 @@ use crate::metrics_impl_describe;
 use crate::metrics_impl_fn_inc;
 
 /// Init application global metrics.
+///
+/// Default configuration runs metrics exporter on port 9000.
 pub fn init_metrics() {
-    // default configuration runs metrics exporter on port 9000
-    PrometheusBuilder::new().install().expect("metrics initialization failed");
-    register_metrics();
+    tracing::info!("starting metrics");
 
-    tracing::info!("metrics initialized");
+    PrometheusBuilder::new().install().expect("failed to start metrics");
+    register_metrics();
 }
 
 // Create all applications metrics.

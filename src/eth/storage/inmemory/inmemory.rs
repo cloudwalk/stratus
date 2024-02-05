@@ -63,6 +63,8 @@ struct InMemoryStorageState {
 
 impl Default for InMemoryStorage {
     fn default() -> Self {
+        tracing::info!("starting inmemory storage");
+
         let mut state = InMemoryStorageState::default();
 
         // add genesis block to state
