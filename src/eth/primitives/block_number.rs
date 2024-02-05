@@ -49,6 +49,11 @@ impl BlockNumber {
     pub fn next(&self) -> Self {
         Self(self.0 + 1)
     }
+
+    /// Converts itself to i64.
+    pub fn as_i64(&self) -> i64 {
+        self.0.as_u64() as i64
+    }
 }
 
 impl Display for BlockNumber {
@@ -101,24 +106,6 @@ impl FromStr for BlockNumber {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> Self
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for BlockNumber {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        // HACK: Actually BIGSERIAL, in theory
-        // they are equal
-        sqlx::postgres::PgTypeInfo::with_name("INT8")
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 impl From<BlockNumber> for U64 {
@@ -144,5 +131,23 @@ impl TryFrom<BlockNumber> for i64 {
 impl From<BlockNumber> for [u8; 8] {
     fn from(block_number: BlockNumber) -> Self {
         block_number.0.as_u64().to_be_bytes()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: sqlx
+// -----------------------------------------------------------------------------
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for BlockNumber {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        // HACK: Actually BIGSERIAL, in theory
+        // they are equal
+        sqlx::postgres::PgTypeInfo::with_name("INT8")
     }
 }

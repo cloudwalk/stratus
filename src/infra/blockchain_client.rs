@@ -13,7 +13,7 @@ pub struct BlockchainClient {
 impl BlockchainClient {
     /// Creates a new RPC client.
     pub fn new(url: &str) -> anyhow::Result<Self> {
-        tracing::info!(%url, "initing blockchain client");
+        tracing::info!(%url, "starting blockchain client");
         let http = match HttpClientBuilder::default().build(url) {
             Ok(client) => client,
             Err(e) => {

@@ -10,13 +10,13 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Config {
-    /// Storage implementation.
-    #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
-    pub storage: StorageConfig,
-
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    /// Storage implementation.
+    #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
+    pub storage: StorageConfig,
 
     /// Number of EVM instances to run.
     #[arg(long = "evms", env = "EVMS", default_value = "1")]
@@ -29,6 +29,10 @@ pub struct Config {
     /// Number of threads to execute global blocking tasks.
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "1")]
     pub num_blocking_threads: usize,
+
+    /// External RPC endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: Option<String>,
 }
 
 /// Storage configuration.

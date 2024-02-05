@@ -1,5 +1,8 @@
 import '.justfile_helpers' # _lint, _outdated
 
+postgres_url := "postgres://postgres:123@0.0.0.0:5432/stratus"
+testnet_url  := "https://rpc.testnet.cloudwalk.io/"
+
 # Project: Show available tasks
 default:
     just --list --unsorted
@@ -19,13 +22,13 @@ setup:
 # Stratus tasks
 # ------------------------------------------------------------------------------
 
-# Stratus: Run locally with debug options
+# Stratus: Run main service locally with debug options
 run *args="":
     #!/bin/bash
     RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- {{args}}
     exit 0
 
-# Stratus: Run locally with release options
+# Stratus: Run main service locally with release options
 run-release *args="":
     RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- {{args}}
 
@@ -60,7 +63,7 @@ lint-check:
 
 # Stratus: Compile SQLx queries
 sqlx:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@0.0.0.0:5432/stratus -- --all-targets
+    SQLX_OFFLINE=true cargo sqlx prepare --database-url {{postgres_url}} -- --all-targets
 
 # Stratus: Check for outdated crates
 outdated:
@@ -69,6 +72,13 @@ outdated:
 # Stratus: Update only the project dependencies
 update:
     cargo update stratus
+
+# ------------------------------------------------------------------------------
+# Jobs tasks
+# ------------------------------------------------------------------------------
+# Job: Run "Fetch RPC" locally with debug options.
+job-fetch-rpc:
+    cargo run --bin fetch-rpc -- --storage {{postgres_url}} --external-rpc {{testnet_url}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -184,7 +194,7 @@ e2e-stratus-postgres test="":
     wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
 
     echo "-> Starting Stratus"
-    RUST_LOG=debug just run -a 0.0.0.0:3000 -s postgres://postgres:123@0.0.0.0:5432/stratus > stratus.log &
+    RUST_LOG=debug just run -a 0.0.0.0:3000 -s {{postgres_url}} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo

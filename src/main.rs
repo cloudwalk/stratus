@@ -52,7 +52,6 @@ async fn run_rpc_server(config: Arc<Config>) -> anyhow::Result<()> {
     tracing::info!("Starting RPC server");
 
     let storage: Arc<dyn EthStorage> = match &config.storage {
-        // init services
         StorageConfig::InMemory => Arc::new(InMemoryStorage::default().metrified()),
         StorageConfig::Postgres { url } => Arc::new(Postgres::new(url).await?.metrified()),
     };
