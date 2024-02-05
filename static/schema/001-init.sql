@@ -13,9 +13,23 @@ CREATE TABLE IF NOT EXISTS blocks (
 
 CREATE TABLE IF NOT EXISTS accounts (
     address BYTEA NOT NULL CHECK (LENGTH(address) = 20),
-    nonce NUMERIC NOT NULL CHECK (nonce >= 0),
-    balance NUMERIC NOT NULL CHECK (balance >= 0),
     bytecode BYTEA CHECK (LENGTH(bytecode) <= 24000),
+    latest_balance NUMERIC NOT NULL CHECK (latest_balance >= 0),
+    latest_nonce NUMERIC NOT NULL CHECK (latest_nonce >= 0),
+    creation_block  BIGSERIAL NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
+    PRIMARY KEY (address)
+);
+
+CREATE TABLE IF NOT EXISTS historical_balances (
+    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) REFERENCES accounts (address) ON DELETE CASCADE,
+    balance NUMERIC NOT NULL CHECK (balance >= 0),
+    block_number BIGSERIAL NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
+    PRIMARY KEY (address, block_number)
+);
+
+CREATE TABLE IF NOT EXISTS historical_nonces (
+    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) REFERENCES accounts (address) ON DELETE CASCADE,
+    nonce NUMERIC NOT NULL CHECK (nonce >= 0),
     block_number BIGSERIAL NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
     PRIMARY KEY (address, block_number)
 );
@@ -23,9 +37,16 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE TABLE IF NOT EXISTS account_slots (
     idx BYTEA NOT NULL CHECK (LENGTH(idx) = 32),
     value BYTEA NOT NULL CHECK (LENGTH(value) = 32),
-    account_address BYTEA NOT NULL,
+    account_address BYTEA NOT NULL REFERENCES accounts (address) ON DELETE CASCADE,
+    creation_block  BIGSERIAL NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
+    PRIMARY KEY (idx, account_address)
+);
+
+CREATE TABLE IF NOT EXISTS historical_slots (
+    idx BYTEA NOT NULL CHECK (LENGTH(idx) = 32),
+    value BYTEA NOT NULL CHECK (LENGTH(value) = 32),
+    account_address BYTEA NOT NULL REFERENCES accounts (address) ON DELETE CASCADE,
     block_number BIGSERIAL NOT NULL CHECK (block_number >= 0) REFERENCES blocks (number) ON DELETE CASCADE,
-    FOREIGN KEY (account_address, block_number) REFERENCES accounts (address, block_number) ON DELETE CASCADE,
     PRIMARY KEY (idx, account_address, block_number)
 );
 
@@ -42,7 +63,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     ,idx_in_block SERIAL NOT NULL CHECK (idx_in_block >= 0)
     ,block_number BIGSERIAL REFERENCES blocks(number) ON DELETE CASCADE NOT NULL CHECK (block_number >= 0)
     ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
-    -- ,block_timestamp INTEGER REFERENCES blocks(timestamp_in_secs) NOT NULL CHECK (block_timestamp >= 0)
     ,v BYTEA NOT NULL
     ,r BYTEA NOT NULL
     ,s BYTEA NOT NULL
@@ -73,11 +93,3 @@ CREATE TABLE IF NOT EXISTS topics (
     ,FOREIGN KEY (block_hash, log_idx) REFERENCES logs (block_hash, log_idx)
     ,PRIMARY KEY (block_hash, log_idx, topic_idx)
 );
-
-CREATE SEQUENCE IF NOT EXISTS block_number_seq
-    AS BIGINT
-    MINVALUE 0
-    START WITH 0
-    INCREMENT BY 1
-    NO CYCLE
-    OWNED BY blocks.number;

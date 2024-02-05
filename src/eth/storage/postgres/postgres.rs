@@ -41,32 +41,73 @@ impl EthStorage for Postgres {
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         tracing::debug!(%address, "reading account");
-
-        let block = match point_in_time {
-            StoragePointInTime::Present => self.read_current_block_number().await?,
-            StoragePointInTime::Past(number) => *number,
+        let account = match point_in_time {
+            StoragePointInTime::Present => {
+                // We have to get the account information closest to the block with the given block_number
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    SELECT
+                        address as "address: _",
+                        latest_nonce as "nonce: _",
+                        latest_balance as "balance: _",
+                        bytecode as "bytecode: _"
+                    FROM accounts
+                    WHERE address = $1
+                    "#,
+                    address.as_ref()
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?
+            }
+            StoragePointInTime::Past(number) => {
+                let block_number: i64 = (*number).try_into()?;
+                // We have to get the account information closest to the block with the given block_number
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    WITH closest_nonce_block AS (
+                        SELECT MAX(block_number) as block_number
+                        FROM historical_nonces
+                        WHERE block_number <= $2
+                        AND address = $1
+                    ),
+                    closest_balance_block AS (
+                        SELECT MAX(block_number) as block_number
+                        FROM historical_balances
+                        WHERE block_number <= $2
+                        AND address = $1
+                    ),
+                    closest_nonce AS (
+                        SELECT nonce
+                        FROM historical_nonces
+                        JOIN closest_nonce_block ON true
+                        WHERE historical_nonces.block_number = closest_nonce_block.block_number
+                        AND address = $1
+                    ),
+                    closest_balance AS (
+                        SELECT balance
+                        FROM historical_balances
+                        JOIN closest_balance_block ON true
+                        WHERE historical_balances.block_number = closest_balance_block.block_number
+                        AND address = $1
+                    )
+                    SELECT
+                        accounts.address as "address: _",
+                        closest_nonce.nonce as "nonce: _",
+                        closest_balance.balance as "balance: _",
+                        bytecode as "bytecode: _"
+                    FROM accounts
+                    JOIN closest_nonce ON true
+                    JOIN closest_balance ON true
+                    WHERE accounts.address = $1"#,
+                    address.as_ref(),
+                    block_number,
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?
+            }
         };
-
-        let block_number = i64::try_from(block)?;
-
-        // We have to get the account information closest to the block with the given block_number
-        let account = sqlx::query_as!(
-            Account,
-            r#"
-                SELECT
-                    address as "address: _",
-                    nonce as "nonce: _",
-                    balance as "balance: _",
-                    bytecode as "bytecode: _"
-                FROM accounts
-                WHERE address = $1 AND block_number <= $2
-                ORDER BY block_number DESC
-            "#,
-            address.as_ref(),
-            block_number,
-        )
-        .fetch_optional(&self.connection_pool)
-        .await?;
 
         // If there is no account, we return
         // an "empty account"
@@ -82,36 +123,55 @@ impl EthStorage for Postgres {
 
         Ok(acc)
     }
+
     async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         tracing::debug!(%address, %slot_index, "reading slot");
-
-        let block = match point_in_time {
-            StoragePointInTime::Present => self.read_current_block_number().await?,
-            StoragePointInTime::Past(number) => *number,
-        };
-
-        let block_number = i64::try_from(block)?;
 
         // TODO: improve this conversion
         let slot_index: [u8; 32] = slot_index.clone().into();
 
-        // We have to get the slot information closest to the block with the given block_number
-        let slot = sqlx::query_as!(
-            Slot,
-            r#"
-                SELECT
-                    idx as "index: _",
-                    value as "value: _"
-                FROM account_slots
-                WHERE account_address = $1 AND idx = $2 AND block_number <= $3
-                ORDER BY block_number DESC
-            "#,
-            address.as_ref(),
-            slot_index.as_ref(),
-            block_number,
-        )
-        .fetch_optional(&self.connection_pool)
-        .await?;
+        let slot = match point_in_time {
+            StoragePointInTime::Present =>
+                sqlx::query_as!(
+                    Slot,
+                    r#"
+                        SELECT
+                            idx as "index: _",
+                            value as "value: _"
+                        FROM account_slots
+                        WHERE account_address = $1
+                        AND idx = $2
+                    "#,
+                    address.as_ref(),
+                    slot_index.as_ref()
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?,
+            StoragePointInTime::Past(number) => {
+                let block_number: i64 = (*number).try_into()?;
+                sqlx::query_as!(
+                    Slot,
+                    r#"
+                        SELECT
+                            idx as "index: _",
+                            value as "value: _"
+                        FROM historical_slots
+                        WHERE account_address = $1
+                        AND idx = $2
+                        AND block_number = (SELECT MAX(block_number)
+                                                FROM historical_slots
+                                                WHERE account_address = $1
+                                                AND idx = $2
+                                                AND block_number <= $3)
+                    "#,
+                    address.as_ref(),
+                    slot_index.as_ref(),
+                    block_number,
+                )
+                .fetch_optional(&self.connection_pool)
+                .await?
+            }
+        };
 
         // If there is no slot, we return
         // an "empty slot"
@@ -420,7 +480,6 @@ impl EthStorage for Postgres {
     // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
     // neither worked for some reason I was not able to determine at this time)
-    // TODO: save slots
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         tracing::debug!(block = ?block, "saving block");
         sqlx::query_file!(
@@ -483,28 +542,74 @@ impl EthStorage for Postgres {
                         })
                         .map(|val| val.as_ref().to_owned());
 
+                    let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
+                    let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+                    let balance = BigDecimal::try_from(balance)?;
+                    let nonce = BigDecimal::try_from(nonce)?;
+
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_account.sql",
                         change.address.as_ref(),
-                        BigDecimal::try_from(nonce)?,
-                        BigDecimal::try_from(balance)?,
+                        nonce,
+                        balance,
                         bytecode,
-                        i64::try_from(block.header.number).context("failed to convert block number")?
+                        block_number
                     )
-                    .execute(&self.connection_pool)
+                    .execute(&mut *tx)
                     .await
                     .context("failed to insert account")?;
+
+                    sqlx::query!(
+                        "INSERT INTO historical_balances (address, balance, block_number) VALUES ($1, $2, $3)",
+                        change.address.as_ref(),
+                        balance,
+                        block_number
+                    )
+                    .execute(&mut *tx)
+                    .await
+                    .context("failed to insert balance")?;
+
+                    sqlx::query!(
+                        "INSERT INTO historical_nonces (address, nonce, block_number) VALUES ($1, $2, $3)",
+                        change.address.as_ref(),
+                        nonce,
+                        block_number
+                    )
+                    .execute(&mut *tx)
+                    .await
+                    .context("failed to insert nonce")?;
+
+                    tx.commit().await.context("Failed to commit transaction")?;
+
                     for (slot_idx, value) in change.slots {
+                        let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
+                        let idx = &<[u8; 32]>::from(slot_idx);
+                        let val = &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value); // the or condition should never happen
+                        let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+
                         sqlx::query_file!(
                             "src/eth/storage/postgres/queries/insert_account_slot.sql",
-                            &<[u8; 32]>::from(slot_idx),
-                            &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value), // this should never happen
+                            idx,
+                            val,
                             change.address.as_ref(),
-                            i64::try_from(block.header.number).context("failed to convert block number")?
+                            block_number
                         )
-                        .execute(&self.connection_pool)
+                        .execute(&mut *tx)
                         .await
                         .context("failed to insert slot")?;
+
+                        sqlx::query_file!(
+                            "src/eth/storage/postgres/queries/insert_historical_slot.sql",
+                            idx,
+                            val,
+                            change.address.as_ref(),
+                            block_number
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .context("failed to insert slot to history")?;
+
+                        tx.commit().await.context("failed to commit transaction")?;
                     }
                 }
             }
@@ -589,6 +694,88 @@ impl EthStorage for Postgres {
         sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
             .execute(&self.connection_pool)
             .await?;
+
+        // Rollback the values of account.latest_balance, account.latest_nonce and
+        // account_slots.value.
+
+        sqlx::query!(
+            r#"
+            -- Get the block_numbers with the latest balance change for each address
+            WITH latest_block_numbers AS (
+                SELECT address, MAX(block_number) as block_number
+                FROM historical_balances
+                GROUP BY address
+            ),
+            -- Get the latest balance change for each address
+            latest_balances AS (
+                SELECT accounts.address, historical_balances.balance
+                FROM accounts
+                JOIN latest_block_numbers
+                ON latest_block_numbers.address = accounts.address
+                LEFT JOIN historical_balances on accounts.address = historical_balances.address
+                    AND latest_block_numbers.block_number = historical_balances.block_number
+            )
+            -- Update the accounts with the balances in latest_balances
+            UPDATE accounts
+            SET latest_balance = latest_balances.balance
+            FROM latest_balances
+            WHERE latest_balances.address = accounts.address
+                AND latest_balances.balance IS DISTINCT FROM accounts.latest_balance"#
+        )
+        .execute(&self.connection_pool)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            WITH latest_block_numbers AS (
+                SELECT address, MAX(block_number) as block_number
+                FROM historical_nonces
+                GROUP BY address
+            ),
+            latest_nonces AS (
+                SELECT accounts.address, historical_nonces.nonce
+                FROM accounts
+                JOIN latest_block_numbers
+                ON latest_block_numbers.address = accounts.address
+                LEFT JOIN historical_nonces on accounts.address = historical_nonces.address
+                    AND latest_block_numbers.block_number = historical_nonces.block_number
+            )
+            UPDATE accounts
+            SET latest_nonce = latest_nonces.nonce
+            FROM latest_nonces
+            WHERE latest_nonces.address = accounts.address
+                AND latest_nonces.nonce IS DISTINCT FROM accounts.latest_nonce"#
+        )
+        .execute(&self.connection_pool)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            WITH latest_block_numbers AS (
+                SELECT account_address, idx, MAX(block_number) as block_number
+                FROM historical_slots
+                GROUP BY idx, account_address
+            ),
+            latest_slots AS (
+                SELECT account_slots.account_address, historical_slots.idx, historical_slots.value
+                FROM account_slots
+                JOIN latest_block_numbers
+                ON latest_block_numbers.account_address = account_slots.account_address
+                    AND account_slots.idx = latest_block_numbers.idx
+                LEFT JOIN historical_slots ON account_slots.account_address = historical_slots.account_address
+                    AND latest_block_numbers.block_number = historical_slots.block_number
+              		AND account_slots.idx = historical_slots.idx
+            )
+            UPDATE account_slots
+            SET value = latest_slots.value
+            FROM latest_slots
+            WHERE latest_slots.account_address = account_slots.account_address
+                AND latest_slots.idx = account_slots.idx
+                AND latest_slots.value IS DISTINCT FROM account_slots.value"#
+        )
+        .execute(&self.connection_pool)
+        .await?;
+
         Ok(())
     }
 }
