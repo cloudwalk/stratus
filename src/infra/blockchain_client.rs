@@ -1,10 +1,13 @@
 use anyhow::Context;
+use hex_literal::hex;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use serde_json::Value as JsonValue;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
 
 pub struct BlockchainClient {
     http: HttpClient,
@@ -40,7 +43,7 @@ impl BlockchainClient {
     pub async fn get_block_by_number(&self, number: BlockNumber) -> anyhow::Result<JsonValue> {
         tracing::debug!(%number, "retrieving block");
 
-        let number = serde_json::to_value(number).unwrap();
+        let number = serde_json::to_value(number)?;
         match self
             .http
             .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number, JsonValue::Bool(true)])
@@ -49,6 +52,42 @@ impl BlockchainClient {
             Ok(block) => Ok(block),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to retrieve block by number");
+                Err(e).context("failed to retrieve block by number")
+            }
+        }
+    }
+
+    pub async fn get_transaction_receipt(&self, transaction_hash: Hash) -> anyhow::Result<JsonValue> {
+        tracing::debug!(%transaction_hash, "retrieving block");
+
+        let serde_transaction_hash = serde_json::to_value(transaction_hash)?;
+        match self
+            .http
+            .request::<JsonValue, Vec<JsonValue>>("eth_getTransactionReceipt", vec![serde_transaction_hash])
+            .await
+        {
+            Ok(block) => Ok(block),
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to retrieve block by transactionHash");
+                Err(e).context("failed to retrieve block by number")
+            }
+        }
+    }
+
+    pub async fn get_transaction_slots(&self, contract_hash: Address, number: BlockNumber) -> anyhow::Result<JsonValue> {
+
+        let serde_transaction_hash = serde_json::to_value(contract_hash)?;
+        let serde_slot = serde_json::to_value(Hash::new(hex!("0000000000000000000000000000000000000000000000000000000000000000")))?;
+        let serde_number = serde_json::to_value(number)?;
+
+        match self
+            .http
+            .request::<JsonValue, Vec<JsonValue>>("eth_getStorageAt", vec![serde_transaction_hash, serde_slot, serde_number])
+            .await
+        {
+            Ok(block) => Ok(block),
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to retrieve block by transactionHash");
                 Err(e).context("failed to retrieve block by number")
             }
         }
