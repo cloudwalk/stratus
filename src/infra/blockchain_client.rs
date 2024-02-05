@@ -75,7 +75,6 @@ impl BlockchainClient {
     }
 
     pub async fn get_transaction_slots(&self, contract_hash: Address, number: BlockNumber) -> anyhow::Result<JsonValue> {
-
         let serde_transaction_hash = serde_json::to_value(contract_hash)?;
         let serde_slot = serde_json::to_value(Hash::new(hex!("0000000000000000000000000000000000000000000000000000000000000000")))?;
         let serde_number = serde_json::to_value(number)?;
