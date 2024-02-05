@@ -10,7 +10,6 @@ use sqlx::PgPool;
 
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 
@@ -46,16 +45,45 @@ impl Postgres {
         tracing::debug!("adding test accounts to genesis block");
 
         for acc in accounts {
+            let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
+            let block_number = 0;
+            let balance = BigDecimal::try_from(acc.balance)?;
+            let nonce = BigDecimal::try_from(acc.nonce)?;
+            let bytecode = acc.bytecode.as_deref();
+
             sqlx::query_file!(
                 "src/eth/storage/postgres/queries/insert_account.sql",
-                acc.address.as_bytes(),
-                BigDecimal::try_from(acc.nonce)?,
-                BigDecimal::try_from(acc.balance)?,
-                acc.bytecode.as_deref()
+                acc.address.as_ref(),
+                nonce,
+                balance,
+                bytecode,
+                block_number
             )
-            .execute(&self.connection_pool)
+            .execute(&mut *tx)
             .await
             .context("failed to insert account")?;
+
+            sqlx::query!(
+                "INSERT INTO historical_balances (address, balance, block_number) VALUES ($1, $2, $3)",
+                acc.address.as_ref(),
+                balance,
+                block_number
+            )
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert balance")?;
+
+            sqlx::query!(
+                "INSERT INTO historical_nonces (address, nonce, block_number) VALUES ($1, $2, $3)",
+                acc.address.as_ref(),
+                nonce,
+                block_number
+            )
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert nonce")?;
+
+            tx.commit().await.context("Failed to commit transaction")?;
         }
 
         Ok(())

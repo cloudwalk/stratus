@@ -144,10 +144,11 @@ impl EthStorage for Postgres {
                         FROM historical_slots
                         WHERE account_address = $1
                         AND idx = $2
-                        AND block_number <= (SELECT MAX(block_number)
+                        AND block_number = (SELECT MAX(block_number)
                                                 FROM historical_slots
-                                                WHERE block_number <= $3
-                                                AND account_address = $1)
+                                                WHERE account_address = $1
+                                                AND idx = $2
+                                                AND block_number <= $3)
                     "#,
                     address.as_ref(),
                     slot_index.as_ref(),
@@ -538,6 +539,7 @@ impl EthStorage for Postgres {
                         nonce,
                         balance,
                         bytecode,
+                        block_number
                     )
                     .execute(&mut *tx)
                     .await
@@ -569,17 +571,25 @@ impl EthStorage for Postgres {
                         let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
                         let idx = &<[u8; 32]>::from(slot_idx);
                         let val = &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value); // the or condition should never happen
-                        sqlx::query_file!("src/eth/storage/postgres/queries/insert_account_slot.sql", idx, val, change.address.as_ref(),)
-                            .execute(&mut *tx)
-                            .await
-                            .context("failed to insert slot")?;
+                        let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+
+                        sqlx::query_file!(
+                            "src/eth/storage/postgres/queries/insert_account_slot.sql",
+                            idx,
+                            val,
+                            change.address.as_ref(),
+                            block_number
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .context("failed to insert slot")?;
 
                         sqlx::query_file!(
                             "src/eth/storage/postgres/queries/insert_historical_slot.sql",
                             idx,
                             val,
                             change.address.as_ref(),
-                            i64::try_from(block.header.number).context("failed to convert block number")?
+                            block_number
                         )
                         .execute(&mut *tx)
                         .await
@@ -667,33 +677,81 @@ impl EthStorage for Postgres {
     }
 
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
-        // TODO: Fixthis
         sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
             .execute(&self.connection_pool)
             .await?;
 
         sqlx::query!(
-            r#"UPDATE accounts
-            SET latest_balance = (SELECT balance
+            r#"
+            WITH latest_block_numbers AS (
+                SELECT address, MAX(block_number) as block_number
+                FROM historical_balances
+                GROUP BY address
+            ),
+            latest_balances AS (
+                SELECT accounts.address, historical_balances.balance
                 FROM accounts
-                JOIN (SELECT address, MAX(block_number) as block_number
-                                    FROM historical_balances
-                                    GROUP BY address) as block_numbers ON block_numbers.address = accounts.address
+                JOIN latest_block_numbers
+                ON latest_block_numbers.address = accounts.address
                 LEFT JOIN historical_balances on accounts.address = historical_balances.address
-                AND block_numbers.block_number = historical_balances.block_number)"#
+                    AND latest_block_numbers.block_number = historical_balances.block_number
+            )
+            UPDATE accounts
+            SET latest_balance = latest_balances.balance
+            FROM latest_balances
+            WHERE latest_balances.address = accounts.address
+                AND latest_balances.balance IS DISTINCT FROM accounts.latest_balance"#
         )
         .execute(&self.connection_pool)
         .await?;
 
         sqlx::query!(
-            r#"UPDATE accounts
-            SET latest_nonce = (SELECT nonce
+            r#"
+            WITH latest_block_numbers AS (
+                SELECT address, MAX(block_number) as block_number
+                FROM historical_nonces
+                GROUP BY address
+            ),
+            latest_nonces AS (
+                SELECT accounts.address, historical_nonces.nonce
                 FROM accounts
-                JOIN (SELECT address, MAX(block_number) as block_number
-                                    FROM historical_nonces
-                                    GROUP BY address) as block_numbers ON block_numbers.address = accounts.address
+                JOIN latest_block_numbers
+                ON latest_block_numbers.address = accounts.address
                 LEFT JOIN historical_nonces on accounts.address = historical_nonces.address
-                AND block_numbers.block_number = historical_nonces.block_number)"#
+                    AND latest_block_numbers.block_number = historical_nonces.block_number
+            )
+            UPDATE accounts
+            SET latest_nonce = latest_nonces.nonce
+            FROM latest_nonces
+            WHERE latest_nonces.address = accounts.address
+                AND latest_nonces.nonce IS DISTINCT FROM accounts.latest_nonce"#
+        )
+        .execute(&self.connection_pool)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            WITH latest_block_numbers AS (
+                SELECT account_address, idx, MAX(block_number) as block_number
+                FROM historical_slots
+                GROUP BY idx, account_address
+            ),
+            latest_slots AS (
+                SELECT account_slots.account_address, historical_slots.idx, historical_slots.value
+                FROM account_slots
+                JOIN latest_block_numbers
+                ON latest_block_numbers.account_address = account_slots.account_address
+                    AND account_slots.idx = latest_block_numbers.idx
+                LEFT JOIN historical_slots ON account_slots.account_address = historical_slots.account_address
+                    AND latest_block_numbers.block_number = historical_slots.block_number
+              		AND account_slots.idx = historical_slots.idx
+            )
+            UPDATE account_slots
+            SET value = latest_slots.value
+            FROM latest_slots
+            WHERE latest_slots.account_address = account_slots.account_address
+                AND latest_slots.idx = account_slots.idx
+                AND latest_slots.value IS DISTINCT FROM account_slots.value"#
         )
         .execute(&self.connection_pool)
         .await?;
