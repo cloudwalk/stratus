@@ -35,10 +35,24 @@ impl Postgres {
 
         let postgres = Self { connection_pool };
 
-        postgres.save_block(BlockMiner::genesis()).await?;
-        postgres.insert_test_accounts_in_genesis(test_accounts()).await?;
+        postgres.insert_genesis().await?;
 
         Ok(postgres)
+    }
+
+    async fn insert_genesis(&self) -> anyhow::Result<()> {
+        let genesis = sqlx::query!("SELECT number FROM blocks WHERE number = 0")
+            .fetch_optional(&self.connection_pool)
+            .await?;
+        match genesis {
+            Some(_) => {}
+            None => {
+                self.save_block(BlockMiner::genesis()).await?;
+                self.insert_test_accounts_in_genesis(test_accounts()).await?;
+            }
+        };
+
+        Ok(())
     }
 
     async fn insert_test_accounts_in_genesis(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
