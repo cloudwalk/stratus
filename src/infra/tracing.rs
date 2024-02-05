@@ -4,6 +4,8 @@ use tracing_subscriber::EnvFilter;
 
 /// Init application global tracing.
 pub fn init_tracing() {
+    println!("starting tracing");
+
     // if tracing level not configured, set default
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "stratus=debug");
@@ -16,7 +18,7 @@ pub fn init_tracing() {
         .with_thread_names(true)
         .with_env_filter(EnvFilter::from_default_env())
         .try_init()
-        .expect("Tracing initialization failed");
+        .expect("failed to start tracing");
 
-    tracing::info!("tracing initialized");
+    tracing::info!("started tracing");
 }

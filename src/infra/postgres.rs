@@ -20,7 +20,7 @@ pub struct Postgres {
 
 impl Postgres {
     pub async fn new(url: &str) -> anyhow::Result<Self> {
-        tracing::info!(%url, "connecting to postgres");
+        tracing::info!(%url, "starting postgres client");
 
         let connection_pool = PgPoolOptions::new()
             .min_connections(1)
@@ -29,8 +29,8 @@ impl Postgres {
             .connect(url)
             .await
             .map_err(|e| {
-                tracing::error!(reason = ?e, %url, "failed to connect to postgres");
-                anyhow!("failed to connect to postgres")
+                tracing::error!(reason = ?e, %url, "failed to start postgres client");
+                anyhow!("failed to start postgres client")
             })?;
 
         let postgres = Self { connection_pool };
