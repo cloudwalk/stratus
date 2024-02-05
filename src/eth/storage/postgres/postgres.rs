@@ -66,26 +66,41 @@ impl EthStorage for Postgres {
                 sqlx::query_as!(
                     Account,
                     r#"
+                    WITH closest_nonce_block AS (
+                        SELECT MAX(block_number) as block_number
+                        FROM historical_nonces
+                        WHERE block_number <= $2
+                        AND address = $1
+                    ),
+                    closest_balance_block AS (
+                        SELECT MAX(block_number) as block_number
+                        FROM historical_balances
+                        WHERE block_number <= $2
+                        AND address = $1
+                    ),
+                    closest_nonce AS (
+                        SELECT nonce
+                        FROM historical_nonces
+                        JOIN closest_nonce_block ON true
+                        WHERE historical_nonces.block_number = closest_nonce_block.block_number
+                        AND address = $1
+                    ),
+                    closest_balance AS (
+                        SELECT balance
+                        FROM historical_balances
+                        JOIN closest_balance_block ON true
+                        WHERE historical_balances.block_number = closest_balance_block.block_number
+                        AND address = $1
+                    )
                     SELECT
                         accounts.address as "address: _",
-                        historical_nonces.nonce as "nonce: _",
-                        historical_balances.balance as "balance: _",
+                        closest_nonce.nonce as "nonce: _",
+                        closest_balance.balance as "balance: _",
                         bytecode as "bytecode: _"
                     FROM accounts
-                    JOIN historical_nonces
-                    ON accounts.address = historical_nonces.address
-                    JOIN historical_balances
-                    ON accounts.address = historical_balances.address
-                    WHERE accounts.address = $1
-                    AND historical_nonces.block_number = (SELECT MAX(block_number)
-                                                            FROM historical_nonces
-                                                            WHERE block_number <= $2
-                                                            AND address = $1)
-                    AND historical_balances.block_number = (SELECT MAX(block_number)
-                                                            FROM historical_balances
-                                                            WHERE block_number <= $2
-                                                            AND address = $1)
-                            "#,
+                    JOIN closest_nonce ON true
+                    JOIN closest_balance ON true
+                    WHERE accounts.address = $1"#,
                     address.as_ref(),
                     block_number,
                 )
