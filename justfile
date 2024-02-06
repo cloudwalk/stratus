@@ -76,9 +76,9 @@ update:
 # ------------------------------------------------------------------------------
 # Jobs tasks
 # ------------------------------------------------------------------------------
-# Job: Run "Fetch RPC" locally with debug options.
-job-fetch-rpc:
-    cargo run --bin fetch-rpc -- --storage {{postgres_url}} --external-rpc {{testnet_url}}
+# Job: Run "RPC ()" locally with debug options.
+importer-fetch:
+    cargo run --bin importer-fetch -- --storage {{postgres_url}} --external-rpc {{testnet_url}}
 
 # ------------------------------------------------------------------------------
 # Test tasks

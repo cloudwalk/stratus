@@ -82,8 +82,8 @@ phf_codegen = "0.11.2"
 # ------------------------------------------------------------------------------
 
 [[bin]]
-name = "fetch-rpc"
-path = "src/bin/importer/fetch_rpc.rs"
+name = "importer-fetch"
+path = "src/bin/importer/importer-fetch.rs"
 
 [[bin]]
 name = "rpc-server-poller"

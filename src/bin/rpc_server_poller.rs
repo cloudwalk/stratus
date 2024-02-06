@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow!("rpc url not provided as argument"));
     };
 
-    let chain = Arc::new(BlockchainClient::new(&rpc_url)?);
+    let chain = Arc::new(BlockchainClient::new(&rpc_url, Duration::from_secs(1))?);
 
     // TODO instead of gathering the current block all the time, we should track the first block and just keep polling onwards aggregating by 1
     loop {
