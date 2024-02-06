@@ -22,6 +22,7 @@
 pub mod codegen;
 pub mod evm;
 mod executor;
+mod sync_parser;
 pub mod miner;
 pub mod primitives;
 pub mod rpc;
