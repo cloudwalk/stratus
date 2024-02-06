@@ -76,7 +76,7 @@ pub enum ExecutionConflict {
 
     PgSlot {
         address: Address,
-        slot: Vec<u8>,
-        expected: Vec<u8>,
+        slot: [u8; 32],
+        expected: [u8; 32],
     },
 }

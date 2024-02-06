@@ -503,6 +503,7 @@ impl EthStorage for Postgres {
                     .await
                     .context("failed to insert account")?;
 
+                    // A successful insert/update with no conflicts will have one affected row
                     if account_result.rows_affected() != 1 {
                         tx.rollback().await.context("failed to rollback transaction")?;
                         let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
@@ -535,37 +536,38 @@ impl EthStorage for Postgres {
 
                     for (slot_idx, value) in change.slots {
                         let (original_value, val) = value.clone().take_both();
-                        let idx: &[u8; 32] = &slot_idx.into();
-                        let val: &[u8; 32] = &val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
+                        let idx: [u8; 32] = slot_idx.into();
+                        let val: [u8; 32] = val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
                         let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-                        let original_value: &[u8; 32] = &original_value.unwrap_or_default().value.into();
+                        let original_value: [u8; 32] = original_value.unwrap_or_default().value.into();
 
                         let slot_result: PgQueryResult = sqlx::query_file!(
                             "src/eth/storage/postgres/queries/insert_account_slot.sql",
-                            idx,
-                            val,
+                            &idx,
+                            &val,
                             change.address.as_ref(),
                             block_number,
-                            original_value
+                            &original_value
                         )
                         .execute(&mut *tx)
                         .await
                         .context("failed to insert slot")?;
 
+                        // A successful insert/update with no conflicts will have one affected row
                         if slot_result.rows_affected() != 1 {
                             tx.rollback().await.context("failed to rollback transaction")?;
                             let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
                                 address: change.address,
-                                slot: idx.into(),
-                                expected: original_value.into(),
+                                slot: idx,
+                                expected: original_value,
                             }]));
                             return Err(error);
                         }
 
                         sqlx::query_file!(
                             "src/eth/storage/postgres/queries/insert_historical_slot.sql",
-                            idx,
-                            val,
+                            &idx,
+                            &val,
                             change.address.as_ref(),
                             block_number
                         )
