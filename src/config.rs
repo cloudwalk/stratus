@@ -24,7 +24,7 @@ use crate::infra::postgres::Postgres;
 #[command(author, version, about, long_about = None)]
 pub struct Config {
     /// Environment where the application is running.
-    #[arg(value_enum, short = 'e', long = "env", env = "ENV", default_value = "dev")]
+    #[arg(value_enum, short = 'e', long = "env", env = "ENV", default_value_t = Environment::Development)]
     pub env: Environment,
 
     /// JSON-RPC binding address.
@@ -50,10 +50,6 @@ pub struct Config {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: Option<String>,
-
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(value_enum, short = 'e', long = "environment", env = "ENVIROMENT", default_value_t = Environment::Development)]
-    pub environment: Environment,
 }
 
 impl Config {
@@ -130,14 +126,9 @@ impl FromStr for StorageConfig {
 /// Enviroment where the application is running.
 #[derive(clap::ValueEnum, Debug, Clone, PartialEq)]
 pub enum Environment {
-    /// Development environment (usually the developer's local machine).
     Development,
-    /// Staging environment (usually a pre-production environment).
     Staging,
-    /// Production environment (usually the live environment).
     Production,
-    /// Any other environment not covered by previous options.
-    Custom(String),
 }
 
 impl Environment {
@@ -161,7 +152,7 @@ impl FromStr for Environment {
             "dev" | "development" => Ok(Self::Development),
             "stag" | "staging" => Ok(Self::Staging),
             "prod" | "production" => Ok(Self::Production),
-            s => Ok(Self::Custom(s.to_string())),
+            &_ => todo!()
         }
     }
 }

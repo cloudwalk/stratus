@@ -55,7 +55,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
         chain_id: 2008,
         client_version: "stratus",
         gas_price: 0,
-        environment: config.environment,
+        env: config.env,
 
         // services
         executor,
