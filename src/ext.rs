@@ -45,6 +45,41 @@ macro_rules! if_else {
     };
 }
 
+/// Logs an error and also wrap the existing error with the provided message.
+#[macro_export]
+macro_rules! log_and_err {
+    // with reason: wrap the original error with provided message
+    (reason = $error:ident, payload = $payload:expr, $msg:tt) => {
+        {
+            use anyhow::Context;
+            tracing::error!(reason = ?$error, payload = ?$payload, message = $msg);
+            Err($error).context($msg)
+        }
+    };
+    (reason = $error:ident, $msg:tt) => {
+        {
+            use anyhow::Context;
+            tracing::error!(reason = ?$error, $msg);
+            Err($error).context($msg)
+        }
+    };
+    // without reason: generate a new error using provided message
+    (payload = $payload:expr, $msg:tt) => {
+        {
+            use anyhow::Context;
+            tracing::error!(payload = ?$payload, $msg);
+            let message = format!("{} | payload={:?}", $msg, $payload);
+            Err(anyhow!(message))
+        }
+    };
+    ($msg:tt) => {
+        {
+            tracing::error!(event = $msg);
+            Err(anyhow!($msg))
+        }
+    };
+}
+
 // -----------------------------------------------------------------------------
 // Option
 // -----------------------------------------------------------------------------
