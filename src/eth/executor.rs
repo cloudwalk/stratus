@@ -66,9 +66,10 @@ impl EthExecutor {
         }
     }
 
-    pub async fn import(&self,
-                        _block: ethers_core::types::Block<ethers_core::types::Transaction> ,
-                        _receipts: HashMap<H256, ethers_core::types::TransactionReceipt>
+    pub async fn import(
+        &self,
+        _block: ethers_core::types::Block<ethers_core::types::Transaction>,
+        _receipts: HashMap<H256, ethers_core::types::TransactionReceipt>,
     ) -> anyhow::Result<()> {
         //TODO iterate on block transactions
         //TODO inside the iteration make the link with receipts

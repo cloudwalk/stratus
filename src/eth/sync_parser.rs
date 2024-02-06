@@ -2,11 +2,10 @@ use std::collections::HashMap;
 
 use ethereum_types::H256;
 use ethers_core::types::TransactionReceipt;
-use serde_json::Value;
+
 
 pub fn parse_receipt(receipt_json: &str) -> anyhow::Result<HashMap<H256, TransactionReceipt>> {
-    let receipt: TransactionReceipt = serde_json::from_str(receipt_json)
-        .map_err(|e| anyhow::anyhow!("Failed to parse receipt JSON: {:?}", e))?;
+    let receipt: TransactionReceipt = serde_json::from_str(receipt_json).map_err(|e| anyhow::anyhow!("Failed to parse receipt JSON: {:?}", e))?;
 
     let mut receipts_map = HashMap::new();
     receipts_map.insert(receipt.transaction_hash, receipt);
@@ -14,7 +13,8 @@ pub fn parse_receipt(receipt_json: &str) -> anyhow::Result<HashMap<H256, Transac
     Ok(receipts_map)
 }
 
-use ethers_core::types::{Block as ECBlock, Transaction as ECTransaction};
+use ethers_core::types::Block as ECBlock;
+use ethers_core::types::Transaction as ECTransaction;
 
 pub fn parse_block(block_json: &str) -> anyhow::Result<ECBlock<ECTransaction>> {
     let block: ECBlock<ECTransaction> = serde_json::from_str(block_json)?;
@@ -23,10 +23,12 @@ pub fn parse_block(block_json: &str) -> anyhow::Result<ECBlock<ECTransaction>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*; // Import everything from the outer module
-    use ethers_core::{types::{H256, U64}, k256::U256};
+    use ethers_core::k256::U256;
+    use ethers_core::types::H256;
+    use ethers_core::types::U64;
     use hex_literal::hex;
 
+    use super::*; // Import everything from the outer module
 
     #[test]
     fn test_parse_receipts() {
@@ -52,9 +54,11 @@ mod tests {
 
         // Since we are testing with a known good value, unwrap is used directly
         let expected_tx_hash = H256::from_slice(&hex!("5a493d5b9e4f36a7569407988e2f9506334de3a7ce3b451c594ab1496cc5e13f"));
-        assert!(receipts_map.contains_key(&expected_tx_hash), "Receipts map does not contain the expected transaction hash.");
+        assert!(
+            receipts_map.contains_key(&expected_tx_hash),
+            "Receipts map does not contain the expected transaction hash."
+        );
     }
-
 
     #[test]
     fn test_parse_block() {
