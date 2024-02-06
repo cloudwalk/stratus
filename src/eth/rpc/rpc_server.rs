@@ -1,6 +1,5 @@
 //! RPC server for HTTP and WS.
 
-
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -16,7 +15,6 @@ use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
 use crate::config::Config;
-
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
@@ -57,7 +55,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
         chain_id: 2008,
         client_version: "stratus",
         gas_price: 0,
-        environment: config.environment,
+        environment: config.env,
 
         // services
         executor,
