@@ -4,13 +4,7 @@ use std::sync::Arc;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
-
-pub enum Environment {
-    Development,
-    Test,
-    Staging,
-    Production,
-}
+use crate::config::Environment;
 
 pub struct RpcContext {
     // blockchain config
@@ -35,16 +29,5 @@ impl Debug for RpcContext {
             .field("environment", &self.environment)
             .field("gas_price", &self.gas_price)
             .finish_non_exhaustive()
-    }
-}
-
-impl Debug for Environment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Environment::Development => write!(f, "Development"),
-            Environment::Test => write!(f, "Test"),
-            Environment::Staging => write!(f, "Staging"),
-            Environment::Production => write!(f, "Production"),
-        }
     }
 }

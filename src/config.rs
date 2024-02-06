@@ -1,5 +1,6 @@
 //! Application configuration.
 
+use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -44,6 +45,10 @@ pub struct Config {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: Option<String>,
+
+    /// External RPC endpoint to sync blocks with Stratus.
+    #[arg(value_enum, short = 'e', long = "environment", env = "ENVIROMENT", default_value_t = Environment::Development)]
+    pub environment: Environment,
 }
 
 impl Config {
@@ -112,6 +117,25 @@ impl FromStr for StorageConfig {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown storage: {}", s)),
+        }
+    }
+}
+
+#[derive(clap::ValueEnum, Clone)]
+pub enum Environment {
+    Development,
+    Test,
+    Staging,
+    Production,
+}
+
+impl Debug for Environment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Environment::Development => write!(f, "Development"),
+            Environment::Test => write!(f, "Test"),
+            Environment::Staging => write!(f, "Staging"),
+            Environment::Production => write!(f, "Production"),
         }
     }
 }

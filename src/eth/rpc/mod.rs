@@ -7,7 +7,6 @@ mod rpc_parser;
 mod rpc_server;
 mod rpc_subscriptions;
 
-use rpc_context::Environment;
 use rpc_context::RpcContext;
 pub use rpc_error::RpcError;
 use rpc_middleware::RpcMiddleware;
