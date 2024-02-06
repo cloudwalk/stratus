@@ -488,8 +488,8 @@ impl EthStorage for Postgres {
                     .await
                     .context("failed to insert account")?;
 
-                    sqlx::query!(
-                        "INSERT INTO historical_balances (address, balance, block_number) VALUES ($1, $2, $3)",
+                    sqlx::query_file!(
+                        "src/eth/storage/postgres/queries/insert_historical_balance.sql",
                         change.address.as_ref(),
                         balance,
                         block_number
@@ -498,8 +498,8 @@ impl EthStorage for Postgres {
                     .await
                     .context("failed to insert balance")?;
 
-                    sqlx::query!(
-                        "INSERT INTO historical_nonces (address, nonce, block_number) VALUES ($1, $2, $3)",
+                    sqlx::query_file!(
+                        "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
                         change.address.as_ref(),
                         nonce,
                         block_number
