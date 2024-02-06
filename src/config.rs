@@ -2,9 +2,20 @@
 
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use clap::Parser;
+use nonempty::NonEmpty;
+use tokio::runtime::Builder;
+use tokio::runtime::Runtime;
+
+use crate::eth::evm::revm::Revm;
+use crate::eth::evm::Evm;
+use crate::eth::storage::EthStorage;
+use crate::eth::storage::InMemoryStorage;
+use crate::infra::postgres::Postgres;
 
 /// Application configuration entry-point.
 #[derive(Parser, Debug)]
@@ -35,6 +46,44 @@ pub struct Config {
     pub external_rpc: Option<String>,
 }
 
+impl Config {
+    /// Initializes storage.
+    pub async fn init_storage(&self) -> anyhow::Result<Arc<dyn EthStorage>> {
+        self.storage.init().await
+    }
+
+    /// Initializes EVMs.
+    pub fn init_evms(&self, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
+        tracing::info!(evms = %self.num_evms, "starting evms");
+
+        let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(self.num_evms);
+        for _ in 1..=self.num_evms {
+            evms.push(Box::new(Revm::new(Arc::clone(&storage))));
+        }
+        NonEmpty::from_vec(evms).unwrap()
+    }
+
+    /// Initializes Tokio runtime.
+    pub fn init_runtime(&self) -> Runtime {
+        tracing::info!(
+            async_threads = %self.num_async_threads,
+            blocking_threads = %self.num_blocking_threads,
+            "starting tokio runtime"
+        );
+
+        let runtime = Builder::new_multi_thread()
+            .enable_all()
+            .thread_name("tokio")
+            .worker_threads(self.num_async_threads)
+            .max_blocking_threads(self.num_blocking_threads)
+            .thread_keep_alive(Duration::from_secs(u64::MAX))
+            .build()
+            .expect("failed to start tokio runtime");
+
+        runtime
+    }
+}
+
 /// Storage configuration.
 #[derive(Clone, Debug, strum::Display)]
 pub enum StorageConfig {
@@ -43,6 +92,16 @@ pub enum StorageConfig {
 
     #[strum(serialize = "postgres")]
     Postgres { url: String },
+}
+
+impl StorageConfig {
+    /// Initializes the storage implementation.
+    pub async fn init(&self) -> anyhow::Result<Arc<dyn EthStorage>> {
+        match self {
+            Self::InMemory => Ok(Arc::new(InMemoryStorage::default().metrified())),
+            Self::Postgres { url } => Ok(Arc::new(Postgres::new(url).await?.metrified())),
+        }
+    }
 }
 
 impl FromStr for StorageConfig {
