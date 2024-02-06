@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Get the block_numbers with the latest balance change for each address\nWITH latest_block_numbers AS (\n    SELECT address, MAX(block_number) as block_number\n    FROM historical_balances\n    GROUP BY address\n),\n-- Get the latest balance change for each address\nlatest_balances AS (\n    SELECT accounts.address, historical_balances.balance\n    FROM accounts\n    JOIN latest_block_numbers\n    ON latest_block_numbers.address = accounts.address\n    LEFT JOIN historical_balances on accounts.address = historical_balances.address\n        AND latest_block_numbers.block_number = historical_balances.block_number\n)\n-- Update the accounts with the balances in latest_balances\nUPDATE accounts\nSET latest_balance = latest_balances.balance\nFROM latest_balances\nWHERE latest_balances.address = accounts.address\n    AND latest_balances.balance IS DISTINCT FROM accounts.latest_balance\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "0f884cf7b39860f7017d4c0b14d2402081808565b06c24ae136393c57f0bbc9b"
+}

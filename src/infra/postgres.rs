@@ -60,7 +60,7 @@ impl Postgres {
     }
 
     async fn insert_genesis(&self) -> anyhow::Result<()> {
-        let genesis = sqlx::query!("SELECT number FROM blocks WHERE number = 0")
+        let genesis = sqlx::query_file!("src/eth/storage/postgres/queries/select_genesis.sql")
             .fetch_optional(&self.connection_pool)
             .await?;
 
@@ -94,8 +94,8 @@ impl Postgres {
             .await
             .context("failed to insert account")?;
 
-            sqlx::query!(
-                "INSERT INTO historical_balances (address, balance, block_number) VALUES ($1, $2, $3)",
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_historical_balance.sql",
                 acc.address.as_ref(),
                 balance,
                 block_number
@@ -104,8 +104,8 @@ impl Postgres {
             .await
             .context("failed to insert balance")?;
 
-            sqlx::query!(
-                "INSERT INTO historical_nonces (address, nonce, block_number) VALUES ($1, $2, $3)",
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
                 acc.address.as_ref(),
                 nonce,
                 block_number

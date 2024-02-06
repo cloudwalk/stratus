@@ -18,7 +18,7 @@ pub struct RpcContext {
     pub executor: EthExecutor,
     pub storage: Arc<dyn EthStorage>,
     pub subs: Arc<RpcSubscriptions>,
-    pub environment: Environment,
+    pub env: Environment,
 }
 
 impl Debug for RpcContext {
@@ -26,8 +26,14 @@ impl Debug for RpcContext {
         f.debug_struct("RpcContext")
             .field("chain_id", &self.chain_id)
             .field("client_version", &self.client_version)
-            .field("environment", &self.environment)
+            .field("environment", &self.env)
             .field("gas_price", &self.gas_price)
             .finish_non_exhaustive()
+    }
+}
+
+impl RpcContext {
+    pub fn is_production(&self) -> bool {
+        self.env == Environment::Production
     }
 }
