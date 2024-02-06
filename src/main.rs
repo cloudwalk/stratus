@@ -23,6 +23,6 @@ async fn run_rpc_server(config: Config) -> anyhow::Result<()> {
     let evms = config.init_evms(Arc::clone(&storage));
     let executor = EthExecutor::new(evms, Arc::clone(&storage));
 
-    serve_rpc(executor, storage, config.address).await?;
+    serve_rpc(executor, storage, config).await?;
     Ok(())
 }
