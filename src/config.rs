@@ -16,12 +16,17 @@ use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::InMemoryStorage;
+use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
 /// Application configuration entry-point.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Config {
+    /// Environment where the application is running.
+    #[arg(value_enum, short = 'e', long = "env", env = "ENV", default_value = "dev")]
+    pub env: Environment,
+
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
@@ -45,10 +50,6 @@ pub struct Config {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: Option<String>,
-
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(value_enum, short = 'e', long = "environment", env = "ENVIROMENT", default_value_t = Environment::Development)]
-    pub environment: Environment,
 }
 
 impl Config {
@@ -121,21 +122,41 @@ impl FromStr for StorageConfig {
     }
 }
 
-#[derive(clap::ValueEnum, Clone)]
+/// Enviroment where the application is running.
+#[derive(Debug, Clone)]
 pub enum Environment {
+    /// Development environment (usually the developer's local machine).
     Development,
-    Test,
+    /// Staging environment (usually a pre-production environment).
     Staging,
+    /// Production environment (usually the live environment).
     Production,
+    /// Any other environment not covered by previous options.
+    Custom(String),
 }
 
-impl Debug for Environment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Environment::Development => write!(f, "Development"),
-            Environment::Test => write!(f, "Test"),
-            Environment::Staging => write!(f, "Staging"),
-            Environment::Production => write!(f, "Production"),
+impl Environment {
+    /// Checks if the current environment is production.
+    pub fn is_production(&self) -> bool {
+        matches!(self, Self::Production)
+    }
+
+    /// Checks if the current environment is NOT production.
+    pub fn is_not_production(&self) -> bool {
+        not(self.is_production())
+    }
+}
+
+impl FromStr for Environment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim().to_lowercase();
+        match s.as_str() {
+            "dev" | "development" => Ok(Self::Development),
+            "stag" | "staging" => Ok(Self::Staging),
+            "prod" | "production" => Ok(Self::Production),
+            s => Ok(Self::Custom(s.to_string())),
         }
     }
 }
