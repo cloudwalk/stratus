@@ -69,7 +69,9 @@ impl Postgres {
                 nonce,
                 balance,
                 bytecode,
-                block_number
+                block_number,
+                BigDecimal::from(0),
+                BigDecimal::from(0)
             )
             .execute(&mut *tx)
             .await

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use async_trait::async_trait;
+use nonempty::nonempty;
+use sqlx::postgres::PgQueryResult;
 use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
 use sqlx::Row;
@@ -13,6 +15,7 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionConflict;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Hash as TransactionHash;
@@ -35,7 +38,6 @@ use crate::infra::postgres::Postgres;
 #[async_trait]
 impl EthStorage for Postgres {
     async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        // TODO: implement conflict resolution
         Ok(None)
     }
 
@@ -410,6 +412,8 @@ impl EthStorage for Postgres {
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
     // neither worked for some reason I was not able to determine at this time)
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
+
         tracing::debug!(block = ?block, "saving block");
         sqlx::query_file!(
             "src/eth/storage/postgres/queries/insert_block.sql",
@@ -421,7 +425,7 @@ impl EthStorage for Postgres {
             i32::try_from(block.header.timestamp_in_secs).context("failed to convert block timestamp")?,
             block.header.parent_hash.as_ref()
         )
-        .execute(&self.connection_pool)
+        .execute(&mut *tx)
         .await
         .context("failed to insert block")?;
 
@@ -448,20 +452,29 @@ impl EthStorage for Postgres {
                 BigDecimal::try_from(transaction.input.value)?,
                 transaction.execution.result.to_string()
             )
-            .execute(&self.connection_pool)
+            .execute(&mut *tx)
             .await
             .context("failed to insert transaction")?;
 
             if is_success {
                 for change in transaction.execution.changes {
-                    let nonce = change.nonce.take().unwrap_or_else(|| {
-                        tracing::debug!("Nonce not set, defaulting to 0");
-                        0.into()
-                    });
-                    let balance = change.balance.take().unwrap_or_else(|| {
-                        tracing::debug!("Balance not set, defaulting to 0");
-                        0.into()
-                    });
+                    let (original_nonce, nonce) = change.nonce.take_both();
+                    let (original_balance, balance) = change.balance.take_both();
+
+                    let nonce: BigDecimal = nonce
+                        .unwrap_or_else(|| {
+                            tracing::debug!("Nonce not set, defaulting to 0");
+                            0.into()
+                        })
+                        .try_into()?;
+
+                    let balance: BigDecimal = balance
+                        .unwrap_or_else(|| {
+                            tracing::debug!("Balance not set, defaulting to 0");
+                            0.into()
+                        })
+                        .try_into()?;
+
                     let bytecode = change
                         .bytecode
                         .take()
@@ -471,22 +484,34 @@ impl EthStorage for Postgres {
                         })
                         .map(|val| val.as_ref().to_owned());
 
-                    let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
-                    let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-                    let balance = BigDecimal::try_from(balance)?;
-                    let nonce = BigDecimal::try_from(nonce)?;
+                    let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
+                    let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
 
-                    sqlx::query_file!(
+                    let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+
+                    let account_result: PgQueryResult = sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_account.sql",
                         change.address.as_ref(),
                         nonce,
                         balance,
                         bytecode,
-                        block_number
+                        block_number,
+                        original_nonce,
+                        original_balance
                     )
                     .execute(&mut *tx)
                     .await
                     .context("failed to insert account")?;
+
+                    if account_result.rows_affected() != 1 {
+                        tx.rollback().await.context("failed to rollback transaction")?;
+                        let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
+                            address: change.address,
+                            expected_balance: original_balance,
+                            expected_nonce: original_nonce,
+                        }]));
+                        return Err(error);
+                    }
 
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_historical_balance.sql",
@@ -508,24 +533,34 @@ impl EthStorage for Postgres {
                     .await
                     .context("failed to insert nonce")?;
 
-                    tx.commit().await.context("Failed to commit transaction")?;
-
                     for (slot_idx, value) in change.slots {
-                        let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
-                        let idx = &<[u8; 32]>::from(slot_idx);
-                        let val = &<[u8; 32]>::from(value.take().ok_or(anyhow::anyhow!("critical: no change for slot"))?.value); // the or condition should never happen
+                        let (original_value, val) = value.clone().take_both();
+                        let idx: &[u8; 32] = &slot_idx.into();
+                        let val: &[u8; 32] = &val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
                         let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+                        let original_value: &[u8; 32] = &original_value.unwrap_or_default().value.into();
 
-                        sqlx::query_file!(
+                        let slot_result: PgQueryResult = sqlx::query_file!(
                             "src/eth/storage/postgres/queries/insert_account_slot.sql",
                             idx,
                             val,
                             change.address.as_ref(),
-                            block_number
+                            block_number,
+                            original_value
                         )
                         .execute(&mut *tx)
                         .await
                         .context("failed to insert slot")?;
+
+                        if slot_result.rows_affected() != 1 {
+                            tx.rollback().await.context("failed to rollback transaction")?;
+                            let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
+                                address: change.address,
+                                slot: idx.into(),
+                                expected: original_value.into(),
+                            }]));
+                            return Err(error);
+                        }
 
                         sqlx::query_file!(
                             "src/eth/storage/postgres/queries/insert_historical_slot.sql",
@@ -537,8 +572,6 @@ impl EthStorage for Postgres {
                         .execute(&mut *tx)
                         .await
                         .context("failed to insert slot to history")?;
-
-                        tx.commit().await.context("failed to commit transaction")?;
                     }
                 }
             }
@@ -561,7 +594,7 @@ impl EthStorage for Postgres {
                     b_number,
                     b_hash
                 )
-                .execute(&self.connection_pool)
+                .execute(&mut *tx)
                 .await
                 .context("failed to insert log")?;
                 for (idx, topic) in log.log.topics.into_iter().enumerate() {
@@ -575,12 +608,14 @@ impl EthStorage for Postgres {
                         b_number,
                         b_hash
                     )
-                    .execute(&self.connection_pool)
+                    .execute(&mut *tx)
                     .await
                     .context("failed to insert topic")?;
                 }
             }
         }
+
+        tx.commit().await.context("failed to commit transaction")?;
 
         Ok(())
     }

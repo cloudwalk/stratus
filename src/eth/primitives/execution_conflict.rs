@@ -1,4 +1,5 @@
 use nonempty::NonEmpty;
+use sqlx::types::BigDecimal;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
@@ -46,10 +47,18 @@ impl ExecutionConflictsBuilder {
 #[derive(Debug)]
 pub enum ExecutionConflict {
     /// Account nonce mismatch.
-    Nonce { address: Address, expected: Nonce, actual: Nonce },
+    Nonce {
+        address: Address,
+        expected: Nonce,
+        actual: Nonce,
+    },
 
     /// Account balance mismatch.
-    Balance { address: Address, expected: Wei, actual: Wei },
+    Balance {
+        address: Address,
+        expected: Wei,
+        actual: Wei,
+    },
 
     /// Slot value mismatch.
     Slot {
@@ -57,5 +66,17 @@ pub enum ExecutionConflict {
         slot: SlotIndex,
         expected: SlotValue,
         actual: SlotValue,
+    },
+
+    Account {
+        address: Address,
+        expected_nonce: BigDecimal,
+        expected_balance: BigDecimal,
+    },
+
+    PgSlot {
+        address: Address,
+        slot: Vec<u8>,
+        expected: Vec<u8>,
     },
 }
