@@ -1,6 +1,5 @@
 //! RPC server for HTTP and WS.
 
-
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -16,7 +15,6 @@ use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
 use crate::config::Config;
-
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
