@@ -30,6 +30,7 @@ use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
 use crate::eth::rpc::rpc_parsing_error;
+use crate::eth::rpc::Environment;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
@@ -54,6 +55,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
         chain_id: 2008,
         client_version: "stratus",
         gas_price: 0,
+        environment: Environment::Development,
 
         // services
         executor,
