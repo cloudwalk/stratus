@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT MAX(number) as \"n!: _\" FROM blocks\n            ",
+  "query": "SELECT number FROM blocks WHERE number = 0\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "n!: _",
+        "name": "number",
         "type_info": "Int8"
       }
     ],
@@ -13,8 +13,8 @@
       "Left": []
     },
     "nullable": [
-      null
+      false
     ]
   },
-  "hash": "18e85bb443de90d8425148c08f5b522cc7d61fb5a7d8c3a3e6bd6c5119381c9f"
+  "hash": "5e8aaa5ce9e561c54be6410c4ef13882f84114ddb63e234de9edaaa1c7a27888"
 }

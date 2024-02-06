@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH latest_block_numbers AS (\n    SELECT account_address, idx, MAX(block_number) as block_number\n    FROM historical_slots\n    GROUP BY idx, account_address\n),\nlatest_slots AS (\n    SELECT account_slots.account_address, historical_slots.idx, historical_slots.value\n    FROM account_slots\n    JOIN latest_block_numbers\n    ON latest_block_numbers.account_address = account_slots.account_address\n        AND account_slots.idx = latest_block_numbers.idx\n    LEFT JOIN historical_slots ON account_slots.account_address = historical_slots.account_address\n        AND latest_block_numbers.block_number = historical_slots.block_number\n        AND account_slots.idx = historical_slots.idx\n)\nUPDATE account_slots\nSET value = latest_slots.value\nFROM latest_slots\nWHERE latest_slots.account_address = account_slots.account_address\n    AND latest_slots.idx = account_slots.idx\n    AND latest_slots.value IS DISTINCT FROM account_slots.value\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "d7897bea70e596ba2f03c3484b669bde4560a0b5961bb452a4ccb173081319c0"
+}

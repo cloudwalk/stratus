@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO historical_nonces (address, nonce, block_number) VALUES ($1, $2, $3)",
+  "query": "INSERT INTO historical_nonces (address, nonce, block_number) VALUES ($1, $2, $3)\n",
   "describe": {
     "columns": [],
     "parameters": {
@@ -12,5 +12,5 @@
     },
     "nullable": []
   },
-  "hash": "7b7263a8e5f1c47a753d22cc61d8c3291391e5eabefb9079a509bf2bf630f431"
+  "hash": "82d8d80ffc8e9ec042ea1afb201b02b5e0e54c002b5b55410df644c558eb1f14"
 }
