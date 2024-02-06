@@ -122,7 +122,6 @@ impl FromStr for StorageConfig {
     }
 }
 
-
 /// Enviroment where the application is running.
 #[derive(clap::ValueEnum, Debug, Clone, PartialEq)]
 pub enum Environment {
@@ -152,7 +151,7 @@ impl FromStr for Environment {
             "dev" | "development" => Ok(Self::Development),
             "stag" | "staging" => Ok(Self::Staging),
             "prod" | "production" => Ok(Self::Production),
-            &_ => todo!()
+            &_ => todo!(),
         }
     }
 }
