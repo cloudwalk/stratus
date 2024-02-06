@@ -31,3 +31,9 @@ impl Debug for RpcContext {
             .finish_non_exhaustive()
     }
 }
+
+impl RpcContext {
+    pub fn is_production(&self) -> bool {
+        self.environment == Environment::Production
+    }
+}

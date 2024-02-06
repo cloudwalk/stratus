@@ -149,6 +149,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
 // Debug
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    if ctx.is_production() {
+        return Err(RpcError::Response(rpc_internal_error("method is only available in development environment")));
+    }
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number).await?;
     Ok(serde_json::to_value(number).unwrap())
@@ -249,6 +252,7 @@ async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::R
     }
 }
 
+//XXX validate
 async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;

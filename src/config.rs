@@ -121,7 +121,7 @@ impl FromStr for StorageConfig {
     }
 }
 
-#[derive(clap::ValueEnum, Clone)]
+#[derive(clap::ValueEnum, Clone, PartialEq)]
 pub enum Environment {
     Development,
     Test,
