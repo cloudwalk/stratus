@@ -31,18 +31,22 @@ test() {
 # configure tools
 asdf local nodejs 20.10.0
 
-while getopts tpmch flag
+while getopts tpmchix flag
 do
     case "${flag}" in
         t) token=1;;
         p) periphery=1;;
         m) multisig=1;;
         c) compound=1;;
-        h) echo "Usage: test-contracts.sh [-t] [-p] [-m] [-c]";
+        i) yield=1;;
+        x) pix=1;;
+        h) echo "Usage: test-contracts.sh [-[tpchix]]";
            echo "-t for brlc-token";
            echo "-p for brlc-periphery";
            echo "-m for brlc-multisig";
            echo "-c for compound-periphery";
+           echo "-i for brlc-yield-streamer";
+           echo "-x for brlc-pix-cashier";
            echo "No parameter execute all tests";
            exit;;
     esac
@@ -53,6 +57,8 @@ if [ "$#" == 0 ]; then
     periphery=1
     multisig=1
     compound=1
+    yield=1
+    pix=1
 fi
 
 # execute
@@ -61,6 +67,18 @@ if [ "$token" == 1 ]; then
     test brlc-token BRLCToken.complex
     test brlc-token BRLCTokenBridgeable
     test brlc-token USJimToken
+    test brlc-token InfinitePointsToken 
+    test brlc-token LightningBitcoin 
+    test brlc-token USJimToken 
+fi
+
+if [ "$pix" == 1 ]; then
+    test brlc-pix-cashier PixCashier
+fi
+
+if [ "$yield" == 1 ]; then
+    test brlc-yield-streamer BalanceTracker
+    test brlc-yield-streamer YieldStreamer
 fi
 
 if [ "$periphery" == 1 ]; then
