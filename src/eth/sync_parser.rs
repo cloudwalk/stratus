@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use ethereum_types::H256;
 use ethers_core::types::TransactionReceipt;
 
-
 pub fn parse_receipt(receipt_jsons: Vec<&str>) -> anyhow::Result<HashMap<H256, TransactionReceipt>> {
     let mut receipts_map = HashMap::new();
 
@@ -36,10 +35,7 @@ mod tests {
 
     #[test]
     fn test_parse_receipts() {
-        let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("test")
-            .join("fixtures")
-            .join("receipt_fixture.json");
+        let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("test").join("fixtures").join("receipt_fixture.json");
 
         // This JSON string represents a single transaction receipt. For testing, it needs to be wrapped in an array.
         let single_receipt_json = fs::read_to_string(fixture_path).expect("Failed to read fixture file");
@@ -56,10 +52,7 @@ mod tests {
 
     #[test]
     fn test_parse_block() {
-        let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("test")
-            .join("fixtures")
-            .join("block_fixture.json");
+        let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("test").join("fixtures").join("block_fixture.json");
 
         // This JSON string represents a single transaction receipt. For testing, it needs to be wrapped in an array.
         let block_json = fs::read_to_string(fixture_path).expect("Failed to read fixture file");
