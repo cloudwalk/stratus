@@ -26,6 +26,6 @@ pub mod miner;
 pub mod primitives;
 pub mod rpc;
 pub mod storage;
-mod sync_parser;
+pub mod sync_parser;
 
 pub use executor::EthExecutor;

@@ -4,7 +4,13 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
+use clap::Parser;
+use hex_literal::hex;
+use stratus::config::Config;
+use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::Hash;
+use stratus::eth::EthExecutor;
 use stratus::infra::init_tracing;
 use stratus::infra::BlockchainClient;
 use tokio::time::sleep;
@@ -15,21 +21,33 @@ const POLL_LATENCY: Duration = Duration::from_secs(1);
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
+    let config = Config::parse();
 
-    let Some(rpc_url) = env::args().nth(1) else {
-        return Err(anyhow!("rpc url not provided as argument"));
-    };
-
+    let rpc_url = config.external_rpc.clone().unwrap();
     let chain = Arc::new(BlockchainClient::new(&rpc_url, Duration::from_secs(1))?);
 
     // TODO instead of gathering the current block all the time, we should track the first block and just keep polling onwards aggregating by 1
     loop {
         tracing::debug!("polling for new blocks");
-        let current_block = Arc::clone(&chain).get_current_block_number().await.unwrap();
+        let current_block = Arc::clone(&chain).get_current_block_number().await?;
         tracing::info!("current block number: {}", current_block);
         // TODO call storage in order to save the block details
-        let json = block_json(Arc::clone(&chain), current_block).await.unwrap();
-        tracing::info!("block: {}", json);
+        let block_json = block_json(Arc::clone(&chain), current_block).await?;
+        tracing::info!("block: {}", block_json);
+        let ethers_core_block = stratus::eth::sync_parser::parse_block(&block_json)?;
+
+        let receipt = Arc::clone(&chain)
+            .get_transaction_receipt(&Hash::new(hex!("5a493d5b9e4f36a7569407988e2f9506334de3a7ce3b451c594ab1496cc5e13f")))
+            .await?;
+        let receipt_json = serde_json::to_string(&receipt)?;
+        tracing::info!("receipt_json: {:?}", receipt_json);
+        let ethers_core_receipts = stratus::eth::sync_parser::parse_receipt(vec![&receipt_json])?;
+
+        let storage = config.init_storage().await?;
+        let evms = config.init_evms(Arc::clone(&storage));
+        let executor = EthExecutor::new(evms, Arc::clone(&storage));
+        executor.import(ethers_core_block, ethers_core_receipts).await?;
+
         sleep(POLL_LATENCY).await;
     }
 }
