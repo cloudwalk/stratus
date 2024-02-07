@@ -2,15 +2,15 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
-use clap::Parser;
 use anyhow::anyhow;
 use anyhow::Context;
+use clap::Parser;
 use hex_literal::hex;
 use stratus::config::Config;
-use stratus::eth::EthExecutor;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
+use stratus::eth::EthExecutor;
 use stratus::infra::init_tracing;
 use stratus::infra::BlockchainClient;
 use tokio::time::sleep;
@@ -42,7 +42,6 @@ async fn main() -> anyhow::Result<()> {
         let receipt_json = serde_json::to_string(&receipt)?;
         tracing::info!("receipt_json: {:?}", receipt_json);
         let ethers_core_receipts = stratus::eth::sync_parser::parse_receipt(vec![&receipt_json])?;
-
 
         let storage = config.init_storage().await?;
         let evms = config.init_evms(Arc::clone(&storage));
