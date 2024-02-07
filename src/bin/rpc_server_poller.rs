@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
     let config = Config::parse();
 
-    let rpc_url = config.extra.clone().unwrap();
+    let rpc_url = config.external_rpc.clone().unwrap();
     let chain = Arc::new(BlockchainClient::new(&rpc_url, Duration::from_secs(1))?);
 
     // TODO instead of gathering the current block all the time, we should track the first block and just keep polling onwards aggregating by 1

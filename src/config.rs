@@ -50,10 +50,6 @@ pub struct Config {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: Option<String>,
-
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(long = "extra")]
-    pub extra: Option<String>,
 }
 
 impl Config {
