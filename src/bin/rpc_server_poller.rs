@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use hex_literal::hex;
+use stratus::config::RpcPollerConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
 use stratus::infra::BlockchainClient;
@@ -14,10 +15,9 @@ const POLL_LATENCY: Duration = Duration::from_secs(1);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    let config = init_global_services();
+    let config: RpcPollerConfig = init_global_services();
 
-    let rpc_url = config.external_rpc.clone().unwrap();
-    let chain = Arc::new(BlockchainClient::new(&rpc_url, Duration::from_secs(1))?);
+    let chain = Arc::new(BlockchainClient::new(&config.external_rpc, Duration::from_secs(1))?);
 
     // TODO instead of gathering the current block all the time, we should track the first block and just keep polling onwards aggregating by 1
     loop {
