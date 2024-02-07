@@ -11,12 +11,16 @@ use std::thread;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
+use ethers_core::types::Block as ECBlock;
+use ethers_core::types::Transaction as ECTransaction;
+use ethers_core::types::TransactionReceipt as ECTransactionReceipt;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
+use super::primitives::BlockNumber;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::miner::BlockMiner;
@@ -66,15 +70,31 @@ impl EthExecutor {
         }
     }
 
-    pub async fn import(
-        &self,
-        _block: ethers_core::types::Block<ethers_core::types::Transaction>,
-        _receipts: HashMap<H256, ethers_core::types::TransactionReceipt>,
-    ) -> anyhow::Result<()> {
-        //TODO iterate on block transactions
-        //TODO inside the iteration make the link with receipts
-        //TODO execute transacitons with execute_in_evm
-        //TODO save block
+    pub async fn import(&self, ethers_core_block: ECBlock<ECTransaction>, ethers_core_receipts: HashMap<H256, ECTransactionReceipt>) -> anyhow::Result<()> {
+        // Placeholder for all executions to be collected before saving the block.
+        let mut executions = Vec::new();
+
+        for ethers_core_transaction in ethers_core_block.clone().transactions {
+            // Find the receipt for the current transaction.
+            let ethers_core_receipt = ethers_core_receipts
+                .get(&ethers_core_transaction.hash)
+                .ok_or(anyhow!("Receipt not found for transaction {}", ethers_core_transaction.hash))?;
+
+            // Prepare input for the EVM execution based on transaction and its receipt.
+            let evm_input = self.prepare_evm_input(&ethers_core_transaction, ethers_core_receipt)?;
+
+            // Execute transaction in EVM.
+            let execution = self.execute_in_evm(evm_input).await?;
+            executions.push(execution);
+        }
+
+        // After executing all transactions, you can now create a Block object
+        // containing all necessary information, including transactions and their executions.
+        let block_to_save = self.prepare_block_to_save(&ethers_core_block, &executions)?;
+
+        // Save the block and its transactions to the database.
+        self.eth_storage.save_block(block_to_save).await?;
+
         //TODO compare slots/changes
         //TODO compare nonce
         //TODO compare balance
@@ -83,6 +103,21 @@ impl EthExecutor {
         //XXX panic in case of bad comparisson
 
         Ok(())
+    }
+
+    // Placeholder for preparing EVM input. Adjust according to your actual input structure.
+    fn prepare_evm_input(&self, _transaction: &ECTransaction, _receipt: &ECTransactionReceipt) -> anyhow::Result<EvmInput> {
+        //TODO Transform transaction and receipt into your EvmInput structure.
+        //TODO This might involve mapping fields from `transaction` and `receipt` to `EvmInput`.
+
+        TransactionInput::default().try_into() // Replace with actual transformation logic.
+    }
+
+    // Placeholder for preparing the block to be saved. Adjust according to your actual block structure.
+    fn prepare_block_to_save(&self, _block: &ECBlock<ECTransaction>, _executions: &[Execution]) -> anyhow::Result<Block> {
+        //TODO Transform the original block and executions into your Block structure.
+        //TODO This likely involves aggregating execution results and mapping to your storage format.
+        Ok(Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)) // Replace with actual transformation logic.
     }
 
     /// Executes Ethereum transactions and facilitates block creation.
