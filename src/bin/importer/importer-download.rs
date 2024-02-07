@@ -9,7 +9,7 @@ use futures::StreamExt;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
-use stratus::config::StorageConfig;
+use stratus::config::ImporterDownloadConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
 use stratus::infra::postgres::Postgres;
@@ -28,17 +28,13 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    let config = init_global_services();
+    let config: ImporterDownloadConfig = init_global_services();
 
     // init storage
-    let pg = match config.storage {
-        StorageConfig::Postgres { url } => Arc::new(Postgres::new(&url).await?),
-        StorageConfig::InMemory => panic!("unsupported storage: inmemory"),
-    };
+    let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
 
     // init blockchain
-    let rpc = config.external_rpc.expect("--external-rpc is required"); // todo: clap commands
-    let chain = Arc::new(BlockchainClient::new(&rpc, NETWORK_TIMEOUT)?);
+    let chain = Arc::new(BlockchainClient::new(&config.external_rpc, NETWORK_TIMEOUT)?);
     let current_block = chain.get_current_block_number().await?;
 
     // prepare and execute tasks
