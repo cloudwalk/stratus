@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select hash, block_number, payload\nfrom external_receipts\nwhere block_number >= $1 and block_number <= $2;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hash",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "block_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "payload",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a659c2aadec8b9d89a6dd40b8c5bfbc0e48a3a7bd8f580fa82fef6c52122f484"
+}

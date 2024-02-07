@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "fetch 1000\nfrom cur_downloaded_blocks",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ae671f367ce12d6119af69e915026ed4eba1fde8754382b192e496594cd3f5dc"
+}
