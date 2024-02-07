@@ -4,19 +4,17 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use clap::Parser;
 use futures::Future;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
-use stratus::config::Config;
 use stratus::config::StorageConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
-use stratus::infra::init_tracing;
 use stratus::infra::postgres::Postgres;
 use stratus::infra::BlockchainClient;
+use stratus::init_global_services;
 use stratus::log_and_err;
 
 /// Number of parallel downloads to execute.
@@ -30,9 +28,7 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    // init global
-    let config = Config::parse();
-    init_tracing();
+    let config = init_global_services();
 
     // init storage
     let pg = match config.storage {

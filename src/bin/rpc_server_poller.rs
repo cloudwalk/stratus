@@ -1,18 +1,12 @@
-use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Context;
-use clap::Parser;
 use hex_literal::hex;
-use stratus::config::Config;
-use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
-use stratus::eth::EthExecutor;
-use stratus::infra::init_tracing;
 use stratus::infra::BlockchainClient;
+use stratus::init_global_services;
 use tokio::time::sleep;
 use tokio::time::timeout;
 
@@ -20,8 +14,7 @@ const POLL_LATENCY: Duration = Duration::from_secs(1);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    init_tracing();
-    let config = Config::parse();
+    let config = init_global_services();
 
     let rpc_url = config.external_rpc.clone().unwrap();
     let chain = Arc::new(BlockchainClient::new(&rpc_url, Duration::from_secs(1))?);
@@ -44,8 +37,7 @@ async fn main() -> anyhow::Result<()> {
         let ethers_core_receipts = stratus::eth::sync_parser::parse_receipt(vec![&receipt_json])?;
 
         let storage = config.init_storage().await?;
-        let evms = config.init_evms(Arc::clone(&storage));
-        let executor = EthExecutor::new(evms, Arc::clone(&storage));
+        let executor = config.init_executor(Arc::clone(&storage));
         executor.import(ethers_core_block, ethers_core_receipts).await?;
 
         sleep(POLL_LATENCY).await;

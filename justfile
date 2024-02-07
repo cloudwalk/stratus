@@ -22,13 +22,13 @@ setup:
 # Stratus tasks
 # ------------------------------------------------------------------------------
 
-# Stratus: Run main service locally with debug options
+# Stratus: Run main service with debug options
 run *args="":
     #!/bin/bash
     RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- {{args}}
     exit 0
 
-# Stratus: Run main service locally with release options
+# Stratus: Run main service with release options
 run-release *args="":
     RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- {{args}}
 
@@ -74,11 +74,15 @@ update:
     cargo update stratus
 
 # ------------------------------------------------------------------------------
-# Jobs tasks
+# Importer tasks
 # ------------------------------------------------------------------------------
-# Job: Run "RPC ()" locally with debug options.
-importer-fetch:
-    cargo run --bin importer-fetch -- --storage {{postgres_url}} --external-rpc {{testnet_url}}
+# Importer: Download external RPC blocks to temporary storage
+importer-download:
+    cargo run --bin importer-download -- --storage {{postgres_url}} --external-rpc {{testnet_url}}
+
+# Importer: Import downloaded external RPC blocks to Stratus storage
+importer-import:
+    cargo run --bin importer-import -- --storage {{postgres_url}} --external-rpc {{testnet_url}}
 
 # ------------------------------------------------------------------------------
 # Test tasks

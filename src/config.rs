@@ -1,5 +1,6 @@
 //! Application configuration.
 
+use std::cmp::max;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -16,6 +17,7 @@ use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::InMemoryStorage;
+use crate::eth::EthExecutor;
 use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
@@ -58,15 +60,17 @@ impl Config {
         self.storage.init().await
     }
 
-    /// Initializes EVMs.
-    pub fn init_evms(&self, storage: Arc<dyn EthStorage>) -> NonEmpty<Box<dyn Evm>> {
-        tracing::info!(evms = %self.num_evms, "starting evms");
+    /// Initializes EthExecutor.
+    pub fn init_executor(&self, storage: Arc<dyn EthStorage>) -> EthExecutor {
+        let num_evms = max(self.num_evms, 1);
+        tracing::info!(evms = %num_evms, "starting executor");
 
-        let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(self.num_evms);
-        for _ in 1..=self.num_evms {
+        let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(num_evms);
+        for _ in 1..=num_evms {
             evms.push(Box::new(Revm::new(Arc::clone(&storage))));
         }
-        NonEmpty::from_vec(evms).unwrap()
+
+        EthExecutor::new(NonEmpty::from_vec(evms).unwrap(), Arc::clone(&storage))
     }
 
     /// Initializes Tokio runtime.
