@@ -106,15 +106,19 @@ impl EthExecutor {
     }
 
     // Placeholder for preparing EVM input. Adjust according to your actual input structure.
-    fn prepare_evm_input(&self, _transaction: &ECTransaction, _receipt: &ECTransactionReceipt) -> anyhow::Result<EvmInput> {
+    fn prepare_evm_input(&self, transaction: &ECTransaction, receipt: &ECTransactionReceipt) -> anyhow::Result<EvmInput> {
         //TODO Transform transaction and receipt into your EvmInput structure.
         //TODO This might involve mapping fields from `transaction` and `receipt` to `EvmInput`.
 
-        TransactionInput::default().try_into() // Replace with actual transformation logic.
+        let transaction_input: TransactionInput = match transaction.to_owned().try_into() {
+            Ok(transaction_input) => transaction_input,
+            Err(e) => return Err(anyhow!("Failed to convert transaction into TransactionInput: {:?}", e)),
+        };
+        transaction_input.try_into()
     }
 
     // Placeholder for preparing the block to be saved. Adjust according to your actual block structure.
-    fn prepare_block_to_save(&self, _block: &ECBlock<ECTransaction>, _executions: &[Execution]) -> anyhow::Result<Block> {
+    fn prepare_block_to_save(&self, block: &ECBlock<ECTransaction>, executions: &[Execution]) -> anyhow::Result<Block> {
         //TODO Transform the original block and executions into your Block structure.
         //TODO This likely involves aggregating execution results and mapping to your storage format.
         Ok(Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)) // Replace with actual transformation logic.
@@ -243,7 +247,7 @@ fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> crossbeam_channel::Sen
             }
             tracing::warn!("stopping evm thread because task channel was closed");
         })
-        .expect("spawning evm threads should not fail");
+         .expect("spawning evm threads should not fail");
     }
     evm_tx
 }
