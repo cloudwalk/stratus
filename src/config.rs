@@ -41,13 +41,17 @@ pub struct ImporterDownloadConfig {
     pub external_rpc: String,
 
     /// Postgres connection URL.
-    #[arg(short = 'd', long = "postgres-url", env = "POSTGRES_URL")]
+    #[arg(short = 'd', long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
 }
 
 /// Configuration for importer-import binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct ImporterImportConfig {
+    /// Postgres connection URL.
+    #[arg(short = 'd', long = "postgres", env = "POSTGRES_URL")]
+    pub postgres_url: String,
+
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,

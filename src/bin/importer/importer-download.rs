@@ -28,31 +28,28 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    // init services
     let config: ImporterDownloadConfig = init_global_services();
-
-    // init storage
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
-
-    // init blockchain
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc, NETWORK_TIMEOUT)?);
-    let current_block = chain.get_current_block_number().await?;
 
     // prepare and execute tasks
-    let tasks = prepare_tasks(pg, chain, current_block);
+    let tasks = prepare_tasks(pg, chain).await?;
     execute_tasks(tasks).await
 }
 
-fn prepare_tasks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, end: BlockNumber) -> Vec<impl Future<Output = Result<(), anyhow::Error>>> {
-    tracing::info!(%end, blocks_by_taks = %BLOCKS_BY_TASK,  "preparing tasks");
-    let mut tasks = Vec::new();
-
+async fn prepare_tasks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>) -> anyhow::Result<Vec<impl Future<Output = Result<(), anyhow::Error>>>> {
     let mut start = BlockNumber::ZERO;
+    let end = chain.get_current_block_number().await?;
+
+    tracing::info!(blocks_by_taks = %BLOCKS_BY_TASK, %start, %end, "preparing tasks");
+    let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (BLOCKS_BY_TASK - 1), end);
         tasks.push(download(Arc::clone(&pg), Arc::clone(&chain), start, end));
         start += BLOCKS_BY_TASK;
     }
-    tasks
+    Ok(tasks)
 }
 
 async fn execute_tasks(tasks: Vec<impl Future<Output = Result<(), anyhow::Error>>>) -> anyhow::Result<()> {
@@ -71,8 +68,8 @@ async fn execute_tasks(tasks: Vec<impl Future<Output = Result<(), anyhow::Error>
 
 async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
     // calculate current block
-    let mut current = match db_max_downloaded_block(&pg, start, end_inclusive).await? {
-        Some(max_block) => max_block.next(),
+    let mut current = match find_max_downloaded_block(&pg, start, end_inclusive).await? {
+        Some(number) => number.next(),
         None => start,
     };
     tracing::info!(%start, current = %current, end = %end_inclusive, "starting");
@@ -123,7 +120,7 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
             }
 
             // save block and receipts
-            if let Err(e) = db_insert_block_and_receipts(&pg, current, block_json, receipts_json).await {
+            if let Err(e) = insert_block_and_receipts(&pg, current, block_json, receipts_json).await {
                 tracing::warn!(reason = ?e, "retrying because failed to save block");
                 continue;
             }
@@ -136,11 +133,11 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
 }
 
 // -----------------------------------------------------------------------------
-// Postgres - Maybe move to Postgres module if needed elsewhere
+// Postgres
 // -----------------------------------------------------------------------------
 
-async fn db_max_downloaded_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
-    tracing::debug!(%start, %end, "counting collected blocks");
+async fn find_max_downloaded_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
+    tracing::debug!(%start, %end, "finding max downloaded block");
 
     let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_downloaded_block_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_one(&pg.connection_pool)
@@ -148,14 +145,14 @@ async fn db_max_downloaded_block(pg: &Postgres, start: BlockNumber, end: BlockNu
     let block_number: i64 = match result {
         Ok(Some(max)) => max,
         Ok(None) => return Ok(None),
-        Err(e) => return log_and_err!(reason = e, "failed to retrieve max block number"),
+        Err(e) => return log_and_err!(reason = e, "failed to find max block number"),
     };
 
-    Ok(Some(BlockNumber::from(block_number)))
+    Ok(Some(block_number.into()))
 }
 
-async fn db_insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()> {
-    tracing::debug!(?block, ?receipts, "saving block");
+async fn insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()> {
+    tracing::debug!(?block, ?receipts, "saving block and receipts");
 
     let mut tx = pg.start_transaction().await?;
 
@@ -170,7 +167,7 @@ async fn db_insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block:
             tracing::warn!(reason = ?e, "block unique violation, skipping");
         }
         Err(e) => {
-            return log_and_err!(reason = e, "failed to isnert block");
+            return log_and_err!(reason = e, "failed to insert block");
         }
     }
 
