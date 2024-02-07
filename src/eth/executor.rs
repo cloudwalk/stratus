@@ -5,10 +5,12 @@
 //! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread;
 
 use anyhow::anyhow;
+use ethereum_types::H256;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
@@ -62,6 +64,25 @@ impl EthExecutor {
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
         }
+    }
+
+    pub async fn import(
+        &self,
+        _block: ethers_core::types::Block<ethers_core::types::Transaction>,
+        _receipts: HashMap<H256, ethers_core::types::TransactionReceipt>,
+    ) -> anyhow::Result<()> {
+        //TODO iterate on block transactions
+        //TODO inside the iteration make the link with receipts
+        //TODO execute transacitons with execute_in_evm
+        //TODO save block
+        //TODO compare slots/changes
+        //TODO compare nonce
+        //TODO compare balance
+        //TODO compare logs
+        //TODO compare status
+        //XXX panic in case of bad comparisson
+
+        Ok(())
     }
 
     /// Executes Ethereum transactions and facilitates block creation.
