@@ -21,17 +21,57 @@ use crate::eth::EthExecutor;
 use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
-/// Application configuration entry-point.
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct Config {
-    /// Environment where the application is running.
-    #[arg(value_enum, short = 'e', long = "env", env = "ENV", default_value_t = Environment::Development)]
-    pub env: Environment,
-
+/// Configuration for main Stratus service.
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct StratusConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+/// Configuration for importer-download binary.
+#[derive(Parser, Debug)]
+pub struct ImporterDownloadConfig {
+    /// External RPC endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    /// Postgres connection URL.
+    #[arg(short = 'd', long = "postgres-url", env = "POSTGRES_URL")]
+    pub postgres_url: String,
+}
+
+/// Configuration for importer-import binary.
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct ImporterImportConfig {
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+/// Configuration for rpc-poller binary.
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct RpcPollerConfig {
+    /// External RPC endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+/// Common configuration that can be used by any binary.
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct CommonConfig {
+    /// Environment where the application is running.
+    #[arg(value_enum, short = 'e', long = "env", env = "ENV", default_value_t = Environment::Development)]
+    pub env: Environment,
 
     /// Storage implementation.
     #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
@@ -48,13 +88,9 @@ pub struct Config {
     /// Number of threads to execute global blocking tasks.
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "1")]
     pub num_blocking_threads: usize,
-
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: Option<String>,
 }
 
-impl Config {
+impl CommonConfig {
     /// Initializes storage.
     pub async fn init_storage(&self) -> anyhow::Result<Arc<dyn EthStorage>> {
         self.storage.init().await
