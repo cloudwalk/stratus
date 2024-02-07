@@ -36,3 +36,5 @@ clone brlc-multisig
 clone brlc-periphery
 clone brlc-token
 clone compound-periphery
+clone brlc-yield-streamer
+clone brlc-pix-cashier
