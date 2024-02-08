@@ -114,8 +114,9 @@ impl TryFrom<EthersTransaction> for TransactionInput {
         let chain_id: ChainId = match value.chain_id {
             Some(chain_id) => chain_id.into(),
             None => {
-                tracing::warn!(reason = %"transaction without chain id");
-                return Err(ConversionError::NoChainId(anyhow!("Transaction sent without chain id is not allowed.")));
+                let transaction_value = value.clone();
+                tracing::warn!(reason = %"transaction without chain id", ?transaction_value);
+                2009.into() //XXX this might have unexpected consequences, we need to review this down the road
             }
         };
 
