@@ -20,7 +20,7 @@ use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
-use super::primitives::BlockNumber;
+
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::miner::BlockMiner;
@@ -76,7 +76,7 @@ impl EthExecutor {
 
         for ethers_core_transaction in ethers_core_block.clone().transactions {
             // Find the receipt for the current transaction.
-            let ethers_core_receipt = ethers_core_receipts
+            let _ethers_core_receipt = ethers_core_receipts
                 .get(&ethers_core_transaction.hash)
                 .ok_or(anyhow!("Receipt not found for transaction {}", ethers_core_transaction.hash))?;
 
