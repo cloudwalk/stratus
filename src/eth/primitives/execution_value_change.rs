@@ -25,6 +25,22 @@ impl<T> ValueState<T> {
     pub fn is_not_set(&self) -> bool {
         not(self.is_set())
     }
+
+    pub fn take(self) -> Option<T> {
+        if let Self::Set(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn take_ref(&self) -> Option<&T> {
+        if let Self::Set(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
 }
 
 impl<T> ExecutionValueChange<T>
@@ -57,48 +73,27 @@ where
 
     /// Takes the original value as reference if it is set.
     pub fn take_original_ref(&self) -> Option<&T> {
-        if let ValueState::Set(ref value) = self.original {
-            Some(value)
-        } else {
-            None
-        }
+        self.original.take_ref()
     }
 
     /// Takes the original value if it is set.
     pub fn take_original(self) -> Option<T> {
-        if let ValueState::Set(value) = self.original {
-            Some(value)
-        } else {
-            None
-        }
+        self.original.take()
     }
 
     /// Takes the modified value if it is set.
     pub fn take_modified(self) -> Option<T> {
-        if let ValueState::Set(value) = self.modified {
-            Some(value)
-        } else {
-            None
-        }
+        self.modified.take()
     }
 
+    /// Takes the original and the modified value if they are set.
     pub fn take_both(self) -> (Option<T>, Option<T>) {
-        let original = if let ValueState::Set(value) = self.original { Some(value) } else { None };
-
-        let modified = if let ValueState::Set(value) = self.modified { Some(value) } else { None };
-
-        (original, modified)
+        (self.original.take(), self.modified.take())
     }
 
     /// Takes any value that is set giving preference to the modified value, but using the original value as fallback.
     pub fn take(self) -> Option<T> {
-        if let ValueState::Set(value) = self.modified {
-            Some(value)
-        } else if let ValueState::Set(value) = self.original {
-            Some(value)
-        } else {
-            None
-        }
+        self.modified.take().or_else(|| self.original.take())
     }
 
     /// Check if the value was modified.
