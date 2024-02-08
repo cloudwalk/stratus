@@ -56,8 +56,8 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
     }
 
     /// TODO: track metric
-    async fn read_account_opt(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        self.inner.read_account_opt(address, point_in_time).await
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        self.inner.maybe_read_account(address, point_in_time).await
     }
 
     async fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
@@ -68,8 +68,8 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
     }
 
     /// TODO: track metric
-    async fn read_slot_opt(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        self.inner.read_slot_opt(address, slot_index, point_in_time).await
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        self.inner.maybe_read_slot(address, slot_index, point_in_time).await
     }
 
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {

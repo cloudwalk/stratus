@@ -41,7 +41,7 @@ impl EthStorage for Postgres {
         Ok(None)
     }
 
-    async fn read_account_opt(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
         let account = match point_in_time {
             StoragePointInTime::Present => {
@@ -76,7 +76,7 @@ impl EthStorage for Postgres {
         }
     }
 
-    async fn read_slot_opt(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
         // TODO: improve this conversion
