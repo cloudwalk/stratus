@@ -11,9 +11,7 @@ use std::thread;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
-use ethers_core::types::Block as ECBlock;
-use ethers_core::types::Transaction as ECTransaction;
-use ethers_core::types::TransactionReceipt as ECTransactionReceipt;
+use ethers_core::types::Block as EthersBlock;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
@@ -33,6 +31,8 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+
+use super::primitives::ExternalTransaction;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -76,17 +76,17 @@ impl EthExecutor {
         Ok(())
     }
 
-    pub async fn import(&self, ethers_core_block: ECBlock<ECTransaction>, ethers_core_receipts: HashMap<H256, ECTransactionReceipt>) -> anyhow::Result<()> {
+    pub async fn import(&self, external_block: ExternalBlock, external_receipts: HashMap<H256, ExternalReceipt>) -> anyhow::Result<()> {
         // Placeholder for all executions to be collected before saving the block.
         let mut executions = Vec::new();
 
-        for ethers_core_transaction in ethers_core_block.clone().transactions {
+        for external_transaction in <EthersBlock<ExternalTransaction>>::from(external_block.clone()).transactions {
             // Find the receipt for the current transaction.
-            let _ethers_core_receipt = ethers_core_receipts
-                .get(&ethers_core_transaction.hash)
-                .ok_or(anyhow!("receipt not found for transaction {}", ethers_core_transaction.hash))?;
+            let _ethers_core_receipt = external_receipts
+                .get(&external_transaction.hash)
+                .ok_or(anyhow!("receipt not found for transaction {}", external_transaction.hash))?;
 
-            let transaction_input: TransactionInput = match ethers_core_transaction.to_owned().try_into() {
+            let transaction_input: TransactionInput = match external_transaction.to_owned().try_into() {
                 Ok(transaction_input) => transaction_input,
                 Err(e) => return Err(anyhow!("failed to convert transaction into TransactionInput: {:?}", e)),
             };
