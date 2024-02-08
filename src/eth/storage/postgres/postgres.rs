@@ -457,64 +457,64 @@ impl EthStorage for Postgres {
             .await
             .context("failed to insert transaction")?;
 
-            if is_success {
-                for change in transaction.execution.changes {
-                    let (original_nonce, nonce) = change.nonce.take_both();
-                    let (original_balance, balance) = change.balance.take_both();
+            for change in transaction.execution.changes {
+                let (original_nonce, new_nonce) = change.nonce.take_both();
+                let (original_balance, new_balance) = change.balance.take_both();
 
-                    let nonce: BigDecimal = nonce
-                        .unwrap_or_else(|| {
-                            tracing::debug!("Nonce not set, defaulting to 0");
-                            0.into()
-                        })
-                        .try_into()?;
+                let new_nonce: Option<BigDecimal> = match new_nonce {
+                    Some(nonce) => Some(nonce.try_into()?),
+                    None => None,
+                };
 
-                    let balance: BigDecimal = balance
-                        .unwrap_or_else(|| {
-                            tracing::debug!("Balance not set, defaulting to 0");
-                            0.into()
-                        })
-                        .try_into()?;
+                let new_balance: Option<BigDecimal> = match new_balance {
+                    Some(balance) => Some(balance.try_into()?),
+                    None => None,
+                };
 
-                    let bytecode = change
+                let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
+                let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
+
+                let bytecode = if is_success {
+                    change
                         .bytecode
                         .take()
                         .unwrap_or_else(|| {
-                            tracing::debug!("Bytecode not set, defaulting to None");
+                            tracing::debug!("bytecode not set, defaulting to None");
                             None
                         })
-                        .map(|val| val.as_ref().to_owned());
+                        .map(|val| val.as_ref().to_owned())
+                } else {
+                    None
+                };
 
-                    let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
-                    let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
+                let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
 
-                    let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+                let account_result: PgQueryResult = sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_account.sql",
+                    change.address.as_ref(),
+                    new_nonce.as_ref().unwrap_or(&original_nonce),
+                    new_balance.as_ref().unwrap_or(&original_balance),
+                    bytecode,
+                    block_number,
+                    original_nonce,
+                    original_balance
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert account")?;
 
-                    let account_result: PgQueryResult = sqlx::query_file!(
-                        "src/eth/storage/postgres/queries/insert_account.sql",
-                        change.address.as_ref(),
-                        nonce,
-                        balance,
-                        bytecode,
-                        block_number,
-                        original_nonce,
-                        original_balance
-                    )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert account")?;
+                // A successful insert/update with no conflicts will have one affected row
+                if account_result.rows_affected() != 1 {
+                    tx.rollback().await.context("failed to rollback transaction")?;
+                    let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
+                        address: change.address,
+                        expected_balance: original_balance,
+                        expected_nonce: original_nonce,
+                    }]));
+                    return Err(error);
+                }
 
-                    // A successful insert/update with no conflicts will have one affected row
-                    if account_result.rows_affected() != 1 {
-                        tx.rollback().await.context("failed to rollback transaction")?;
-                        let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
-                            address: change.address,
-                            expected_balance: original_balance,
-                            expected_nonce: original_nonce,
-                        }]));
-                        return Err(error);
-                    }
-
+                if let Some(balance) = new_balance {
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_historical_balance.sql",
                         change.address.as_ref(),
@@ -524,7 +524,9 @@ impl EthStorage for Postgres {
                     .execute(&mut *tx)
                     .await
                     .context("failed to insert balance")?;
+                }
 
+                if let Some(nonce) = new_nonce {
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
                         change.address.as_ref(),
@@ -534,7 +536,9 @@ impl EthStorage for Postgres {
                     .execute(&mut *tx)
                     .await
                     .context("failed to insert nonce")?;
+                }
 
+                if is_success {
                     for (slot_idx, value) in change.slots {
                         let (original_value, val) = value.clone().take_both();
                         let idx: [u8; 32] = slot_idx.into();
@@ -579,41 +583,43 @@ impl EthStorage for Postgres {
                 }
             }
 
-            for log in transaction.logs {
-                let addr = log.log.address.as_ref();
-                let data = log.log.data;
-                let tx_hash = log.transaction_hash.as_ref();
-                let tx_idx = i32::from(log.transaction_index);
-                let lg_idx = i32::from(log.log_index);
-                let b_number = i64::try_from(log.block_number).context("failed to convert block number")?;
-                let b_hash = log.block_hash.as_ref();
-                sqlx::query_file!(
-                    "src/eth/storage/postgres/queries/insert_log.sql",
-                    addr,
-                    *data,
-                    tx_hash,
-                    tx_idx,
-                    lg_idx,
-                    b_number,
-                    b_hash
-                )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert log")?;
-                for (idx, topic) in log.log.topics.into_iter().enumerate() {
+            if is_success {
+                for log in transaction.logs {
+                    let addr = log.log.address.as_ref();
+                    let data = log.log.data;
+                    let tx_hash = log.transaction_hash.as_ref();
+                    let tx_idx = i32::from(log.transaction_index);
+                    let lg_idx = i32::from(log.log_index);
+                    let b_number = i64::try_from(log.block_number).context("failed to convert block number")?;
+                    let b_hash = log.block_hash.as_ref();
                     sqlx::query_file!(
-                        "src/eth/storage/postgres/queries/insert_topic.sql",
-                        topic.as_ref(),
+                        "src/eth/storage/postgres/queries/insert_log.sql",
+                        addr,
+                        *data,
                         tx_hash,
                         tx_idx,
                         lg_idx,
-                        i32::try_from(idx).context("failed to convert topic idx")?,
                         b_number,
                         b_hash
                     )
                     .execute(&mut *tx)
                     .await
-                    .context("failed to insert topic")?;
+                    .context("failed to insert log")?;
+                    for (idx, topic) in log.log.topics.into_iter().enumerate() {
+                        sqlx::query_file!(
+                            "src/eth/storage/postgres/queries/insert_topic.sql",
+                            topic.as_ref(),
+                            tx_hash,
+                            tx_idx,
+                            lg_idx,
+                            i32::try_from(idx).context("failed to convert topic idx")?,
+                            b_number,
+                            b_hash
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .context("failed to insert topic")?;
+                    }
                 }
             }
         }
