@@ -80,20 +80,14 @@ impl EthExecutor {
                 .get(&ethers_core_transaction.hash)
                 .ok_or(anyhow!("Receipt not found for transaction {}", ethers_core_transaction.hash))?;
 
-            // Prepare input for the EVM execution based on transaction and its receipt.
-            let evm_input = self.prepare_evm_input(&ethers_core_transaction, ethers_core_receipt)?;
+            let transaction_input: TransactionInput = match ethers_core_transaction.to_owned().try_into() {
+                Ok(transaction_input) => transaction_input,
+                Err(e) => return Err(anyhow!("Failed to convert transaction into TransactionInput: {:?}", e)),
+            };
 
-            // Execute transaction in EVM.
-            let execution = self.execute_in_evm(evm_input).await?;
+            let execution = self.mine_and_execute_transaction(transaction_input).await?;
             executions.push(execution);
         }
-
-        // After executing all transactions, you can now create a Block object
-        // containing all necessary information, including transactions and their executions.
-        let block_to_save = self.prepare_block_to_save(&ethers_core_block, &executions)?;
-
-        // Save the block and its transactions to the database.
-        self.eth_storage.save_block(block_to_save).await?;
 
         //TODO compare slots/changes
         //TODO compare nonce
@@ -103,25 +97,6 @@ impl EthExecutor {
         //XXX panic in case of bad comparisson
 
         Ok(())
-    }
-
-    // Placeholder for preparing EVM input. Adjust according to your actual input structure.
-    fn prepare_evm_input(&self, transaction: &ECTransaction, _receipt: &ECTransactionReceipt) -> anyhow::Result<EvmInput> {
-        //TODO Transform transaction and receipt into your EvmInput structure.
-        //TODO This might involve mapping fields from `transaction` and `receipt` to `EvmInput`.
-
-        let transaction_input: TransactionInput = match transaction.to_owned().try_into() {
-            Ok(transaction_input) => transaction_input,
-            Err(e) => return Err(anyhow!("Failed to convert transaction into TransactionInput: {:?}", e)),
-        };
-        transaction_input.try_into()
-    }
-
-    // Placeholder for preparing the block to be saved. Adjust according to your actual block structure.
-    fn prepare_block_to_save(&self, _block: &ECBlock<ECTransaction>, _executions: &[Execution]) -> anyhow::Result<Block> {
-        //TODO Transform the original block and executions into your Block structure.
-        //TODO This likely involves aggregating execution results and mapping to your storage format.
-        Ok(Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)) // Replace with actual transformation logic.
     }
 
     /// Executes Ethereum transactions and facilitates block creation.
@@ -151,6 +126,11 @@ impl EthExecutor {
             return Err(anyhow!("Transaction sent from zero address is not allowed."));
         }
 
+        //creates a block and performs the necessary notifications
+        self.mine_and_execute_transaction(transaction).await
+    }
+
+    async fn mine_and_execute_transaction(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         // execute transaction until no more conflicts
         // TODO: must have a stop condition like timeout or max number of retries
         let (execution, block) = loop {
@@ -181,7 +161,7 @@ impl EthExecutor {
         };
 
         // notify transaction logs
-        for trx in block.transactions {
+        for trx in block.clone().transactions {
             for log in trx.logs {
                 if let Err(e) = self.log_notifier.send(log) {
                     tracing::error!(reason = ?e, "failed to send log notification");

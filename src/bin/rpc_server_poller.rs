@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let storage = config.init_storage().await?;
     let executor = config.init_executor(Arc::clone(&storage));
 
-    let mut current_block_number: BlockNumber = 0.into();
+    let mut current_block_number: BlockNumber = 35590.into();
     // TODO instead of gathering the current block all the time, we should track the first block and just keep polling onwards aggregating by 1
     loop {
         let start_time = std::time::Instant::now();
