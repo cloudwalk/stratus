@@ -41,7 +41,7 @@ impl EthStorage for Postgres {
         Ok(None)
     }
 
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+    async fn read_account_opt(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
         let account = match point_in_time {
             StoragePointInTime::Present => {
@@ -64,22 +64,19 @@ impl EthStorage for Postgres {
             }
         };
 
-        // If there is no account, we return
-        // an "empty account"
-        let acc = match account {
-            Some(acc) => acc,
-            None => Account {
-                address: address.clone(),
-                ..Account::default()
+        match account {
+            Some(account) => {
+                tracing::trace!(%address, ?account, "account found");
+                Ok(Some(account))
             },
-        };
-
-        tracing::debug!(%address, "Account read");
-
-        Ok(acc)
+            None => {
+                tracing::trace!(%address, "account not found");
+                Ok(None)
+            },
+        }
     }
 
-    async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    async fn read_slot_opt(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, "reading slot");
 
         // TODO: improve this conversion
@@ -106,12 +103,16 @@ impl EthStorage for Postgres {
 
         // If there is no slot, we return
         // an "empty slot"
-        let s = match slot {
-            Some(slot) => slot,
-            None => Slot::default(),
-        };
-
-        Ok(s)
+        match slot {
+            Some(slot) => {
+                tracing::trace!(?address, ?slot_index, %slot, "slot found");
+                Ok(Some(slot))
+            },
+            None => {
+                tracing::trace!(?address, ?slot_index, ?point_in_time,  "slot not found");
+                Ok(None)
+            }
+        }
     }
 
     async fn read_block(&self, block: &BlockSelection) -> anyhow::Result<Option<Block>> {
