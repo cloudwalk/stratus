@@ -20,7 +20,6 @@ use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
-
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::miner::BlockMiner;
