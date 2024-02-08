@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select max(number)\nfrom blocks;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "419ed3c21b0c74c888146404e320fc05673de96e65d6c493f4d721aee3146639"
+}
