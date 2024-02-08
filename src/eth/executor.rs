@@ -26,6 +26,8 @@ use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -67,6 +69,11 @@ impl EthExecutor {
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
         }
+    }
+
+    /// Synchorinize an external block using the offline flow.
+    pub async fn sync_offline(_block: ExternalBlock, _receipts: Vec<ExternalReceipt>) -> anyhow::Result<()> {
+        Ok(())
     }
 
     pub async fn import(&self, ethers_core_block: ECBlock<ECTransaction>, ethers_core_receipts: HashMap<H256, ECTransactionReceipt>) -> anyhow::Result<()> {
