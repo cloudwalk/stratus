@@ -110,13 +110,12 @@ impl EthStorage for InMemoryStorage {
         Ok(check_conflicts(&state_lock, execution))
     }
 
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         let state = self.lock_read().await;
 
         match state.accounts.get(address) {
-            // account found
             Some(account) => {
                 let account = Account {
                     address: address.clone(),
@@ -125,21 +124,17 @@ impl EthStorage for InMemoryStorage {
                     bytecode: account.bytecode.get_at_point(point_in_time).unwrap_or_default(),
                 };
                 tracing::trace!(%address, ?account, "account found");
-                Ok(account)
+                Ok(Some(account))
             }
 
-            // account not found
             None => {
                 tracing::trace!(%address, "account not found");
-                Ok(Account {
-                    address: address.clone(),
-                    ..Account::default()
-                })
+                Ok(None)
             }
         }
     }
 
-    async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
         let state = self.lock_read().await;
@@ -149,17 +144,15 @@ impl EthStorage for InMemoryStorage {
         };
 
         match account.slots.get(slot_index) {
-            // slot exists and block NOT specified
             Some(slot_history) => {
                 let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %slot_index, %slot, "slot found");
-                Ok(slot)
+                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
+                Ok(Some(slot))
             }
 
-            // slot NOT exists
             None => {
-                tracing::trace!(%address, ?point_in_time, %slot_index, "slot not found");
-                Ok(Slot::default())
+                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
+                Ok(None)
             }
         }
     }
