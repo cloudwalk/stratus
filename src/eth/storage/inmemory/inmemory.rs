@@ -12,7 +12,6 @@ use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
 use super::InMemoryAccount;
-use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -29,7 +28,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::inmemory::InMemoryHistory;
-use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
 
@@ -65,22 +63,8 @@ impl Default for InMemoryStorage {
     fn default() -> Self {
         tracing::info!("starting inmemory storage");
 
-        let mut state = InMemoryStorageState::default();
-
-        // add genesis block to state
-        let genesis = Arc::new(BlockMiner::genesis());
-        state.blocks_by_number.insert(*genesis.number(), Arc::clone(&genesis));
-        state.blocks_by_hash.insert(genesis.hash().clone(), Arc::clone(&genesis));
-
-        // add test accounts to state
-        for account in test_accounts() {
-            state
-                .accounts
-                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
-        }
-
         Self {
-            state: RwLock::new(state),
+            state: RwLock::new(InMemoryStorageState::default()),
             block_number: Default::default(),
         }
     }
@@ -311,6 +295,24 @@ impl EthStorage for InMemoryStorage {
             account.reset(block_number);
         }
 
+        Ok(())
+    }
+
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
+        let block = Arc::new(genesis);
+        let mut state = self.lock_write().await;
+        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
+        state.blocks_by_hash.insert(block.hash().clone(), block);
+        Ok(())
+    }
+
+    async fn enable_test_accounts(&self, test_account: Vec<Account>) -> anyhow::Result<()> {
+        let mut state = self.lock_write().await;
+        for account in test_account {
+            state
+                .accounts
+                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
+        }
         Ok(())
     }
 }
