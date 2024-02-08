@@ -2,10 +2,13 @@
 
 use std::sync::Arc;
 
+use itertools::Itertools;
 use serde_json::Value as JsonValue;
 use sqlx::Row;
 use stratus::config::ImporterImportConfig;
 use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::ExternalBlock;
+use stratus::eth::primitives::ExternalReceipt;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -15,13 +18,15 @@ async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterImportConfig = init_global_services();
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
+    let storage = config.init_storage().await?;
+    let executor = config.init_executor(storage);
 
     // init cursor
     let mut tx = init_blocks_cursor(&pg).await?;
 
     // fetch blocks form cursor reprocessing
     loop {
-        // fetch blocks
+        // find blocks
         let blocks = fetch_blocks_cursor(&mut tx).await?;
         if blocks.is_empty() {
             tracing::info!("no more blocks to process");
@@ -35,8 +40,15 @@ async fn main() -> anyhow::Result<()> {
 
         // imports txs
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
-        for _ in blocks {
-            // do import
+        for block in blocks {
+            // filter receipt from current block
+            let receipts = receipts
+                .iter()
+                .filter(|receipt| receipt.block_number == block.number)
+                .map(|receipt| &receipt.payload)
+                .collect_vec();
+
+            executor.import_offline(block.payload, &receipts).await?;
         }
     }
     Ok(())
@@ -48,13 +60,13 @@ async fn main() -> anyhow::Result<()> {
 
 struct BlockRow {
     number: i64,
-    payload: JsonValue,
+    payload: ExternalBlock,
 }
 
 struct ReceiptRow {
     hash: Vec<u8>,
     block_number: i64,
-    payload: JsonValue,
+    payload: ExternalReceipt,
 }
 
 async fn init_blocks_cursor(pg: &Postgres) -> anyhow::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
@@ -83,13 +95,17 @@ async fn fetch_blocks_cursor(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> 
         .await;
 
     match result {
-        Ok(rows) => Ok(rows
-            .into_iter()
-            .map(|row| BlockRow {
-                number: row.get_unchecked::<'_, i64, usize>(0),
-                payload: row.get_unchecked::<'_, JsonValue, usize>(1),
-            })
-            .collect()),
+        Ok(rows) => {
+            let mut parsed_rows: Vec<BlockRow> = Vec::with_capacity(rows.len());
+            for row in rows {
+                let parsed = BlockRow {
+                    number: row.get_unchecked::<'_, i64, usize>(0),
+                    payload: row.get_unchecked::<'_, JsonValue, usize>(1).try_into()?,
+                };
+                parsed_rows.push(parsed);
+            }
+            Ok(parsed_rows)
+        }
         Err(e) => log_and_err!(reason = e, "failed to fetch blocks from cursor"),
     }
 }
@@ -97,17 +113,24 @@ async fn fetch_blocks_cursor(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> 
 async fn find_receipts(pg: &Postgres, block_start: i64, block_end: i64) -> anyhow::Result<Vec<ReceiptRow>> {
     tracing::debug!(start = %block_start, end = %block_end, "findind receipts");
 
-    let result = sqlx::query_file_as!(
-        ReceiptRow,
-        "src/bin/importer/sql/select_downloaded_receipts_in_range.sql",
-        block_start,
-        block_end
-    )
-    .fetch_all(&pg.connection_pool)
-    .await;
+    let result = sqlx::query_file!("src/bin/importer/sql/select_downloaded_receipts_in_range.sql", block_start, block_end)
+        .fetch_all(&pg.connection_pool)
+        .await;
 
     match result {
-        Ok(receipts) => Ok(receipts),
+        Ok(rows) => {
+            let mut parsed_rows: Vec<ReceiptRow> = Vec::with_capacity(rows.len());
+            for row in rows {
+                let parsed = ReceiptRow {
+                    hash: row.hash,
+                    block_number: row.block_number,
+                    payload: row.payload.try_into()?,
+                };
+
+                parsed_rows.push(parsed);
+            }
+            Ok(parsed_rows)
+        }
         Err(e) => log_and_err!(reason = e, "failed to find receipts"),
     }
 }
