@@ -1,20 +1,12 @@
-use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Context;
-use clap::Parser;
-use hex_literal::hex;
 use stratus::config::RpcPollerConfig;
-use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
-use stratus::eth::EthExecutor;
-use stratus::infra::init_tracing;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
-use tokio::time::sleep;
 use tokio::time::timeout;
 
 const POLL_LATENCY: Duration = Duration::from_secs(1);

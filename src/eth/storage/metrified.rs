@@ -55,11 +55,21 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         result
     }
 
+    /// TODO: track metric
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        self.inner.maybe_read_account(address, point_in_time).await
+    }
+
     async fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         let start = Instant::now();
         let result = self.inner.read_slot(address, slot, point_in_time).await;
         metrics::inc_storage_slots_read(start.elapsed(), point_in_time, result.is_ok());
         result
+    }
+
+    /// TODO: track metric
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        self.inner.maybe_read_slot(address, slot_index, point_in_time).await
     }
 
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
