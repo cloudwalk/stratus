@@ -69,6 +69,7 @@ impl Dummy<Faker> for TransactionInput {
     }
 }
 
+#[derive(Debug)]
 pub enum ConversionError {
     InvalidSigner(anyhow::Error),
     NoChainId(anyhow::Error),
