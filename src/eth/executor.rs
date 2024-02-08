@@ -82,7 +82,7 @@ impl EthExecutor {
 
             let transaction_input: TransactionInput = match ethers_core_transaction.to_owned().try_into() {
                 Ok(transaction_input) => transaction_input,
-                Err(e) => return Err(anyhow!("Failed to convert transaction into TransactionInput: {:?}", e)),
+                Err(e) => return Err(anyhow!("failed to convert transaction into TransactionInput: {:?}", e)),
             };
 
             let execution = self.mine_and_execute_transaction(transaction_input).await?;
