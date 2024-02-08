@@ -6,13 +6,14 @@ use anyhow::anyhow;
 use anyhow::Context;
 use clap::Parser;
 use hex_literal::hex;
-use stratus::config::Config;
+use stratus::config::RpcPollerConfig;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
 use stratus::eth::EthExecutor;
 use stratus::infra::init_tracing;
 use stratus::infra::BlockchainClient;
+use stratus::init_global_services;
 use tokio::time::sleep;
 use tokio::time::timeout;
 
@@ -20,16 +21,13 @@ const POLL_LATENCY: Duration = Duration::from_secs(1);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    init_tracing();
-    let config = Config::parse();
+    let config: RpcPollerConfig = init_global_services();
 
-    let rpc_url = config.external_rpc.clone().unwrap();
-    let chain = Arc::new(BlockchainClient::new(&rpc_url, Duration::from_secs(1))?);
+    let chain = Arc::new(BlockchainClient::new(&config.external_rpc, Duration::from_secs(1))?);
 
     // Initialize storage and executor for importing the block and receipts.
     let storage = config.init_storage().await?;
-    let evms = config.init_evms(Arc::clone(&storage));
-    let executor = EthExecutor::new(evms, Arc::clone(&storage));
+    let executor = config.init_executor(Arc::clone(&storage));
 
     let mut current_block_number: BlockNumber = 0.into();
     // TODO instead of gathering the current block all the time, we should track the first block and just keep polling onwards aggregating by 1
@@ -48,9 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
         // Fetch the receipt for each transaction in the block.
         for transaction in &ethers_core_block.transactions {
-            let receipt = Arc::clone(&chain)
-                .get_transaction_receipt(&Hash::from(transaction.hash))
-                .await?;
+            let receipt = Arc::clone(&chain).get_transaction_receipt(&Hash::from(transaction.hash)).await?;
             let receipt_json = serde_json::to_string(&receipt)?;
             receipt_jsons.push(receipt_json);
         }
@@ -65,7 +61,10 @@ async fn main() -> anyhow::Result<()> {
 
         tracing::info!(
             "Fetching {} receipts for {} transactions in block {} took {:?}",
-            receipts_count, transactions_count, current_block_number, fetching_duration
+            receipts_count,
+            transactions_count,
+            current_block_number,
+            fetching_duration
         );
 
         // Import the block and its associated receipts.

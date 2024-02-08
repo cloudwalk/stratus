@@ -247,7 +247,7 @@ fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> crossbeam_channel::Sen
             }
             tracing::warn!("stopping evm thread because task channel was closed");
         })
-         .expect("spawning evm threads should not fail");
+        .expect("spawning evm threads should not fail");
     }
     evm_tx
 }
