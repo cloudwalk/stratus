@@ -78,7 +78,7 @@ impl EthExecutor {
             // Find the receipt for the current transaction.
             let _ethers_core_receipt = ethers_core_receipts
                 .get(&ethers_core_transaction.hash)
-                .ok_or(anyhow!("Receipt not found for transaction {}", ethers_core_transaction.hash))?;
+                .ok_or(anyhow!("receipt not found for transaction {}", ethers_core_transaction.hash))?;
 
             let transaction_input: TransactionInput = match ethers_core_transaction.to_owned().try_into() {
                 Ok(transaction_input) => transaction_input,
