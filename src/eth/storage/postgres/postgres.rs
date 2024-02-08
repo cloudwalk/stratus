@@ -672,6 +672,68 @@ impl EthStorage for Postgres {
 
         Ok(())
     }
+
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
+        let existing_genesis = sqlx::query_file!("src/eth/storage/postgres/queries/select_genesis.sql")
+            .fetch_optional(&self.connection_pool)
+            .await?;
+
+        if existing_genesis.is_none() {
+            self.save_block(genesis).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn enable_test_accounts(&self, test_accounts: Vec<Account>) -> anyhow::Result<()> {
+        tracing::debug!("adding test accounts to genesis block");
+
+        for acc in test_accounts {
+            let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
+            let block_number = 0;
+            let balance = BigDecimal::try_from(acc.balance)?;
+            let nonce = BigDecimal::try_from(acc.nonce)?;
+            let bytecode = acc.bytecode.as_deref();
+
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_account.sql",
+                acc.address.as_ref(),
+                nonce,
+                balance,
+                bytecode,
+                block_number,
+                BigDecimal::from(0),
+                BigDecimal::from(0)
+            )
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert account")?;
+
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_historical_balance.sql",
+                acc.address.as_ref(),
+                balance,
+                block_number
+            )
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert balance")?;
+
+            sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
+                acc.address.as_ref(),
+                nonce,
+                block_number
+            )
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert nonce")?;
+
+            tx.commit().await.context("Failed to commit transaction")?;
+        }
+
+        Ok(())
+    }
 }
 
 fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<TransactionHash, Vec<PostgresLog>> {

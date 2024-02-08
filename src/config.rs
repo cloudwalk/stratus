@@ -15,6 +15,8 @@ use tokio::runtime::Runtime;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
+use crate::eth::miner::BlockMiner;
+use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::InMemoryStorage;
 use crate::eth::EthExecutor;
@@ -41,7 +43,7 @@ pub struct ImporterDownloadConfig {
     pub external_rpc: String,
 
     /// Postgres connection URL.
-    #[arg(short = 'd', long = "postgres", env = "POSTGRES_URL")]
+    #[arg(long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
 }
 
@@ -92,12 +94,27 @@ pub struct CommonConfig {
     /// Number of threads to execute global blocking tasks.
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "1")]
     pub num_blocking_threads: usize,
+
+    /// Generates genesis block on startup when it does not exist.
+    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
+    pub enable_genesis: bool,
+
+    /// Enables test accounts with max wei on startup.
+    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
+    pub enable_test_accounts: bool,
 }
 
 impl CommonConfig {
     /// Initializes storage.
     pub async fn init_storage(&self) -> anyhow::Result<Arc<dyn EthStorage>> {
-        self.storage.init().await
+        let storage = self.storage.init().await?;
+        if self.enable_genesis {
+            storage.enable_genesis(BlockMiner::genesis()).await?;
+        }
+        if self.enable_test_accounts {
+            storage.enable_test_accounts(test_accounts()).await?;
+        }
+        Ok(storage)
     }
 
     /// Initializes EthExecutor.
