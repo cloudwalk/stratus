@@ -68,11 +68,11 @@ impl EthStorage for Postgres {
             Some(account) => {
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
-            },
+            }
             None => {
                 tracing::trace!(%address, "account not found");
                 Ok(None)
-            },
+            }
         }
     }
 
@@ -107,9 +107,9 @@ impl EthStorage for Postgres {
             Some(slot) => {
                 tracing::trace!(?address, ?slot_index, %slot, "slot found");
                 Ok(Some(slot))
-            },
+            }
             None => {
-                tracing::trace!(?address, ?slot_index, ?point_in_time,  "slot not found");
+                tracing::trace!(?address, ?slot_index, ?point_in_time, "slot not found");
                 Ok(None)
             }
         }

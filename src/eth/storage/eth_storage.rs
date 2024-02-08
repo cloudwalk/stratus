@@ -72,7 +72,7 @@ pub trait EthStorage: Send + Sync {
             None => Ok(Account {
                 address: address.clone(),
                 ..Account::default()
-            })
+            }),
         }
     }
 
@@ -83,7 +83,7 @@ pub trait EthStorage: Send + Sync {
             None => Ok(Slot {
                 index: slot_index.clone(),
                 ..Default::default()
-            })
+            }),
         }
     }
 

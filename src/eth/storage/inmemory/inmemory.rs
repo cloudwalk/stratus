@@ -116,7 +116,6 @@ impl EthStorage for InMemoryStorage {
         let state = self.lock_read().await;
 
         match state.accounts.get(address) {
-
             Some(account) => {
                 let account = Account {
                     address: address.clone(),
