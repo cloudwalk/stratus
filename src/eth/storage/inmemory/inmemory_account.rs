@@ -57,7 +57,7 @@ impl InMemoryAccount {
         self.balance.push(block_number, balance);
     }
 
-    /// Sets a new nonce for the accoun tracking the history change.
+    /// Sets a new nonce for the account tracking the history change.
     pub fn set_nonce(&mut self, block_number: BlockNumber, nonce: Nonce) {
         self.nonce.push(block_number, nonce);
     }

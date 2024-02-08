@@ -106,11 +106,15 @@ impl EthExecutor {
     }
 
     // Placeholder for preparing EVM input. Adjust according to your actual input structure.
-    fn prepare_evm_input(&self, _transaction: &ECTransaction, _receipt: &ECTransactionReceipt) -> anyhow::Result<EvmInput> {
+    fn prepare_evm_input(&self, transaction: &ECTransaction, _receipt: &ECTransactionReceipt) -> anyhow::Result<EvmInput> {
         //TODO Transform transaction and receipt into your EvmInput structure.
         //TODO This might involve mapping fields from `transaction` and `receipt` to `EvmInput`.
 
-        TransactionInput::default().try_into() // Replace with actual transformation logic.
+        let transaction_input: TransactionInput = match transaction.to_owned().try_into() {
+            Ok(transaction_input) => transaction_input,
+            Err(e) => return Err(anyhow!("Failed to convert transaction into TransactionInput: {:?}", e)),
+        };
+        transaction_input.try_into()
     }
 
     // Placeholder for preparing the block to be saved. Adjust according to your actual block structure.
