@@ -227,57 +227,14 @@ impl EthStorage for InMemoryStorage {
             }
 
             // save execution changes
-            self.save_account_changes(*block.number(), transaction.execution).await?;
+            save_account_changes(&mut state, *block.number(), transaction.execution);
         }
         Ok(())
     }
 
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
-        let is_success = execution.is_success();
-        let changes_vec = execution.changes;
-        let mut state = self.lock_write().await;
-
-        for changes in changes_vec {
-            let account = state
-                .accounts
-                .entry(changes.address.clone())
-                .or_insert_with(|| InMemoryAccount::new(changes.address));
-
-            // nonce
-            if let Some(nonce) = changes.nonce.take_modified() {
-                account.set_nonce(block_number, nonce);
-            }
-
-            // balance
-            if let Some(balance) = changes.balance.take_modified() {
-                account.set_balance(block_number, balance);
-            }
-
-            // bytecode
-            if is_success {
-                if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                    account.set_bytecode(block_number, bytecode);
-                }
-            }
-
-            // slots
-            if is_success {
-                for (slot_index, slot) in changes.slots {
-                    if let Some(slot) = slot.take_modified() {
-                        match account.slots.get_mut(&slot_index) {
-                            Some(slot_history) => {
-                                slot_history.push(block_number, slot);
-                            }
-                            None => {
-                                account.slots.insert(slot_index, InMemoryHistory::new(block_number, slot));
-                            }
-                        };
-                    }
-                }
-            }
-        }
-
-        Ok(())
+        let mut state_lock = self.lock_write().await;
+        Ok(save_account_changes(&mut state_lock, block_number, execution))
     }
 
     async fn reset(&self, block_number: BlockNumber) -> anyhow::Result<()> {
@@ -324,6 +281,51 @@ impl EthStorage for InMemoryStorage {
                 .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
         }
         Ok(())
+    }
+}
+
+fn save_account_changes(state: &mut RwLockWriteGuard<InMemoryStorageState>, block_number: BlockNumber, execution: Execution) {
+    let is_success = execution.is_success();
+    let changes_vec = execution.changes;
+
+    for changes in changes_vec {
+        let account = state
+            .accounts
+            .entry(changes.address.clone())
+            .or_insert_with(|| InMemoryAccount::new(changes.address));
+
+        // nonce
+        if let Some(nonce) = changes.nonce.take_modified() {
+            account.set_nonce(block_number, nonce);
+        }
+
+        // balance
+        if let Some(balance) = changes.balance.take_modified() {
+            account.set_balance(block_number, balance);
+        }
+
+        // bytecode
+        if is_success {
+            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
+                account.set_bytecode(block_number, bytecode);
+            }
+        }
+
+        // slots
+        if is_success {
+            for (slot_index, slot) in changes.slots {
+                if let Some(slot) = slot.take_modified() {
+                    match account.slots.get_mut(&slot_index) {
+                        Some(slot_history) => {
+                            slot_history.push(block_number, slot);
+                        }
+                        None => {
+                            account.slots.insert(slot_index, InMemoryHistory::new(block_number, slot));
+                        }
+                    };
+                }
+            }
+        }
     }
 }
 
