@@ -93,8 +93,9 @@ impl TryFrom<Nonce> for BigDecimal {
 
 #[cfg(test)]
 mod tests {
-    use super::*; // Adjust this as necessary to bring your types into scope
     use sqlx::types::BigDecimal;
+
+    use super::*; // Adjust this as necessary to bring your types into scope
 
     #[test]
     fn big_decimal_to_nonce_conversion() {
