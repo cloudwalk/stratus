@@ -8,6 +8,7 @@
 //! structure, such as querying block information or broadcasting newly mined
 //! blocks.
 
+use anyhow::anyhow;
 use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
@@ -57,9 +58,16 @@ impl Block {
         &self.header.hash
     }
 
-    pub fn cmp_with_external(&self, external_block: &ExternalBlock) {
-        assert_eq!(self.transactions.len(), external_block.transactions.len());
-        assert_eq!(self.header.transactions_root, external_block.transactions_root.into());
+    pub fn cmp_with_external(&self, external_block: &ExternalBlock) -> anyhow::Result<()> {
+        if self.transactions.len() != external_block.transactions.len() {
+            return Err(anyhow!("block transactions length mismatch, expected: {:?} got: {:?}", external_block.transactions.len(), self.transactions.len()))
+        }
+
+        let external_tx_root = external_block.transactions_root.into();
+        if self.header.transactions_root != external_tx_root {
+            return Err(anyhow!("block transactions root mismatch, expected: {:?} got: {:?}", external_tx_root, self.header.transactions_root))
+        }
+        Ok(())
     }
 }
 

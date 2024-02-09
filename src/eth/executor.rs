@@ -132,7 +132,7 @@ impl EthExecutor {
             external_block.clone().into()
         };
 
-        block.cmp_with_external(&external_block);
+        block.cmp_with_external(&external_block)?;
 
         self.eth_storage.save_block(block).await?;
 
