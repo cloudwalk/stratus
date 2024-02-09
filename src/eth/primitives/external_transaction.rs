@@ -1,8 +1,8 @@
 use ethers_core::types::Transaction as EthersTransaction;
 
 use crate::eth::primitives::transaction_input::ConversionError;
-use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::TransactionInput;
 
 #[derive(Debug, Clone, Default, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
