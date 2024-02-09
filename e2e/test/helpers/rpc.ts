@@ -3,11 +3,11 @@ import { expect } from "chai";
 import { JsonRpcProvider, keccak256 } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
+import { Numbers } from "web3-types";
 
 import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
-import { CURRENT_NETWORK } from "./network";
-import { Numbers } from "web3-types";
+import { Network, currentNetwork, isStratus } from "./network";
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -15,10 +15,12 @@ import { Numbers } from "web3-types";
 export const CHAIN_ID_DEC = 2008;
 export const CHAIN_ID = toHex(CHAIN_ID_DEC);
 
+export const TX_PARAMS = { chainId: CHAIN_ID, gasPrice: 0, gasLimit: 1_000_000 };
+
 // Special numbers
 export const ZERO = "0x0";
 export const ONE = "0x1";
-export const MAX = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+export const TEST_BALANCE = "0xffffffffffffffff";
 
 // Special hashes
 export const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";
@@ -29,7 +31,7 @@ export const HASH_EMPTY_TRANSACTIONS = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e0
 // -----------------------------------------------------------------------------
 
 // Configure RPC provider according to the network.
-let providerUrl = (config.networks[CURRENT_NETWORK as string] as HttpNetworkConfig).url;
+let providerUrl = (config.networks[currentNetwork() as string] as HttpNetworkConfig).url;
 if (!providerUrl) {
     providerUrl = "http://localhost:8545";
 }
@@ -117,12 +119,10 @@ export function toPaddedHex(number: number | bigint, bytes: number): string {
 }
 
 // Converts a hex string timestamp into unix time in seconds
-export function fromHexTimestamp(timestamp: Numbers):  number {
+export function fromHexTimestamp(timestamp: Numbers): number {
     let value = timestamp.valueOf();
-    if (typeof value == "string")
-        return parseInt(value, 16);
-    else 
-        throw new Error("Expected block timestamp to be a hexstring. Got: " + timestamp.valueOf());
+    if (typeof value == "string") return parseInt(value, 16);
+    else throw new Error("Expected block timestamp to be a hexstring. Got: " + timestamp.valueOf());
 }
 
 // Calculate the storage position of an address key in a mapping.
@@ -162,8 +162,12 @@ export async function sendRawTransactions(signedTxs: string[]): Promise<string[]
 }
 
 /// Resets the blockchain state to the specified block number.
-export async function sendReset(blockNumber: number = 0): Promise<void> {
-    await send("debug_setHead", [toHex(blockNumber)]);
+export async function sendReset(): Promise<void> {
+    if (isStratus) {
+        await send("debug_setHead", [toHex(0)]);
+    } else {
+        await send("hardhat_reset");
+    }
 }
 
 /// Retrieves the current nonce of an account.

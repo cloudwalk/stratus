@@ -145,7 +145,7 @@ pub fn test_accounts() -> Vec<Account> {
     .into_iter()
     .map(|address| Account {
         address: address.into(),
-        balance: Wei::MAX,
+        balance: Wei::TEST_BALANCE,
         ..Account::default()
     })
     .collect()

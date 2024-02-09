@@ -23,6 +23,10 @@ const config: HardhatUserConfig = {
             mining: {
                 auto: true,
             },
+            accounts: {
+                mnemonic: ACCOUNTS_MNEMONIC,
+                accountsBalance: "18446744073709551615", // u64::max
+            },
         },
         anvil: {
             url: "http://localhost:8546",
