@@ -97,8 +97,18 @@ impl EthStorage for StratusStorage {
     }
 
     /// Retrieves a transaction from the storage.
-    async fn read_mined_transaction(&self, _hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        todo!()
+    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+        let tx = match self.temp.read_mined_transaction(hash).await? {
+            Some(tx) => Some(tx),
+            None => {
+                match self.perm.read_mined_transaction(hash).await? {
+                    Some(tx) => Some(tx),
+                    None => None
+                }
+            }
+        };
+
+        Ok(tx)
     }
 
     /// Retrieves logs from the storage.
@@ -117,8 +127,11 @@ impl EthStorage for StratusStorage {
     }
 
     /// Resets all state to a specific block number.
-    async fn reset(&self, _number: BlockNumber) -> anyhow::Result<()> {
-        todo!()
+    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+        self.temp.reset(number).await?;
+        self.perm.reset(number).await?;
+
+        Ok(())
     }
 
     /// Enables genesis block.
