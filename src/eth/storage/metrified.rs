@@ -18,6 +18,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::infra::metrics;
 
 /// Proxy storage that tracks metrics.
@@ -98,6 +99,10 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         let result = self.inner.save_block(block).await;
         metrics::inc_storage_blocks_written(start.elapsed(), result.is_ok());
         result
+    }
+
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        todo!();
     }
 
     // TODO: track metric

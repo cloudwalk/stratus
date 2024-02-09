@@ -17,6 +17,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::MetrifiedStorage;
+use crate::eth::primitives::ExecutionAccountChanges;
 
 /// EVM storage operations.
 #[async_trait]
@@ -55,6 +56,9 @@ pub trait EthStorage: Send + Sync {
 
     /// Persist atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
+
+    /// Temporarily stores account changes during block production
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
 
     /// Resets all state to a specific block number.
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;

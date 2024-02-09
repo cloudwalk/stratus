@@ -18,6 +18,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
@@ -227,46 +228,56 @@ impl EthStorage for InMemoryStorage {
             }
 
             // save execution changes
-            for changes in transaction.execution.changes {
-                let account = state
-                    .accounts
-                    .entry(changes.address.clone())
-                    .or_insert_with(|| InMemoryAccount::new(changes.address));
+            self.save_account_changes(*block.number(), transaction.execution).await?
+        }
+        Ok(())
+    }
 
-                // nonce
-                if let Some(nonce) = changes.nonce.take_modified() {
-                    account.set_nonce(*block.number(), nonce);
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        let is_success = execution.is_success();
+        let changes_vec = execution.changes;
+        let mut state = self.lock_write().await;
+
+        for changes in changes_vec {
+            let account = state
+                .accounts
+                .entry(changes.address.clone())
+                .or_insert_with(|| InMemoryAccount::new(changes.address));
+
+            // nonce
+            if let Some(nonce) = changes.nonce.take_modified() {
+                account.set_nonce(block_number, nonce);
+            }
+
+            // balance
+            if let Some(balance) = changes.balance.take_modified() {
+                account.set_balance(block_number, balance);
+            }
+
+            // bytecode
+            if is_success {
+                if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
+                    account.set_bytecode(block_number, bytecode);
                 }
+            }
 
-                // balance
-                if let Some(balance) = changes.balance.take_modified() {
-                    account.set_balance(*block.number(), balance);
-                }
-
-                // bytecode
-                if is_success {
-                    if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                        account.set_bytecode(*block.number(), bytecode);
-                    }
-                }
-
-                // slots
-                if is_success {
-                    for (slot_index, slot) in changes.slots {
-                        if let Some(slot) = slot.take_modified() {
-                            match account.slots.get_mut(&slot_index) {
-                                Some(slot_history) => {
-                                    slot_history.push(*block.number(), slot);
-                                }
-                                None => {
-                                    account.slots.insert(slot_index, InMemoryHistory::new(*block.number(), slot));
-                                }
-                            };
-                        }
+            // slots
+            if is_success {
+                for (slot_index, slot) in changes.slots {
+                    if let Some(slot) = slot.take_modified() {
+                        match account.slots.get_mut(&slot_index) {
+                            Some(slot_history) => {
+                                slot_history.push(block_number, slot);
+                            }
+                            None => {
+                                account.slots.insert(slot_index, InMemoryHistory::new(block_number.into(), slot));
+                            }
+                        };
                     }
                 }
             }
         }
+
         Ok(())
     }
 
