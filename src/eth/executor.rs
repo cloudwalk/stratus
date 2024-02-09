@@ -11,15 +11,14 @@ use std::thread;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
-use ethers_core::types::Block as ECBlock;
-use ethers_core::types::Transaction as ECTransaction;
-use ethers_core::types::TransactionReceipt as ECTransactionReceipt;
+use ethers_core::types::Block as EthersBlock;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
+use super::primitives::ExternalTransaction;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::miner::BlockMiner;
@@ -88,6 +87,7 @@ impl EthExecutor {
             let execution = self.execute_in_evm(tx.clone().into()).await;
             match execution {
                 Ok(execution) => {
+                    execution.cmp_with_receipt(receipt)?;
                     self.eth_storage.save_account_changes(block.number(), execution).await?;
                 }
                 Err(e) => {
@@ -104,24 +104,37 @@ impl EthExecutor {
         Ok(())
     }
 
-    pub async fn import(&self, ethers_core_block: ECBlock<ECTransaction>, ethers_core_receipts: HashMap<H256, ECTransactionReceipt>) -> anyhow::Result<()> {
+    pub async fn import(&self, external_block: ExternalBlock, external_receipts: HashMap<H256, ExternalReceipt>) -> anyhow::Result<()> {
         // Placeholder for all executions to be collected before saving the block.
         let mut executions = Vec::new();
 
-        for ethers_core_transaction in ethers_core_block.clone().transactions {
+        for external_transaction in <EthersBlock<ExternalTransaction>>::from(external_block.clone()).transactions {
             // Find the receipt for the current transaction.
-            let _ethers_core_receipt = ethers_core_receipts
-                .get(&ethers_core_transaction.hash)
-                .ok_or(anyhow!("receipt not found for transaction {}", ethers_core_transaction.hash))?;
+            let external_receipt = external_receipts
+                .get(&external_transaction.hash)
+                .ok_or(anyhow!("receipt not found for transaction {}", external_transaction.hash))?;
 
-            let transaction_input: TransactionInput = match ethers_core_transaction.to_owned().try_into() {
+            let transaction_input: TransactionInput = match external_transaction.to_owned().try_into() {
                 Ok(transaction_input) => transaction_input,
-                Err(e) => return Err(anyhow!("failed to convert transaction into TransactionInput: {:?}", e)),
+                Err(e) => return Err(anyhow!("failed to convert external transaction into TransactionInput: {:?}", e)),
             };
 
-            let execution = self.mine_and_execute_transaction(transaction_input).await?;
-            executions.push(execution);
+            let execution = self.execute_in_evm(transaction_input.clone().into()).await?;
+
+            execution.cmp_with_receipt(external_receipt)?;
+
+            executions.push((transaction_input, execution));
         }
+
+        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
+            self.miner.lock().await.mine_with_many_transactions(executions).await?
+        } else {
+            external_block.clone().into()
+        };
+
+        block.cmp_with_external(&external_block)?;
+
+        self.eth_storage.save_block(block).await?;
 
         //TODO compare slots/changes
         //TODO compare nonce
@@ -195,7 +208,7 @@ impl EthExecutor {
         };
 
         // notify transaction logs
-        for trx in block.clone().transactions {
+        for trx in block.transactions {
             for log in trx.logs {
                 if let Err(e) = self.log_notifier.send(log) {
                     tracing::error!(reason = ?e, "failed to send log notification");

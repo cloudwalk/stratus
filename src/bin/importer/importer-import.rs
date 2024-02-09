@@ -27,6 +27,7 @@ async fn main() -> anyhow::Result<()> {
     // fetch blocks form cursor reprocessing
     loop {
         // find blocks
+        // this skips the genesis
         let blocks = fetch_blocks_cursor(&mut tx).await?;
         if blocks.is_empty() {
             tracing::info!("no more blocks to process");

@@ -60,7 +60,9 @@ async fn main() -> anyhow::Result<()> {
         );
 
         // Import the block and its associated receipts.
-        executor.import(ethers_core_block, ethers_core_receipts).await?;
+        executor
+            .import(ethers_core_block.into(), ethers_core_receipts.into_iter().map(|(k, v)| (k, v.into())).collect())
+            .await?;
         current_block_number = current_block_number.next();
         if current_block_number >= Arc::clone(&chain).get_current_block_number().await? {
             tracing::info!("waiting for block number: {}", current_block_number);
