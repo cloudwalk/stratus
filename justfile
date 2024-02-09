@@ -179,9 +179,11 @@ e2e-stratus test="":
 
     echo "-> Running E2E tests"
     just e2e stratus {{test}}
+    result_code=$?
 
     echo "-> Killing Stratus"
     killport 3000
+    exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus-postgres test="":
