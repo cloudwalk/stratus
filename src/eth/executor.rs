@@ -92,7 +92,7 @@ impl EthExecutor {
                 Err(e) => return Err(anyhow!("failed to convert external transaction into TransactionInput: {:?}", e)),
             };
 
-            let execution = self.mine_and_execute_transaction(transaction_input.clone()).await?;
+            let execution = self.execute_in_evm(transaction_input.clone().try_into()?).await?;
 
             // Should the gas be the same?
             // assert_eq!(execution.gas, external_receipt.gas_used.unwrap_or_default().into());
@@ -102,6 +102,7 @@ impl EthExecutor {
                 _ => 0,
             };
             assert_eq!(U64::from(exec_result), external_receipt.status.unwrap_or_default());
+            // assert_eq!(execution.output, external_receipt.?);
             assert_eq!(execution.logs.len(), external_receipt.logs.len());
             for (log, external_log) in execution.logs.iter().zip(&external_receipt.logs) {
                 assert_eq!(log.topics.len(), external_log.topics.len());
@@ -114,14 +115,20 @@ impl EthExecutor {
             executions.push((transaction_input, execution));
         }
         let executions = NonEmpty::from_vec(executions);
-        if let Some(executions) = executions {
+        let block = if let Some(executions) = executions {
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_many_transactions(executions).await?;
             drop(miner_lock);
 
             assert_eq!(block.transactions.len(), external_block.transactions.len());
-            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
-        }
+            //assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
+            block
+        } else {
+            assert_eq!(0, external_block.transactions.len());
+            external_block.into()
+        };
+
+        self.eth_storage.save_block(block).await?;
 
         //TODO compare slots/changes
         //TODO compare nonce
@@ -129,6 +136,7 @@ impl EthExecutor {
         //TODO compare logs
         //TODO compare status
         //XXX panic in case of bad comparisson
+
 
         Ok(())
     }

@@ -3,6 +3,8 @@ use ethers_core::types::Transaction as EthersTransaction;
 
 use crate::eth::primitives::ExternalTransaction;
 
+use super::Block;
+
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
 pub struct ExternalBlock(#[deref] EthersBlock<ExternalTransaction>);
@@ -49,5 +51,22 @@ impl From<EthersBlock<EthersTransaction>> for ExternalBlock {
             other: value.other,
         };
         ExternalBlock(block)
+    }
+}
+
+impl From<ExternalBlock> for Block {
+    fn from(value: ExternalBlock) -> Self {
+        Block {
+            header: super::BlockHeader {
+                number: value.number.unwrap().into(),
+                hash: value.hash.unwrap().into(),
+                transactions_root: value.transactions_root.into(),
+                gas: value.gas_used.into(),
+                bloom: value.logs_bloom.unwrap().into(),
+                timestamp_in_secs: value.timestamp.as_u64().into(),
+                parent_hash: value.parent_hash.into(),
+            },
+            transactions: vec![]
+        }
     }
 }
