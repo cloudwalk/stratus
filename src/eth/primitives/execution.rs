@@ -77,7 +77,11 @@ impl Execution {
         }
 
         if self.logs.len() != receipt.logs.len() {
-            return Err(anyhow!("tx logs length mismatch, expected: {:?} got: {:?}", receipt.logs.len(), self.logs.len()));
+            return Err(anyhow!(
+                "tx logs length mismatch, expected: {:?} got: {:?}",
+                receipt.logs.len(),
+                self.logs.len()
+            ));
         }
 
         for (log, external_log) in self.logs.iter().zip(&receipt.logs) {
@@ -89,7 +93,11 @@ impl Execution {
                 ));
             }
             if log.data.as_ref() != external_log.data.as_ref() {
-                return Err(anyhow!("tx log data mismatch, expected: {:?} got: {:?}", external_log.data.as_ref(), log.data.as_ref()));
+                return Err(anyhow!(
+                    "tx log data mismatch, expected: {:?} got: {:?}",
+                    external_log.data.as_ref(),
+                    log.data.as_ref()
+                ));
             }
             for (topic, external_topic) in log.topics.iter().zip(&external_log.topics) {
                 let topic: H256 = topic.to_owned().into();

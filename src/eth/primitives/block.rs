@@ -60,12 +60,20 @@ impl Block {
 
     pub fn cmp_with_external(&self, external_block: &ExternalBlock) -> anyhow::Result<()> {
         if self.transactions.len() != external_block.transactions.len() {
-            return Err(anyhow!("block transactions length mismatch, expected: {:?} got: {:?}", external_block.transactions.len(), self.transactions.len()))
+            return Err(anyhow!(
+                "block transactions length mismatch, expected: {:?} got: {:?}",
+                external_block.transactions.len(),
+                self.transactions.len()
+            ));
         }
 
         let external_tx_root = external_block.transactions_root.into();
         if self.header.transactions_root != external_tx_root {
-            return Err(anyhow!("block transactions root mismatch, expected: {:?} got: {:?}", external_tx_root, self.header.transactions_root))
+            return Err(anyhow!(
+                "block transactions root mismatch, expected: {:?} got: {:?}",
+                external_tx_root,
+                self.header.transactions_root
+            ));
         }
         Ok(())
     }
