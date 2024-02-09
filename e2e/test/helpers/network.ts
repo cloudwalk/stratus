@@ -8,9 +8,16 @@ export enum Network {
     Unknown = "",
 }
 
-export const CURRENT_NETWORK = match(network.name)
-    .returnType<Network>()
-    .with("hardhat", () => Network.Hardhat)
-    .with("anvil", () => Network.Anvil)
-    .with("stratus", () => Network.Stratus)
-    .otherwise(() => Network.Unknown);
+export function currentNetwork(): Network {
+    switch (network.name) {
+        case "stratus":
+            return Network.Stratus;
+        case "hardhat":
+            return Network.Hardhat;
+        case "anvil":
+            return Network.Anvil;
+        default:
+            return Network.Unknown;
+    }
+}
+export const isStratus = currentNetwork() == Network.Stratus;

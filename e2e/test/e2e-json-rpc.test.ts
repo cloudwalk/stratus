@@ -1,15 +1,18 @@
 import { expect } from "chai";
-import { match } from "ts-pattern";
-import { Block, Transaction, TransactionReceipt } from "web3-types";
+import { Block } from "web3-types";
 
 import { ALICE } from "./helpers/account";
-import { CURRENT_NETWORK, Network } from "./helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, MAX, ZERO, send, sendExpect } from "./helpers/rpc";
+import { Network, isStratus } from "./helpers/network";
+import { CHAIN_ID, CHAIN_ID_DEC, TEST_BALANCE, ZERO, send, sendExpect } from "./helpers/rpc";
 
 describe("JSON-RPC", () => {
     describe("State", () => {
-        it("debug_setHead", async () => {
-            (await sendExpect("debug_setHead", [ZERO])).eq(ZERO);
+        it("debug_setHead / hardhat_reset", async () => {
+            if (isStratus) {
+                (await sendExpect("debug_setHead", [ZERO])).eq(ZERO);
+            } else {
+                (await sendExpect("hardhat_reset", [])).eq(true);
+            }
         });
     });
 
@@ -18,23 +21,27 @@ describe("JSON-RPC", () => {
             (await sendExpect("eth_chainId")).eq(CHAIN_ID);
         });
         it("net_listening", async () => {
-            (await sendExpect("net_listening")).eq("true");
+            (await sendExpect("net_listening")).eq(true);
         });
         it("net_version", async () => {
             (await sendExpect("net_version")).eq(CHAIN_ID_DEC + "");
         });
         it("web3_clientVersion", async () => {
             let client = await sendExpect("web3_clientVersion");
-            match(CURRENT_NETWORK).with(Network.Stratus, () => client.deep.eq("stratus"));
+            if (isStratus) {
+                client.eq("stratus");
+            }
         });
     });
 
     describe("Gas", () => {
         it("eth_gasPrice", async () => {
             let gasPrice = await sendExpect("eth_gasPrice");
-            match(CURRENT_NETWORK)
-                .with(Network.Stratus, () => gasPrice.eq(ZERO))
-                .otherwise(() => gasPrice.not.eq(ZERO));
+            if (isStratus) {
+                gasPrice.eq(ZERO);
+            } else {
+                gasPrice.not.eq(ZERO);
+            }
         });
     });
 
@@ -44,8 +51,8 @@ describe("JSON-RPC", () => {
             (await sendExpect("eth_getTransactionCount", [ALICE, "latest"])).eq(ZERO);
         });
         it("eth_getBalance", async () => {
-            (await sendExpect("eth_getBalance", [ALICE])).eq(MAX);
-            (await sendExpect("eth_getBalance", [ALICE, "latest"])).eq(MAX);
+            (await sendExpect("eth_getBalance", [ALICE])).eq(TEST_BALANCE);
+            (await sendExpect("eth_getBalance", [ALICE, "latest"])).eq(TEST_BALANCE);
         });
     });
 
@@ -58,8 +65,9 @@ describe("JSON-RPC", () => {
             expect(block.transactions.length).eq(0);
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
-            let block: Block = await send("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO]);
-            expect(block).eq(null);
+            if (isStratus) {
+                (await sendExpect("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO])).eq(null);
+            }
         });
     });
 });

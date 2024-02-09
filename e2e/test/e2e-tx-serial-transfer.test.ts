@@ -3,6 +3,7 @@ import { keccak256 } from "ethers";
 import { Block, Transaction, TransactionReceipt } from "web3-types";
 
 import { ALICE, BOB } from "./helpers/account";
+import { isStratus } from "./helpers/network";
 import {
     CHAIN_ID,
     CHAIN_ID_DEC,
@@ -20,14 +21,14 @@ describe("Transaction: serial transfer", () => {
     var _tx: Transaction;
     var _txHash: string;
     var _block: Block;
-    var _txTimestampInSeconds: number;
+    var _txSentTimestamp: number;
 
     it("Resets blockchain", async () => {
         await sendReset();
     });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signWeiTransfer(BOB.address, 0);
-        _txTimestampInSeconds = Math.floor(Date.now() / 1000);
+        _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
     });
@@ -51,8 +52,9 @@ describe("Transaction: serial transfer", () => {
         expect(_block.transactions.length).eq(1);
         expect(_block.transactions[0] as Transaction).deep.eq(_tx);
 
-        // Timestamp is within transaction sending time and now
-        expect(fromHexTimestamp(_block.timestamp)).gte(_txTimestampInSeconds);
+        if (isStratus) {
+            expect(fromHexTimestamp(_block.timestamp)).gte(_txSentTimestamp);
+        }
         expect(fromHexTimestamp(_block.timestamp)).lte(Date.now());
 
         // ParentHash is the previous block's hash

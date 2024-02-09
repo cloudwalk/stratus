@@ -156,8 +156,8 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
 }
 
 // Status
-async fn net_listening(_: Params<'_>, _: Arc<RpcContext>) -> &'static str {
-    "true"
+async fn net_listening(_: Params<'_>, _: Arc<RpcContext>) -> bool {
+    true
 }
 
 // Blockchain
