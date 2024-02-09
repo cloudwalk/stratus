@@ -5,7 +5,7 @@ use crate::eth::primitives::TransactionInput;
 
 #[derive(Debug, Clone, Default, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
-pub struct ExternalTransaction(#[deref] EthersTransaction);
+pub struct ExternalTransaction(#[deref] pub EthersTransaction);
 
 impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = ConversionError;
@@ -19,3 +19,4 @@ impl From<EthersTransaction> for ExternalTransaction {
         ExternalTransaction(value)
     }
 }
+

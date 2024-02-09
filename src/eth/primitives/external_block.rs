@@ -1,13 +1,26 @@
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 
+use super::BlockNumber;
 use crate::eth::primitives::ExternalTransaction;
+use crate::log_and_err;
 
 use super::Block;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
-pub struct ExternalBlock(#[deref] EthersBlock<ExternalTransaction>);
+pub struct ExternalBlock(#[deref] pub EthersBlock<ExternalTransaction>);
+
+impl ExternalBlock {
+    /// Returns the block number.
+    pub fn number(&self) -> BlockNumber {
+        self.0.number.expect("external block must have number").into()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
 
 impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
     fn from(value: ExternalBlock) -> Self {
@@ -15,6 +28,35 @@ impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
     }
 }
 
+impl From<ExternalBlock> for Block {
+    fn from(value: ExternalBlock) -> Self {
+        Block {
+            header: super::BlockHeader {
+                number: value.number.unwrap().into(),
+                hash: value.hash.unwrap().into(),
+                transactions_root: value.transactions_root.into(),
+                gas: value.gas_used.into(),
+                bloom: value.logs_bloom.unwrap().into(),
+                timestamp_in_secs: value.timestamp.as_u64().into(),
+                parent_hash: value.parent_hash.into(),
+            },
+            transactions: vec![]
+
+
+// -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
+impl TryFrom<serde_json::Value> for ExternalBlock {
+    type Error = anyhow::Error;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        match serde_json::from_value(value.clone()) {
+            Ok(v) => Ok(v),
+            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),
+        }
+    }
+}
+          
 impl From<EthersBlock<EthersTransaction>> for ExternalBlock {
     fn from(value: EthersBlock<EthersTransaction>) -> Self {
         let txs: Vec<ExternalTransaction> = value.transactions.into_iter().map(ExternalTransaction::from).collect();
@@ -51,22 +93,5 @@ impl From<EthersBlock<EthersTransaction>> for ExternalBlock {
             other: value.other,
         };
         ExternalBlock(block)
-    }
-}
-
-impl From<ExternalBlock> for Block {
-    fn from(value: ExternalBlock) -> Self {
-        Block {
-            header: super::BlockHeader {
-                number: value.number.unwrap().into(),
-                hash: value.hash.unwrap().into(),
-                transactions_root: value.transactions_root.into(),
-                gas: value.gas_used.into(),
-                bloom: value.logs_bloom.unwrap().into(),
-                timestamp_in_secs: value.timestamp.as_u64().into(),
-                parent_hash: value.parent_hash.into(),
-            },
-            transactions: vec![]
-        }
     }
 }

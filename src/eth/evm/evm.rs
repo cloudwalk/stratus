@@ -10,6 +10,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -67,18 +68,29 @@ pub struct EvmInput {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-impl TryFrom<TransactionInput> for EvmInput {
-    type Error = anyhow::Error;
-
-    fn try_from(value: TransactionInput) -> anyhow::Result<Self> {
-        Ok(Self {
+impl From<TransactionInput> for EvmInput {
+    fn from(value: TransactionInput) -> Self {
+        Self {
             from: value.signer,
             to: value.to,
             value: value.value,
             data: value.input,
             nonce: Some(value.nonce),
             point_in_time: StoragePointInTime::Present,
-        })
+        }
+    }
+}
+
+impl From<ExternalTransaction> for EvmInput {
+    fn from(value: ExternalTransaction) -> Self {
+        Self {
+            from: value.0.from.into(),
+            to: value.0.to.map_into(),
+            value: value.0.value.into(),
+            data: value.0.input.into(),
+            nonce: Some(value.0.nonce.into()),
+            point_in_time: StoragePointInTime::Present,
+        }
     }
 }
 

@@ -25,12 +25,12 @@ setup:
 # Stratus: Run main service with debug options
 run *args="":
     #!/bin/bash
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- {{args}} --enable-genesis --enable-test-accounts
     exit 0
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- {{args}} --enable-genesis --enable-test-accounts
 
 # Stratus: Compile with debug options
 build:
@@ -179,9 +179,11 @@ e2e-stratus test="":
 
     echo "-> Running E2E tests"
     just e2e stratus {{test}}
+    result_code=$?
 
     echo "-> Killing Stratus"
     killport 3000
+    exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus-postgres test="":

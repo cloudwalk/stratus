@@ -12,7 +12,6 @@ use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
 use super::InMemoryAccount;
-use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -29,7 +28,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::inmemory::InMemoryHistory;
-use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
 
@@ -65,22 +63,8 @@ impl Default for InMemoryStorage {
     fn default() -> Self {
         tracing::info!("starting inmemory storage");
 
-        let mut state = InMemoryStorageState::default();
-
-        // add genesis block to state
-        let genesis = Arc::new(BlockMiner::genesis());
-        state.blocks_by_number.insert(*genesis.number(), Arc::clone(&genesis));
-        state.blocks_by_hash.insert(genesis.hash().clone(), Arc::clone(&genesis));
-
-        // add test accounts to state
-        for account in test_accounts() {
-            state
-                .accounts
-                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
-        }
-
         Self {
-            state: RwLock::new(state),
+            state: RwLock::new(InMemoryStorageState::default()),
             block_number: Default::default(),
         }
     }
@@ -243,46 +227,14 @@ impl EthStorage for InMemoryStorage {
             }
 
             // save execution changes
-            for changes in transaction.execution.changes {
-                let account = state
-                    .accounts
-                    .entry(changes.address.clone())
-                    .or_insert_with(|| InMemoryAccount::new(changes.address));
-
-                // nonce
-                if let Some(nonce) = changes.nonce.take_modified() {
-                    account.set_nonce(*block.number(), nonce);
-                }
-
-                // balance
-                if let Some(balance) = changes.balance.take_modified() {
-                    account.set_balance(*block.number(), balance);
-                }
-
-                // bytecode
-                if is_success {
-                    if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                        account.set_bytecode(*block.number(), bytecode);
-                    }
-                }
-
-                // slots
-                if is_success {
-                    for (slot_index, slot) in changes.slots {
-                        if let Some(slot) = slot.take_modified() {
-                            match account.slots.get_mut(&slot_index) {
-                                Some(slot_history) => {
-                                    slot_history.push(*block.number(), slot);
-                                }
-                                None => {
-                                    account.slots.insert(slot_index, InMemoryHistory::new(*block.number(), slot));
-                                }
-                            };
-                        }
-                    }
-                }
-            }
+            save_account_changes(&mut state, *block.number(), transaction.execution);
         }
+        Ok(())
+    }
+
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        let mut state_lock = self.lock_write().await;
+        save_account_changes(&mut state_lock, block_number, execution);
         Ok(())
     }
 
@@ -312,6 +264,69 @@ impl EthStorage for InMemoryStorage {
         }
 
         Ok(())
+    }
+
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
+        let block = Arc::new(genesis);
+        let mut state = self.lock_write().await;
+        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
+        state.blocks_by_hash.insert(block.hash().clone(), block);
+        Ok(())
+    }
+
+    async fn enable_test_accounts(&self, test_account: Vec<Account>) -> anyhow::Result<()> {
+        let mut state = self.lock_write().await;
+        for account in test_account {
+            state
+                .accounts
+                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
+        }
+        Ok(())
+    }
+}
+
+fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNumber, execution: Execution) {
+    let is_success = execution.is_success();
+    let changes_vec = execution.changes;
+
+    for changes in changes_vec {
+        let account = state
+            .accounts
+            .entry(changes.address.clone())
+            .or_insert_with(|| InMemoryAccount::new(changes.address));
+
+        // nonce
+        if let Some(nonce) = changes.nonce.take_modified() {
+            account.set_nonce(block_number, nonce);
+        }
+
+        // balance
+        if let Some(balance) = changes.balance.take_modified() {
+            account.set_balance(block_number, balance);
+        }
+
+        // bytecode
+        if is_success {
+            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
+                account.set_bytecode(block_number, bytecode);
+            }
+        }
+
+        // slots
+        if is_success {
+            for (slot_index, slot) in changes.slots {
+                if let Some(slot) = slot.take_modified() {
+                    match account.slots.get_mut(&slot_index) {
+                        Some(slot_history) => {
+                            slot_history.push(block_number, slot);
+                        }
+                        None => {
+                            account.slots.insert(slot_index, InMemoryHistory::new(block_number, slot));
+                        }
+                    };
+                }
+            }
+        }
     }
 }
 

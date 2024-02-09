@@ -19,8 +19,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::MetrifiedStorage;
 
 /// EVM storage operations.
-///
-/// TODO: Evaluate if it should be split in multiple traits like EthAccountStorage, EthSlotStorage, EthTransactionStorage, etc.
 #[async_trait]
 pub trait EthStorage: Send + Sync {
     // -------------------------------------------------------------------------
@@ -58,8 +56,21 @@ pub trait EthStorage: Send + Sync {
     /// Persist atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
+    /// Temporarily stores account changes during block production
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
+
     /// Resets all state to a specific block number.
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+
+    /// Enables genesis block.
+    ///
+    /// TODO: maybe can use save_block from a default method.
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()>;
+
+    /// Enables test accounts.
+    ///
+    /// TODO: maybe can use save_accounts from a default method.
+    async fn enable_test_accounts(&self, test_accounts: Vec<Account>) -> anyhow::Result<()>;
 
     // -------------------------------------------------------------------------
     // Default operations
@@ -118,8 +129,6 @@ pub trait EthStorage: Send + Sync {
 }
 
 /// Retrieves test accounts.
-///
-/// TODO: use a feature-flag to determine if test accounts should be returned.
 pub fn test_accounts() -> Vec<Account> {
     use hex_literal::hex;
 

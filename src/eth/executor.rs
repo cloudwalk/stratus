@@ -72,8 +72,21 @@ impl EthExecutor {
         }
     }
 
-    /// Synchorinize an external block using the offline flow.
-    pub async fn sync_offline(_block: ExternalBlock, _receipts: Vec<ExternalReceipt>) -> anyhow::Result<()> {
+    /// Imports an external block using the offline flow.
+    pub async fn import_offline(&self, block: ExternalBlock, receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
+        tracing::info!(number = %block.number(), "importing offline block");
+
+        // index receipts
+        let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
+        for receipt in receipts {
+            receipts_by_hash.insert(receipt.transaction_hash, receipt);
+        }
+
+        // re-execute transactions
+        for transaction in block.transactions.clone() {
+            self.execute_in_evm(transaction.into()).await?;
+        }
+
         Ok(())
     }
 
@@ -177,7 +190,7 @@ impl EthExecutor {
         // TODO: must have a stop condition like timeout or max number of retries
         let (execution, block) = loop {
             // execute and check conflicts before mining block
-            let execution = self.execute_in_evm(transaction.clone().try_into()?).await?;
+            let execution = self.execute_in_evm(transaction.clone().into()).await?;
             if let Some(conflicts) = self.eth_storage.check_conflicts(&execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;

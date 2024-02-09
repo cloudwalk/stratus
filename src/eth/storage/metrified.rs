@@ -100,8 +100,22 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         result
     }
 
+    async fn save_account_changes(&self, block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
+        self.inner.reset(block_number).await
+    }
+
     // TODO: track metric
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.inner.reset(number).await
+    }
+
+    // TODO: track metric
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
+        self.inner.enable_genesis(genesis).await
+    }
+
+    // TODO: track metric
+    async fn enable_test_accounts(&self, test_accounts: Vec<Account>) -> anyhow::Result<()> {
+        self.inner.enable_test_accounts(test_accounts).await
     }
 }

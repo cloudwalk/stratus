@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - '*'
+  workflow_dispatch:
 
 jobs:
   e2e-stratus:
@@ -12,7 +13,7 @@ jobs:
     timeout-minutes: 25
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
