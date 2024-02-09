@@ -87,7 +87,7 @@ impl EthExecutor {
             let execution = self.execute_in_evm(tx.clone().into()).await;
             match execution {
                 Ok(execution) => {
-                    execution.cmp_with_receipt(receipt);
+                    execution.cmp_with_receipt(receipt)?;
                     self.eth_storage.save_account_changes(block.number(), execution).await?;
                 }
                 Err(e) => {
@@ -121,7 +121,7 @@ impl EthExecutor {
 
             let execution = self.execute_in_evm(transaction_input.clone().into()).await?;
 
-            execution.cmp_with_receipt(external_receipt);
+            execution.cmp_with_receipt(external_receipt)?;
 
             executions.push((transaction_input, execution));
         }
