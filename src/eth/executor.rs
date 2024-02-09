@@ -26,6 +26,8 @@ use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -67,6 +69,24 @@ impl EthExecutor {
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
         }
+    }
+
+    /// Imports an external block using the offline flow.
+    pub async fn import_offline(&self, block: ExternalBlock, receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
+        tracing::info!(number = %block.number(), "importing offline block");
+
+        // index receipts
+        let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
+        for receipt in receipts {
+            receipts_by_hash.insert(receipt.transaction_hash, receipt);
+        }
+
+        // re-execute transactions
+        for transaction in block.transactions.clone() {
+            self.execute_in_evm(transaction.into()).await?;
+        }
+
+        Ok(())
     }
 
     pub async fn import(&self, ethers_core_block: ECBlock<ECTransaction>, ethers_core_receipts: HashMap<H256, ECTransactionReceipt>) -> anyhow::Result<()> {
@@ -134,7 +154,7 @@ impl EthExecutor {
         // TODO: must have a stop condition like timeout or max number of retries
         let (execution, block) = loop {
             // execute and check conflicts before mining block
-            let execution = self.execute_in_evm(transaction.clone().try_into()?).await?;
+            let execution = self.execute_in_evm(transaction.clone().into()).await?;
             if let Some(conflicts) = self.eth_storage.check_conflicts(&execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;

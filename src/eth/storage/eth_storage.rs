@@ -19,8 +19,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::MetrifiedStorage;
 
 /// EVM storage operations.
-///
-/// TODO: Evaluate if it should be split in multiple traits like EthAccountStorage, EthSlotStorage, EthTransactionStorage, etc.
 #[async_trait]
 pub trait EthStorage: Send + Sync {
     // -------------------------------------------------------------------------
@@ -40,11 +38,11 @@ pub trait EthStorage: Send + Sync {
     /// Checks if the transaction execution conflicts with the current storage state.
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>>;
 
-    /// Retrieves an account from the storage.
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account>;
+    /// Retrieves an account from the storage. Returns Option when not found.
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
 
-    /// Retrieves an slot from the storage.
-    async fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot>;
+    /// Retrieves an slot from the storage. Returns Option when not found.
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
 
     /// Retrieves a block from the storage.
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
@@ -58,12 +56,47 @@ pub trait EthStorage: Send + Sync {
     /// Persist atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
+    /// Temporarily stores account changes during block production
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
+
     /// Resets all state to a specific block number.
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+
+    /// Enables genesis block.
+    ///
+    /// TODO: maybe can use save_block from a default method.
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()>;
+
+    /// Enables test accounts.
+    ///
+    /// TODO: maybe can use save_accounts from a default method.
+    async fn enable_test_accounts(&self, test_accounts: Vec<Account>) -> anyhow::Result<()>;
 
     // -------------------------------------------------------------------------
     // Default operations
     // -------------------------------------------------------------------------
+
+    /// Retrieves an account from the storage. Returns default value when not found.
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+        match self.maybe_read_account(address, point_in_time).await? {
+            Some(account) => Ok(account),
+            None => Ok(Account {
+                address: address.clone(),
+                ..Account::default()
+            }),
+        }
+    }
+
+    /// Retrieves an slot from the storage. Returns default value when not found.
+    async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+        match self.maybe_read_slot(address, slot_index, point_in_time).await? {
+            Some(slot) => Ok(slot),
+            None => Ok(Slot {
+                index: slot_index.clone(),
+                ..Default::default()
+            }),
+        }
+    }
 
     /// Wraps the current storage with a proxy that collects execution metrics.
     fn metrified(self) -> MetrifiedStorage<Self>
@@ -96,8 +129,6 @@ pub trait EthStorage: Send + Sync {
 }
 
 /// Retrieves test accounts.
-///
-/// TODO: use a feature-flag to determine if test accounts should be returned.
 pub fn test_accounts() -> Vec<Account> {
     use hex_literal::hex;
 
