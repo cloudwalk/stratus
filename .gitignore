@@ -17,5 +17,5 @@ e2e-contracts/repos
 
 # Build
 /target
-
+vendor
 stratus.log
