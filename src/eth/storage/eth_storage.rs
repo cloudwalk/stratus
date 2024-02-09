@@ -17,7 +17,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::MetrifiedStorage;
-use crate::eth::primitives::ExecutionAccountChanges;
 
 /// EVM storage operations.
 #[async_trait]

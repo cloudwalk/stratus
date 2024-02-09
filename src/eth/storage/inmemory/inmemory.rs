@@ -18,7 +18,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
@@ -228,7 +227,7 @@ impl EthStorage for InMemoryStorage {
             }
 
             // save execution changes
-            self.save_account_changes(*block.number(), transaction.execution).await?
+            self.save_account_changes(*block.number(), transaction.execution).await?;
         }
         Ok(())
     }
@@ -270,7 +269,7 @@ impl EthStorage for InMemoryStorage {
                                 slot_history.push(block_number, slot);
                             }
                             None => {
-                                account.slots.insert(slot_index, InMemoryHistory::new(block_number.into(), slot));
+                                account.slots.insert(slot_index, InMemoryHistory::new(block_number, slot));
                             }
                         };
                     }

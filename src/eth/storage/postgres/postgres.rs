@@ -34,7 +34,6 @@ use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
 use crate::infra::postgres::Postgres;
-use crate::eth::primitives::ExecutionAccountChanges;
 
 #[async_trait]
 impl EthStorage for Postgres {
@@ -657,7 +656,7 @@ impl EthStorage for Postgres {
         Ok(nextval.into())
     }
 
-    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+    async fn save_account_changes(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
         todo!();
     }
 
