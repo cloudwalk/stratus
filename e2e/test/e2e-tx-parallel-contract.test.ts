@@ -3,10 +3,12 @@ import { expect } from "chai";
 import { TestContractBalances, TestContractCounter } from "../typechain-types";
 import { ALICE, BOB, CHARLIE, randomAccounts } from "./helpers/account";
 import {
+    CHAIN_ID,
+    GAS as GAS_LIMIT,
+    TX_PARAMS,
     deployTestContractBalances,
     deployTestContractCounter,
     sendGetNonce,
-    sendRawTransaction,
     sendRawTransactions,
     sendReset,
 } from "./helpers/rpc";
@@ -21,13 +23,13 @@ describe("Transaction: parallel TestContractBalances", async () => {
     it("Deploy TestContractBalances", async () => {
         _contract = await deployTestContractBalances();
     });
-
-    it("Sends parallel transactions", async () => {
-        // initial balance
+    it("Ensure initial balance", async () => {
         expect(await _contract.get(ALICE.address)).eq(0);
         expect(await _contract.get(BOB.address)).eq(0);
         expect(await _contract.get(CHARLIE.address)).eq(0);
+    });
 
+    it("Sends parallel transactions", async () => {
         // prepare transactions
         const expectedBalances: Record<string, number> = {};
         expectedBalances[ALICE.address] = 0;
@@ -50,9 +52,10 @@ describe("Transaction: parallel TestContractBalances", async () => {
             // sign transaction
             const sender = senders[accountIndex];
             const nonce = await sendGetNonce(sender.address);
-            const tx = await _contract
-                .connect(sender.signer())
-                .add.populateTransaction(account, amount, { nonce: nonce, gasPrice: 0 });
+            const tx = await _contract.connect(sender.signer()).add.populateTransaction(account, amount, {
+                nonce: nonce,
+                ...TX_PARAMS,
+            });
             signedTxs.push(await sender.signer().signTransaction(tx));
         }
 
@@ -76,12 +79,12 @@ describe("Transaction: parallel TestContractCounter", async () => {
     it("Deploy TestContractCounter", async () => {
         _contract = await deployTestContractCounter();
     });
-
-    it("Sends parallel transactions", async () => {
-        // initial balance
+    it("Ensure initial balance", async () => {
         expect(await _contract.getCounter()).eq(0);
         expect(await _contract.getDoubleCounter()).eq(0);
+    });
 
+    it("Sends parallel transactions", async () => {
         const incSender = ALICE;
         const doubleSender = BOB;
 
@@ -95,13 +98,13 @@ describe("Transaction: parallel TestContractCounter", async () => {
             const incNonce = await sendGetNonce(incSender.address);
             const incTx = await _contract
                 .connect(incSender.signer())
-                .inc.populateTransaction({ nonce: incNonce, gasPrice: 0 });
+                .inc.populateTransaction({ nonce: incNonce, ...TX_PARAMS });
             const incSignedTx = await incSender.signer().signTransaction(incTx);
 
             const doubleNonce = await sendGetNonce(doubleSender.address);
             const doubleTx = await _contract
                 .connect(doubleSender.signer())
-                .double.populateTransaction({ nonce: doubleNonce, gasPrice: 0 });
+                .double.populateTransaction({ nonce: doubleNonce, ...TX_PARAMS });
             const doubleSignedTx = await doubleSender.signer().signTransaction(doubleTx);
 
             // send transactions in parallel

@@ -29,7 +29,7 @@ pub struct Wei(U256);
 impl Wei {
     pub const ZERO: Wei = Wei(U256::zero());
     pub const ONE: Wei = Wei(U256::one());
-    pub const MAX: Wei = Wei(U256::max_value());
+    pub const TEST_BALANCE: Wei = Wei(U256([u64::MAX, 0, 0, 0]));
 }
 
 impl Display for Wei {
