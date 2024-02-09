@@ -59,8 +59,8 @@ impl EthStorage for Postgres {
                     address.as_ref(),
                     block_number,
                 )
-                    .fetch_optional(&self.connection_pool)
-                    .await?
+                .fetch_optional(&self.connection_pool)
+                .await?
             }
         };
 
@@ -88,8 +88,8 @@ impl EthStorage for Postgres {
         let slot = match point_in_time {
             StoragePointInTime::Present =>
                 sqlx::query_file_as!(Slot, "src/eth/storage/postgres/queries/select_slot.sql", address.as_ref(), slot_index.as_ref())
-                .fetch_optional(&self.connection_pool)
-                .await?,
+                    .fetch_optional(&self.connection_pool)
+                    .await?,
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_as!(
@@ -99,8 +99,8 @@ impl EthStorage for Postgres {
                     slot_index.as_ref(),
                     block_number,
                 )
-                    .fetch_optional(&self.connection_pool)
-                    .await?
+                .fetch_optional(&self.connection_pool)
+                .await?
             }
         };
 
@@ -131,7 +131,7 @@ impl EthStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
                     block_number
                 )
-                    .fetch_all(&self.connection_pool);
+                .fetch_all(&self.connection_pool);
 
                 let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
                     .fetch_all(&self.connection_pool);
@@ -141,7 +141,7 @@ impl EthStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
                     block_number
                 )
-                    .fetch_all(&self.connection_pool);
+                .fetch_all(&self.connection_pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
@@ -179,7 +179,7 @@ impl EthStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_transactions_by_block_hash.sql",
                     hash.as_ref()
                 )
-                    .fetch_all(&self.connection_pool);
+                .fetch_all(&self.connection_pool);
 
                 let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_hash.sql", hash.as_ref())
                     .fetch_all(&self.connection_pool);
@@ -225,7 +225,7 @@ impl EthStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
                     block_number
                 )
-                    .fetch_all(&self.connection_pool);
+                .fetch_all(&self.connection_pool);
 
                 let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
                     .fetch_all(&self.connection_pool);
@@ -235,7 +235,7 @@ impl EthStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
                     block_number
                 )
-                    .fetch_all(&self.connection_pool);
+                .fetch_all(&self.connection_pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
@@ -274,7 +274,7 @@ impl EthStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
                     block_number
                 )
-                    .fetch_all(&self.connection_pool);
+                .fetch_all(&self.connection_pool);
 
                 let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
                     .fetch_all(&self.connection_pool);
@@ -284,7 +284,7 @@ impl EthStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
                     block_number
                 )
-                    .fetch_all(&self.connection_pool);
+                .fetch_all(&self.connection_pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
@@ -322,8 +322,8 @@ impl EthStorage for Postgres {
             "src/eth/storage/postgres/queries/select_transaction_by_hash.sql",
             hash.as_ref()
         )
-            .fetch_one(&self.connection_pool)
-            .await;
+        .fetch_one(&self.connection_pool)
+        .await;
 
         let transaction: PostgresTransaction = match transaction_query {
             Ok(res) => res,
@@ -336,16 +336,16 @@ impl EthStorage for Postgres {
             "src/eth/storage/postgres/queries/select_logs_by_transaction_hash.sql",
             hash.as_ref()
         )
-            .fetch_all(&self.connection_pool)
-            .await?;
+        .fetch_all(&self.connection_pool)
+        .await?;
 
         let topics = sqlx::query_file_as!(
             PostgresTopic,
             "src/eth/storage/postgres/queries/select_topics_by_transaction_hash.sql",
             hash.as_ref()
         )
-            .fetch_all(&self.connection_pool)
-            .await?;
+        .fetch_all(&self.connection_pool)
+        .await?;
 
         let mut topic_partitions = partition_topics(topics);
 
@@ -385,8 +385,8 @@ impl EthStorage for Postgres {
                 block_hash,
                 log_idx
             )
-                .fetch_all(&self.connection_pool)
-                .await?;
+            .fetch_all(&self.connection_pool)
+            .await?;
 
             let log = LogMined {
                 log: Log {
@@ -425,9 +425,9 @@ impl EthStorage for Postgres {
             i32::try_from(block.header.timestamp_in_secs).context("failed to convert block timestamp")?,
             block.header.parent_hash.as_ref()
         )
-            .execute(&mut *tx)
-            .await
-            .context("failed to insert block")?;
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert block")?;
 
         for transaction in block.transactions {
             let is_success = transaction.is_success();
@@ -452,9 +452,9 @@ impl EthStorage for Postgres {
                 BigDecimal::try_from(transaction.input.value)?,
                 transaction.execution.result.to_string()
             )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert transaction")?;
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert transaction")?;
 
             for change in transaction.execution.changes {
                 let (original_nonce, nonce) = change.nonce.take_both();
@@ -498,9 +498,9 @@ impl EthStorage for Postgres {
                     original_nonce,
                     original_balance
                 )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert account")?;
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert account")?;
 
                 // A successful insert/update with no conflicts will have one affected row
                 if account_result.rows_affected() != 1 {
@@ -519,9 +519,9 @@ impl EthStorage for Postgres {
                     balance,
                     block_number
                 )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert balance")?;
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert balance")?;
 
                 sqlx::query_file!(
                     "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
@@ -529,9 +529,9 @@ impl EthStorage for Postgres {
                     nonce,
                     block_number
                 )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert nonce")?;
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert nonce")?;
 
                 if is_success {
                     for (slot_idx, value) in change.slots {
@@ -549,9 +549,9 @@ impl EthStorage for Postgres {
                             block_number,
                             &original_value
                         )
-                            .execute(&mut *tx)
-                            .await
-                            .context("failed to insert slot")?;
+                        .execute(&mut *tx)
+                        .await
+                        .context("failed to insert slot")?;
 
                         // A successful insert/update with no conflicts will have one affected row
                         if slot_result.rows_affected() != 1 {
@@ -571,9 +571,9 @@ impl EthStorage for Postgres {
                             change.address.as_ref(),
                             block_number
                         )
-                            .execute(&mut *tx)
-                            .await
-                            .context("failed to insert slot to history")?;
+                        .execute(&mut *tx)
+                        .await
+                        .context("failed to insert slot to history")?;
                     }
                 }
             }
@@ -596,9 +596,9 @@ impl EthStorage for Postgres {
                     b_number,
                     b_hash
                 )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert log")?;
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert log")?;
                 for (idx, topic) in log.log.topics.into_iter().enumerate() {
                     sqlx::query_file!(
                         "src/eth/storage/postgres/queries/insert_topic.sql",
@@ -610,9 +610,9 @@ impl EthStorage for Postgres {
                         b_number,
                         b_hash
                     )
-                        .execute(&mut *tx)
-                        .await
-                        .context("failed to insert topic")?;
+                    .execute(&mut *tx)
+                    .await
+                    .context("failed to insert topic")?;
                 }
             }
         }
