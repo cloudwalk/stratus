@@ -28,6 +28,7 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -72,18 +73,32 @@ impl EthExecutor {
     }
 
     /// Imports an external block using the offline flow.
-    pub async fn import_offline(&self, block: ExternalBlock, receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
+    pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
         tracing::info!(number = %block.number(), "importing offline block");
 
-        // index receipts
-        let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
-        for receipt in receipts {
-            receipts_by_hash.insert(receipt.transaction_hash, receipt);
-        }
-
         // re-execute transactions
-        for transaction in block.transactions.clone() {
-            self.execute_in_evm(transaction.into()).await?;
+        for tx in block.transactions.clone() {
+            // find receipt
+            let Some(receipt) = receipts.get(&tx.hash()) else {
+                tracing::error!(hash = %tx.hash, "receipt is missing");
+                return Err(anyhow!("receipt missing for hash {}", tx.hash));
+            };
+
+            // re-execute and save it
+            let execution = self.execute_in_evm(tx.clone().into()).await;
+            match execution {
+                Ok(execution) => {
+                    self.eth_storage.save_account_changes(block.number(), execution).await?;
+                }
+                Err(e) => {
+                    // TODO: handle scenarios where transaction is expected to fail
+                    // TODO: for now just log tx and receipt to help debug
+                    let tx = serde_json::to_string(&tx).unwrap();
+                    let receipt = serde_json::to_string(&receipt).unwrap();
+                    tracing::error!(%tx, %receipt);
+                    return Err(e);
+                }
+            }
         }
 
         Ok(())

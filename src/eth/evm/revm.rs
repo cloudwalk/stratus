@@ -63,8 +63,9 @@ impl Revm {
         evm.env.block.coinbase = Address::COINBASE.into();
 
         // evm tx config
+        evm.env.tx.gas_limit = 1_000_000; // todo: must come from transaction
         evm.env.tx.gas_price = U256::ZERO;
-        evm.env.tx.gas_limit = 100_000_000;
+        evm.env.tx.gas_priority_fee = None;
 
         Self { evm, storage }
     }
@@ -77,6 +78,7 @@ impl Evm for Revm {
         let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone());
 
         // configure evm block
+        evm.env.block.basefee = U256::ZERO;
         evm.env.block.timestamp = U256::from(session.block_timestamp_in_secs);
 
         // configure database
@@ -106,8 +108,8 @@ impl Evm for Revm {
                 Ok(parse_revm_execution(result, session.block_timestamp_in_secs, session.storage_changes)?)
             }
             Err(e) => {
-                tracing::error!(reason = ?e, "unexpected error in evm execution");
-                Err(anyhow!("Unexpected error with EVM bytecode. Check logs for more information."))
+                tracing::warn!(reason = ?e, "evm execution error");
+                Err(anyhow!("Error executing EVM transaction. Check logs for more information."))
             }
         }
     }

@@ -25,12 +25,12 @@ setup:
 # Stratus: Run main service with debug options
 run *args="":
     #!/bin/bash
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- {{args}} --enable-genesis --enable-test-accounts
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
     exit 0
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- {{args}} --enable-genesis --enable-test-accounts
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
 
 # Stratus: Compile with debug options
 build:

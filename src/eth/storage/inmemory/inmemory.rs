@@ -232,9 +232,9 @@ impl EthStorage for InMemoryStorage {
         Ok(())
     }
 
-    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+    async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let mut state_lock = self.lock_write().await;
-        save_account_changes(&mut state_lock, block_number, execution);
+        save_account_changes(&mut state_lock, number, execution);
         Ok(())
     }
 
@@ -287,9 +287,7 @@ impl EthStorage for InMemoryStorage {
 
 fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNumber, execution: Execution) {
     let is_success = execution.is_success();
-    let changes_vec = execution.changes;
-
-    for changes in changes_vec {
+    for changes in execution.changes {
         let account = state
             .accounts
             .entry(changes.address.clone())
