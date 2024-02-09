@@ -9,6 +9,10 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+use ethereum_types::H256;
+use ethereum_types::U64;
+
+use super::ExternalReceipt;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
@@ -55,5 +59,25 @@ impl Execution {
     /// Check if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
         matches!(self.result, ExecutionResult::Success { .. })
+    }
+
+    pub fn cmp_with_receipt(&self, receipt: &ExternalReceipt) {
+        // Should the gas be the same?
+        // assert_eq!(execution.gas, receipt.gas_used.unwrap_or_default().into());
+
+        let exec_result = match self.result {
+            ExecutionResult::Success => 1,
+            _ => 0,
+        };
+        assert_eq!(U64::from(exec_result), receipt.status.unwrap_or_default());
+        // assert_eq!(execution.output, receipt.?);
+        assert_eq!(self.logs.len(), receipt.logs.len());
+        for (log, external_log) in self.logs.iter().zip(&receipt.logs) {
+            assert_eq!(log.topics.len(), external_log.topics.len());
+            assert_eq!(log.data.as_ref(), external_log.data.as_ref());
+            for (topic, external_topic) in log.topics.iter().zip(&external_log.topics) {
+                assert_eq!(H256::from(topic.to_owned()), external_topic.to_owned());
+            }
+        }
     }
 }
