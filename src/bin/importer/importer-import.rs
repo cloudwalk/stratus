@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use serde_json::Value as JsonValue;
 use sqlx::Row;
 use stratus::config::ImporterImportConfig;
@@ -38,17 +38,16 @@ async fn main() -> anyhow::Result<()> {
         let block_end = blocks.last().unwrap().number;
         let receipts = find_receipts(&pg, block_start, block_end).await?;
 
-        // imports txs
-        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
-        for block in blocks {
-            // filter receipt from current block
-            let receipts = receipts
-                .iter()
-                .filter(|receipt| receipt.block_number == block.number)
-                .map(|receipt| &receipt.payload)
-                .collect_vec();
+        // index receipts
+        let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
+        for receipt in receipts {
+            receipts_by_hash.insert(receipt.payload.0.transaction_hash.into(), receipt.payload);
+        }
 
-            executor.import_offline(block.payload, &receipts).await?;
+        // imports transactions
+        tracing::info!(%block_start, %block_end, receipts = %receipts_by_hash.len(), "importing blocks");
+        for block in blocks {
+            executor.import_offline(block.payload, &receipts_by_hash).await?;
         }
     }
     Ok(())
@@ -64,7 +63,6 @@ struct BlockRow {
 }
 
 struct ReceiptRow {
-    hash: Vec<u8>,
     block_number: i64,
     payload: ExternalReceipt,
 }
@@ -122,7 +120,6 @@ async fn find_receipts(pg: &Postgres, block_start: i64, block_end: i64) -> anyho
             let mut parsed_rows: Vec<ReceiptRow> = Vec::with_capacity(rows.len());
             for row in rows {
                 let parsed = ReceiptRow {
-                    hash: row.hash,
                     block_number: row.block_number,
                     payload: row.payload.try_into()?,
                 };
