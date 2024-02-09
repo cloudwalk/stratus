@@ -15,8 +15,19 @@ impl ExternalReceipt {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
+
+impl From<EthersReceipt> for ExternalReceipt {
+    fn from(value: EthersReceipt) -> Self {
+        ExternalReceipt(value)
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+
 impl TryFrom<serde_json::Value> for ExternalReceipt {
     type Error = anyhow::Error;
 
