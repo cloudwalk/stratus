@@ -234,7 +234,8 @@ impl EthStorage for InMemoryStorage {
 
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let mut state_lock = self.lock_write().await;
-        Ok(save_account_changes(&mut state_lock, block_number, execution))
+        save_account_changes(&mut state_lock, block_number, execution);
+        Ok(())
     }
 
     async fn reset(&self, block_number: BlockNumber) -> anyhow::Result<()> {
