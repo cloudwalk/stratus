@@ -80,8 +80,6 @@ impl EthExecutor {
             receipts_by_hash.insert(receipt.transaction_hash, receipt);
         }
 
-        let mut executions = Vec::new();
-
         // re-execute transactions
         for transaction in external_block.transactions.clone() {
             let tx_receipt = receipts_by_hash
@@ -92,20 +90,7 @@ impl EthExecutor {
             let execution = self.execute_in_evm(input).await?;
 
             execution.cmp_with_receipt(tx_receipt);
-
-            let transaction_input = transaction.try_into().or(Err(anyhow!("failed to convert tx input")))?;
-            executions.push((transaction_input, execution));
         }
-
-        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
-            self.miner.lock().await.mine_with_many_transactions(executions).await?
-        } else {
-            external_block.clone().into()
-        };
-
-        block.cmp_with_external(&external_block);
-
-        self.eth_storage.save_block(block).await?;
 
         Ok(())
     }
