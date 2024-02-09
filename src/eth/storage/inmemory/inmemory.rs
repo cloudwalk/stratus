@@ -284,7 +284,7 @@ impl EthStorage for InMemoryStorage {
     }
 }
 
-fn save_account_changes(state: &mut RwLockWriteGuard<InMemoryStorageState>, block_number: BlockNumber, execution: Execution) {
+fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNumber, execution: Execution) {
     let is_success = execution.is_success();
     let changes_vec = execution.changes;
 
