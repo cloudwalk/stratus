@@ -14,6 +14,7 @@ use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
+use super::ExternalBlock;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -54,6 +55,11 @@ impl Block {
     /// Returns the block hash.
     pub fn hash(&self) -> &Hash {
         &self.header.hash
+    }
+
+    pub fn cmp_with_external(&self, external_block: &ExternalBlock) {
+        assert_eq!(self.transactions.len(), external_block.transactions.len());
+        assert_eq!(self.header.transactions_root, external_block.transactions_root.into());
     }
 }
 

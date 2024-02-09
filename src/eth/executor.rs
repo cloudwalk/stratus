@@ -11,7 +11,6 @@ use std::thread;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
-use ethereum_types::U64;
 use ethers_core::types::Block as EthersBlock;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
@@ -26,7 +25,6 @@ use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
-use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::LogMined;
@@ -72,24 +70,6 @@ impl EthExecutor {
         }
     }
 
-    async fn mine_and_check_fields(&self, executions: Vec<(TransactionInput, Execution)>, external_block: ExternalBlock) -> anyhow::Result<Block> {
-        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
-            let mut miner_lock = self.miner.lock().await;
-            let block = miner_lock.mine_with_many_transactions(executions).await?;
-            drop(miner_lock);
-
-            assert_eq!(block.transactions.len(), external_block.transactions.len());
-            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
-
-            block
-        } else {
-            assert_eq!(0, external_block.transactions.len());
-            external_block.into()
-        };
-
-        Ok(block)
-    }
-
     /// Imports an external block using the offline flow.
     pub async fn import_offline(&self, external_block: ExternalBlock, external_receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
         tracing::info!(number = %external_block.number(), "importing offline block");
@@ -111,13 +91,19 @@ impl EthExecutor {
             let input = transaction.clone().into();
             let execution = self.execute_in_evm(input).await?;
 
-            cmp_execution_with_receipt(&execution, tx_receipt);
+            execution.cmp_with_receipt(&tx_receipt);
 
             let transaction_input = transaction.try_into().or(Err(anyhow!("failed to convert tx input")))?;
             executions.push((transaction_input, execution));
         }
 
-        let block = self.mine_and_check_fields(executions, external_block).await?;
+        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
+            self.miner.lock().await.mine_with_many_transactions(executions).await?
+        } else {
+            external_block.clone().into()
+        };
+
+        block.cmp_with_external(&external_block);
 
         self.eth_storage.save_block(block).await?;
 
@@ -141,12 +127,18 @@ impl EthExecutor {
 
             let execution = self.execute_in_evm(transaction_input.clone().into()).await?;
 
-            cmp_execution_with_receipt(&execution, external_receipt);
+            execution.cmp_with_receipt(&external_receipt);
 
             executions.push((transaction_input, execution));
         }
 
-        let block = self.mine_and_check_fields(executions, external_block).await?;
+        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
+            self.miner.lock().await.mine_with_many_transactions(executions).await?
+        } else {
+            external_block.clone().into()
+        };
+
+        block.cmp_with_external(&external_block);
 
         self.eth_storage.save_block(block).await?;
 
@@ -262,26 +254,6 @@ impl EthExecutor {
     /// Subscribe to new logs events.
     pub fn subscribe_to_logs(&self) -> broadcast::Receiver<LogMined> {
         self.log_notifier.subscribe()
-    }
-}
-
-fn cmp_execution_with_receipt(execution: &Execution, receipt: &ExternalReceipt) {
-    // Should the gas be the same?
-    // assert_eq!(execution.gas, receipt.gas_used.unwrap_or_default().into());
-
-    let exec_result = match &execution.result {
-        ExecutionResult::Success => 1,
-        _ => 0,
-    };
-    assert_eq!(U64::from(exec_result), receipt.status.unwrap_or_default());
-    // assert_eq!(execution.output, receipt.?);
-    assert_eq!(execution.logs.len(), receipt.logs.len());
-    for (log, external_log) in execution.logs.iter().zip(&receipt.logs) {
-        assert_eq!(log.topics.len(), external_log.topics.len());
-        assert_eq!(log.data.as_ref(), external_log.data.as_ref());
-        for (topic, external_topic) in log.topics.iter().zip(&external_log.topics) {
-            assert_eq!(H256::from(topic.to_owned()), external_topic.to_owned());
-        }
     }
 }
 
