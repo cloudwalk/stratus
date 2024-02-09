@@ -55,12 +55,7 @@ impl EthStorage for StratusStorage {
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         let account = match self.temp.maybe_read_account(address, point_in_time).await? {
             Some(account) => Some(account),
-            None => {
-                match self.perm.maybe_read_account(address, point_in_time).await? {
-                    Some(account) => Some(account),
-                    None => None
-                }
-            },
+            None => self.perm.maybe_read_account(address, point_in_time).await?,
         };
 
         Ok(account)
@@ -70,12 +65,7 @@ impl EthStorage for StratusStorage {
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         let slot = match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
             Some(slot) => Some(slot),
-            None => {
-                match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
-                    Some(slot) => Some(slot),
-                    None => None
-                }
-            }
+            None => self.perm.maybe_read_slot(address, slot_index, point_in_time).await?,
         };
 
         Ok(slot)
@@ -85,12 +75,7 @@ impl EthStorage for StratusStorage {
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         let block = match self.temp.read_block(block_selection).await? {
             Some(block) => Some(block),
-            None => {
-                match self.perm.read_block(block_selection).await? {
-                    Some(block) => Some(block),
-                    None => None
-                }
-            }
+            None => self.perm.read_block(block_selection).await?,
         };
 
         Ok(block)
@@ -100,12 +85,7 @@ impl EthStorage for StratusStorage {
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         let tx = match self.temp.read_mined_transaction(hash).await? {
             Some(tx) => Some(tx),
-            None => {
-                match self.perm.read_mined_transaction(hash).await? {
-                    Some(tx) => Some(tx),
-                    None => None
-                }
-            }
+            None => self.perm.read_mined_transaction(hash).await?,
         };
 
         Ok(tx)
