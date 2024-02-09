@@ -91,7 +91,7 @@ impl EthExecutor {
             let input = transaction.clone().into();
             let execution = self.execute_in_evm(input).await?;
 
-            execution.cmp_with_receipt(&tx_receipt);
+            execution.cmp_with_receipt(tx_receipt);
 
             let transaction_input = transaction.try_into().or(Err(anyhow!("failed to convert tx input")))?;
             executions.push((transaction_input, execution));
@@ -127,7 +127,7 @@ impl EthExecutor {
 
             let execution = self.execute_in_evm(transaction_input.clone().into()).await?;
 
-            execution.cmp_with_receipt(&external_receipt);
+            execution.cmp_with_receipt(external_receipt);
 
             executions.push((transaction_input, execution));
         }
