@@ -43,12 +43,12 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
-impl From<BigDecimal> for Nonce {
-    fn from(value: BigDecimal) -> Self {
-        // NOTE: This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
-        let (integer, _) = value.as_bigint_and_exponent();
-        let (_, bytes) = integer.to_bytes_be();
-        Nonce(U256::from_big_endian(&bytes))
+impl TryFrom<BigDecimal> for Nonce {
+    type Error = anyhow::Error;
+    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
+        let value_str = value.to_string();
+
+        Ok(Nonce(U256::from_dec_str(&value_str)?))
     }
 }
 
@@ -58,7 +58,7 @@ impl From<BigDecimal> for Nonce {
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Nonce {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
+        Ok(value.try_into()?)
     }
 }
 
@@ -88,5 +88,20 @@ impl TryFrom<Nonce> for BigDecimal {
     fn try_from(value: Nonce) -> Result<Self, Self::Error> {
         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
         Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*; // Adjust this as necessary to bring your types into scope
+    use sqlx::types::BigDecimal;
+
+    #[test]
+    fn big_decimal_to_nonce_conversion() {
+        // Test with a simple value
+        let big_decimal = BigDecimal::new(1.into(), -4);
+        let nonce: Nonce = big_decimal.clone().try_into().unwrap();
+        let expected = nonce.0.as_u64();
+        assert_eq!(10000, expected);
     }
 }
