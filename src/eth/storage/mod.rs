@@ -3,13 +3,13 @@
 mod eth_storage;
 mod inmemory;
 mod metrified;
-mod stratus_storage;
 mod postgres;
 mod storage_error;
+mod stratus_storage;
 
 pub use eth_storage::test_accounts;
 pub use eth_storage::EthStorage;
 pub use inmemory::InMemoryStorage;
 pub use metrified::MetrifiedStorage;
-pub use stratus_storage::StratusStorage;
 pub use storage_error::EthStorageError;
+pub use stratus_storage::StratusStorage;
