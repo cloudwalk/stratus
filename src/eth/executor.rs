@@ -27,6 +27,7 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -71,25 +72,33 @@ impl EthExecutor {
     }
 
     /// Imports an external block using the offline flow.
-    pub async fn import_offline(&self, external_block: ExternalBlock, external_receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
-        tracing::info!(number = %external_block.number(), "importing offline block");
-
-        // index receipts
-        let mut receipts_by_hash: HashMap<H256, &ExternalReceipt> = HashMap::with_capacity(external_receipts.len());
-        for receipt in external_receipts {
-            receipts_by_hash.insert(receipt.transaction_hash, receipt);
-        }
+    pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
+        tracing::info!(number = %block.number(), "importing offline block");
 
         // re-execute transactions
-        for transaction in external_block.transactions.clone() {
-            let tx_receipt = receipts_by_hash
-                .get(&transaction.hash)
-                .ok_or(anyhow!("receipt not found for transaction {}", transaction.hash))?;
+        for tx in block.transactions.clone() {
+            // find receipt
+            let Some(receipt) = receipts.get(&tx.hash()) else {
+                tracing::error!(hash = %tx.hash, "receipt is missing");
+                return Err(anyhow!("receipt missing for hash {}", tx.hash));
+            };
 
-            let input = transaction.clone().into();
-            let execution = self.execute_in_evm(input).await?;
-
-            execution.cmp_with_receipt(tx_receipt);
+            // re-execute and save it
+            let execution = self.execute_in_evm(tx.clone().into()).await;
+            match execution {
+                Ok(execution) => {
+                    execution.cmp_with_receipt(tx_receipt);
+                    self.eth_storage.save_account_changes(block.number(), execution).await?;
+                }
+                Err(e) => {
+                    // TODO: handle scenarios where transaction is expected to fail
+                    // TODO: for now just log tx and receipt to help debug
+                    let tx = serde_json::to_string(&tx).unwrap();
+                    let receipt = serde_json::to_string(&receipt).unwrap();
+                    tracing::error!(%tx, %receipt);
+                    return Err(e);
+                }
+            }
         }
 
         Ok(())
