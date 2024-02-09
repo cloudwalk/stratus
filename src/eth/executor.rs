@@ -72,6 +72,24 @@ impl EthExecutor {
         }
     }
 
+    async fn mine_and_check_fields(&self, executions: Vec<(TransactionInput, Execution)>, external_block: ExternalBlock) -> anyhow::Result<Block> {
+        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
+            let mut miner_lock = self.miner.lock().await;
+            let block = miner_lock.mine_with_many_transactions(executions).await?;
+            drop(miner_lock);
+
+            assert_eq!(block.transactions.len(), external_block.transactions.len());
+            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
+
+            block
+        } else {
+            assert_eq!(0, external_block.transactions.len());
+            external_block.into()
+        };
+
+        Ok(block)
+    }
+
     /// Imports an external block using the offline flow.
     pub async fn import_offline(&self, external_block: ExternalBlock, external_receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
         tracing::info!(number = %external_block.number(), "importing offline block");
@@ -99,19 +117,7 @@ impl EthExecutor {
             executions.push((transaction_input, execution));
         }
 
-        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
-            let mut miner_lock = self.miner.lock().await;
-            let block = miner_lock.mine_with_many_transactions(executions).await?;
-            drop(miner_lock);
-
-            assert_eq!(block.transactions.len(), external_block.transactions.len());
-            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
-
-            block
-        } else {
-            assert_eq!(0, external_block.transactions.len());
-            external_block.into()
-        };
+        let block = self.mine_and_check_fields(executions, external_block).await?;
 
         self.eth_storage.save_block(block).await?;
 
@@ -139,19 +145,8 @@ impl EthExecutor {
 
             executions.push((transaction_input, execution));
         }
-        let executions = NonEmpty::from_vec(executions);
-        let block = if let Some(executions) = executions {
-            let mut miner_lock = self.miner.lock().await;
-            let block = miner_lock.mine_with_many_transactions(executions).await?;
-            drop(miner_lock);
 
-            assert_eq!(block.transactions.len(), external_block.transactions.len());
-            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
-            block
-        } else {
-            assert_eq!(0, external_block.transactions.len());
-            external_block.into()
-        };
+        let block = self.mine_and_check_fields(executions, external_block).await?;
 
         self.eth_storage.save_block(block).await?;
 
