@@ -12,7 +12,9 @@ impl ExternalTransaction {
     /// Returns the block hash.
     pub fn hash(&self) -> Hash {
         self.0.hash.into()
-      
+    }
+}
+
 impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = ConversionError;
     fn try_from(value: ExternalTransaction) -> Result<Self, Self::Error> {
