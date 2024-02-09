@@ -21,6 +21,8 @@ impl ExternalReceipt {
 impl From<EthersReceipt> for ExternalReceipt {
     fn from(value: EthersReceipt) -> Self {
         ExternalReceipt(value)
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self

@@ -19,4 +19,3 @@ impl From<EthersTransaction> for ExternalTransaction {
         ExternalTransaction(value)
     }
 }
-

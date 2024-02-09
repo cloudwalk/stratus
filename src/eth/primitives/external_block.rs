@@ -1,11 +1,10 @@
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 
+use super::Block;
 use super::BlockNumber;
 use crate::eth::primitives::ExternalTransaction;
 use crate::log_and_err;
-
-use super::Block;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
@@ -40,8 +39,10 @@ impl From<ExternalBlock> for Block {
                 timestamp_in_secs: value.timestamp.as_u64().into(),
                 parent_hash: value.parent_hash.into(),
             },
-            transactions: vec![]
-
+            transactions: vec![],
+        }
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
@@ -56,7 +57,7 @@ impl TryFrom<serde_json::Value> for ExternalBlock {
         }
     }
 }
-          
+
 impl From<EthersBlock<EthersTransaction>> for ExternalBlock {
     fn from(value: EthersBlock<EthersTransaction>) -> Self {
         let txs: Vec<ExternalTransaction> = value.transactions.into_iter().map(ExternalTransaction::from).collect();

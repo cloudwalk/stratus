@@ -73,19 +73,47 @@ impl EthExecutor {
     }
 
     /// Imports an external block using the offline flow.
-    pub async fn import_offline(&self, block: ExternalBlock, receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
-        tracing::info!(number = %block.number(), "importing offline block");
+    pub async fn import_offline(&self, external_block: ExternalBlock, external_receipts: &[&ExternalReceipt]) -> anyhow::Result<()> {
+        tracing::info!(number = %external_block.number(), "importing offline block");
 
         // index receipts
-        let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
-        for receipt in receipts {
+        let mut receipts_by_hash: HashMap<H256, &ExternalReceipt> = HashMap::with_capacity(external_receipts.len());
+        for receipt in external_receipts {
             receipts_by_hash.insert(receipt.transaction_hash, receipt);
         }
 
+        let mut executions = Vec::new();
+
         // re-execute transactions
-        for transaction in block.transactions.clone() {
-            self.execute_in_evm(transaction.into()).await?;
+        for transaction in external_block.transactions.clone() {
+            let tx_receipt = receipts_by_hash
+                .get(&transaction.hash)
+                .ok_or(anyhow!("receipt not found for transaction {}", transaction.hash))?;
+
+            let input = transaction.clone().into();
+            let execution = self.execute_in_evm(input).await?;
+
+            cmp_execution_with_receipt(&execution, tx_receipt);
+
+            let transaction_input = transaction.try_into().or(Err(anyhow!("failed to convert tx input")))?;
+            executions.push((transaction_input, execution));
         }
+
+        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
+            let mut miner_lock = self.miner.lock().await;
+            let block = miner_lock.mine_with_many_transactions(executions).await?;
+            drop(miner_lock);
+
+            assert_eq!(block.transactions.len(), external_block.transactions.len());
+            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
+
+            block
+        } else {
+            assert_eq!(0, external_block.transactions.len());
+            external_block.into()
+        };
+
+        self.eth_storage.save_block(block).await?;
 
         Ok(())
     }
@@ -105,25 +133,9 @@ impl EthExecutor {
                 Err(e) => return Err(anyhow!("failed to convert external transaction into TransactionInput: {:?}", e)),
             };
 
-            let execution = self.execute_in_evm(transaction_input.clone().try_into()?).await?;
+            let execution = self.execute_in_evm(transaction_input.clone().into()).await?;
 
-            // Should the gas be the same?
-            // assert_eq!(execution.gas, external_receipt.gas_used.unwrap_or_default().into());
-
-            let exec_result = match &execution.result {
-                ExecutionResult::Success => 1,
-                _ => 0,
-            };
-            assert_eq!(U64::from(exec_result), external_receipt.status.unwrap_or_default());
-            // assert_eq!(execution.output, external_receipt.?);
-            assert_eq!(execution.logs.len(), external_receipt.logs.len());
-            for (log, external_log) in execution.logs.iter().zip(&external_receipt.logs) {
-                assert_eq!(log.topics.len(), external_log.topics.len());
-                assert_eq!(log.data.as_ref(), external_log.data.as_ref());
-                for (topic, external_topic) in log.topics.iter().zip(&external_log.topics) {
-                    assert_eq!(H256::from(topic.to_owned()), external_topic.to_owned());
-                }
-            }
+            cmp_execution_with_receipt(&execution, external_receipt);
 
             executions.push((transaction_input, execution));
         }
@@ -134,7 +146,7 @@ impl EthExecutor {
             drop(miner_lock);
 
             assert_eq!(block.transactions.len(), external_block.transactions.len());
-            //assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
+            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
             block
         } else {
             assert_eq!(0, external_block.transactions.len());
@@ -149,7 +161,6 @@ impl EthExecutor {
         //TODO compare logs
         //TODO compare status
         //XXX panic in case of bad comparisson
-
 
         Ok(())
     }
@@ -256,6 +267,26 @@ impl EthExecutor {
     /// Subscribe to new logs events.
     pub fn subscribe_to_logs(&self) -> broadcast::Receiver<LogMined> {
         self.log_notifier.subscribe()
+    }
+}
+
+fn cmp_execution_with_receipt(execution: &Execution, receipt: &ExternalReceipt) {
+    // Should the gas be the same?
+    // assert_eq!(execution.gas, receipt.gas_used.unwrap_or_default().into());
+
+    let exec_result = match &execution.result {
+        ExecutionResult::Success => 1,
+        _ => 0,
+    };
+    assert_eq!(U64::from(exec_result), receipt.status.unwrap_or_default());
+    // assert_eq!(execution.output, receipt.?);
+    assert_eq!(execution.logs.len(), receipt.logs.len());
+    for (log, external_log) in execution.logs.iter().zip(&receipt.logs) {
+        assert_eq!(log.topics.len(), external_log.topics.len());
+        assert_eq!(log.data.as_ref(), external_log.data.as_ref());
+        for (topic, external_topic) in log.topics.iter().zip(&external_log.topics) {
+            assert_eq!(H256::from(topic.to_owned()), external_topic.to_owned());
+        }
     }
 }
 
