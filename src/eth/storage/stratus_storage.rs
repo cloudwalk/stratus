@@ -22,8 +22,8 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::EthStorage;
 
 pub struct StratusStorage {
-    _temp: InMemoryStorage,
-    _perm: Arc<dyn EthStorage>,
+    temp: InMemoryStorage,
+    perm: Arc<dyn EthStorage>,
 }
 
 #[async_trait]
@@ -34,12 +34,12 @@ impl EthStorage for StratusStorage {
 
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
-        todo!()
+        self.temp.read_current_block_number().await
     }
 
     /// Atomically increments the block number, returning the new value.
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        todo!()
+        self.temp.increment_block_number().await
     }
 
     // -------------------------------------------------------------------------
@@ -47,23 +47,53 @@ impl EthStorage for StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Checks if the transaction execution conflicts with the current storage state.
-    async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        todo!()
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        self.temp.check_conflicts(execution).await
     }
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    async fn maybe_read_account(&self, _address: &Address, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        todo!()
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        let account = match self.temp.maybe_read_account(address, point_in_time).await? {
+            Some(account) => Some(account),
+            None => {
+                match self.perm.maybe_read_account(address, point_in_time).await? {
+                    Some(account) => Some(account),
+                    None => None
+                }
+            },
+        };
+
+        Ok(account)
     }
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn maybe_read_slot(&self, _address: &Address, _slot_index: &SlotIndex, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        todo!()
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        let slot = match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
+            Some(slot) => Some(slot),
+            None => {
+                match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
+                    Some(slot) => Some(slot),
+                    None => None
+                }
+            }
+        };
+
+        Ok(slot)
     }
 
     /// Retrieves a block from the storage.
-    async fn read_block(&self, _block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
-        todo!()
+    async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+        let block = match self.temp.read_block(block_selection).await? {
+            Some(block) => Some(block),
+            None => {
+                match self.perm.read_block(block_selection).await? {
+                    Some(block) => Some(block),
+                    None => None
+                }
+            }
+        };
+
+        Ok(block)
     }
 
     /// Retrieves a transaction from the storage.
