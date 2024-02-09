@@ -11,6 +11,7 @@ use std::thread;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
+use ethereum_types::U64;
 use ethers_core::types::Block as EthersBlock;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
@@ -18,12 +19,14 @@ use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
+use super::primitives::ExternalTransaction;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::LogMined;
@@ -31,8 +34,6 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
-
-use super::primitives::ExternalTransaction;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -82,17 +83,44 @@ impl EthExecutor {
 
         for external_transaction in <EthersBlock<ExternalTransaction>>::from(external_block.clone()).transactions {
             // Find the receipt for the current transaction.
-            let _ethers_core_receipt = external_receipts
+            let external_receipt = external_receipts
                 .get(&external_transaction.hash)
                 .ok_or(anyhow!("receipt not found for transaction {}", external_transaction.hash))?;
 
             let transaction_input: TransactionInput = match external_transaction.to_owned().try_into() {
                 Ok(transaction_input) => transaction_input,
-                Err(e) => return Err(anyhow!("failed to convert transaction into TransactionInput: {:?}", e)),
+                Err(e) => return Err(anyhow!("failed to convert external transaction into TransactionInput: {:?}", e)),
             };
 
-            let execution = self.mine_and_execute_transaction(transaction_input).await?;
-            executions.push(execution);
+            let execution = self.mine_and_execute_transaction(transaction_input.clone()).await?;
+
+            // Should the gas be the same?
+            // assert_eq!(execution.gas, external_receipt.gas_used.unwrap_or_default().into());
+
+            let exec_result = match &execution.result {
+                ExecutionResult::Success => 1,
+                _ => 0,
+            };
+            assert_eq!(U64::from(exec_result), external_receipt.status.unwrap_or_default());
+            assert_eq!(execution.logs.len(), external_receipt.logs.len());
+            for (log, external_log) in execution.logs.iter().zip(&external_receipt.logs) {
+                assert_eq!(log.topics.len(), external_log.topics.len());
+                assert_eq!(log.data.as_ref(), external_log.data.as_ref());
+                for (topic, external_topic) in log.topics.iter().zip(&external_log.topics) {
+                    assert_eq!(H256::from(topic.to_owned()), external_topic.to_owned());
+                }
+            }
+
+            executions.push((transaction_input, execution));
+        }
+        let executions = NonEmpty::from_vec(executions);
+        if let Some(executions) = executions {
+            let mut miner_lock = self.miner.lock().await;
+            let block = miner_lock.mine_with_many_transactions(executions).await?;
+            drop(miner_lock);
+
+            assert_eq!(block.transactions.len(), external_block.transactions.len());
+            assert_eq!(block.header.transactions_root, external_block.transactions_root.into());
         }
 
         //TODO compare slots/changes
@@ -167,7 +195,7 @@ impl EthExecutor {
         };
 
         // notify transaction logs
-        for trx in block.clone().transactions {
+        for trx in block.transactions {
             for log in trx.logs {
                 if let Err(e) = self.log_notifier.send(log) {
                     tracing::error!(reason = ?e, "failed to send log notification");

@@ -13,7 +13,6 @@ impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
     }
 }
 
-
 impl From<EthersBlock<EthersTransaction>> for ExternalBlock {
     fn from(value: EthersBlock<EthersTransaction>) -> Self {
         let txs: Vec<ExternalTransaction> = value.transactions.into_iter().map(ExternalTransaction::from).collect();
@@ -47,7 +46,7 @@ impl From<EthersBlock<EthersTransaction>> for ExternalBlock {
             withdrawals: value.withdrawals,
             withdrawals_root: value.withdrawals_root,
             parent_beacon_block_root: value.parent_beacon_block_root,
-            other: value.other
+            other: value.other,
         };
         ExternalBlock(block)
     }

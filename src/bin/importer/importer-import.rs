@@ -1,11 +1,17 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use ethereum_types::H256 as TXHash;
+use ethers_core::types::Block as ECBlock;
+use ethers_core::types::Transaction as ECTransaction;
+use ethers_core::types::TransactionReceipt as ECReceipt;
 use serde_json::Value as JsonValue;
 use sqlx::Row;
 use stratus::config::ImporterImportConfig;
 use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::ExternalReceipt;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -15,6 +21,10 @@ async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterImportConfig = init_global_services();
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
+
+    // Initialize storage and executor for importing the block and receipts.
+    let storage = config.init_storage().await?;
+    let executor = config.init_executor(Arc::clone(&storage));
 
     // init cursor
     let mut tx = init_blocks_cursor(&pg).await?;
@@ -33,10 +43,24 @@ async fn main() -> anyhow::Result<()> {
         let block_end = blocks.last().unwrap().number;
         let receipts = find_receipts(&pg, block_start, block_end).await?;
 
+        let mut receipt_map: HashMap<i64, HashMap<TXHash, ExternalReceipt>> = HashMap::new();
+        for receipt in receipts {
+            let external_receipt: ECReceipt = serde_json::from_value(receipt.payload)?;
+            if let Some(transaction_map) = receipt_map.get_mut(&receipt.block_number) {
+                transaction_map.insert(external_receipt.transaction_hash, external_receipt.into());
+            } else {
+                receipt_map.insert(
+                    receipt.block_number,
+                    vec![(external_receipt.transaction_hash, external_receipt.into())].into_iter().collect(),
+                );
+            }
+        }
         // imports txs
-        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
-        for _ in blocks {
-            // do import
+        tracing::info!(%block_start, %block_end, "importing blocks");
+        for block in blocks {
+            let external_block: ECBlock<ECTransaction> = serde_json::from_value(block.payload)?;
+            let external_receipts: HashMap<TXHash, ExternalReceipt> = receipt_map.remove(&block.number).unwrap_or_default();
+            executor.import(external_block.into(), external_receipts).await?;
         }
     }
     Ok(())
