@@ -22,6 +22,8 @@ export const ZERO = "0x0";
 export const ONE = "0x1";
 export const TEST_BALANCE = "0xffffffffffffffff";
 
+export const TEST_TRANSFER = 12345678;
+
 // Special hashes
 export const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";
 export const HASH_EMPTY_TRANSACTIONS = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
