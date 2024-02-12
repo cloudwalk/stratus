@@ -58,10 +58,6 @@ export const FERDIE = new Account(
     "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
 );
 
-export const GRACE = new Account(
-    "0xbaDf35CED311B893fD42508B6922af3c4b41f287",
-    "6065570b305c31e9e9143d7ad05d56bed04378de1a95b8fce63c0afccfc6f7dd"
-)
 
 export const TEST_ACCOUNTS = [ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE];
 

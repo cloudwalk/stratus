@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { keccak256 } from "ethers";
 import { Block, Transaction, TransactionReceipt } from "web3-types";
 
-import { ALICE, BOB, GRACE } from "./helpers/account";
+import { ALICE, Account, BOB } from "./helpers/account";
 import { isStratus } from "./helpers/network";
 import {
     CHAIN_ID,
@@ -25,6 +25,7 @@ describe("Transaction: serial transfer", () => {
     var _txHash: string;
     var _block: Block;
     var _txSentTimestamp: number;
+    var new_account: Account;
 
     it("Resets blockchain", async () => {
         await sendReset();
@@ -86,11 +87,12 @@ describe("Transaction: serial transfer", () => {
         expect(await sendGetBalance(ALICE)).eq(parseInt(TEST_BALANCE, 16) - TEST_TRANSFER)
     });
     it("Send transaction to new account", async () => {
-        let txSigned = await ALICE.signWeiTransfer(GRACE.address, TEST_TRANSFER, 1);
+        new_account = randomAccounts(1)[0];
+        let txSigned = await ALICE.signWeiTransfer(new_account.address, TEST_TRANSFER, 1);
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
     });
     it("Receiver balance is increased", async () => {
-        expect(await sendGetBalance(GRACE)).eq(TEST_TRANSFER)
+        expect(await sendGetBalance(new_account)).eq(TEST_TRANSFER);
     });
 });
