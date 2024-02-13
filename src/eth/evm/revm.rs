@@ -10,11 +10,13 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use chrono::Utc;
 use itertools::Itertools;
+use revm::interpreter::CallInputs;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::CreateScheme;
+use revm::primitives::EVMError;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
@@ -75,6 +77,7 @@ impl Evm for Revm {
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution> {
         // init session
         let evm = &mut self.evm;
+
         let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone());
 
         // configure evm block
@@ -83,6 +86,10 @@ impl Evm for Revm {
 
         // configure database
         evm.database(session);
+
+        // gathers input data before executing the transaction
+        #[cfg(debug_assertions)]
+        let _ = inspect_evm_instructions(evm);
 
         // configure evm params
         let tx = &mut evm.env.tx;
@@ -94,10 +101,11 @@ impl Evm for Revm {
         tx.nonce = input.nonce.map_into();
         tx.data = input.data.into();
         tx.value = input.value.into();
+        //XXX tx.gas_limit = input.gas_limit.into();
 
         // execute evm
         #[cfg(debug_assertions)]
-        let evm_result = evm.inspect(RevmInspector {});
+        let evm_result = inspect_evm_instructions(evm);
 
         #[cfg(not(debug_assertions))]
         let evm_result = evm.transact();
@@ -113,6 +121,13 @@ impl Evm for Revm {
             }
         }
     }
+}
+
+#[cfg(debug_assertions)]
+fn inspect_evm_instructions(evm: &mut EVM<RevmDatabaseSession>) -> Result<RevmResultAndState, EVMError<anyhow::Error>> {
+    let evm_result = evm.inspect(RevmInspector {});
+    tracing::debug!("{:#?}", &evm_result);
+    evm_result
 }
 
 // -----------------------------------------------------------------------------
@@ -211,6 +226,10 @@ impl Database for RevmDatabaseSession {
 struct RevmInspector;
 
 impl Inspector<RevmDatabaseSession> for RevmInspector {
+    fn call(&mut self, _data: &mut revm::EVMData<'_, RevmDatabaseSession>, _inputs: &mut CallInputs) -> (InstructionResult, revm::interpreter::Gas, revm::primitives::Bytes) {
+        (InstructionResult::Continue, revm::interpreter::Gas::new(0), revm::primitives::Bytes::new())
+    }
+
     fn step(&mut self, _interpreter: &mut revm::interpreter::Interpreter, _: &mut revm::EVMData<'_, RevmDatabaseSession>) -> InstructionResult {
         // let arg1 = unsafe { *interpreter.instruction_pointer.add(1) };
         // let arg2 = unsafe { *interpreter.instruction_pointer.add(2) };
@@ -223,9 +242,9 @@ impl Inspector<RevmDatabaseSession> for RevmInspector {
         //     interpreter.stack.data(),
         // );
         // use revm::interpreter::opcode;
-        // match opcode::OPCODE_JUMPMAP[_interpreter.current_opcode() as usize] {
+        // match opcode::OPCODE_JUMPMAP[interpreter.current_opcode() as usize] {
         //     Some(opcode) => println!("{} ", opcode),
-        //     None => println!("{:#x} ", _interpreter.current_opcode() as usize),
+        //     None => println!("{:#x} ", interpreter.current_opcode() as usize),
         // }
         InstructionResult::Continue
     }
@@ -311,6 +330,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
                 ExecutionAccountChanges::from_new_account(account, account_modified_slots),
             );
         }
+
         // status: touched (updated)
         else if account_updated {
             let Some(existing_account) = execution_changes.get_mut(&address) else {
