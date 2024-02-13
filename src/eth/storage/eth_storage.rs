@@ -82,11 +82,12 @@ pub trait EthStorage: Send + Sync {
             Some(account) => Ok(account),
             None => {
                 tracing::error!("Account not found: {}", address);
-                Ok(Account { //XXX maybe we should just return an error
+                Ok(Account {
+                    //XXX maybe we should just return an error
                     address: address.clone(),
                     ..Account::default()
                 })
-            },
+            }
         }
     }
 

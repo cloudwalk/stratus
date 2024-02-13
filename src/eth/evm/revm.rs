@@ -226,7 +226,11 @@ impl Database for RevmDatabaseSession {
 struct RevmInspector;
 
 impl Inspector<RevmDatabaseSession> for RevmInspector {
-    fn call(&mut self, _data: &mut revm::EVMData<'_, RevmDatabaseSession>, _inputs: &mut CallInputs) -> (InstructionResult, revm::interpreter::Gas, revm::primitives::Bytes) {
+    fn call(
+        &mut self,
+        _data: &mut revm::EVMData<'_, RevmDatabaseSession>,
+        _inputs: &mut CallInputs,
+    ) -> (InstructionResult, revm::interpreter::Gas, revm::primitives::Bytes) {
         (InstructionResult::Continue, revm::interpreter::Gas::new(0), revm::primitives::Bytes::new())
     }
 
@@ -330,7 +334,6 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
                 ExecutionAccountChanges::from_new_account(account, account_modified_slots),
             );
         }
-
         // status: touched (updated)
         else if account_updated {
             let Some(existing_account) = execution_changes.get_mut(&address) else {
