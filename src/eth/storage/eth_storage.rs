@@ -80,10 +80,13 @@ pub trait EthStorage: Send + Sync {
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         match self.maybe_read_account(address, point_in_time).await? {
             Some(account) => Ok(account),
-            None => Ok(Account {
-                address: address.clone(),
-                ..Account::default()
-            }),
+            None => {
+                tracing::error!("Account not found: {}", address);
+                Ok(Account { //XXX maybe we should just return an error
+                    address: address.clone(),
+                    ..Account::default()
+                })
+            },
         }
     }
 
