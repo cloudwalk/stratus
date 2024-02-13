@@ -63,7 +63,7 @@ impl Revm {
         evm.env.block.coinbase = Address::COINBASE.into();
 
         // evm tx config
-        evm.env.tx.gas_limit = 1_000_000; // todo: must come from transaction
+        evm.env.tx.gas_limit = u64::MAX; // todo: must come from transaction
         evm.env.tx.gas_price = U256::ZERO;
         evm.env.tx.gas_priority_fee = None;
 
