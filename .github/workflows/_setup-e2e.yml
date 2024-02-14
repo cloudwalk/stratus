@@ -1,4 +1,4 @@
-name: Setup E2E environment
+name: Setup E2E Environment
 
 on:
   workflow_call:
@@ -9,6 +9,7 @@ on:
 
 jobs:
   setup_and_test:
+    name: Setup and Run E2E
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
