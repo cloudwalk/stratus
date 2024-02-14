@@ -8,11 +8,11 @@ on:
 
 jobs:
   e2e-stratus:
-    uses: ./.github/workflows/_reusable/_setup-e2e.yml
+    uses: ./.github/workflows/_setup-e2e.yml
     with:
       test_command: 'e2e-stratus'
   
   e2e-stratus-postgres:
-    uses: ./.github/workflows/_reusable/_setup-e2e.yml
+    uses: ./.github/workflows/_setup-e2e.yml
     with:
       test_command: 'e2e-stratus-postgres'
