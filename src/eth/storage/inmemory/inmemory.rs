@@ -232,6 +232,18 @@ impl EthStorage for InMemoryStorage {
         Ok(())
     }
 
+    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        tracing::debug!(?accounts, "saving initial accounts");
+
+        let mut state = self.lock_write().await;
+        for account in accounts {
+            state
+                .accounts
+                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
+        }
+        Ok(())
+    }
+
     async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let mut state_lock = self.lock_write().await;
         save_account_changes(&mut state_lock, number, execution);
@@ -271,16 +283,6 @@ impl EthStorage for InMemoryStorage {
         let mut state = self.lock_write().await;
         state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
         state.blocks_by_hash.insert(block.hash().clone(), block);
-        Ok(())
-    }
-
-    async fn enable_test_accounts(&self, test_account: Vec<Account>) -> anyhow::Result<()> {
-        let mut state = self.lock_write().await;
-        for account in test_account {
-            state
-                .accounts
-                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
-        }
         Ok(())
     }
 }

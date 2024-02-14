@@ -121,7 +121,7 @@ impl CommonConfig {
             storage.enable_genesis(BlockMiner::genesis()).await?;
         }
         if self.enable_test_accounts {
-            storage.enable_test_accounts(test_accounts()).await?;
+            storage.save_initial_accounts(test_accounts()).await?;
         }
         Ok(storage)
     }
