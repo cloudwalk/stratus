@@ -129,7 +129,7 @@ async fn find_receipts(pg: &Postgres, block_start: i64, block_end: i64) -> anyho
             }
             Ok(parsed_rows)
         }
-        Err(e) => log_and_err!(reason = e, "failed to find receipts"),
+        Err(e) => log_and_err!(reason = e, "failed to retrieve receipts"),
     }
 }
 
@@ -143,7 +143,7 @@ async fn db_max_imported_block(pg: &Postgres) -> anyhow::Result<Option<BlockNumb
     let block_number: i64 = match result {
         Ok(Some(max)) => max,
         Ok(None) => return Ok(None),
-        Err(e) => return log_and_err!(reason = e, "failed to find max block number"),
+        Err(e) => return log_and_err!(reason = e, "failed to retrieve max block number"),
     };
 
     Ok(Some(block_number.into()))

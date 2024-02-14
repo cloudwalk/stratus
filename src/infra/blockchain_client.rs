@@ -1,7 +1,5 @@
 use std::time::Duration;
 
-use anyhow::Context;
-use hex_literal::hex;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
@@ -10,6 +8,7 @@ use serde_json::Value as JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Wei;
 use crate::log_and_err;
 
 pub struct BlockchainClient {
@@ -65,21 +64,17 @@ impl BlockchainClient {
         }
     }
 
-    pub async fn get_transaction_slots(&self, contract_hash: Address, number: BlockNumber) -> anyhow::Result<JsonValue> {
-        let serde_contract_hash = serde_json::to_value(contract_hash)?;
-        let serde_slot = serde_json::to_value(Hash::new(hex!("0000000000000000000000000000000000000000000000000000000000000000")))?;
-        let serde_number = serde_json::to_value(number)?;
+    /// Retrieves an account balance at some block.
+    pub async fn get_balance(&self, address: &Address, number: Option<BlockNumber>) -> anyhow::Result<Wei> {
+        tracing::debug!(%address, ?number, "retrieving account balance");
 
-        match self
-            .http
-            .request::<JsonValue, Vec<JsonValue>>("eth_getStorageAt", vec![serde_contract_hash, serde_slot, serde_number])
-            .await
-        {
-            Ok(block) => Ok(block),
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to retrieve block by transaction slot");
-                Err(e).context("failed to retrieve transaction slot")
-            }
+        let address = serde_json::to_value(address)?;
+        let number = serde_json::to_value(number)?;
+        let result = self.http.request::<Wei, Vec<JsonValue>>("eth_getBalance", vec![address, number]).await;
+
+        match result {
+            Ok(receipt) => Ok(receipt),
+            Err(e) => log_and_err!(reason = e, "failed to retrieve account balance"),
         }
     }
 }

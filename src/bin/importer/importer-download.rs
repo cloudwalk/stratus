@@ -4,21 +4,21 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use futures::Future;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
+use sqlx::types::BigDecimal;
 use stratus::config::ImporterDownloadConfig;
+use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
+use stratus::eth::primitives::Wei;
+use stratus::ext::not;
 use stratus::infra::postgres::Postgres;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use stratus::log_and_err;
-
-/// Number of parallel downloads to execute.
-const PARALELLISM: usize = 20;
 
 /// Number of blocks each parallel download will process.
 const BLOCKS_BY_TASK: usize = 1_000;
@@ -33,28 +33,55 @@ async fn main() -> anyhow::Result<()> {
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc, NETWORK_TIMEOUT)?);
 
-    // prepare and execute tasks
-    let tasks = prepare_tasks(pg, chain).await?;
-    execute_tasks(tasks).await
+    // download balances and blocks
+    download_balances(&pg, &chain, config.initial_accounts).await?;
+    download_blocks(pg, chain, config.paralellism).await?;
+    Ok(())
 }
 
-async fn prepare_tasks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>) -> anyhow::Result<Vec<impl Future<Output = Result<(), anyhow::Error>>>> {
+async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
+    if accounts.is_empty() {
+        tracing::warn!("no initial accounts to retrieve balance");
+        return Ok(());
+    } else {
+        tracing::info!(?accounts, "retrieving initial balances");
+    }
+
+    // retrieve downloaded balances
+    let downloaded_balances = db_retrieve_downloaded_balances(pg).await?;
+    let downloaded_balances_addresses = downloaded_balances.iter().map(|balance| &balance.address).collect_vec();
+
+    // keep only accounts that must be downloaded
+    let address_to_download = accounts
+        .into_iter()
+        .filter(|address| not(downloaded_balances_addresses.contains(&address)))
+        .collect_vec();
+
+    // download missing balances
+    for address in address_to_download {
+        let balance = chain.get_balance(&address, Some(BlockNumber::ZERO)).await?;
+        db_insert_balance(pg, address, balance).await?;
+    }
+
+    Ok(())
+}
+
+async fn download_blocks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, paralellism: usize) -> anyhow::Result<()> {
+    // prepare download block tasks
     let mut start = BlockNumber::ZERO;
     let end = chain.get_current_block_number().await?;
+    tracing::info!(blocks_by_taks = %BLOCKS_BY_TASK, %start, %end, "preparing block downloads");
 
-    tracing::info!(blocks_by_taks = %BLOCKS_BY_TASK, %start, %end, "preparing tasks");
     let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (BLOCKS_BY_TASK - 1), end);
         tasks.push(download(Arc::clone(&pg), Arc::clone(&chain), start, end));
         start += BLOCKS_BY_TASK;
     }
-    Ok(tasks)
-}
 
-async fn execute_tasks(tasks: Vec<impl Future<Output = Result<(), anyhow::Error>>>) -> anyhow::Result<()> {
-    tracing::info!(tasks = %tasks.len(), paralellism = %PARALELLISM, "executing tasks");
-    let result = futures::stream::iter(tasks).buffer_unordered(PARALELLISM).try_collect::<Vec<()>>().await;
+    // execute download block tasks
+    tracing::info!(tasks = %tasks.len(), %paralellism, "executing block downloads");
+    let result = futures::stream::iter(tasks).buffer_unordered(paralellism).try_collect::<Vec<()>>().await;
     match result {
         Ok(_) => {
             tracing::info!("tasks finished");
@@ -68,7 +95,7 @@ async fn execute_tasks(tasks: Vec<impl Future<Output = Result<(), anyhow::Error>
 
 async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
     // calculate current block
-    let mut current = match find_max_downloaded_block(&pg, start, end_inclusive).await? {
+    let mut current = match db_retrieve_max_downloaded_block(&pg, start, end_inclusive).await? {
         Some(number) => number.next(),
         None => start,
     };
@@ -120,7 +147,7 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
             }
 
             // save block and receipts
-            if let Err(e) = insert_block_and_receipts(&pg, current, block_json, receipts_json).await {
+            if let Err(e) = db_insert_block_and_receipts(&pg, current, block_json, receipts_json).await {
                 tracing::warn!(reason = ?e, "retrying because failed to save block");
                 continue;
             }
@@ -136,28 +163,55 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
 // Postgres
 // -----------------------------------------------------------------------------
 
-async fn find_max_downloaded_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
-    tracing::debug!(%start, %end, "finding max downloaded block");
+async fn db_retrieve_downloaded_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
+    tracing::debug!("retrieving downloaded balances");
+
+    let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_downloaded_balances.sql")
+        .fetch_all(&pg.connection_pool)
+        .await;
+    match result {
+        Ok(accounts) => Ok(accounts),
+        Err(e) => log_and_err!(reason = e, "failed to retrieve downloaded balances"),
+    }
+}
+
+async fn db_retrieve_max_downloaded_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
+    tracing::debug!(%start, %end, "retrieving max downloaded block");
 
     let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_downloaded_block_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_one(&pg.connection_pool)
         .await;
-    let block_number: i64 = match result {
-        Ok(Some(max)) => max,
-        Ok(None) => return Ok(None),
-        Err(e) => return log_and_err!(reason = e, "failed to find max block number"),
-    };
-
-    Ok(Some(block_number.into()))
+    match result {
+        Ok(Some(max)) => Ok(Some(max.into())),
+        Ok(None) => Ok(None),
+        Err(e) => log_and_err!(reason = e, "failed to retrieve max block number"),
+    }
 }
 
-async fn insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()> {
-    tracing::debug!(?block, ?receipts, "saving block and receipts");
+async fn db_insert_balance(pg: &Postgres, address: Address, balance: Wei) -> anyhow::Result<()> {
+    tracing::debug!(%address, %balance, "saving external balance");
+
+    let result = sqlx::query_file!(
+        "src/bin/importer/sql/insert_external_balance.sql",
+        address.as_ref(),
+        TryInto::<BigDecimal>::try_into(balance)?
+    )
+    .execute(&pg.connection_pool)
+    .await;
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => log_and_err!(reason = e, "failed to insert external balance"),
+    }
+}
+
+async fn db_insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()> {
+    tracing::debug!(?block, ?receipts, "saving external block and receipts");
 
     let mut tx = pg.start_transaction().await?;
 
     // insert block
-    let result = sqlx::query_file!("src/bin/importer/sql/insert_block.sql", number.as_i64(), block)
+    let result = sqlx::query_file!("src/bin/importer/sql/insert_external_block.sql", number.as_i64(), block)
         .execute(&mut *tx)
         .await;
 
@@ -173,7 +227,7 @@ async fn insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: Js
 
     // insert receipts
     for (hash, receipt) in receipts {
-        let result = sqlx::query_file!("src/bin/importer/sql/insert_receipt.sql", hash.as_ref(), number.as_i64(), receipt)
+        let result = sqlx::query_file!("src/bin/importer/sql/insert_external_receipt.sql", hash.as_ref(), number.as_i64(), receipt)
             .execute(&mut *tx)
             .await;
 
@@ -191,6 +245,12 @@ async fn insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: Js
     pg.commit_transaction(tx).await?;
 
     Ok(())
+}
+
+struct BalanceRow {
+    address: Address,
+    #[allow(dead_code)] // allow it because the SQL returns it, even if it is not used
+    balance: Wei,
 }
 
 // -----------------------------------------------------------------------------

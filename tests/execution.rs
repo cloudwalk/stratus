@@ -27,7 +27,7 @@ mod tests {
         fake_transaction_input.gas = 0.into();
 
         let accounts = test_accounts();
-        let _ = storage.enable_test_accounts(accounts.clone()).await.unwrap();
+        storage.enable_test_accounts(accounts.clone()).await.unwrap();
 
         let address = accounts.last().unwrap().address.clone();
         fake_transaction_input.from = address;

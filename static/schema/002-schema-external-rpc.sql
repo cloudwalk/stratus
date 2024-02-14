@@ -8,3 +8,8 @@ create table external_receipts(
     block_number bigint not null references external_blocks(number),
     payload jsonb not null
 );
+
+create table external_balances(
+    address bytea primary key not null check (length(address) = 20),
+    balance numeric not null check (balance >= 0)
+);
