@@ -1,16 +1,20 @@
 use std::sync::Arc;
+
 use stratus::eth::evm::revm::Revm;
 
 #[cfg(test)]
 mod tests {
-    use super::*; use ethers_core::rand::thread_rng;
+    use ethers_core::rand::thread_rng;
     // Adjust this import to include your Revm and related structs
-    use fake::{Faker, Dummy};
+    use fake::{Dummy, Faker};
     use nonempty::nonempty;
     use stratus::config::StorageConfig;
-    use stratus::eth::EthExecutor;
-    use stratus::eth::primitives::{TransactionInput, Wei};
+    use stratus::eth::primitives::TransactionInput;
+    use stratus::eth::primitives::Wei;
     use stratus::eth::storage::test_accounts;
+    use stratus::eth::EthExecutor;
+
+    use super::*;
 
     #[tokio::test]
     async fn regression_test_for_gas_handling() {

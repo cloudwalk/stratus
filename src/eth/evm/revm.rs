@@ -322,4 +322,3 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
     }
     Ok(execution_changes)
 }
-
