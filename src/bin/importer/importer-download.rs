@@ -48,7 +48,7 @@ async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Ve
     }
 
     // retrieve downloaded balances
-    let downloaded_balances = db_retrieve_downloaded_balances(pg).await?;
+    let downloaded_balances = db_retrieve_balances(pg).await?;
     let downloaded_balances_addresses = downloaded_balances.iter().map(|balance| &balance.address).collect_vec();
 
     // keep only accounts that must be downloaded
@@ -163,7 +163,13 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
 // Postgres
 // -----------------------------------------------------------------------------
 
-async fn db_retrieve_downloaded_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
+struct BalanceRow {
+    address: Address,
+    #[allow(dead_code)] // allow it because the SQL returns it, even if it is not used
+    balance: Wei,
+}
+
+async fn db_retrieve_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
     tracing::debug!("retrieving downloaded balances");
 
     let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_downloaded_balances.sql")
@@ -245,12 +251,6 @@ async fn db_insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block:
     pg.commit_transaction(tx).await?;
 
     Ok(())
-}
-
-struct BalanceRow {
-    address: Address,
-    #[allow(dead_code)] // allow it because the SQL returns it, even if it is not used
-    balance: Wei,
 }
 
 // -----------------------------------------------------------------------------
