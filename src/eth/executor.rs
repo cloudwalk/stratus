@@ -105,9 +105,6 @@ impl EthExecutor {
     }
 
     pub async fn import(&self, external_block: ExternalBlock, external_receipts: HashMap<H256, ExternalReceipt>) -> anyhow::Result<()> {
-        // Placeholder for all executions to be collected before saving the block.
-        let mut executions = Vec::new();
-
         for external_transaction in <EthersBlock<ExternalTransaction>>::from(external_block.clone()).transactions {
             // Find the receipt for the current transaction.
             let external_receipt = external_receipts
@@ -123,24 +120,14 @@ impl EthExecutor {
 
             execution.cmp_with_receipt(external_receipt)?;
 
-            executions.push((transaction_input, execution));
+            let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
+
+            self.eth_storage.save_block(block).await?;
         }
-
-        let block = if let Some(executions) = NonEmpty::from_vec(executions) {
-            self.miner.lock().await.mine_with_many_transactions(executions).await?
-        } else {
-            external_block.clone().into()
-        };
-
-        block.cmp_with_external(&external_block)?;
-
-        self.eth_storage.save_block(block).await?;
 
         //TODO compare slots/changes
         //TODO compare nonce
         //TODO compare balance
-        //TODO compare logs
-        //TODO compare status
         //XXX panic in case of bad comparisson
 
         Ok(())

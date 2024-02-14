@@ -45,12 +45,12 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32, [u8; 32]);
 
-impl From<BigDecimal> for Gas {
-    fn from(value: BigDecimal) -> Self {
-        // NOTE: This clones, but there I found no other way to get the BigInt (or the bytes) in BigDecimal
-        let (integer, _) = value.as_bigint_and_exponent();
-        let (_, bytes) = integer.to_bytes_be();
-        Gas(U256::from_big_endian(&bytes))
+impl TryFrom<BigDecimal> for Gas {
+    type Error = anyhow::Error;
+
+    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
+        let value_str = value.to_string();
+        Ok(Gas(U256::from_dec_str(&value_str)?))
     }
 }
 
@@ -60,7 +60,7 @@ impl From<BigDecimal> for Gas {
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Gas {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
+        Ok(value.try_into()?)
     }
 }
 
