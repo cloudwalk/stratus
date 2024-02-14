@@ -207,6 +207,7 @@ e2e-stratus-postgres test="":
 
     echo "-> Running E2E tests"
     just e2e stratus {{test}}
+    result_code=$?
 
     echo "-> Killing Stratus"
     killport 3000
@@ -215,6 +216,7 @@ e2e-stratus-postgres test="":
     docker-compose down
 
     echo "** -> Stratus log accessible in ./stratus.log **"
+    exit $result_code
 
 # E2E: Lint and format code
 e2e-lint:
