@@ -8,11 +8,13 @@ on:
 
 jobs:
   e2e-stratus:
+    name: E2E Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       test_command: 'e2e-stratus'
   
   e2e-stratus-postgres:
+    name: E2E Stratus Postgres
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       test_command: 'e2e-stratus-postgres'
