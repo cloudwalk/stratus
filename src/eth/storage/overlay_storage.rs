@@ -1,16 +1,10 @@
-
 use async_trait::async_trait;
-
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-
 use crate::eth::primitives::BlockNumber;
-
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
-
-
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;

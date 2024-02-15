@@ -54,7 +54,7 @@ impl OverlayStorage for StratusStorage {
         self.temp.maybe_read_slot(address, slot_index, point_in_time).await
     }
 
-    /// Commits changes to permanent storage
+    /// Commits changes to permanent storage and flushes overlay storage
     async fn commit(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
         todo!()
     }
@@ -127,7 +127,7 @@ impl PermanentStorage for StratusStorage {
 
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
-        self.temp.save_account_changes(block_number, execution).await
+        self.perm.save_account_changes(block_number, execution).await
     }
 
     /// Resets all state to a specific block number.
