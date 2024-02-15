@@ -94,12 +94,12 @@ impl From<TransactionMined> for EthersReceipt {
             // receipt specific
             status: Some(if_else!(value.is_success(), 1, 0).into()),
             contract_address: value.execution.contract_address().map_into(),
+            gas_used: Some(value.execution.gas.into()),
 
             // transaction
             transaction_hash: value.input.hash.into(),
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
-            gas_used: Some(value.input.gas_limit.into()), //XXX this might be wrong
 
             // block
             block_hash: Some(value.block_hash.into()),
