@@ -11,6 +11,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExternalTransaction;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -41,7 +42,9 @@ pub struct EvmInput {
     /// * Not specified when deploying a contract.
     pub to: Option<Address>,
 
-    /// TODO: document
+    /// Transfered amount from party to counterparty.
+    ///
+    /// Present only in native token transfers. When calling a contract function, the value is usually zero.
     pub value: Wei,
 
     /// Operation data.
@@ -59,6 +62,12 @@ pub struct EvmInput {
     /// * Not specified when performing an `eth_call`.
     pub nonce: Option<Nonce>,
 
+    /// Max gas consumption allowed for the transaction.
+    pub gas_limit: Gas,
+
+    /// Gas price paid by each unit of gas consumed by the transaction.
+    pub gas_price: Wei,
+
     /// Block number indicating the point-in-time the EVM state will be used to compute the transaction.
     ///
     /// When not specified, assumes the current state.
@@ -75,6 +84,8 @@ impl From<TransactionInput> for EvmInput {
             to: value.to,
             value: value.value,
             data: value.input,
+            gas_limit: Gas::MAX,  // XXX: use value from input?
+            gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: Some(value.nonce),
             point_in_time: StoragePointInTime::Present,
         }
@@ -83,12 +94,15 @@ impl From<TransactionInput> for EvmInput {
 
 impl From<ExternalTransaction> for EvmInput {
     fn from(value: ExternalTransaction) -> Self {
+        let gas_limit = value.gas_limit();
         Self {
             from: value.0.from.into(),
             to: value.0.to.map_into(),
             value: value.0.value.into(),
             data: value.0.input.into(),
             nonce: Some(value.0.nonce.into()),
+            gas_limit,
+            gas_price: value.0.gas_price.expect("gas_price must be set for ExternalTransaction").into(), // XXX: how to handle transactions without gas price?
             point_in_time: StoragePointInTime::Present,
         }
     }
@@ -101,6 +115,8 @@ impl From<(CallInput, StoragePointInTime)> for EvmInput {
             to: value.0.to.map_into(),
             value: value.0.value,
             data: value.0.data,
+            gas_limit: Gas::MAX,  // XXX: use value from input?
+            gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: None,
             point_in_time: value.1,
         }
