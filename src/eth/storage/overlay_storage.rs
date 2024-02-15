@@ -1,21 +1,19 @@
-use anyhow::anyhow;
+
 use async_trait::async_trait;
 
-use super::EthStorageError;
+
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
+
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
+
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
 
-use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMined;
+
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
-
 
 /// Temporary storage (in-between blocks) operations
 // TODO: add Metrified method
@@ -36,14 +34,8 @@ pub trait OverlayStorage: Send + Sync {
     /// Retrieves an slot from the storage. Returns Option when not found.
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
 
-    /// Retrieves a block from the storage.
-    async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
-
-    /// Retrieves logs from the storage.
-    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
-
-    /// Persists atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
+    /// Commits changes to permanent storage
+    async fn commit(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
 
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
@@ -74,27 +66,6 @@ pub trait OverlayStorage: Send + Sync {
                 index: slot_index.clone(),
                 ..Default::default()
             }),
-        }
-    }
-
-    /// Translates a block selection to a specific storage point-in-time indicator.
-    async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
-        match block_selection {
-            BlockSelection::Latest => Ok(StoragePointInTime::Present),
-            BlockSelection::Number(number) => {
-                let current_block = self.read_current_block_number().await?;
-                if number <= &current_block {
-                    Ok(StoragePointInTime::Past(*number))
-                } else {
-                    Ok(StoragePointInTime::Past(current_block))
-                }
-            }
-            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection).await? {
-                Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
-                None => Err(anyhow!(
-                    "failed to select block because it is greater than current block number or block hash is invalid."
-                )),
-            },
         }
     }
 }

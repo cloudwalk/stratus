@@ -54,19 +54,9 @@ impl OverlayStorage for StratusStorage {
         self.temp.maybe_read_slot(address, slot_index, point_in_time).await
     }
 
-    /// Retrieves a block from the storage.
-    async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
-        self.temp.read_block(block_selection).await
-    }
-
-    /// Retrieves logs from the storage.
-    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        self.temp.read_logs(filter).await
-    }
-
-    /// Persist atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        self.temp.save_block(block).await
+    /// Commits changes to permanent storage
+    async fn commit(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
+        todo!()
     }
 
     /// Temporarily stores account changes during block production
