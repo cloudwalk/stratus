@@ -1,6 +1,7 @@
 use ethers_core::types::Transaction as EthersTransaction;
 
 use crate::eth::primitives::transaction_input::ConversionError;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
 
@@ -9,9 +10,18 @@ use crate::eth::primitives::TransactionInput;
 pub struct ExternalTransaction(#[deref] pub EthersTransaction);
 
 impl ExternalTransaction {
-    /// Returns the block hash.
+    /// Returns the transaction hash.
     pub fn hash(&self) -> Hash {
         self.0.hash.into()
+    }
+
+    /// Returns the gas limit according to the transaction type.
+    pub fn gas_limit(&self) -> Gas {
+        match self.0.transaction_type {
+            Some(tx_type) if tx_type.is_zero() => Gas::MAX,
+            Some(_) => self.0.gas.into(),
+            None => Gas::MAX,
+        }
     }
 }
 
