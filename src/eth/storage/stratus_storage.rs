@@ -92,18 +92,27 @@ impl EthStorage for StratusStorage {
     }
 
     /// Retrieves logs from the storage.
-    async fn read_logs(&self, _filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        todo!()
+    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        let mut logs = self.temp.read_logs(filter).await?;
+
+        if logs.is_empty() {
+            logs = self.perm.read_logs(filter).await?;
+        };
+
+        Ok(logs)
     }
 
     /// Persist atomically all changes from a block.
-    async fn save_block(&self, _block: Block) -> anyhow::Result<(), EthStorageError> {
-        todo!()
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        self.temp.save_block(block.clone()).await?;
+        self.perm.save_block(block).await?;
+
+        Ok(())
     }
 
     /// Temporarily stores account changes during block production
-    async fn save_account_changes(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
-        todo!()
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        self.temp.save_account_changes(block_number, execution).await
     }
 
     /// Resets all state to a specific block number.
@@ -121,10 +130,10 @@ impl EthStorage for StratusStorage {
         todo!()
     }
 
-    /// Enables test accounts.
-    ///
-    /// TODO: maybe can use save_accounts from a default method.
-    async fn enable_test_accounts(&self, _test_accounts: Vec<Account>) -> anyhow::Result<()> {
-        todo!()
+    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        self.temp.save_initial_accounts(accounts.clone()).await?;
+        self.perm.save_initial_accounts(accounts).await?;
+
+        Ok(())
     }
 }
