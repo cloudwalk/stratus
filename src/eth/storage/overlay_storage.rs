@@ -9,13 +9,13 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
-use crate::eth::primitives::Hash;
+
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionMined;
+
 
 /// Temporary storage (in-between blocks) operations
 // TODO: add Metrified method
