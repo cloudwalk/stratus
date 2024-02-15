@@ -7,7 +7,7 @@ import { Numbers } from "web3-types";
 
 import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
-import { Network, currentNetwork, isStratus } from "./network";
+import { currentNetwork, isStratus } from "./network";
 
 // -----------------------------------------------------------------------------
 // Constants
