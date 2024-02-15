@@ -20,7 +20,8 @@ import {
     sendReset,
 } from "./helpers/rpc";
 
-describe("Transaction: serial transfer", () => {
+
+describe("GAS_LIMIT", () => {
     var _tx: Transaction;
     var _txHash: string;
     var _block: Block;
@@ -72,7 +73,7 @@ describe("Transaction: serial transfer", () => {
         expect(receipt.transactionHash).eq(_txHash, "rceipt.txHash");
         expect(receipt.transactionIndex).eq(ZERO, "receipt.txIndex");
         expect(receipt.from).eq(ALICE.address, "receipt.from");
-        expect(receipt.status).eq(ONE, "receipt.status");
+        expect(receipt.status).eq(ZERO, "receipt.status");
     });
     it("Sender nonce increased", async () => {
         expect(await send("eth_getTransactionCount", [ALICE, "latest"])).eq(ONE);
