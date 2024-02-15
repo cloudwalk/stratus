@@ -3,6 +3,7 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use chrono::Utc;
 use ethereum_types::U256;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -25,6 +26,8 @@ use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::OFFSET_TIME;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -138,6 +141,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     // storage
     module.register_async_method("eth_getStorageAt", eth_get_storage_at)?;
 
+    module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
+
     Ok(module)
 }
 
@@ -178,6 +183,12 @@ async fn web3_client_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
 
 async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
     hex_zero()
+}
+
+async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
+    OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(*timestamp));
+    Ok(serde_json::to_value(5).unwrap())
 }
 
 // Block
@@ -277,7 +288,10 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         Ok(result) if result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(result) => Err(RpcError::Response(rpc_internal_error(hex_data(result.output)))),
+        Ok(result) => {
+            println!("{:#?}", result);
+            Err(RpcError::Response(rpc_internal_error(hex_data(result.output))))
+        },
 
         // internal error
         Err(e) => {

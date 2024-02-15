@@ -8,17 +8,45 @@
 
 use std::num::TryFromIntError;
 use std::ops::Deref;
+use std::str::FromStr;
 
+use chrono::Utc;
 use fake::Dummy;
 use fake::Faker;
+use metrics::atomics::AtomicU64;
+use serde_with::DeserializeFromStr;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub static OFFSET_TIME: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, DeserializeFromStr)]
 pub struct UnixTime(u64);
 
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
+    pub fn now() -> Self {
+        let offset_time = OFFSET_TIME.load(std::sync::atomic::Ordering::Acquire);
+        match offset_time {
+            0 => Self(Utc::now().timestamp() as u64),
+            _ => {
+                tracing::debug!(time = offset_time, "offset time set");
+                let _ = OFFSET_TIME
+                    .fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(0))
+                    .map_err(|_| tracing::error!("failed to reset offset time"));
+                Self(offset_time)
+            }
+        }
+    }
+}
+
+impl FromStr for UnixTime {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        let without_prefix = s.trim_start_matches("0x");
+        Ok(u64::from_str_radix(without_prefix, 16)?.into())
+    }
 }
 
 impl Deref for UnixTime {

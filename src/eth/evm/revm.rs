@@ -8,7 +8,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use chrono::Utc;
 use itertools::Itertools;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
@@ -42,6 +41,7 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::UnixTime;
 use crate::eth::storage::EthStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -142,7 +142,7 @@ impl RevmDatabaseSession {
         Self {
             storage,
             storage_point_in_time,
-            block_timestamp_in_secs: Utc::now().timestamp() as u64,
+            block_timestamp_in_secs: *UnixTime::now(),
             to,
             storage_changes: Default::default(),
         }
