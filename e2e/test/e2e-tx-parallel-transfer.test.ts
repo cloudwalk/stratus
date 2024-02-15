@@ -17,13 +17,13 @@ describe("Transaction: parallel transfer", () => {
         for (let i = 0; i < TEST_ACCOUNTS.length; i++) {
             const amount = i + 1;
             const account = TEST_ACCOUNTS[i];
-            signedTxs.push(await account.signWeiTransfer(counterParty.address, amount));
+            signedTxs.push(await account.signWeiTransfer(counterParty.address, amount, 1_000_000));
             expectedCounterPartyBalance += amount;
         }
 
         // sign transaction from accounts that have no balance
         for (const account of randomAccounts(100)) {
-            signedTxs.push(await account.signWeiTransfer(counterParty.address, 0));
+            signedTxs.push(await account.signWeiTransfer(counterParty.address, 0, 1_000_000));
         }
 
         // send transactions in parallel
