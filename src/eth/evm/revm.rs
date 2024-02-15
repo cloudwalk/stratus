@@ -63,8 +63,6 @@ impl Revm {
         evm.env.block.coinbase = Address::COINBASE.into();
 
         // evm tx config
-        evm.env.tx.gas_limit = u64::MAX; // todo: must come from transaction
-        evm.env.tx.gas_price = U256::ZERO;
         evm.env.tx.gas_priority_fee = None;
 
         Self { evm, storage }
@@ -91,6 +89,8 @@ impl Evm for Revm {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create(CreateScheme::Create),
         };
+        tx.gas_limit = input.gas_limit.into();
+        tx.gas_price = input.gas_price.into();
         tx.nonce = input.nonce.map_into();
         tx.data = input.data.into();
         tx.value = input.value.into();
@@ -243,7 +243,7 @@ fn parse_revm_execution(
     let (result, output, logs, gas) = parse_revm_result(revm_result.result);
     let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
 
-    tracing::info!(%result, %gas, output_len = %output.len(), %output, "evm executed");
+    tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
     Ok(Execution {
         result,
         output,

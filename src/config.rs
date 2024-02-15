@@ -16,6 +16,7 @@ use tokio::runtime::Runtime;
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::miner::BlockMiner;
+use crate::eth::primitives::Address;
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::InMemoryStorage;
@@ -45,6 +46,14 @@ pub struct ImporterDownloadConfig {
     /// Postgres connection URL.
     #[arg(long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
+
+    /// Number of parallel block downloads.
+    #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
+    pub paralellism: usize,
+
+    /// Accounts to retrieve initial balance information.
+    #[arg(long = "initial-accounts", env = "INITIAL_ACCOUNTS", value_delimiter = ',')]
+    pub initial_accounts: Vec<Address>,
 }
 
 /// Configuration for importer-import binary.
@@ -112,7 +121,7 @@ impl CommonConfig {
             storage.enable_genesis(BlockMiner::genesis()).await?;
         }
         if self.enable_test_accounts {
-            storage.enable_test_accounts(test_accounts()).await?;
+            storage.save_initial_accounts(test_accounts()).await?;
         }
         Ok(storage)
     }

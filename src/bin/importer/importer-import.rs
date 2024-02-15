@@ -3,12 +3,17 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use itertools::Itertools;
 use serde_json::Value as JsonValue;
 use sqlx::Row;
 use stratus::config::ImporterImportConfig;
+use stratus::eth::primitives::Account;
+use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
+use stratus::eth::primitives::Nonce;
+use stratus::eth::primitives::Wei;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -19,16 +24,26 @@ async fn main() -> anyhow::Result<()> {
     let config: ImporterImportConfig = init_global_services();
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
     let storage = config.init_storage().await?;
-    let executor = config.init_executor(storage);
+    let executor = config.init_executor(Arc::clone(&storage));
 
-    // init cursor
-    let mut tx = init_blocks_cursor(&pg).await?;
+    // process genesis accounts
+    let balances = db_retrieve_balances(&pg).await?;
+    let accounts = balances
+        .into_iter()
+        .map(|balance| Account {
+            address: balance.address,
+            nonce: Nonce::ZERO,
+            balance: balance.balance,
+            bytecode: None,
+        })
+        .collect_vec();
+    storage.save_initial_accounts(accounts).await?;
 
-    // fetch blocks form cursor reprocessing
+    // process blocks
+    let mut tx = db_init_blocks_cursor(&pg).await?;
     loop {
         // find blocks
-        // this skips the genesis
-        let blocks = fetch_blocks_cursor(&mut tx).await?;
+        let blocks = db_fetch_blocks(&mut tx).await?;
         if blocks.is_empty() {
             tracing::info!("no more blocks to process");
             break;
@@ -37,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
         // find receipts
         let block_start = blocks.first().unwrap().number;
         let block_end = blocks.last().unwrap().number;
-        let receipts = find_receipts(&pg, block_start, block_end).await?;
+        let receipts = db_retrieve_receipts(&pg, block_start, block_end).await?;
 
         // index receipts
         let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
@@ -68,8 +83,25 @@ struct ReceiptRow {
     payload: ExternalReceipt,
 }
 
-async fn init_blocks_cursor(pg: &Postgres) -> anyhow::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
-    let start = match db_max_imported_block(pg).await? {
+struct BalanceRow {
+    address: Address,
+    balance: Wei,
+}
+
+async fn db_retrieve_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
+    tracing::debug!("retrieving downloaded balances");
+
+    let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_downloaded_balances.sql")
+        .fetch_all(&pg.connection_pool)
+        .await;
+    match result {
+        Ok(accounts) => Ok(accounts),
+        Err(e) => log_and_err!(reason = e, "failed to retrieve downloaded balances"),
+    }
+}
+
+async fn db_init_blocks_cursor(pg: &Postgres) -> anyhow::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
+    let start = match db_retrieve_max_imported_block(pg).await? {
         Some(number) => number.next(),
         None => BlockNumber::ZERO,
     };
@@ -86,7 +118,7 @@ async fn init_blocks_cursor(pg: &Postgres) -> anyhow::Result<sqlx::Transaction<'
     }
 }
 
-async fn fetch_blocks_cursor(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> anyhow::Result<Vec<BlockRow>> {
+async fn db_fetch_blocks(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> anyhow::Result<Vec<BlockRow>> {
     tracing::debug!("fetching more blocks");
 
     let result = sqlx::query_file_scalar!("src/bin/importer/sql/cursor_fetch_downloaded_blocks.sql")
@@ -109,7 +141,7 @@ async fn fetch_blocks_cursor(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> 
     }
 }
 
-async fn find_receipts(pg: &Postgres, block_start: i64, block_end: i64) -> anyhow::Result<Vec<ReceiptRow>> {
+async fn db_retrieve_receipts(pg: &Postgres, block_start: i64, block_end: i64) -> anyhow::Result<Vec<ReceiptRow>> {
     tracing::debug!(start = %block_start, end = %block_end, "findind receipts");
 
     let result = sqlx::query_file!("src/bin/importer/sql/select_downloaded_receipts_in_range.sql", block_start, block_end)
@@ -129,11 +161,11 @@ async fn find_receipts(pg: &Postgres, block_start: i64, block_end: i64) -> anyho
             }
             Ok(parsed_rows)
         }
-        Err(e) => log_and_err!(reason = e, "failed to find receipts"),
+        Err(e) => log_and_err!(reason = e, "failed to retrieve receipts"),
     }
 }
 
-async fn db_max_imported_block(pg: &Postgres) -> anyhow::Result<Option<BlockNumber>> {
+async fn db_retrieve_max_imported_block(pg: &Postgres) -> anyhow::Result<Option<BlockNumber>> {
     tracing::debug!("finding max imported block");
 
     let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_imported_block.sql")
@@ -143,7 +175,7 @@ async fn db_max_imported_block(pg: &Postgres) -> anyhow::Result<Option<BlockNumb
     let block_number: i64 = match result {
         Ok(Some(max)) => max,
         Ok(None) => return Ok(None),
-        Err(e) => return log_and_err!(reason = e, "failed to find max block number"),
+        Err(e) => return log_and_err!(reason = e, "failed to retrieve max block number"),
     };
 
     Ok(Some(block_number.into()))

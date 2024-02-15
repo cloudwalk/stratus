@@ -11,6 +11,7 @@
 
 use std::fmt::Display;
 use std::ops::Deref;
+use std::str::FromStr;
 
 use ethabi::Token;
 use ethereum_types::H160;
@@ -126,6 +127,14 @@ impl AsRef<[u8]> for Address {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl FromStr for Address {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(H160::from_str(s)?))
+    }
+}
+
 impl From<Address> for H160 {
     fn from(value: Address) -> Self {
         value.0

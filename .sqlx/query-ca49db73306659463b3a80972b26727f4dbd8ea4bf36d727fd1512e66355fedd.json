@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into external_balances(address, balance)\nvalues ($1, $2)\non conflict do nothing;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca49db73306659463b3a80972b26727f4dbd8ea4bf36d727fd1512e66355fedd"
+}
