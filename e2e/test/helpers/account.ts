@@ -16,14 +16,14 @@ export class Account implements Addressable {
         return new Wallet(this.privateKey, ETHERJS);
     }
 
-    async signWeiTransfer(counterParty: string, amount: BigNumberish, nonce?: number): Promise<string> {
+    async signWeiTransfer(counterParty: string, amount: BigNumberish, nonce: number = 0): Promise<string> {
         return await this.signer().signTransaction({
             to: counterParty,
             value: amount,
             chainId: CHAIN_ID_DEC,
             gasPrice: 0,
             gasLimit: 1_000_000,
-            nonce: nonce || 0,
+            nonce,
         });
     }
 }
