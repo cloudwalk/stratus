@@ -24,7 +24,7 @@ mod tests {
         let mut fake_transaction_input = TransactionInput::dummy_with_rng(&Faker, &mut rng);
         fake_transaction_input.nonce = 0.into();
         fake_transaction_input.gas_price = 0.into();
-        fake_transaction_input.gas = 0.into();
+        fake_transaction_input.gas_limit = 0.into();
 
         let accounts = test_accounts();
         storage.save_initial_accounts(accounts.clone()).await.unwrap();

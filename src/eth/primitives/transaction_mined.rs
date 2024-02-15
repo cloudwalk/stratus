@@ -78,7 +78,7 @@ impl From<TransactionMined> for EthersTransaction {
             to: input.to.map_into(),
             value: input.value.into(),
             gas_price: Some(input.gas_price.into()),
-            gas: input.gas.into(),
+            gas: input.gas_limit.into(),
             input: input.input.into(),
             v: input.v,
             r: input.r,
@@ -99,7 +99,7 @@ impl From<TransactionMined> for EthersReceipt {
             transaction_hash: value.input.hash.into(),
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
-            gas_used: Some(value.input.gas.into()),
+            gas_used: Some(value.input.gas_limit.into()), //XXX this might be wrong
 
             // block
             block_hash: Some(value.block_hash.into()),
