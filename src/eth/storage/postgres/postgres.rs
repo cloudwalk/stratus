@@ -656,49 +656,10 @@ impl EthStorage for Postgres {
         Ok(nextval.into())
     }
 
-    async fn save_account_changes(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
-        todo!();
-    }
+    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        tracing::debug!(?accounts, "saving initial accounts");
 
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
-        sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
-            .execute(&self.connection_pool)
-            .await?;
-
-        // Rollback the values of account.latest_balance, account.latest_nonce and
-        // account_slots.value.
-
-        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_reset_balance.sql")
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_reset_nonce.sql")
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_slots_reset_value.sql")
-            .execute(&self.connection_pool)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
-        let existing_genesis = sqlx::query_file!("src/eth/storage/postgres/queries/select_genesis.sql")
-            .fetch_optional(&self.connection_pool)
-            .await?;
-
-        if existing_genesis.is_none() {
-            self.save_block(genesis).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn enable_test_accounts(&self, test_accounts: Vec<Account>) -> anyhow::Result<()> {
-        tracing::debug!("adding test accounts to genesis block");
-
-        for acc in test_accounts {
+        for acc in accounts {
             let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
             let block_number = 0;
             let balance = BigDecimal::try_from(acc.balance)?;
@@ -740,6 +701,45 @@ impl EthStorage for Postgres {
             .context("failed to insert nonce")?;
 
             tx.commit().await.context("Failed to commit transaction")?;
+        }
+
+        Ok(())
+    }
+
+    async fn save_account_changes(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
+        todo!();
+    }
+
+    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+        sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
+            .execute(&self.connection_pool)
+            .await?;
+
+        // Rollback the values of account.latest_balance, account.latest_nonce and
+        // account_slots.value.
+
+        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_reset_balance.sql")
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_reset_nonce.sql")
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_slots_reset_value.sql")
+            .execute(&self.connection_pool)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
+        let existing_genesis = sqlx::query_file!("src/eth/storage/postgres/queries/select_genesis.sql")
+            .fetch_optional(&self.connection_pool)
+            .await?;
+
+        if existing_genesis.is_none() {
+            self.save_block(genesis).await?;
         }
 
         Ok(())

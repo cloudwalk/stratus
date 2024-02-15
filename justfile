@@ -77,12 +77,12 @@ update:
 # Importer tasks
 # ------------------------------------------------------------------------------
 # Importer: Download external RPC blocks to temporary storage
-importer-download:
-    cargo run --bin importer-download -- --postgres {{postgres_url}} --external-rpc {{testnet_url}}
+importer-download *args="":
+    cargo run --bin importer-download -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
 importer-import:
-    cargo run --bin importer-import -- --postgres {{postgres_url}} --storage inmemory
+    cargo run --bin importer-import --release -- --postgres {{postgres_url}} --storage inmemory
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -207,6 +207,7 @@ e2e-stratus-postgres test="":
 
     echo "-> Running E2E tests"
     just e2e stratus {{test}}
+    result_code=$?
 
     echo "-> Killing Stratus"
     killport 3000
@@ -215,6 +216,7 @@ e2e-stratus-postgres test="":
     docker-compose down
 
     echo "** -> Stratus log accessible in ./stratus.log **"
+    exit $result_code
 
 # E2E: Lint and format code
 e2e-lint:
