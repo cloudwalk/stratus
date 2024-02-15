@@ -53,8 +53,11 @@ pub trait EthStorage: Send + Sync {
     /// Retrieves logs from the storage.
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
-    /// Persist atomically all changes from a block.
+    /// Persists atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
+
+    /// Persists initial accounts (test accounts or genesis accounts).
+    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
@@ -66,11 +69,6 @@ pub trait EthStorage: Send + Sync {
     ///
     /// TODO: maybe can use save_block from a default method.
     async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()>;
-
-    /// Enables test accounts.
-    ///
-    /// TODO: maybe can use save_accounts from a default method.
-    async fn enable_test_accounts(&self, test_accounts: Vec<Account>) -> anyhow::Result<()>;
 
     // -------------------------------------------------------------------------
     // Default operations
