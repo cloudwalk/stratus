@@ -1,8 +1,9 @@
-// TODO: doc
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use super::overlay_storage::OverlayStorage;
+use super::permanent_storage::PermanentStorage;
 use super::EthStorageError;
 use super::InMemoryStorage;
 use crate::eth::primitives::Account;
@@ -27,11 +28,7 @@ pub struct StratusStorage {
 }
 
 #[async_trait]
-impl EthStorage for StratusStorage {
-    // -------------------------------------------------------------------------
-    // Block number operations
-    // -------------------------------------------------------------------------
-
+impl OverlayStorage for StratusStorage {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         self.temp.read_current_block_number().await
@@ -42,10 +39,6 @@ impl EthStorage for StratusStorage {
         self.temp.increment_block_number().await
     }
 
-    // -------------------------------------------------------------------------
-    // State operations
-    // -------------------------------------------------------------------------
-
     /// Checks if the transaction execution conflicts with the current storage state.
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         self.temp.check_conflicts(execution).await
@@ -53,61 +46,27 @@ impl EthStorage for StratusStorage {
 
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        let account = match self.temp.maybe_read_account(address, point_in_time).await? {
-            Some(account) => Some(account),
-            None => self.perm.maybe_read_account(address, point_in_time).await?,
-        };
-
-        Ok(account)
+        self.temp.maybe_read_account(address, point_in_time).await
     }
 
     /// Retrieves an slot from the storage. Returns Option when not found.
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        let slot = match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
-            Some(slot) => Some(slot),
-            None => self.perm.maybe_read_slot(address, slot_index, point_in_time).await?,
-        };
-
-        Ok(slot)
+        self.temp.maybe_read_slot(address, slot_index, point_in_time).await
     }
 
     /// Retrieves a block from the storage.
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
-        let block = match self.temp.read_block(block_selection).await? {
-            Some(block) => Some(block),
-            None => self.perm.read_block(block_selection).await?,
-        };
-
-        Ok(block)
-    }
-
-    /// Retrieves a transaction from the storage.
-    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        let tx = match self.temp.read_mined_transaction(hash).await? {
-            Some(tx) => Some(tx),
-            None => self.perm.read_mined_transaction(hash).await?,
-        };
-
-        Ok(tx)
+        self.temp.read_block(block_selection).await
     }
 
     /// Retrieves logs from the storage.
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        let mut logs = self.temp.read_logs(filter).await?;
-
-        if logs.is_empty() {
-            logs = self.perm.read_logs(filter).await?;
-        };
-
-        Ok(logs)
+        self.temp.read_logs(filter).await
     }
 
     /// Persist atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        self.temp.save_block(block.clone()).await?;
-        self.perm.save_block(block).await?;
-
-        Ok(())
+        self.temp.save_block(block).await
     }
 
     /// Temporarily stores account changes during block production
@@ -117,23 +76,84 @@ impl EthStorage for StratusStorage {
 
     /// Resets all state to a specific block number.
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
-        self.temp.reset(number).await?;
-        self.perm.reset(number).await?;
+        self.temp.reset(number).await
+    }
+}
 
-        Ok(())
+#[async_trait]
+impl PermanentStorage for StratusStorage {
+    // -------------------------------------------------------------------------
+    // Block number operations
+    // -------------------------------------------------------------------------
+
+    // Retrieves the last mined block number.
+    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+        self.perm.read_current_block_number().await
+    }
+
+    /// Atomically increments the block number, returning the new value.
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+        self.perm.increment_block_number().await
+    }
+
+    // -------------------------------------------------------------------------
+    // State operations
+    // -------------------------------------------------------------------------
+
+    /// Checks if the transaction execution conflicts with the current storage state.
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        self.perm.check_conflicts(execution).await
+    }
+
+    /// Retrieves an account from the storage. Returns Option when not found.
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        self.perm.maybe_read_account(address, point_in_time).await
+    }
+
+    /// Retrieves an slot from the storage. Returns Option when not found.
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        self.perm.maybe_read_slot(address, slot_index, point_in_time).await
+    }
+
+    /// Retrieves a block from the storage.
+    async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+        self.perm.read_block(block_selection).await
+    }
+
+    /// Retrieves a transaction from the storage.
+    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+        self.perm.read_mined_transaction(hash).await
+    }
+
+    /// Retrieves logs from the storage.
+    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        self.perm.read_logs(filter).await
+    }
+
+    /// Persist atomically all changes from a block.
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        self.perm.save_block(block).await
+    }
+
+    /// Temporarily stores account changes during block production
+    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        self.temp.save_account_changes(block_number, execution).await
+    }
+
+    /// Resets all state to a specific block number.
+    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+        self.perm.reset(number).await
     }
 
     /// Enables genesis block.
     ///
     /// TODO: maybe can use save_block from a default method.
-    async fn enable_genesis(&self, _genesis: Block) -> anyhow::Result<()> {
-        todo!()
+    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
+        self.perm.enable_genesis(genesis).await
     }
 
+    /// Enables pre-genesis accounts
     async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        self.temp.save_initial_accounts(accounts.clone()).await?;
-        self.perm.save_initial_accounts(accounts).await?;
-
-        Ok(())
+        self.perm.save_initial_accounts(accounts).await
     }
 }

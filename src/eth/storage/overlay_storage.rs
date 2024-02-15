@@ -16,24 +16,16 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::MetrifiedStorage;
 
-/// EVM storage operations.
+/// Temporary storage (in-between blocks) operations
+// TODO: add Metrified method
 #[async_trait]
-pub trait EthStorage: Send + Sync {
-    // -------------------------------------------------------------------------
-    // Block number operations
-    // -------------------------------------------------------------------------
-
+pub trait OverlayStorage: Send + Sync {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Atomically increments the block number, returning the new value.
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
-
-    // -------------------------------------------------------------------------
-    // State operations
-    // -------------------------------------------------------------------------
 
     /// Checks if the transaction execution conflicts with the current storage state.
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>>;
@@ -47,28 +39,17 @@ pub trait EthStorage: Send + Sync {
     /// Retrieves a block from the storage.
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
 
-    /// Retrieves a transaction from the storage.
-    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
-
     /// Retrieves logs from the storage.
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     /// Persists atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
-    /// Persists initial accounts (test accounts or genesis accounts).
-    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
-
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
 
     /// Resets all state to a specific block number.
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
-
-    /// Enables genesis block.
-    ///
-    /// TODO: maybe can use save_block from a default method.
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()>;
 
     // -------------------------------------------------------------------------
     // Default operations
@@ -96,14 +77,6 @@ pub trait EthStorage: Send + Sync {
         }
     }
 
-    /// Wraps the current storage with a proxy that collects execution metrics.
-    fn metrified(self) -> MetrifiedStorage<Self>
-    where
-        Self: Sized,
-    {
-        MetrifiedStorage::new(self)
-    }
-
     /// Translates a block selection to a specific storage point-in-time indicator.
     async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
         match block_selection {
@@ -124,27 +97,4 @@ pub trait EthStorage: Send + Sync {
             },
         }
     }
-}
-
-/// Retrieves test accounts.
-pub fn test_accounts() -> Vec<Account> {
-    use hex_literal::hex;
-
-    use crate::eth::primitives::Wei;
-
-    [
-        hex!("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"),
-        hex!("70997970c51812dc3a010c7d01b50e0d17dc79c8"),
-        hex!("3c44cdddb6a900fa2b585dd299e03d12fa4293bc"),
-        hex!("15d34aaf54267db7d7c367839aaf71a00a2c6a65"),
-        hex!("9965507d1a55bcc2695c58ba16fb37d819b0a4dc"),
-        hex!("976ea74026e726554db657fa54763abd0c3a0aa9"),
-    ]
-    .into_iter()
-    .map(|address| Account {
-        address: address.into(),
-        balance: Wei::TEST_BALANCE,
-        ..Account::default()
-    })
-    .collect()
 }

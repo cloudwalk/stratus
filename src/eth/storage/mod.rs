@@ -3,6 +3,8 @@
 mod eth_storage;
 mod inmemory;
 mod metrified;
+mod overlay_storage;
+mod permanent_storage;
 mod postgres;
 mod storage_error;
 mod stratus_storage;
