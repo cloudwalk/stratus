@@ -83,19 +83,26 @@ impl EthExecutor {
                 return Err(anyhow!("receipt missing for hash {}", tx.hash));
             };
 
-            // re-execute and save it
-            let execution = self.execute_in_evm(tx.clone().into()).await;
+            // re-execute transaction
+            let json_tx = serde_json::to_string(&tx).unwrap();
+            let json_receipt = serde_json::to_string(&receipt).unwrap();
+            let execution = self.execute_in_evm((tx.clone(), receipt).into()).await;
+
+            // handle execution result
             match execution {
                 Ok(execution) => {
-                    execution.cmp_with_receipt(receipt)?;
+                    // ensure it matches receipt before saving
+                    if let Err(e) = execution.compare_with_receipt(receipt) {
+                        let execution_logs = serde_json::to_string(&execution.logs).unwrap();
+                        tracing::error!(%json_tx, %json_receipt, %execution_logs, "mismatch reexecuting transaction");
+                        return Err(e);
+                    };
+
                     self.eth_storage.save_account_changes(block.number(), execution).await?;
                 }
                 Err(e) => {
-                    // TODO: handle scenarios where transaction is expected to fail
-                    // TODO: for now just log tx and receipt to help debug
-                    let tx = serde_json::to_string(&tx).unwrap();
-                    let receipt = serde_json::to_string(&receipt).unwrap();
-                    tracing::error!(%tx, %receipt);
+                    // TODO: must handle this better because some errors can be expected
+                    tracing::error!(%json_tx, %json_receipt, "unexpected error reexecuting transaction");
                     return Err(e);
                 }
             }
@@ -118,7 +125,7 @@ impl EthExecutor {
 
             let execution = self.execute_in_evm(transaction_input.clone().into()).await?;
 
-            execution.cmp_with_receipt(external_receipt)?;
+            execution.compare_with_receipt(external_receipt)?;
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
