@@ -164,6 +164,19 @@ impl EthExecutor {
         self.mine_and_execute_transaction(transaction).await
     }
 
+    #[cfg(debug_assertions)]
+    pub async fn mine_empty_block(&self) -> anyhow::Result<()>{
+        let mut miner_lock = self.miner.lock().await;
+        let block = miner_lock.mine_with_no_transactions().await?;
+        self.eth_storage.save_block(block.clone()).await?;
+
+        if let Err(e) = self.block_notifier.send(block.clone()) {
+            tracing::error!(reason = ?e, "failed to send block notification");
+        };
+
+        Ok(())
+    }
+
     async fn mine_and_execute_transaction(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         // execute transaction until no more conflicts
         // TODO: must have a stop condition like timeout or max number of retries

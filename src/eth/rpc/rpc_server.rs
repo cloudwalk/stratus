@@ -103,6 +103,10 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
     // debug
     module.register_async_method("debug_setHead", debug_set_head)?;
+    #[cfg(debug_assertions)]
+    module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
+    #[cfg(debug_assertions)]
+    module.register_async_method("evm_mine", evm_mine)?;
 
     // blockchain
     module.register_async_method("net_version", net_version)?;
@@ -140,7 +144,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     // storage
     module.register_async_method("eth_getStorageAt", eth_get_storage_at)?;
 
-    module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
 
     Ok(module)
 }
@@ -157,6 +160,21 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number).await?;
     Ok(serde_json::to_value(number).unwrap())
+}
+
+#[cfg(debug_assertions)]
+async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    ctx.executor.mine_empty_block().await?;
+    Ok(serde_json::to_value(true).unwrap())
+}
+
+#[cfg(debug_assertions)]
+async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
+    match OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(*timestamp)) {
+        Ok(_) => Ok(serde_json::to_value(timestamp).unwrap()),
+        Err(_) => Err(anyhow::anyhow!("failed to to set the next block's timestamp").into())
+    }
 }
 
 // Status
@@ -182,15 +200,6 @@ async fn web3_client_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
 
 async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
     hex_zero()
-}
-
-#[cfg(debug_assertions)]
-async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    match OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(*timestamp)) {
-        Ok(_) => Ok(serde_json::to_value(timestamp).unwrap()),
-        Err(_) => Err(anyhow::anyhow!("failed to to set the next block's timestamp").into())
-    }
 }
 
 // Block

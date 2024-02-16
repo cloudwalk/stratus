@@ -19,6 +19,7 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 use crate::eth::storage::EthStorage;
 use crate::ext::not;
 
@@ -37,6 +38,13 @@ impl BlockMiner {
     /// This block serves as the foundation of the blockchain, with a fixed state and no previous block.
     pub fn genesis() -> Block {
         Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)
+    }
+
+    /// Mine one block with no transactions.
+    #[cfg(debug_assertions)]
+    pub async fn mine_with_no_transactions(&mut self) -> anyhow::Result<Block>{
+        let number = self.storage.increment_block_number().await?;
+        Ok(Block::new_with_capacity(number, *UnixTime::now(), 0))
     }
 
     /// Mine one block with a single transaction.

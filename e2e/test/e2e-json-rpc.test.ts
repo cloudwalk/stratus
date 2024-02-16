@@ -72,18 +72,25 @@ describe("JSON-RPC", () => {
     });
 
     describe("Evm", () => {
-        async function latest(): Promise<number> {
-            return parseInt((await send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
+        async function latest(): Promise<{ timestamp: number; block_number: number }> {
+            const block = await send("eth_getBlockByNumber", ["latest", false]);
+            return { timestamp: parseInt(block.timestamp, 16), block_number: parseInt(block.number, 16) };
         }
+
+        it("evm_mine", async () => {
+            let prev_number = (await latest()).block_number;
+            await send("evm_mine", []);
+            expect((await latest()).block_number).eq(prev_number + 1);
+        });
+
         it("evm_setNextBlockTimestamp", async () => {
             let target = 1;
             await send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
-            let txSigned = await ALICE.signWeiTransfer(BOB.address, 0);
-            await sendRawTransaction(txSigned);
-            expect(await latest()).eq(1);
-            txSigned = await ALICE.signWeiTransfer(BOB.address, 0, 1);
-            await sendRawTransaction(txSigned);
-            expect(await latest()).not.eq(1);
-        })
+            await send("evm_mine", []);
+            expect((await latest()).timestamp).eq(1);
+            await send("evm_mine", []);
+            expect((await latest()).timestamp).not.eq(1);
+        });
+
     });
 });
