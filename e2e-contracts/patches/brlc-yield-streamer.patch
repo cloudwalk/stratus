@@ -1,22 +1,135 @@
-diff --git a/test/MultiSigWallet.test.ts b/test/MultiSigWallet.test.ts
-index f7c3dfd..5265851 100644
---- a/test/MultiSigWallet.test.ts
-+++ b/test/MultiSigWallet.test.ts
-@@ -773,11 +773,17 @@ describe("MultiSigWallet contract", () => {
-         value: 0,
-         data: TX_DATA_STUB
-       };
-+      async function latest(): Promise<number> {
-+        return parseInt((await ethers.provider.send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
-+      }
+diff --git a/test/BalanceTracker.test.ts b/test/BalanceTracker.test.ts
+index 3bebd80..0f45a75 100644
+--- a/test/BalanceTracker.test.ts
++++ b/test/BalanceTracker.test.ts
+@@ -5,6 +5,7 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-wit
+ import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
+ import { Block, TransactionReceipt, TransactionResponse } from "@ethersproject/abstract-provider";
+ import { proveTx } from "../test-utils/eth";
++import fs from "fs";
  
-       async function wait(timeoutInSeconds: number) {
-+        // Sends a RPC request to the blockchain.
-         if (network.name === "hardhat") {
-           // A virtual wait through network time shifting
-           await time.increase(timeoutInSeconds);
-+        } else if (network.name === "stratus") {
-+          await ethers.provider.send("evm_setNextBlockTimestamp", [`0x${(await latest() + timeoutInSeconds).toString(16)}`])
-         } else {
-           // A real wait through a promise
-           const timeoutInMills = timeoutInSeconds * 1000;
+ const HOUR_IN_SECONDS = 3600;
+ const DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS;
+@@ -50,6 +51,14 @@ async function setUpFixture(func: any) {
+   if (network.name === "hardhat") {
+     return loadFixture(func);
+   } else {
++    await network.provider.request({
++      method: "evm_setNextBlockTimestamp",
++      params: [`0x0`]
++    });
++    await network.provider.request({
++      method: "debug_setHead",
++      params: [`0x1`]
++    });
+     return func();
+   }
+ }
+@@ -79,9 +88,26 @@ async function increaseBlockchainTimeToSpecificRelativeDay(relativeDay: number)
+   if (relativeDay < 1) {
+     return;
+   }
+-  const currentTimestampInSeconds: number = await time.latest();
++  const currentTimestampInSeconds: number = await latest();
+   const { secondsOfDay } = toDayAndTime(currentTimestampInSeconds);
+-  await time.increase(DAY_IN_SECONDS - secondsOfDay + (relativeDay - 1) * DAY_IN_SECONDS + 1);
++  await increaseTo(
++    currentTimestampInSeconds + (DAY_IN_SECONDS - secondsOfDay + (relativeDay - 1) * DAY_IN_SECONDS + 1)
++  );
++}
++
++async function latest(): Promise<number> {
++  return parseInt((await ethers.provider.send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
++}
++
++async function increaseTo(target: number) {
++  // Sends a RPC request to the blockchain.
++  if (network.name === "hardhat") {
++    // A virtual wait through network time shifting
++    await time.increaseTo(target);
++  } else if (network.name === "stratus") {
++    await ethers.provider.send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
++    await ethers.provider.send("evm_mine", []);
++  }
+ }
+ 
+ function toBalanceChanges(tokenTransfer: TokenTransfer): BalanceChange[] {
+@@ -183,13 +209,13 @@ function defineExpectedDailyBalances(context: TestContext, dailyBalancesRequest:
+   if (dayFrom < context.balanceTrackerInitDay) {
+     throw new Error(
+       `Cannot define daily balances because 'dayFrom' is less than the BalanceTracker init day. ` +
+-      `The 'dayFrom' value: ${dayFrom}. The init day: ${context.balanceTrackerInitDay}`
++        `The 'dayFrom' value: ${dayFrom}. The init day: ${context.balanceTrackerInitDay}`
+     );
+   }
+   if (dayFrom > dayTo) {
+     throw new Error(
+       `Cannot define daily balances because 'dayFrom' is greater than 'dayTo'. ` +
+-      `The 'dayFrom' value: ${dayFrom}. The 'dayTo' value: ${dayTo}`
++        `The 'dayFrom' value: ${dayFrom}. The 'dayTo' value: ${dayTo}`
+     );
+   }
+   const dailyBalances: BigNumber[] = [];
+@@ -238,19 +264,32 @@ describe("Contract 'BalanceTracker'", async () => {
+   let user1: SignerWithAddress;
+   let user2: SignerWithAddress;
+ 
++  beforeEach(() => {
++    if (fs.existsSync(".openzeppelin")) {
++      fs.rmSync(".openzeppelin", { recursive: true });
++    }
++  });
++
+   before(async () => {
+-    if (network.name !== "hardhat") {
++    if (network.name !== "hardhat" && network.name !== "stratus") {
+       throw new Error(
+         "This tests cannot be run on the network other than Hardhat due to: " +
+-        "1. The initial nonce of the contract deployer must be zero at the beginning of each test. " +
+-        "2. The ability to change block timestamps for checking the contract under test is required."
++          "1. The initial nonce of the contract deployer must be zero at the beginning of each test. " +
++          "2. The ability to change block timestamps for checking the contract under test is required."
+       );
+     }
+-    // Resetting the hardhat network to start from scratch and deploy the special token contract mock first
+-    await network.provider.request({
+-      method: "hardhat_reset",
+-      params: []
+-    });
++    if (network.name === "hardhat") {
++      // Resetting the hardhat network to start from scratch and deploy the special token contract mock first
++      await network.provider.request({
++        method: "hardhat_reset",
++        params: []
++      });
++    } else {
++      await network.provider.request({
++        method: "debug_setHead",
++        params: [`0x0`]
++      });
++    }
+     [deployer, attacker, user1, user2] = await ethers.getSigners();
+     tokenMock = await deployTokenMock(tokenMock);
+     await increaseBlockchainTimeToSpecificRelativeDay(1);
+@@ -289,7 +328,7 @@ describe("Contract 'BalanceTracker'", async () => {
+ 
+   async function executeTokenTransfers(context: TestContext, transfers: TokenTransfer[]) {
+     const { balanceTracker } = context;
+-    let previousTransferDay: number = toDayIndex(await time.latest());
++    let previousTransferDay: number = toDayIndex(await latest());
+     for (let i = 0; i < transfers.length; ++i) {
+       const transfer: TokenTransfer = transfers[i];
+       if (transfer.executionDay < previousTransferDay) {
+@@ -495,11 +534,9 @@ describe("Contract 'BalanceTracker'", async () => {
+ 
+         it("The transfer day index is greater than 65536", async () => {
+           const context: TestContext = await initTestContext();
+-
+-          const currentTimestampInSeconds: number = await time.latest();
++          const currentTimestampInSeconds: number = await latest();
+           const currentDay = toDayIndex(currentTimestampInSeconds);
+           await increaseBlockchainTimeToSpecificRelativeDay(65537 - currentDay);
+-
+           await expect(
+             tokenMock.simulateHookedTransfer(
+               context.balanceTracker.address,
