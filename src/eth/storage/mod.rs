@@ -3,11 +3,11 @@
 mod eth_storage;
 mod inmemory;
 mod metrified;
-mod overlay_storage;
 mod permanent_storage;
 mod postgres;
 mod storage_error;
 mod stratus_storage;
+mod temporary_storage;
 
 pub use eth_storage::test_accounts;
 pub use eth_storage::EthStorage;

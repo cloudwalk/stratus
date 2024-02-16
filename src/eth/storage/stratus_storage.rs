@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 
-use super::overlay_storage::OverlayStorage;
 use super::permanent_storage::PermanentStorage;
+use super::temporary_storage::TemporaryStorage;
 use super::EthStorageError;
 use super::InMemoryStorage;
 use crate::eth::primitives::Account;
@@ -27,8 +28,60 @@ pub struct StratusStorage {
     perm: Arc<dyn EthStorage>,
 }
 
+#[allow(dead_code)]
+impl StratusStorage {
+    /// Retrieves an account from the storage. Returns default value when not found.
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+        match self.temp.maybe_read_account(address, point_in_time).await? {
+            Some(account) => Ok(account),
+            None => match self.perm.maybe_read_account(address, point_in_time).await? {
+                Some(account) => Ok(account),
+                None => Ok(Account {
+                    address: address.clone(),
+                    ..Account::default()
+                }),
+            },
+        }
+    }
+
+    /// Retrieves an slot from the storage. Returns default value when not found.
+    async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+        match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
+            Some(slot) => Ok(slot),
+            None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
+                Some(slot) => Ok(slot),
+                None => Ok(Slot {
+                    index: slot_index.clone(),
+                    ..Default::default()
+                }),
+            },
+        }
+    }
+
+    /// Translates a block selection to a specific storage point-in-time indicator.
+    async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
+        match block_selection {
+            BlockSelection::Latest => Ok(StoragePointInTime::Present),
+            BlockSelection::Number(number) => {
+                let current_block = self.temp.read_current_block_number().await?;
+                if number <= &current_block {
+                    Ok(StoragePointInTime::Past(*number))
+                } else {
+                    Ok(StoragePointInTime::Past(current_block))
+                }
+            }
+            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection).await? {
+                Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
+                None => Err(anyhow!(
+                    "failed to select block because it is greater than current block number or block hash is invalid."
+                )),
+            },
+        }
+    }
+}
+
 #[async_trait]
-impl OverlayStorage for StratusStorage {
+impl TemporaryStorage for StratusStorage {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         self.temp.read_current_block_number().await
@@ -55,8 +108,10 @@ impl OverlayStorage for StratusStorage {
     }
 
     /// Commits changes to permanent storage and flushes overlay storage
-    async fn commit(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
-        todo!()
+    /// Basically calls the `save_block` method from the permanent storage, which
+    /// will by definition update accounts, slots, transactions, logs etc
+    async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        self.perm.save_block(block).await
     }
 
     /// Temporarily stores account changes during block production
@@ -65,6 +120,7 @@ impl OverlayStorage for StratusStorage {
     }
 
     /// Resets all state to a specific block number.
+    // TODO: remove `number` param, just wipe out the storage
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.temp.reset(number).await
     }
@@ -79,11 +135,6 @@ impl PermanentStorage for StratusStorage {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         self.perm.read_current_block_number().await
-    }
-
-    /// Atomically increments the block number, returning the new value.
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        self.perm.increment_block_number().await
     }
 
     // -------------------------------------------------------------------------
