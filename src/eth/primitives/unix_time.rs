@@ -19,6 +19,9 @@ use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
 #[cfg(debug_assertions)]
+pub static TIME_OFFSET: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(debug_assertions)]
 pub static OFFSET_TIME: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, DeserializeFromStr)]
@@ -30,16 +33,17 @@ impl UnixTime {
     #[cfg(debug_assertions)]
     pub fn now() -> Self {
         let offset_time = OFFSET_TIME.load(std::sync::atomic::Ordering::Acquire);
+        let time_offset = TIME_OFFSET.load(std::sync::atomic::Ordering::Acquire);
+        let now = Utc::now().timestamp() as u64;
+        tracing::debug!(now, "NOW");
         match offset_time {
-            0 => Self(Utc::now().timestamp() as u64),
+            0 => Self(Utc::now().timestamp() as u64 + time_offset),
             _ => {
-                tracing::debug!(time = offset_time, "offset time set");
-                let _ = OFFSET_TIME
-                    .fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(0))
-                    .map_err(|_| tracing::error!("failed to reset offset time"));
+                let _ = OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(0));
                 Self(offset_time)
             }
         }
+
     }
 
     #[cfg(not(debug_assertions))]
