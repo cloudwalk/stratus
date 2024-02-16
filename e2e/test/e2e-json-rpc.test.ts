@@ -1,9 +1,9 @@
 import { expect } from "chai";
 import { Block } from "web3-types";
 
-import { ALICE } from "./helpers/account";
-import { Network, isStratus } from "./helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, TEST_BALANCE, ZERO, send, sendExpect } from "./helpers/rpc";
+import { ALICE, BOB } from "./helpers/account";
+import { isStratus } from "./helpers/network";
+import { CHAIN_ID, CHAIN_ID_DEC, TEST_BALANCE, ZERO, send, sendExpect, sendRawTransaction } from "./helpers/rpc";
 
 describe("JSON-RPC", () => {
     describe("State", () => {
@@ -69,5 +69,21 @@ describe("JSON-RPC", () => {
                 (await sendExpect("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO])).eq(null);
             }
         });
+    });
+
+    describe("Evm", () => {
+        async function latest(): Promise<number> {
+            return parseInt((await send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
+        }
+        it("evm_setNextBlockTimestamp", async () => {
+            let target = 1;
+            await send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
+            let txSigned = await ALICE.signWeiTransfer(BOB.address, 0);
+            await sendRawTransaction(txSigned);
+            expect(await latest()).eq(1);
+            txSigned = await ALICE.signWeiTransfer(BOB.address, 0, 1);
+            await sendRawTransaction(txSigned);
+            expect(await latest()).not.eq(1);
+        })
     });
 });
