@@ -43,7 +43,6 @@ impl UnixTime {
                 Self(offset_time)
             }
         }
-
     }
 
     #[cfg(not(debug_assertions))]

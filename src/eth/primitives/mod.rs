@@ -153,8 +153,8 @@ pub use storage_point_in_time::StoragePointInTime;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
 pub use unix_time::UnixTime;
-pub use unix_time::TIME_OFFSET;
 pub use unix_time::OFFSET_TIME;
+pub use unix_time::TIME_OFFSET;
 pub use wei::Wei;
 
 // -----------------------------------------------------------------------------

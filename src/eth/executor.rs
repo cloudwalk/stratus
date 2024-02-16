@@ -165,7 +165,7 @@ impl EthExecutor {
     }
 
     #[cfg(debug_assertions)]
-    pub async fn mine_empty_block(&self) -> anyhow::Result<()>{
+    pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
         self.eth_storage.save_block(block.clone()).await?;

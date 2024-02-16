@@ -3,6 +3,7 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use chrono::Utc;
 use ethereum_types::U256;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -13,7 +14,6 @@ use jsonrpsee::types::Params;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
-use chrono::Utc;
 
 use crate::config::StratusConfig;
 use crate::eth::primitives::Address;
@@ -315,7 +315,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         Ok(result) => {
             println!("{:#?}", result);
             Err(RpcError::Response(rpc_internal_error(hex_data(result.output))))
-        },
+        }
 
         // internal error
         Err(e) => {
