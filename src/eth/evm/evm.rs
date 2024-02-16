@@ -10,6 +10,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
@@ -84,7 +85,7 @@ impl From<TransactionInput> for EvmInput {
             to: value.to,
             value: value.value,
             data: value.input,
-            gas_limit: Gas::MAX,  // XXX: use value from input?
+            gas_limit: value.gas_limit,
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: Some(value.nonce),
             point_in_time: StoragePointInTime::Present,
@@ -92,17 +93,17 @@ impl From<TransactionInput> for EvmInput {
     }
 }
 
-impl From<ExternalTransaction> for EvmInput {
-    fn from(value: ExternalTransaction) -> Self {
-        let gas_limit = value.gas_limit();
+impl From<(ExternalTransaction, &ExternalReceipt)> for EvmInput {
+    fn from((tx, receipt): (ExternalTransaction, &ExternalReceipt)) -> Self {
+        let gas_limit = tx.gas_limit(receipt);
         Self {
-            from: value.0.from.into(),
-            to: value.0.to.map_into(),
-            value: value.0.value.into(),
-            data: value.0.input.into(),
-            nonce: Some(value.0.nonce.into()),
+            from: tx.0.from.into(),
+            to: tx.0.to.map_into(),
+            value: tx.0.value.into(),
+            data: tx.0.input.into(),
+            nonce: Some(tx.0.nonce.into()),
             gas_limit,
-            gas_price: value.0.gas_price.expect("gas_price must be set for ExternalTransaction").into(), // XXX: how to handle transactions without gas price?
+            gas_price: tx.0.gas_price.expect("gas_price must be set for ExternalTransaction").into(), // XXX: how to handle transactions without gas price?
             point_in_time: StoragePointInTime::Present,
         }
     }

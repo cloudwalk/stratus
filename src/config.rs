@@ -21,7 +21,6 @@ use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::InMemoryStorage;
 use crate::eth::EthExecutor;
-use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
 /// Configuration for main Stratus service.
@@ -121,7 +120,11 @@ impl CommonConfig {
             storage.enable_genesis(BlockMiner::genesis()).await?;
         }
         if self.enable_test_accounts {
-            storage.save_initial_accounts(test_accounts()).await?;
+            if self.env.is_production() {
+                tracing::warn!("cannot enable test accounts in production environment");
+            } else {
+                storage.save_initial_accounts(test_accounts()).await?;
+            }
         }
         Ok(storage)
     }
@@ -193,10 +196,9 @@ impl FromStr for StorageConfig {
 }
 
 /// Enviroment where the application is running.
-#[derive(clap::ValueEnum, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Environment {
     Development,
-    Staging,
     Production,
 }
 
@@ -206,9 +208,9 @@ impl Environment {
         matches!(self, Self::Production)
     }
 
-    /// Checks if the current environment is NOT production.
-    pub fn is_not_production(&self) -> bool {
-        not(self.is_production())
+    /// Checks if the current environment is development.
+    pub fn is_development(&self) -> bool {
+        matches!(self, Self::Development)
     }
 }
 
@@ -219,9 +221,8 @@ impl FromStr for Environment {
         let s = s.trim().to_lowercase();
         match s.as_str() {
             "dev" | "development" => Ok(Self::Development),
-            "stag" | "staging" => Ok(Self::Staging),
             "prod" | "production" => Ok(Self::Production),
-            &_ => todo!(),
+            s => Err(anyhow!("unknown environment: {}", s)),
         }
     }
 }

@@ -24,7 +24,7 @@ mod tests {
         let mut fake_transaction_input = TransactionInput::dummy_with_rng(&Faker, &mut rng);
         fake_transaction_input.nonce = 0.into();
         fake_transaction_input.gas_price = 0.into();
-        fake_transaction_input.gas = 0.into();
+        fake_transaction_input.gas_limit = 0.into();
 
         let accounts = test_accounts();
         storage.save_initial_accounts(accounts.clone()).await.unwrap();
@@ -36,6 +36,10 @@ mod tests {
         let revm = Box::new(Revm::new(Arc::clone(&storage)));
         let executor = EthExecutor::new(nonempty![revm], Arc::clone(&storage));
 
+        let low_gas_limit_error = executor.transact(fake_transaction_input.clone()).await;
+        assert!(low_gas_limit_error.is_err());
+
+        fake_transaction_input.gas_limit = stratus::eth::primitives::Gas::MAX; //0.into();
         executor.transact(fake_transaction_input).await.unwrap();
     }
 }
