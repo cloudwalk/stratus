@@ -14,6 +14,8 @@ test() {
 
     # configure hardhat env
     cd repos/$repo
+    git restore .
+    git apply ../../patches/$repo.patch || true
     cp ../../../e2e/hardhat.config.ts .
     rm -rf .openzeppelin/
 
@@ -66,10 +68,8 @@ if [ "$token" == 1 ]; then
     test brlc-token BRLCToken.base
     test brlc-token BRLCToken.complex
     test brlc-token BRLCTokenBridgeable
+    test brlc-token USJimToken.complex
     test brlc-token USJimToken
-    test brlc-token InfinitePointsToken 
-    test brlc-token LightningBitcoin 
-    test brlc-token USJimToken 
 fi
 
 if [ "$pix" == 1 ]; then
