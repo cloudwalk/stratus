@@ -10,8 +10,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use anyhow::anyhow;
-use ethereum_types::H256;
-use ethereum_types::U64;
 
 use super::ExternalReceipt;
 use crate::eth::primitives::Address;
@@ -20,6 +18,7 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
+use crate::log_and_err;
 
 pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
 
@@ -57,54 +56,69 @@ impl Execution {
         None
     }
 
-    /// Check if the current transaction was completed normally.
+    /// Checks if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
         matches!(self.result, ExecutionResult::Success { .. })
     }
 
-    pub fn cmp_with_receipt(&self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
-        // Should the gas be the same?
-        // assert_eq!(execution.gas, receipt.gas_used.unwrap_or_default().into());
-
-        let exec_result: U64 = match self.result {
-            ExecutionResult::Success => 1,
-            _ => 0,
-        }
-        .into();
-        let rcpt_status = receipt.status.unwrap_or_default();
-        if exec_result != rcpt_status {
-            return Err(anyhow!("tx result mismatch, expected: {:?} got: {:?}", rcpt_status, exec_result));
-        }
-
-        if self.logs.len() != receipt.logs.len() {
-            return Err(anyhow!(
-                "tx logs length mismatch, expected: {:?} got: {:?}",
-                receipt.logs.len(),
-                self.logs.len()
+    /// Checks if current execution state matches the information present in the external receipt.
+    pub fn compare_with_receipt(&self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
+        // compare execution status
+        if self.is_success() != receipt.is_success() {
+            return log_and_err!(format!(
+                "transaction status mismatch | hash={} execution={:?} receipt={:?}",
+                receipt.hash(),
+                self.result,
+                receipt.status
             ));
         }
 
-        for (log, external_log) in self.logs.iter().zip(&receipt.logs) {
-            if log.topics.len() != external_log.topics.len() {
-                return Err(anyhow!(
-                    "tx topics length mismatch, expected: {:?} got: {:?}",
-                    external_log.topics.len(),
-                    log.topics.len()
+        // compare logs length
+        if self.logs.len() != receipt.logs.len() {
+            return log_and_err!(format!(
+                "logs length mismatch | hash={} execution={} receipt={}",
+                receipt.hash(),
+                self.logs.len(),
+                receipt.logs.len()
+            ));
+        }
+
+        // compare logs pairs
+        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(&receipt.logs).enumerate() {
+            // compare log topics length
+            if execution_log.topics.len() != receipt_log.topics.len() {
+                return log_and_err!(format!(
+                    "log topics length mismatch | hash={} log_index={} execution={} receipt={}",
+                    receipt.hash(),
+                    log_index,
+                    execution_log.topics.len(),
+                    receipt_log.topics.len(),
                 ));
             }
-            if log.data.as_ref() != external_log.data.as_ref() {
-                return Err(anyhow!(
-                    "tx log data mismatch, expected: {:?} got: {:?}",
-                    external_log.data.as_ref(),
-                    log.data.as_ref()
-                ));
-            }
-            for (topic, external_topic) in log.topics.iter().zip(&external_log.topics) {
-                let topic: H256 = topic.to_owned().into();
-                let external_topic = external_topic.to_owned();
-                if topic != external_topic {
-                    return Err(anyhow!("tx topic mismatch, expected: {:?} got: {:?}", external_topic, topic));
+
+            // compare log topics content
+            for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics.iter().zip(&receipt_log.topics).enumerate() {
+                if execution_log_topic.as_ref() != receipt_log_topic.as_ref() {
+                    return log_and_err!(format!(
+                        "log topics content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
+                        receipt.hash(),
+                        log_index,
+                        topic_index,
+                        execution_log_topic,
+                        receipt_log_topic,
+                    ));
                 }
+            }
+
+            // compare log data content
+            if execution_log.data.as_ref() != receipt_log.data.as_ref() {
+                return log_and_err!(format!(
+                    "log data content mismatch | hash={} log_index={} execution={} receipt={:#x}",
+                    receipt.hash(),
+                    log_index,
+                    execution_log.data,
+                    receipt_log.data,
+                ));
             }
         }
         Ok(())
