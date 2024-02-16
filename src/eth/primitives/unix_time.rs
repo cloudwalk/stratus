@@ -18,6 +18,7 @@ use serde_with::DeserializeFromStr;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
+#[cfg(debug_assertions)]
 pub static OFFSET_TIME: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, DeserializeFromStr)]
@@ -25,6 +26,8 @@ pub struct UnixTime(u64);
 
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
+
+    #[cfg(debug_assertions)]
     pub fn now() -> Self {
         let offset_time = OFFSET_TIME.load(std::sync::atomic::Ordering::Acquire);
         match offset_time {
@@ -37,6 +40,11 @@ impl UnixTime {
                 Self(offset_time)
             }
         }
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn now() -> Self {
+        Self(Utc::now().timestamp() as u64)
     }
 }
 

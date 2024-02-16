@@ -3,7 +3,6 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::Utc;
 use ethereum_types::U256;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -185,10 +184,13 @@ async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
     hex_zero()
 }
 
+#[cfg(debug_assertions)]
 async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(*timestamp));
-    Ok(serde_json::to_value(5).unwrap())
+    match OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(*timestamp)) {
+        Ok(_) => Ok(serde_json::to_value(timestamp).unwrap()),
+        Err(_) => Err(anyhow::anyhow!("failed to to set the next block's timestamp").into())
+    }
 }
 
 // Block
