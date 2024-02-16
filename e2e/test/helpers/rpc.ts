@@ -7,7 +7,7 @@ import { Numbers } from "web3-types";
 
 import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
-import { Network, currentNetwork, isStratus } from "./network";
+import { currentNetwork, isStratus } from "./network";
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -21,8 +21,8 @@ export const TX_PARAMS = { chainId: CHAIN_ID, gasPrice: 0, gasLimit: 1_000_000 }
 export const ZERO = "0x0";
 export const ONE = "0x1";
 export const TEST_BALANCE = "0xffffffffffffffff";
-
 export const TEST_TRANSFER = 12345678;
+export const NATIVE_TRANSFER_GAS = "0x5208"; // 21000
 
 // Special hashes
 export const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";

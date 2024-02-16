@@ -9,6 +9,7 @@ import {
     CHAIN_ID_DEC,
     HASH_EMPTY_TRANSACTIONS,
     HASH_EMPTY_UNCLES,
+    NATIVE_TRANSFER_GAS,
     ONE,
     TEST_BALANCE,
     TEST_TRANSFER,
@@ -72,6 +73,7 @@ describe("Transaction: serial transfer", () => {
         expect(receipt.transactionHash).eq(_txHash, "rceipt.txHash");
         expect(receipt.transactionIndex).eq(ZERO, "receipt.txIndex");
         expect(receipt.from).eq(ALICE.address, "receipt.from");
+        expect(receipt.gasUsed).eq(NATIVE_TRANSFER_GAS, "receipt.gasUsed");
         expect(receipt.status).eq(ONE, "receipt.status");
     });
     it("Sender nonce increased", async () => {
@@ -81,10 +83,10 @@ describe("Transaction: serial transfer", () => {
         expect(await send("eth_getTransactionCount", [BOB, "latest"])).eq(ZERO);
     });
     it("Receiver balance is increased", async () => {
-        expect(await sendGetBalance(BOB)).eq(parseInt(TEST_BALANCE, 16) + TEST_TRANSFER)
+        expect(await sendGetBalance(BOB)).eq(parseInt(TEST_BALANCE, 16) + TEST_TRANSFER);
     });
     it("Sender balance is decreased", async () => {
-        expect(await sendGetBalance(ALICE)).eq(parseInt(TEST_BALANCE, 16) - TEST_TRANSFER)
+        expect(await sendGetBalance(ALICE)).eq(parseInt(TEST_BALANCE, 16) - TEST_TRANSFER);
     });
     it("Send transaction to new account", async () => {
         new_account = randomAccounts(1)[0];

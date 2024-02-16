@@ -67,7 +67,7 @@ impl PostgresTransaction {
             from: self.address_from,
             to: self.address_to,
             input: self.input,
-            gas: self.gas,
+            gas_limit: self.gas,
             gas_price: self.gas_price,
             v: self.v.into(),
             r: self.r.into(),

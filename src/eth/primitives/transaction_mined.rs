@@ -78,7 +78,7 @@ impl From<TransactionMined> for EthersTransaction {
             to: input.to.map_into(),
             value: input.value.into(),
             gas_price: Some(input.gas_price.into()),
-            gas: input.gas.into(),
+            gas: input.gas_limit.into(),
             input: input.input.into(),
             v: input.v,
             r: input.r,
@@ -94,12 +94,12 @@ impl From<TransactionMined> for EthersReceipt {
             // receipt specific
             status: Some(if_else!(value.is_success(), 1, 0).into()),
             contract_address: value.execution.contract_address().map_into(),
+            gas_used: Some(value.execution.gas.into()),
 
             // transaction
             transaction_hash: value.input.hash.into(),
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
-            gas_used: Some(value.input.gas.into()),
 
             // block
             block_hash: Some(value.block_hash.into()),
