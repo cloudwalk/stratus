@@ -100,7 +100,7 @@ impl Execution {
             for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics.iter().zip(&receipt_log.topics).enumerate() {
                 if execution_log_topic.as_ref() != receipt_log_topic.as_ref() {
                     return log_and_err!(format!(
-                        "log topics content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
+                        "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
                         receipt.hash(),
                         log_index,
                         topic_index,
