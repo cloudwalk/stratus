@@ -31,20 +31,20 @@ describe("GAS_LIMIT", () => {
         await sendReset();
     });
     it("Send transaction", async () => {
-        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER, 1);
+        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER, 0, 0);
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
-        expect(_txHash).eq(keccak256(txSigned));
+        expect(_txHash).eq(undefined);
     });
     it("Block is created", async () => {
-        expect(await send("eth_blockNumber")).eq(ONE);
+        expect(await send("eth_blockNumber")).eq(ZERO);
 
         _block = await send("eth_getBlockByNumber", [ONE, true]);
-        expect(_block.number).eq(ONE);
+        expect(_block).eq(null);
     });
     it("Send transaction to new account", async () => {
         new_account = randomAccounts(1)[0];
-        let txSigned = await ALICE.signWeiTransfer(new_account.address, TEST_TRANSFER, 1_000_000, 1);
+        let txSigned = await ALICE.signWeiTransfer(new_account.address, TEST_TRANSFER, 0, 10_000_000);
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
     });

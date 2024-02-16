@@ -32,7 +32,7 @@ describe("Transaction: serial transfer", () => {
         await sendReset();
     });
     it("Send transaction", async () => {
-        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER, 1_000_000);
+        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
@@ -90,7 +90,7 @@ describe("Transaction: serial transfer", () => {
     });
     it("Send transaction to new account", async () => {
         new_account = randomAccounts(1)[0];
-        let txSigned = await ALICE.signWeiTransfer(new_account.address, TEST_TRANSFER, 1_000_000, 1);
+        let txSigned = await ALICE.signWeiTransfer(new_account.address, TEST_TRANSFER, 1);
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
     });
