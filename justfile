@@ -30,7 +30,7 @@ run *args="":
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
 
 # Stratus: Compile with debug options
 build:
@@ -82,7 +82,7 @@ importer-download *args="":
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
 importer-import:
-    cargo run --bin importer-import --release -- --postgres {{postgres_url}} --storage inmemory
+    cargo run --bin importer-import -- --postgres {{postgres_url}} --storage inmemory
 
 # ------------------------------------------------------------------------------
 # Test tasks
