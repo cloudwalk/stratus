@@ -1,6 +1,7 @@
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 
 use super::BlockNumber;
+use crate::eth::primitives::Hash;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
@@ -8,9 +9,22 @@ use crate::log_and_err;
 pub struct ExternalReceipt(#[deref] pub EthersReceipt);
 
 impl ExternalReceipt {
+    /// Returns the transaction hash.
+    pub fn hash(&self) -> Hash {
+        self.0.transaction_hash.into()
+    }
+
     /// Returns the block number.
     pub fn block_number(&self) -> BlockNumber {
         self.0.block_number.expect("external receipt must have block number").into()
+    }
+
+    /// Checks if the receipt is for a transaction that was completed successfully.
+    pub fn is_success(&self) -> bool {
+        match self.0.status {
+            Some(status) => status.as_u64() == 1,
+            None => false,
+        }
     }
 }
 

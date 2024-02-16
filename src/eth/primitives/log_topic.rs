@@ -6,6 +6,8 @@
 //! of log topics and provides functionality for handling and converting these
 //! identifiers, essential for log filtering and retrieval.
 
+use std::fmt::Display;
+
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
@@ -18,6 +20,12 @@ pub struct LogTopic(H256);
 impl LogTopic {
     pub fn new(inner: H256) -> Self {
         Self(inner)
+    }
+}
+
+impl Display for LogTopic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", const_hex::encode_prefixed(self.0))
     }
 }
 

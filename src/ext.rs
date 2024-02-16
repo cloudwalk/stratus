@@ -49,32 +49,32 @@ macro_rules! if_else {
 #[macro_export]
 macro_rules! log_and_err {
     // with reason: wrap the original error with provided message
-    (reason = $error:ident, payload = $payload:expr, $msg:tt) => {
+    (reason = $error:ident, payload = $payload:expr, $msg:expr) => {
         {
             use anyhow::Context;
-            tracing::error!(reason = ?$error, payload = ?$payload, message = $msg);
+            tracing::error!(reason = ?$error, payload = ?$payload, message = %$msg);
             Err($error).context($msg)
         }
     };
-    (reason = $error:ident, $msg:tt) => {
+    (reason = $error:ident, $msg:expr) => {
         {
             use anyhow::Context;
-            tracing::error!(reason = ?$error, $msg);
+            tracing::error!(reason = ?$error, message = %$msg);
             Err($error).context($msg)
         }
     };
     // without reason: generate a new error using provided message
-    (payload = $payload:expr, $msg:tt) => {
+    (payload = $payload:expr, $msg:expr) => {
         {
             use anyhow::Context;
-            tracing::error!(payload = ?$payload, $msg);
+            tracing::error!(payload = ?$payload, message = %$msg);
             let message = format!("{} | payload={:?}", $msg, $payload);
             Err(anyhow!(message))
         }
     };
-    ($msg:tt) => {
+    ($msg:expr) => {
         {
-            tracing::error!(event = $msg);
+            tracing::error!(message = %$msg);
             Err(anyhow!($msg))
         }
     };

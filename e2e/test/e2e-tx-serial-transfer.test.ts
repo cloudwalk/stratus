@@ -9,6 +9,7 @@ import {
     CHAIN_ID_DEC,
     HASH_EMPTY_TRANSACTIONS,
     HASH_EMPTY_UNCLES,
+    NATIVE_TRANSFER_GAS,
     ONE,
     TEST_BALANCE,
     TEST_TRANSFER,
@@ -29,6 +30,16 @@ describe("Transaction: serial transfer", () => {
 
     it("Resets blockchain", async () => {
         await sendReset();
+    });
+    it("Send transaction without any gas, that should fail", async () => {
+        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER, 0, 0);
+        _txSentTimestamp = Math.floor(Date.now() / 1000);
+        _txHash = await sendRawTransaction(txSigned);
+        expect(_txHash).eq(undefined);
+        expect(await send("eth_blockNumber")).eq(ZERO);
+
+        _block = await send("eth_getBlockByNumber", [ONE, true]);
+        expect(_txHash).to.satisfy((hash) => hash === undefined || hash === null, 'Variable should be either undefined or null');
     });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
@@ -72,6 +83,7 @@ describe("Transaction: serial transfer", () => {
         expect(receipt.transactionHash).eq(_txHash, "rceipt.txHash");
         expect(receipt.transactionIndex).eq(ZERO, "receipt.txIndex");
         expect(receipt.from).eq(ALICE.address, "receipt.from");
+        expect(receipt.gasUsed).eq(NATIVE_TRANSFER_GAS, "receipt.gasUsed");
         expect(receipt.status).eq(ONE, "receipt.status");
     });
     it("Sender nonce increased", async () => {
@@ -81,10 +93,10 @@ describe("Transaction: serial transfer", () => {
         expect(await send("eth_getTransactionCount", [BOB, "latest"])).eq(ZERO);
     });
     it("Receiver balance is increased", async () => {
-        expect(await sendGetBalance(BOB)).eq(parseInt(TEST_BALANCE, 16) + TEST_TRANSFER)
+        expect(await sendGetBalance(BOB)).eq(parseInt(TEST_BALANCE, 16) + TEST_TRANSFER);
     });
     it("Sender balance is decreased", async () => {
-        expect(await sendGetBalance(ALICE)).eq(parseInt(TEST_BALANCE, 16) - TEST_TRANSFER)
+        expect(await sendGetBalance(ALICE)).eq(parseInt(TEST_BALANCE, 16) - TEST_TRANSFER);
     });
     it("Send transaction to new account", async () => {
         new_account = randomAccounts(1)[0];
