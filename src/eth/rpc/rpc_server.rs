@@ -14,6 +14,7 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
+use crate::config::Environment;
 use crate::config::StratusConfig;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -67,8 +68,9 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
     tracing::info!(%address, ?ctx, "starting rpc server");
 
     // configure module
+    let env = ctx.env;
     let mut module = RpcModule::<RpcContext>::new(ctx);
-    module = register_methods(module)?;
+    module = register_methods(module, env)?;
 
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
@@ -98,9 +100,11 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
     Ok(())
 }
 
-fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
+fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyhow::Result<RpcModule<RpcContext>> {
     // debug
-    module.register_async_method("debug_setHead", debug_set_head)?;
+    if env.is_development() {
+        module.register_async_method("debug_setHead", debug_set_head)?;
+    }
 
     // blockchain
     module.register_async_method("net_version", net_version)?;
@@ -147,9 +151,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
 // Debug
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    if ctx.is_production() {
-        return Err(RpcError::Response(rpc_internal_error("method is only available in development environment")));
-    }
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number).await?;
     Ok(serde_json::to_value(number).unwrap())
