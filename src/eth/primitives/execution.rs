@@ -66,7 +66,7 @@ impl Execution {
         // compare execution status
         if self.is_success() != receipt.is_success() {
             return log_and_err!(format!(
-                "transaction status does not match | hash={} execution={:?} receipt={:?}",
+                "transaction status mismatch | hash={} execution={:?} receipt={:?}",
                 receipt.hash(),
                 self.result,
                 receipt.status
@@ -76,7 +76,7 @@ impl Execution {
         // compare logs length
         if self.logs.len() != receipt.logs.len() {
             return log_and_err!(format!(
-                "logs length does not match | hash={} execution={} receipt={}",
+                "logs length mismatch | hash={} execution={} receipt={}",
                 receipt.hash(),
                 self.logs.len(),
                 receipt.logs.len()
@@ -88,7 +88,7 @@ impl Execution {
             // compare log topics length
             if execution_log.topics.len() != receipt_log.topics.len() {
                 return log_and_err!(format!(
-                    "log topics length does not match | hash={} log_index={} execution={} receipt={}",
+                    "log topics length mismatch | hash={} log_index={} execution={} receipt={}",
                     receipt.hash(),
                     log_index,
                     execution_log.topics.len(),
@@ -100,7 +100,7 @@ impl Execution {
             for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics.iter().zip(&receipt_log.topics).enumerate() {
                 if execution_log_topic.as_ref() != receipt_log_topic.as_ref() {
                     return log_and_err!(format!(
-                        "log topics content does not match | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
+                        "log topics content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
                         receipt.hash(),
                         log_index,
                         topic_index,
@@ -113,7 +113,7 @@ impl Execution {
             // compare log data content
             if execution_log.data.as_ref() != receipt_log.data.as_ref() {
                 return log_and_err!(format!(
-                    "log data content does not match | hash={} log_index={} execution={} receipt={:#x}",
+                    "log data content mismatch | hash={} log_index={} execution={} receipt={:#x}",
                     receipt.hash(),
                     log_index,
                     execution_log.data,
