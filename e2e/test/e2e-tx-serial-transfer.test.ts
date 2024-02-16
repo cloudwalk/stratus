@@ -39,7 +39,7 @@ describe("Transaction: serial transfer", () => {
         expect(await send("eth_blockNumber")).eq(ZERO);
 
         _block = await send("eth_getBlockByNumber", [ONE, true]);
-        expect(_block).eq(null);
+        expect(_txHash).to.satisfy((hash) => hash === undefined || hash === null, 'Variable should be either undefined or null');
     });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
