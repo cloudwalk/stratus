@@ -19,6 +19,7 @@ use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
 use super::primitives::ExternalTransaction;
+use super::storage::StratusStorage;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -31,6 +32,8 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::TemporaryStorage;
 use crate::eth::storage::EthStorageError;
 use crate::eth::BlockMiner;
 
@@ -50,7 +53,7 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     // Shared storage backend for persisting blockchain state.
-    storage: Arc<dyn EthStorage>,
+    storage: Arc<StratusStorage>,
 
     // Broadcast channels for notifying subscribers about new blocks and logs.
     block_notifier: broadcast::Sender<Block>,
@@ -59,7 +62,7 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evms: NonEmpty<Box<dyn Evm>>, eth_storage: Arc<dyn EthStorage>) -> Self {
+    pub fn new(evms: NonEmpty<Box<dyn Evm>>, eth_storage: Arc<StratusStorage>) -> Self {
         let evm_tx = spawn_background_evms(evms);
 
         Self {
@@ -99,7 +102,7 @@ impl EthExecutor {
                         return Err(e);
                     };
 
-                    self.storage.save_account_changes(block.number(), execution).await?;
+                   PermanentStorage::save_account_changes(&*self.storage, block.number(), execution).await?;
                 }
                 Err(e) => {
                     // TODO: must handle this better because some errors can be expected
@@ -202,8 +205,10 @@ impl EthExecutor {
             // mine and save block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.storage.save_block(block.clone()).await {
-                Ok(()) => {}
+            match TemporaryStorage::commit(&*self.storage, block.clone()).await {
+                Ok(()) => {
+                    TemporaryStorage::reset(&*self.storage);
+                }
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");
                     continue;

@@ -33,10 +33,11 @@ use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+use crate::eth::storage::PermanentStorage;
 use crate::infra::postgres::Postgres;
 
 #[async_trait]
-impl EthStorage for Postgres {
+impl PermanentStorage for Postgres {
     async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         Ok(None)
     }
@@ -641,20 +642,20 @@ impl EthStorage for Postgres {
         Ok(block_number)
     }
 
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        tracing::debug!("incrementing block number");
+    // async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+    //     tracing::debug!("incrementing block number");
 
-        let nextval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
-            .fetch_one(&self.connection_pool)
-            .await
-            .unwrap_or_else(|err| {
-                tracing::error!(?err, "failed to get block number");
-                0
-            })
-            + 1;
+    //     let nextval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
+    //         .fetch_one(&self.connection_pool)
+    //         .await
+    //         .unwrap_or_else(|err| {
+    //             tracing::error!(?err, "failed to get block number");
+    //             0
+    //         })
+    //         + 1;
 
-        Ok(nextval.into())
-    }
+    //     Ok(nextval.into())
+    // }
 
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");

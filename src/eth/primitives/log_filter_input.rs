@@ -21,6 +21,7 @@ use crate::eth::primitives::LogFilterTopicCombination;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
 #[serde_as]
@@ -46,7 +47,7 @@ pub struct LogFilterInput {
 
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
-    pub async fn parse(self, storage: &Arc<dyn EthStorage>) -> anyhow::Result<LogFilter> {
+    pub async fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter> {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {

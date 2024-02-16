@@ -48,6 +48,12 @@ impl InMemoryStorage {
     async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryStorageState> {
         self.state.write().await
     }
+
+    /// Resets state and returns it
+    pub fn flush(&mut self) {
+        self.state = RwLock::new(InMemoryStorageState::default());
+        self.block_number = Default::default();
+    }
 }
 
 #[derive(Debug, Default)]

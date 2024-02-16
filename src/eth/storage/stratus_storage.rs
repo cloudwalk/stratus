@@ -25,13 +25,19 @@ use crate::eth::storage::EthStorage;
 
 pub struct StratusStorage {
     temp: InMemoryStorage,
-    perm: Arc<dyn EthStorage>,
+    perm: Arc<dyn PermanentStorage>,
 }
 
 #[allow(dead_code)]
 impl StratusStorage {
+    pub fn new(temp: InMemoryStorage, perm: Arc<dyn PermanentStorage>) -> Self {
+        Self {
+            temp, perm
+        }
+    }
+    
     /// Retrieves an account from the storage. Returns default value when not found.
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+    pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         match self.temp.maybe_read_account(address, point_in_time).await? {
             Some(account) => Ok(account),
             None => match self.perm.maybe_read_account(address, point_in_time).await? {
@@ -45,7 +51,7 @@ impl StratusStorage {
     }
 
     /// Retrieves an slot from the storage. Returns default value when not found.
-    async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
             Some(slot) => Ok(slot),
             None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
@@ -59,7 +65,7 @@ impl StratusStorage {
     }
 
     /// Translates a block selection to a specific storage point-in-time indicator.
-    async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
+    pub async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
@@ -111,7 +117,10 @@ impl TemporaryStorage for StratusStorage {
     /// Basically calls the `save_block` method from the permanent storage, which
     /// will by definition update accounts, slots, transactions, logs etc
     async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        self.perm.save_block(block).await
+        self.perm.save_block(block).await?;
+        TemporaryStorage::reset(self).await;
+
+        Ok(())
     }
 
     /// Temporarily stores account changes during block production
@@ -120,9 +129,8 @@ impl TemporaryStorage for StratusStorage {
     }
 
     /// Resets all state to a specific block number.
-    // TODO: remove `number` param, just wipe out the storage
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
-        self.temp.reset(number).await
+    async fn reset(&self) -> anyhow::Result<()> {
+        Ok(self.temp.flush())
     }
 }
 

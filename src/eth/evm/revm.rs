@@ -41,18 +41,19 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
     evm: EVM<RevmDatabaseSession>,
-    storage: Arc<dyn EthStorage>,
+    storage: Arc<StratusStorage>,
 }
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
-    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>) -> Self {
         let mut evm = EVM::new();
 
         // evm general config
@@ -119,7 +120,7 @@ impl Evm for Revm {
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 struct RevmDatabaseSession {
     /// Service to communicate with the storage.
-    storage: Arc<dyn EthStorage>,
+    storage: Arc<StratusStorage>,
 
     /// Input passed to EVM to execute the transaction.
     input: EvmInput,
@@ -129,7 +130,7 @@ struct RevmDatabaseSession {
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<dyn EthStorage>, input: EvmInput) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, input: EvmInput) -> Self {
         Self {
             storage,
             input,

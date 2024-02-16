@@ -15,3 +15,5 @@ pub use inmemory::InMemoryStorage;
 pub use metrified::MetrifiedStorage;
 pub use storage_error::EthStorageError;
 pub use stratus_storage::StratusStorage;
+pub use permanent_storage::PermanentStorage;
+pub use temporary_storage::TemporaryStorage;

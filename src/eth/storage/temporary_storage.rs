@@ -36,6 +36,6 @@ pub trait TemporaryStorage: Send + Sync {
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
 
-    /// Resets all state to a specific block number.
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+    /// Resets all state
+    async fn reset(&self) -> anyhow::Result<()>;
 }
