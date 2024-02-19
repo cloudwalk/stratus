@@ -85,7 +85,7 @@ impl From<TransactionInput> for EvmInput {
             to: value.to,
             value: value.value,
             data: value.input,
-            gas_limit: value.gas_limit,
+            gas_limit: Gas::MAX,
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: Some(value.nonce),
             point_in_time: StoragePointInTime::Present,
