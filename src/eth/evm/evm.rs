@@ -7,17 +7,21 @@
 //! or requirements while maintaining a consistent execution interface.
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
+use crate::if_else;
 
 /// EVM operations.
 pub trait Evm: Send + Sync + 'static {
@@ -26,6 +30,7 @@ pub trait Evm: Send + Sync + 'static {
 }
 
 /// EVM input data. Usually derived from a transaction or call.
+#[derive(Debug, Clone)]
 pub struct EvmInput {
     /// Operation party address.
     ///
@@ -69,9 +74,13 @@ pub struct EvmInput {
     /// Gas price paid by each unit of gas consumed by the transaction.
     pub gas_price: Wei,
 
-    /// Block number indicating the point-in-time the EVM state will be used to compute the transaction.
-    ///
-    /// When not specified, assumes the current state.
+    /// Number of the block where the transaction will be or was included.
+    pub block_number: BlockNumber,
+
+    /// Timestamp of the block where the transaction will be or was included.
+    pub block_timestamp: UnixTime,
+
+    /// Point-in-time from where accounts and slots will be read.
     pub point_in_time: StoragePointInTime,
 }
 
@@ -83,9 +92,11 @@ impl EvmInput {
             to: input.to,
             value: input.value,
             data: input.input,
-            gas_limit: input.gas_limit,
+            gas_limit: Gas::MAX,
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: Some(input.nonce),
+            block_number: BlockNumber::ZERO, // TODO: use number of block being mined
+            block_timestamp: UnixTime::now(),
             point_in_time: StoragePointInTime::Present,
         }
     }
@@ -100,13 +111,21 @@ impl EvmInput {
             gas_limit: Gas::MAX,  // XXX: use value from input?
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: None,
+            block_number: match point_in_time {
+                StoragePointInTime::Present => BlockNumber::ZERO, // TODO: use number of block being mined
+                StoragePointInTime::Past(number) => number,
+            },
+            block_timestamp: match point_in_time {
+                StoragePointInTime::Present => UnixTime::now(),
+                StoragePointInTime::Past(_) => UnixTime::now(), // TODO: use timestamp of the specified block
+            },
             point_in_time,
         }
     }
 
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
-    pub fn from_external_transaction(tx: ExternalTransaction, receipt: &ExternalReceipt) -> Self {
-        let gas_limit = tx.gas_limit(receipt);
+    pub fn from_external_transaction(block: &ExternalBlock, tx: ExternalTransaction, receipt: &ExternalReceipt) -> Self {
+        let gas_limit = if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.into());
         Self {
             from: tx.0.from.into(),
             to: tx.0.to.map_into(),
@@ -116,6 +135,8 @@ impl EvmInput {
             gas_limit,
             gas_price: tx.0.gas_price.expect("gas_price must be set for ExternalTransaction").into(), // XXX: how to handle transactions without gas price?
             point_in_time: StoragePointInTime::Present,
+            block_number: block.number(),
+            block_timestamp: block.timestamp(),
         }
     }
 }

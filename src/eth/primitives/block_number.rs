@@ -18,6 +18,7 @@ use ethereum_types::U64;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
+use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
@@ -118,6 +119,12 @@ impl From<BlockNumber> for U64 {
 impl From<BlockNumber> for u64 {
     fn from(block_number: BlockNumber) -> Self {
         block_number.0.as_u64()
+    }
+}
+
+impl From<BlockNumber> for RevmU256 {
+    fn from(block_number: BlockNumber) -> Self {
+        Self::from_limbs([block_number.0.as_u64(), 0, 0, 0])
     }
 }
 

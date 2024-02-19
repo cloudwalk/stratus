@@ -12,7 +12,6 @@ use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
-use stratus::eth::primitives::Nonce;
 use stratus::eth::primitives::Wei;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
@@ -30,12 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let balances = db_retrieve_balances(&pg).await?;
     let accounts = balances
         .into_iter()
-        .map(|balance| Account {
-            address: balance.address,
-            nonce: Nonce::ZERO,
-            balance: balance.balance,
-            bytecode: None,
-        })
+        .map(|row| Account::new_with_balance(row.address, row.balance))
         .collect_vec();
     storage.save_initial_accounts(accounts).await?;
 

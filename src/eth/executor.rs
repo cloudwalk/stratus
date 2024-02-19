@@ -86,7 +86,7 @@ impl EthExecutor {
             // re-execute transaction
             let json_tx = serde_json::to_string(&tx).unwrap();
             let json_receipt = serde_json::to_string(&receipt).unwrap();
-            let evm_input = EvmInput::from_external_transaction(tx.clone(), receipt);
+            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), receipt);
             let execution = self.execute_in_evm(evm_input).await;
 
             // handle execution result

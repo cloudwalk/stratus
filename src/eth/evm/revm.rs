@@ -40,8 +40,6 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::UnixTime;
 use crate::eth::storage::EthStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -71,18 +69,17 @@ impl Revm {
 
 impl Evm for Revm {
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution> {
-        // init session
+        // configure session
         let evm = &mut self.evm;
-        let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.point_in_time, input.to.clone());
+        let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.clone());
+        evm.database(session);
 
         // configure evm block
         evm.env.block.basefee = U256::ZERO;
-        evm.env.block.timestamp = session.block_timestamp.into();
+        evm.env.block.timestamp = input.block_timestamp.into();
+        evm.env.block.number = input.block_number.into();
 
-        // configure database
-        evm.database(session);
-
-        // configure evm params
+        // configure tx params
         let tx = &mut evm.env.tx;
         tx.caller = input.from.into();
         tx.transact_to = match input.to {
@@ -105,7 +102,7 @@ impl Evm for Revm {
         match evm_result {
             Ok(result) => {
                 let session = evm.take_db();
-                Ok(parse_revm_execution(result, session.block_timestamp, session.storage_changes)?)
+                Ok(parse_revm_execution(result, session.input, session.storage_changes)?)
             }
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
@@ -124,26 +121,18 @@ struct RevmDatabaseSession {
     /// Service to communicate with the storage.
     storage: Arc<dyn EthStorage>,
 
-    /// Point in time of the storage during the transaction execution.
-    storage_point_in_time: StoragePointInTime,
-
-    /// Block timestamp.
-    block_timestamp: UnixTime,
-
-    /// Address in the `to` field.
-    to: Option<Address>,
+    /// Input passed to EVM to execute the transaction.
+    input: EvmInput,
 
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<dyn EthStorage>, storage_point_in_time: StoragePointInTime, to: Option<Address>) -> Self {
+    pub fn new(storage: Arc<dyn EthStorage>, input: EvmInput) -> Self {
         Self {
             storage,
-            storage_point_in_time,
-            block_timestamp: UnixTime::now(),
-            to,
+            input,
             storage_changes: Default::default(),
         }
     }
@@ -155,10 +144,10 @@ impl Database for RevmDatabaseSession {
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
         // retrieve account
         let address: Address = revm_address.into();
-        let account = Handle::current().block_on(self.storage.read_account(&address, &self.storage_point_in_time))?;
+        let account = Handle::current().block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
-        if let Some(ref to_address) = self.to {
+        if let Some(ref to_address) = self.input.to {
             if &address == to_address && not(account.is_contract()) {
                 tracing::warn!(%address, "evm to_account does not have bytecode");
             }
@@ -182,7 +171,7 @@ impl Database for RevmDatabaseSession {
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
         //instructions?
-        let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.storage_point_in_time))?;
+        let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
 
         // track original value, except if ignored address
         if not(address.is_ignored()) {
@@ -235,7 +224,7 @@ impl Inspector<RevmDatabaseSession> for RevmInspector {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: RevmResultAndState, block_timestamp: UnixTime, execution_changes: ExecutionChanges) -> anyhow::Result<Execution> {
+fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> anyhow::Result<Execution> {
     let (result, output, logs, gas) = parse_revm_result(revm_result.result);
     let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
 
@@ -245,7 +234,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, block_timestamp: UnixTi
         output,
         logs,
         gas,
-        block_timestamp,
+        block_timestamp: input.block_timestamp,
         changes: execution_changes.into_values().collect(),
     })
 }

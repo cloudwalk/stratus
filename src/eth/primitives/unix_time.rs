@@ -119,7 +119,7 @@ impl From<U256> for UnixTime {
 
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for UnixTime {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <i32 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         let value: u64 = value.try_into()?;
         Ok(value.into())
     }
@@ -129,7 +129,7 @@ impl sqlx::Type<sqlx::Postgres> for UnixTime {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         // HACK: should be "INTEGER" in theory
         // they are equal
-        sqlx::postgres::PgTypeInfo::with_name("INT4")
+        sqlx::postgres::PgTypeInfo::with_name("INT8")
     }
 }
 
