@@ -16,7 +16,7 @@ index 3bebd80..0f45a75 100644
    } else {
 +    await network.provider.request({
 +      method: "evm_setNextBlockTimestamp",
-+      params: [`0x0`]
++      params: [0]
 +    });
 +    await network.provider.request({
 +      method: "debug_setHead",
