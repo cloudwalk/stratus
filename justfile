@@ -1,6 +1,6 @@
 import '.justfile_helpers' # _lint, _outdated
 
-postgres_url := "postgres://postgres:123@0.0.0.0:5432/stratus"
+postgres_url := env("POSTGRES_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 testnet_url  := "https://rpc.testnet.cloudwalk.io/"
 
 # Project: Show available tasks

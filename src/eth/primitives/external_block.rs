@@ -3,8 +3,10 @@ use ethers_core::types::Transaction as EthersTransaction;
 
 use super::Block;
 use super::BlockNumber;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::UnixTime;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
@@ -21,6 +23,11 @@ impl ExternalBlock {
     pub fn number(&self) -> BlockNumber {
         self.0.number.expect("external block must have number").into()
     }
+
+    /// Returns the block timestamp.
+    pub fn timestamp(&self) -> UnixTime {
+        self.0.timestamp.into()
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -36,7 +43,7 @@ impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
 impl From<ExternalBlock> for Block {
     fn from(value: ExternalBlock) -> Self {
         Block {
-            header: super::BlockHeader {
+            header: BlockHeader {
                 number: value.number.unwrap().into(),
                 hash: value.hash.unwrap().into(),
                 transactions_root: value.transactions_root.into(),
