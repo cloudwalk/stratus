@@ -316,7 +316,6 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         // result is failure
         Ok(result) => Err(RpcError::Response(rpc_internal_error(hex_data(result.output)))),
 
-
         // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
