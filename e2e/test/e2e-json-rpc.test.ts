@@ -85,7 +85,7 @@ describe("JSON-RPC", () => {
 
         it("evm_setNextBlockTimestamp", async () => {
             let target = Math.floor(Date.now()/1000) + 10;
-            await send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
+            await send("evm_setNextBlockTimestamp", [target]);
             await send("evm_mine", []);
             expect((await latest()).timestamp).eq(target);
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -93,7 +93,7 @@ describe("JSON-RPC", () => {
             expect((await latest()).timestamp).eq(target + 1);
 
             //reset
-            await send("evm_setNextBlockTimestamp", [`0x0`]);
+            await send("evm_setNextBlockTimestamp", [0]);
             await send("evm_mine", []);
             expect((await latest()).timestamp).eq(Math.floor(Date.now()/1000));
         });

@@ -5,7 +5,7 @@ index f5cbce5..053cfc5 100644
 @@ -54,6 +54,21 @@ describe("Contract 'BRLCToken' - Premintable, Freezable & Restrictable scenarios
      return { token };
    }
- 
+
 +  async function latest(): Promise<number> {
 +    return parseInt((await ethers.provider.send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
 +  }
@@ -16,7 +16,7 @@ index f5cbce5..053cfc5 100644
 +      // A virtual wait through network time shifting
 +      await time.increaseTo(target);
 +    } else if (network.name === "stratus") {
-+      await ethers.provider.send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
++      await ethers.provider.send("evm_setNextBlockTimestamp", [target]);
 +      await ethers.provider.send("evm_mine", []);
 +    }
 +  }
@@ -25,7 +25,7 @@ index f5cbce5..053cfc5 100644
      it("Transfer to purpose account - test 5", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
 @@ -168,15 +183,15 @@ describe("Contract 'BRLCToken' - Premintable, Freezable & Restrictable scenarios
- 
+
    describe("Frozen and premint balances", async () => {
      let timestamp: number;
 -    before(async () => {
@@ -56,7 +56,7 @@ index f5cbce5..053cfc5 100644
 @@ -201,12 +217,12 @@ describe("Contract 'BRLCToken' - Premintable, Freezable & Restrictable scenarios
        );
      });
- 
+
 -    it("Transfer to purpose account - test 15 with release awaiting", async () => {
 +    it("Transfer to purpose account - test 15 with release awaiting ff", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
@@ -132,7 +132,7 @@ index f5cbce5..053cfc5 100644
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
 @@ -400,15 +416,15 @@ describe("Contract 'BRLCToken' - Premintable, Freezable & Restrictable scenarios
- 
+
    describe("Premint and restricted balances", async () => {
      let timestamp: number;
 -    before(async () => {
@@ -232,7 +232,7 @@ index f5cbce5..053cfc5 100644
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
 @@ -664,8 +680,8 @@ describe("Contract 'BRLCToken' - Premintable, Freezable & Restrictable scenarios
- 
+
    describe("Frozen, restricted and premint balances", async () => {
      let timestamp: number;
 -    before(async () => {
@@ -333,7 +333,7 @@ index f5cbce5..053cfc5 100644
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
 @@ -1194,13 +1210,13 @@ describe("Contract 'BRLCToken' - Premintable, Freezable & Restrictable scenarios
- 
+
    describe("Premint balance only, no frozen balance or restricted balance", async () => {
      let timestamp: number;
 -    before(async () => {
@@ -437,7 +437,7 @@ index 1e44d6e..a1c40ab 100644
 @@ -49,17 +49,32 @@ describe("Contract 'USJimToken' - Premintable & Freezable scenarios", async () =
      return { token };
    }
- 
+
 +  async function latest(): Promise<number> {
 +    return parseInt((await ethers.provider.send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
 +  }
@@ -448,7 +448,7 @@ index 1e44d6e..a1c40ab 100644
 +      // A virtual wait through network time shifting
 +      await time.increaseTo(target);
 +    } else if (network.name === "stratus") {
-+      await ethers.provider.send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
++      await ethers.provider.send("evm_setNextBlockTimestamp", [target]);
 +      await ethers.provider.send("evm_mine", []);
 +    }
 +  }
@@ -507,7 +507,7 @@ index 1e44d6e..a1c40ab 100644
          token.connect(user).transfer(reciever.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
 @@ -235,13 +250,13 @@ describe("Contract 'USJimToken' - Premintable & Freezable scenarios", async () =
- 
+
    describe("Premint balance only, no frozen balance", async () => {
      let timestamp: number;
 -    before(async () => {
@@ -566,7 +566,7 @@ index 8d1afc1..a196969 100644
 @@ -62,6 +62,21 @@ describe("Contract 'ERC20Mintable'", async () => {
      tokenFactory = await ethers.getContractFactory("ERC20MintableMock");
    });
- 
+
 +  async function latest(): Promise<number> {
 +    return parseInt((await ethers.provider.send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
 +  }
@@ -577,7 +577,7 @@ index 8d1afc1..a196969 100644
 +      // A virtual wait through network time shifting
 +      await time.increaseTo(target);
 +    } else if (network.name === "stratus") {
-+      await ethers.provider.send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
++      await ethers.provider.send("evm_setNextBlockTimestamp", [target]);
 +      await ethers.provider.send("evm_mine", []);
 +    }
 +  }
@@ -586,7 +586,7 @@ index 8d1afc1..a196969 100644
      const token: Contract = await upgrades.deployProxy(tokenFactory, [TOKEN_NAME, TOKEN_SYMBOL]);
      await token.deployed();
 @@ -334,8 +349,8 @@ describe("Contract 'ERC20Mintable'", async () => {
- 
+
    describe("Function 'premint()'", async () => {
      let timestamp: number;
 -    before(async () => {
@@ -594,7 +594,7 @@ index 8d1afc1..a196969 100644
 +    beforeEach(async () => {
 +      timestamp = (await latest()) + 100;
      });
- 
+
      describe("Executes as expected and emits the correct events if", async () => {
 @@ -383,7 +398,7 @@ describe("Contract 'ERC20Mintable'", async () => {
            await proveTx(token.connect(minter).premint(user.address, TOKEN_AMOUNT, timestamp + i * 10));
@@ -606,7 +606,7 @@ index 8d1afc1..a196969 100644
          await proveTx(token.connect(minter).premint(user.address, TOKEN_AMOUNT + 1, timestamp * 2));
          expect(await token.balanceOfPremint(user.address)).to.eq(TOKEN_AMOUNT * MAX_PENDING_PREMINTS_COUNT + 1);
 @@ -400,7 +415,7 @@ describe("Contract 'ERC20Mintable'", async () => {
- 
+
        it("The premint's release time is passed", async () => {
          const { token } = await setUpFixture(deployAndConfigureToken);
 -        const timestamp = (await time.latest()) - 1;
@@ -615,21 +615,21 @@ index 8d1afc1..a196969 100644
            .to.be.revertedWithCustomError(token, REVERT_ERROR_PREMINT_RELEASE_TIME_PASSED);
        });
 @@ -491,17 +506,17 @@ describe("Contract 'ERC20Mintable'", async () => {
- 
+
    describe("Function 'balanceOfPremint()'", async () => {
      it("Returns the correct balance of premint", async () => {
 -      const timestamp = (await time.latest()) + 100;
 +      const timestamp = (await latest()) + 100;
        const { token } = await setUpFixture(deployAndConfigureToken);
- 
+
        await proveTx(token.connect(minter).premint(user.address, TOKEN_AMOUNT, timestamp));
        await proveTx(token.connect(minter).premint(user.address, TOKEN_AMOUNT + 1, timestamp + 50));
        expect(await token.balanceOfPremint(user.address)).to.eq(TOKEN_AMOUNT * 2 + 1);
- 
+
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        expect(await token.balanceOfPremint(user.address)).to.eq(TOKEN_AMOUNT + 1);
- 
+
 -      await time.increaseTo(timestamp + 50);
 +      await increaseTo(timestamp + 50);
        expect(await token.balanceOfPremint(user.address)).to.eq(0);

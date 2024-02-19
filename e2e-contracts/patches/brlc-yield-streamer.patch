@@ -7,7 +7,7 @@ index 3bebd80..0f45a75 100644
  import { Block, TransactionReceipt, TransactionResponse } from "@ethersproject/abstract-provider";
  import { proveTx } from "../test-utils/eth";
 +import fs from "fs";
- 
+
  const HOUR_IN_SECONDS = 3600;
  const DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS;
 @@ -50,6 +51,14 @@ async function setUpFixture(func: any) {
@@ -48,11 +48,11 @@ index 3bebd80..0f45a75 100644
 +    // A virtual wait through network time shifting
 +    await time.increaseTo(target);
 +  } else if (network.name === "stratus") {
-+    await ethers.provider.send("evm_setNextBlockTimestamp", [`0x${target.toString(16)}`]);
++    await ethers.provider.send("evm_setNextBlockTimestamp", [target]);
 +    await ethers.provider.send("evm_mine", []);
 +  }
  }
- 
+
  function toBalanceChanges(tokenTransfer: TokenTransfer): BalanceChange[] {
 @@ -183,13 +209,13 @@ function defineExpectedDailyBalances(context: TestContext, dailyBalancesRequest:
    if (dayFrom < context.balanceTrackerInitDay) {
@@ -73,7 +73,7 @@ index 3bebd80..0f45a75 100644
 @@ -238,19 +264,32 @@ describe("Contract 'BalanceTracker'", async () => {
    let user1: SignerWithAddress;
    let user2: SignerWithAddress;
- 
+
 +  beforeEach(() => {
 +    if (fs.existsSync(".openzeppelin")) {
 +      fs.rmSync(".openzeppelin", { recursive: true });
@@ -112,7 +112,7 @@ index 3bebd80..0f45a75 100644
      tokenMock = await deployTokenMock(tokenMock);
      await increaseBlockchainTimeToSpecificRelativeDay(1);
 @@ -289,7 +328,7 @@ describe("Contract 'BalanceTracker'", async () => {
- 
+
    async function executeTokenTransfers(context: TestContext, transfers: TokenTransfer[]) {
      const { balanceTracker } = context;
 -    let previousTransferDay: number = toDayIndex(await time.latest());
@@ -121,7 +121,7 @@ index 3bebd80..0f45a75 100644
        const transfer: TokenTransfer = transfers[i];
        if (transfer.executionDay < previousTransferDay) {
 @@ -495,11 +534,9 @@ describe("Contract 'BalanceTracker'", async () => {
- 
+
          it("The transfer day index is greater than 65536", async () => {
            const context: TestContext = await initTestContext();
 -
