@@ -11,12 +11,14 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use chrono::Utc;
+use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use metrics::atomics::AtomicU64;
 use serde_with::DeserializeFromStr;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
+use revm::primitives::U256 as RevmU256;
 
 #[cfg(debug_assertions)]
 pub static TIME_OFFSET: AtomicU64 = AtomicU64::new(0);
@@ -24,7 +26,7 @@ pub static TIME_OFFSET: AtomicU64 = AtomicU64::new(0);
 #[cfg(debug_assertions)]
 pub static OFFSET_TIME: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, DeserializeFromStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, DeserializeFromStr)]
 pub struct UnixTime(u64);
 
 impl UnixTime {
