@@ -1,9 +1,9 @@
 import { expect } from "chai";
 import { Block } from "web3-types";
 
-import { ALICE } from "./helpers/account";
-import { Network, isStratus } from "./helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, TEST_BALANCE, ZERO, send, sendExpect } from "./helpers/rpc";
+import { ALICE, BOB } from "./helpers/account";
+import { isStratus } from "./helpers/network";
+import { CHAIN_ID, CHAIN_ID_DEC, TEST_BALANCE, ZERO, send, sendExpect, sendRawTransaction } from "./helpers/rpc";
 
 describe("JSON-RPC", () => {
     describe("State", () => {
@@ -69,5 +69,31 @@ describe("JSON-RPC", () => {
                 (await sendExpect("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO])).eq(null);
             }
         });
+    });
+
+    describe("Evm", () => {
+        async function latest(): Promise<{ timestamp: number; block_number: number }> {
+            const block = await send("eth_getBlockByNumber", ["latest", false]);
+            return { timestamp: parseInt(block.timestamp, 16), block_number: parseInt(block.number, 16) };
+        }
+
+        it("evm_mine", async () => {
+            let prev_number = (await latest()).block_number;
+            await send("evm_mine", []);
+            expect((await latest()).block_number).eq(prev_number + 1);
+        });
+
+        it("evm_setNextBlockTimestamp", async () => {
+            let target = Math.floor(Date.now()/1000) + 10;
+            await send("evm_setNextBlockTimestamp", [target]);
+            await send("evm_mine", []);
+            expect((await latest()).timestamp).eq(target);
+
+            //reset
+            await send("evm_setNextBlockTimestamp", [0]);
+            await send("evm_mine", []);
+            expect((await latest()).timestamp).eq(Math.floor(Date.now()/1000));
+        });
+
     });
 });
