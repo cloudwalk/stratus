@@ -75,26 +75,37 @@ pub struct EvmInput {
     pub point_in_time: StoragePointInTime,
 }
 
-// -----------------------------------------------------------------------------
-// Conversions: Other -> Self
-// -----------------------------------------------------------------------------
-impl From<TransactionInput> for EvmInput {
-    fn from(value: TransactionInput) -> Self {
+impl EvmInput {
+    /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
+    pub fn from_eth_transaction(input: TransactionInput) -> Self {
         Self {
-            from: value.signer,
-            to: value.to,
-            value: value.value,
-            data: value.input,
-            gas_limit: value.gas_limit,
+            from: input.signer,
+            to: input.to,
+            value: input.value,
+            data: input.input,
+            gas_limit: input.gas_limit,
             gas_price: Wei::ZERO, // XXX: use value from input?
-            nonce: Some(value.nonce),
+            nonce: Some(input.nonce),
             point_in_time: StoragePointInTime::Present,
         }
     }
-}
 
-impl From<(ExternalTransaction, &ExternalReceipt)> for EvmInput {
-    fn from((tx, receipt): (ExternalTransaction, &ExternalReceipt)) -> Self {
+    /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas`.
+    pub fn from_eth_call(input: CallInput, point_in_time: StoragePointInTime) -> Self {
+        Self {
+            from: input.from.unwrap_or(Address::ZERO),
+            to: input.to.map_into(),
+            value: input.value,
+            data: input.data,
+            gas_limit: Gas::MAX,  // XXX: use value from input?
+            gas_price: Wei::ZERO, // XXX: use value from input?
+            nonce: None,
+            point_in_time,
+        }
+    }
+
+    /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
+    pub fn from_external_transaction(tx: ExternalTransaction, receipt: &ExternalReceipt) -> Self {
         let gas_limit = tx.gas_limit(receipt);
         Self {
             from: tx.0.from.into(),
@@ -105,21 +116,6 @@ impl From<(ExternalTransaction, &ExternalReceipt)> for EvmInput {
             gas_limit,
             gas_price: tx.0.gas_price.expect("gas_price must be set for ExternalTransaction").into(), // XXX: how to handle transactions without gas price?
             point_in_time: StoragePointInTime::Present,
-        }
-    }
-}
-
-impl From<(CallInput, StoragePointInTime)> for EvmInput {
-    fn from(value: (CallInput, StoragePointInTime)) -> Self {
-        Self {
-            from: value.0.from.unwrap_or(Address::ZERO),
-            to: value.0.to.map_into(),
-            value: value.0.value,
-            data: value.0.data,
-            gas_limit: Gas::MAX,  // XXX: use value from input?
-            gas_price: Wei::ZERO, // XXX: use value from input?
-            nonce: None,
-            point_in_time: value.1,
         }
     }
 }
