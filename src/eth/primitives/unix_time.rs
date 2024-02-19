@@ -58,7 +58,6 @@ impl UnixTime {
     pub fn now() -> Self {
         let offset_time = OFFSET_TIME.load(Acquire);
         let time_offset = TIME_OFFSET.load(Acquire);
-        let now = Utc::now().timestamp() as u64;
         match offset_time {
             0 => Self(Utc::now().timestamp() as u64 + time_offset),
             _ => {
