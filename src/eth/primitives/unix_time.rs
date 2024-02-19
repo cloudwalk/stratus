@@ -9,7 +9,10 @@
 use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::str::FromStr;
+use std::sync::atomic::Ordering::Acquire;
+use std::sync::atomic::Ordering::SeqCst;
 
+use anyhow::anyhow;
 use chrono::Utc;
 use ethereum_types::U256;
 use fake::Dummy;
@@ -18,6 +21,8 @@ use metrics::atomics::AtomicU64;
 use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
+
+use crate::log_and_err;
 
 #[cfg(debug_assertions)]
 pub static TIME_OFFSET: AtomicU64 = AtomicU64::new(0);
@@ -31,16 +36,34 @@ pub struct UnixTime(u64);
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
 
+    pub fn set_offset(timestamp: UnixTime) -> anyhow::Result<()> {
+        let now = Utc::now().timestamp() as u64;
+
+        if *timestamp != 0 && *timestamp < now {
+            return log_and_err!("timestamp can't be in the past");
+        }
+
+        let diff: u64 = if *timestamp == 0 { 0 } else { *timestamp - now };
+        match OFFSET_TIME.fetch_update(SeqCst, SeqCst, |_| Some(*timestamp)) {
+            Ok(_) => {}
+            Err(_) => return log_and_err!("failed to to set the next block's timestamp"),
+        };
+        match TIME_OFFSET.fetch_update(SeqCst, SeqCst, |_| Some(diff)) {
+            Ok(_) => Ok(()),
+            Err(_) => log_and_err!("failed to to set the offset"),
+        }
+    }
+
     #[cfg(debug_assertions)]
     pub fn now() -> Self {
-        let offset_time = OFFSET_TIME.load(std::sync::atomic::Ordering::Acquire);
-        let time_offset = TIME_OFFSET.load(std::sync::atomic::Ordering::Acquire);
+        let offset_time = OFFSET_TIME.load(Acquire);
+        let time_offset = TIME_OFFSET.load(Acquire);
         let now = Utc::now().timestamp() as u64;
         tracing::debug!(now, "NOW");
         match offset_time {
             0 => Self(Utc::now().timestamp() as u64 + time_offset),
             _ => {
-                let _ = OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(0));
+                let _ = OFFSET_TIME.fetch_update(SeqCst, SeqCst, |_| Some(0));
                 Self(offset_time)
             }
         }

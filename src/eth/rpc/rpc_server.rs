@@ -3,7 +3,6 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::Utc;
 use ethereum_types::U256;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -28,8 +27,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
-use crate::eth::primitives::OFFSET_TIME;
-use crate::eth::primitives::TIME_OFFSET;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -174,22 +171,8 @@ async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<J
 #[cfg(debug_assertions)]
 async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    let now = Utc::now().timestamp() as u64;
-
-    if *timestamp != 0 && *timestamp < now {
-        return Err(anyhow::anyhow!("timestamp can't be in the past").into());
-    }
-
-    let diff: u64 = if *timestamp == 0 { 0 } else { *timestamp - now };
-
-    match OFFSET_TIME.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(*timestamp)) {
-        Ok(_) => {}
-        Err(_) => return Err(anyhow::anyhow!("failed to to set the next block's timestamp").into()),
-    };
-    match TIME_OFFSET.fetch_update(std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst, |_| Some(diff)) {
-        Ok(_) => Ok(serde_json::to_value(timestamp).unwrap()),
-        Err(_) => Err(anyhow::anyhow!("failed to to set the offset").into()),
-    }
+    UnixTime::set_offset(timestamp)?;
+    Ok(serde_json::to_value(timestamp).unwrap())
 }
 
 // Status
