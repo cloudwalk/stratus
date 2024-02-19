@@ -26,6 +26,7 @@ use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::UnixTime;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -102,6 +103,11 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
 
 fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyhow::Result<RpcModule<RpcContext>> {
     // debug
+    #[cfg(debug_assertions)]
+    module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
+    #[cfg(debug_assertions)]
+    module.register_async_method("evm_mine", evm_mine)?;
+
     if env.is_development() {
         module.register_async_method("debug_setHead", debug_set_head)?;
     }
@@ -154,6 +160,19 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number).await?;
     Ok(serde_json::to_value(number).unwrap())
+}
+
+#[cfg(debug_assertions)]
+async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    ctx.executor.mine_empty_block().await?;
+    Ok(serde_json::to_value(true).unwrap())
+}
+
+#[cfg(debug_assertions)]
+async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
+    UnixTime::set_offset(timestamp)?;
+    Ok(serde_json::to_value(timestamp).unwrap())
 }
 
 // Status

@@ -1,0 +1,22 @@
+diff --git a/test/MultiSigWallet.test.ts b/test/MultiSigWallet.test.ts
+index f7c3dfd..5265851 100644
+--- a/test/MultiSigWallet.test.ts
++++ b/test/MultiSigWallet.test.ts
+@@ -773,11 +773,17 @@ describe("MultiSigWallet contract", () => {
+         value: 0,
+         data: TX_DATA_STUB
+       };
++      async function latest(): Promise<number> {
++        return parseInt((await ethers.provider.send("eth_getBlockByNumber", ["latest", false])).timestamp, 16);
++      }
+
+       async function wait(timeoutInSeconds: number) {
++        // Sends a RPC request to the blockchain.
+         if (network.name === "hardhat") {
+           // A virtual wait through network time shifting
+           await time.increase(timeoutInSeconds);
++        } else if (network.name === "stratus") {
++          await ethers.provider.send("evm_setNextBlockTimestamp", [await latest() + timeoutInSeconds])
+         } else {
+           // A real wait through a promise
+           const timeoutInMills = timeoutInSeconds * 1000;

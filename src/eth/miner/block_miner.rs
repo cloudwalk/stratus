@@ -40,6 +40,13 @@ impl BlockMiner {
         Block::new_with_capacity(BlockNumber::ZERO, UnixTime::from(1702568764), 0)
     }
 
+    /// Mine one block with no transactions.
+    #[cfg(debug_assertions)]
+    pub async fn mine_with_no_transactions(&mut self) -> anyhow::Result<Block> {
+        let number = self.storage.increment_block_number().await?;
+        Ok(Block::new_with_capacity(number, UnixTime::now(), 0))
+    }
+
     /// Mine one block with a single transaction.
     /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
     /// enabling consistent processing for both single and multiple transaction scenarios.

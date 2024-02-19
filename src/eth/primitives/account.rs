@@ -35,6 +35,16 @@ pub struct Account {
 }
 
 impl Account {
+    /// Creates a new account with initial balance.
+    pub fn new_with_balance(address: Address, balance: Wei) -> Self {
+        Self {
+            address,
+            nonce: Nonce::ZERO,
+            balance,
+            bytecode: None,
+        }
+    }
+
     /// Checks the current account is a contract.
     pub fn is_contract(&self) -> bool {
         match self.bytecode {
