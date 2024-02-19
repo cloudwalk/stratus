@@ -15,10 +15,10 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use metrics::atomics::AtomicU64;
+use revm::primitives::U256 as RevmU256;
 use serde_with::DeserializeFromStr;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
-use revm::primitives::U256 as RevmU256;
 
 #[cfg(debug_assertions)]
 pub static TIME_OFFSET: AtomicU64 = AtomicU64::new(0);
@@ -31,7 +31,6 @@ pub struct UnixTime(u64);
 
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
-
 
     #[cfg(debug_assertions)]
     pub fn now() -> Self {

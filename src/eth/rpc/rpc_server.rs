@@ -115,7 +115,6 @@ fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyh
         module.register_async_method("debug_setHead", debug_set_head)?;
     }
 
-
     // blockchain
     module.register_async_method("net_version", net_version)?;
     module.register_async_method("net_listening", net_listening)?;
