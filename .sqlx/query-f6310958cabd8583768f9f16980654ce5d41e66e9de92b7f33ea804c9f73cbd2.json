@@ -10,7 +10,7 @@
         "Bytea",
         "Numeric",
         "Bytea",
-        "Int4",
+        "Int8",
         "Bytea"
       ]
     },

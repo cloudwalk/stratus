@@ -31,16 +31,6 @@ describe("Transaction: serial transfer", () => {
     it("Resets blockchain", async () => {
         await sendReset();
     });
-    it("Send transaction without any gas, that should fail", async () => {
-        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER, 0, 0);
-        _txSentTimestamp = Math.floor(Date.now() / 1000);
-        _txHash = await sendRawTransaction(txSigned);
-        expect(_txHash).eq(undefined);
-        expect(await send("eth_blockNumber")).eq(ZERO);
-
-        _block = await send("eth_getBlockByNumber", [ONE, true]);
-        expect(_txHash).to.satisfy((hash) => hash === undefined || hash === null, 'Variable should be either undefined or null');
-    });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
         _txSentTimestamp = Math.floor(Date.now() / 1000);

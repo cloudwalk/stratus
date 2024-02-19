@@ -92,7 +92,7 @@ impl EvmInput {
             to: input.to,
             value: input.value,
             data: input.input,
-            gas_limit: input.gas_limit,
+            gas_limit: Gas::MAX,
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: Some(input.nonce),
             block_number: BlockNumber::ZERO, // TODO: use number of block being mined
