@@ -36,6 +36,7 @@ pub struct UnixTime(u64);
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
 
+    #[cfg(debug_assertions)]
     pub fn set_offset(timestamp: UnixTime) -> anyhow::Result<()> {
         let now = Utc::now().timestamp() as u64;
 
