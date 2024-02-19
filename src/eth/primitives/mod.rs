@@ -197,27 +197,25 @@ mod tests {
     gen_test_serde!(TransactionMined);
     gen_test_serde!(Wei);
 
+    // TODO: move these tests to block_header module
     #[test]
     fn block_hash_calculation() {
-        let number: BlockNumber = 0x0.into();
-        let timestamp_in_secs = 1234567890;
-        let b = BlockHeader::new(number, timestamp_in_secs);
-        assert_eq!(b.hash.to_string(), "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce");
+        let header = BlockHeader::new(BlockNumber::ZERO, UnixTime::from(1234567890));
+        assert_eq!(header.hash.to_string(), "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce");
     }
 
     #[test]
     fn parent_hash() {
-        let number: BlockNumber = 0x1.into();
-        let timestamp_in_secs = 1234567891;
-        let b = BlockHeader::new(number, timestamp_in_secs);
-        assert_eq!(b.parent_hash.to_string(), "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce");
+        let header = BlockHeader::new(BlockNumber::ONE, UnixTime::from(1234567891));
+        assert_eq!(
+            header.parent_hash.to_string(),
+            "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce"
+        );
     }
 
     #[test]
     fn genesis_parent_hash() {
-        let number: BlockNumber = 0x0.into();
-        let timestamp_in_secs = 1234567890;
-        let b = BlockHeader::new(number, timestamp_in_secs);
-        assert_eq!(b.parent_hash, Hash::zero());
+        let header = BlockHeader::new(BlockNumber::ZERO, UnixTime::from(1234567890));
+        assert_eq!(header.parent_hash, Hash::zero());
     }
 }

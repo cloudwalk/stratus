@@ -18,6 +18,7 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
+use crate::eth::primitives::UnixTime;
 use crate::log_and_err;
 
 pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
@@ -38,8 +39,7 @@ pub struct Execution {
     pub gas: Gas,
 
     /// Assumed block timestamp during the execution.
-    // TODO: use UnixTime type
-    pub block_timestamp_in_secs: u64,
+    pub block_timestamp: UnixTime,
 
     /// Storage changes that happened during the transaction execution.
     pub changes: Vec<ExecutionAccountChanges>,

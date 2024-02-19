@@ -42,7 +42,7 @@ impl From<ExternalBlock> for Block {
                 transactions_root: value.transactions_root.into(),
                 gas: value.gas_used.into(),
                 bloom: value.logs_bloom.unwrap().into(),
-                timestamp_in_secs: value.timestamp.as_u64().into(),
+                timestamp: value.timestamp.into(),
                 parent_hash: value.parent_hash.into(),
             },
             transactions: vec![],

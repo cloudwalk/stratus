@@ -30,6 +30,7 @@ pub struct UnixTime(u64);
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
 
+
     #[cfg(debug_assertions)]
     pub fn now() -> Self {
         let offset_time = OFFSET_TIME.load(std::sync::atomic::Ordering::Acquire);
@@ -84,6 +85,12 @@ impl From<u64> for UnixTime {
     }
 }
 
+impl From<U256> for UnixTime {
+    fn from(value: U256) -> Self {
+        value.low_u64().into()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
@@ -108,18 +115,24 @@ impl sqlx::Type<sqlx::Postgres> for UnixTime {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
+impl From<UnixTime> for RevmU256 {
+    fn from(value: UnixTime) -> Self {
+        Self::from_limbs([value.0, 0, 0, 0])
+    }
+}
+
 impl TryFrom<UnixTime> for i64 {
     type Error = TryFromIntError;
 
-    fn try_from(timestamp_in_secs: UnixTime) -> Result<i64, TryFromIntError> {
-        timestamp_in_secs.0.try_into()
+    fn try_from(timestamp: UnixTime) -> Result<i64, TryFromIntError> {
+        timestamp.0.try_into()
     }
 }
 
 impl TryFrom<UnixTime> for i32 {
     type Error = TryFromIntError;
 
-    fn try_from(timestamp_in_secs: UnixTime) -> Result<i32, TryFromIntError> {
-        timestamp_in_secs.0.try_into()
+    fn try_from(timestamp: UnixTime) -> Result<i32, TryFromIntError> {
+        timestamp.0.try_into()
     }
 }

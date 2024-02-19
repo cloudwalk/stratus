@@ -20,6 +20,7 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -29,9 +30,9 @@ pub struct Block {
 
 impl Block {
     /// Creates a new block with the given number and transactions capacity.
-    pub fn new_with_capacity(number: BlockNumber, timestamp_in_secs: u64, capacity: usize) -> Self {
+    pub fn new_with_capacity(number: BlockNumber, timestamp: UnixTime, capacity: usize) -> Self {
         Self {
-            header: BlockHeader::new(number, timestamp_in_secs),
+            header: BlockHeader::new(number, timestamp),
             transactions: Vec::with_capacity(capacity),
         }
     }

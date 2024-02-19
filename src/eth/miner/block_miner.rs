@@ -37,7 +37,7 @@ impl BlockMiner {
     /// Constructs the genesis block, the first block in the blockchain.
     /// This block serves as the foundation of the blockchain, with a fixed state and no previous block.
     pub fn genesis() -> Block {
-        Block::new_with_capacity(BlockNumber::ZERO, 1702568764, 0)
+        Block::new_with_capacity(BlockNumber::ZERO, UnixTime::from(1702568764), 0)
     }
 
     /// Mine one block with no transactions.
@@ -63,11 +63,11 @@ impl BlockMiner {
     pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, Execution)>) -> anyhow::Result<Block> {
         // init block
         let number = self.storage.increment_block_number().await?;
-        let block_timpestamp = transactions
-            .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp_in_secs.cmp(&e2.block_timestamp_in_secs))
+        let block_timestamp = transactions
+            .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp.cmp(&e2.block_timestamp))
             .1
-            .block_timestamp_in_secs;
-        let mut block = Block::new_with_capacity(number, block_timpestamp, transactions.len());
+            .block_timestamp;
+        let mut block = Block::new_with_capacity(number, block_timestamp, transactions.len());
 
         // mine transactions and logs
         let mut log_index = Index::ZERO;
