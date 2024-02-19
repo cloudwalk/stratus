@@ -8,7 +8,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use chrono::Utc;
 use itertools::Itertools;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
@@ -42,6 +41,7 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::UnixTime;
 use crate::eth::storage::EthStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -77,7 +77,7 @@ impl Evm for Revm {
 
         // configure evm block
         evm.env.block.basefee = U256::ZERO;
-        evm.env.block.timestamp = U256::from(session.block_timestamp_in_secs);
+        evm.env.block.timestamp = session.block_timestamp.into();
 
         // configure database
         evm.database(session);
@@ -105,7 +105,7 @@ impl Evm for Revm {
         match evm_result {
             Ok(result) => {
                 let session = evm.take_db();
-                Ok(parse_revm_execution(result, session.block_timestamp_in_secs, session.storage_changes)?)
+                Ok(parse_revm_execution(result, session.block_timestamp, session.storage_changes)?)
             }
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
@@ -127,8 +127,8 @@ struct RevmDatabaseSession {
     /// Point in time of the storage during the transaction execution.
     storage_point_in_time: StoragePointInTime,
 
-    /// Block timestamp in seconds.
-    block_timestamp_in_secs: u64,
+    /// Block timestamp.
+    block_timestamp: UnixTime,
 
     /// Address in the `to` field.
     to: Option<Address>,
@@ -142,7 +142,7 @@ impl RevmDatabaseSession {
         Self {
             storage,
             storage_point_in_time,
-            block_timestamp_in_secs: Utc::now().timestamp() as u64,
+            block_timestamp: UnixTime::now(),
             to,
             storage_changes: Default::default(),
         }
@@ -235,11 +235,7 @@ impl Inspector<RevmDatabaseSession> for RevmInspector {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(
-    revm_result: RevmResultAndState,
-    execution_block_timestamp_in_secs: u64,
-    execution_changes: ExecutionChanges,
-) -> anyhow::Result<Execution> {
+fn parse_revm_execution(revm_result: RevmResultAndState, block_timestamp: UnixTime, execution_changes: ExecutionChanges) -> anyhow::Result<Execution> {
     let (result, output, logs, gas) = parse_revm_result(revm_result.result);
     let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
 
@@ -249,7 +245,7 @@ fn parse_revm_execution(
         output,
         logs,
         gas,
-        block_timestamp_in_secs: execution_block_timestamp_in_secs,
+        block_timestamp,
         changes: execution_changes.into_values().collect(),
     })
 }

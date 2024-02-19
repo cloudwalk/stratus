@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     ,transactions_root BYTEA NOT NULL CHECK (LENGTH(transactions_root) = 32)
     ,gas NUMERIC NOT NULL CHECK (gas >= 0)
     ,logs_bloom BYTEA NOT NULL CHECK (LENGTH(logs_bloom) = 256)
-    ,timestamp_in_secs INTEGER NOT NULL CHECK (timestamp_in_secs >= 0) -- UNIQUE
+    ,timestamp_in_secs INTEGER NOT NULL CHECK (timestamp_in_secs >= 0) -- UNIQUE | TODO: INTEGER is the wrong type for timestamps
     ,parent_hash BYTEA NOT NULL CHECK (LENGTH(parent_hash) = 32) UNIQUE
     ,created_at TIMESTAMP NOT NULL
     ,PRIMARY KEY (number, hash)
