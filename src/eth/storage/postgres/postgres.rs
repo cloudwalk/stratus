@@ -423,7 +423,7 @@ impl EthStorage for Postgres {
             block.header.transactions_root.as_ref(),
             BigDecimal::try_from(block.header.gas)?,
             block.header.bloom.as_ref(),
-            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?, // TODO: this is wrong, it should be using a type that support u64
+            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
             block.header.parent_hash.as_ref()
         )
         .execute(&mut *tx)
