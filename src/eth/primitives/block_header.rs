@@ -36,20 +36,20 @@ pub struct BlockHeader {
     pub transactions_root: Hash,
     pub gas: Gas,
     pub bloom: LogsBloom,
-    pub timestamp_in_secs: UnixTime,
+    pub timestamp: UnixTime,
     pub parent_hash: Hash,
 }
 
 impl BlockHeader {
     /// Creates a new block header with the given number.
-    pub fn new(number: BlockNumber, timestamp_in_secs: u64) -> Self {
+    pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
         Self {
             number,
             hash: number.hash(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
             gas: Gas::ZERO,
             bloom: LogsBloom::default(),
-            timestamp_in_secs: UnixTime::from(timestamp_in_secs),
+            timestamp,
             parent_hash: number.prev().map(|n| n.hash()).unwrap_or(Hash::zero()),
         }
     }
@@ -63,7 +63,7 @@ impl Dummy<Faker> for BlockHeader {
             transactions_root: faker.fake_with_rng(rng),
             gas: faker.fake_with_rng(rng),
             bloom: Default::default(),
-            timestamp_in_secs: faker.fake_with_rng(rng),
+            timestamp: faker.fake_with_rng(rng),
             parent_hash: faker.fake_with_rng(rng),
         }
     }
@@ -89,7 +89,7 @@ where
             parent_hash: header.parent_hash.into(),
 
             // mining: identifiers
-            timestamp: (*header.timestamp_in_secs).into(),
+            timestamp: (*header.timestamp).into(),
             author: Some(Address::COINBASE.into()),
 
             // minining: difficulty

@@ -9,16 +9,24 @@
 use std::num::TryFromIntError;
 use std::ops::Deref;
 
+use chrono::Utc;
+use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
+use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
 
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
+
+    /// Returns the current Unix time.
+    pub fn now() -> Self {
+        Self(Utc::now().timestamp() as u64)
+    }
 }
 
 impl Deref for UnixTime {
@@ -42,6 +50,12 @@ impl Dummy<Faker> for UnixTime {
 impl From<u64> for UnixTime {
     fn from(value: u64) -> Self {
         UnixTime(value)
+    }
+}
+
+impl From<U256> for UnixTime {
+    fn from(value: U256) -> Self {
+        value.low_u64().into()
     }
 }
 
@@ -69,18 +83,24 @@ impl sqlx::Type<sqlx::Postgres> for UnixTime {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
+impl From<UnixTime> for RevmU256 {
+    fn from(value: UnixTime) -> Self {
+        Self::from_limbs([value.0, 0, 0, 0])
+    }
+}
+
 impl TryFrom<UnixTime> for i64 {
     type Error = TryFromIntError;
 
-    fn try_from(timestamp_in_secs: UnixTime) -> Result<i64, TryFromIntError> {
-        timestamp_in_secs.0.try_into()
+    fn try_from(timestamp: UnixTime) -> Result<i64, TryFromIntError> {
+        timestamp.0.try_into()
     }
 }
 
 impl TryFrom<UnixTime> for i32 {
     type Error = TryFromIntError;
 
-    fn try_from(timestamp_in_secs: UnixTime) -> Result<i32, TryFromIntError> {
-        timestamp_in_secs.0.try_into()
+    fn try_from(timestamp: UnixTime) -> Result<i32, TryFromIntError> {
+        timestamp.0.try_into()
     }
 }

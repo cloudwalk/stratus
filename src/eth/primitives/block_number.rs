@@ -30,6 +30,7 @@ pub struct BlockNumber(U64);
 
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());
+    pub const ONE: BlockNumber = BlockNumber(U64::one());
 
     /// Calculates the keccak256 hash of the block number.
     pub fn hash(&self) -> Hash {
