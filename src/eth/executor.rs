@@ -86,7 +86,8 @@ impl EthExecutor {
             // re-execute transaction
             let json_tx = serde_json::to_string(&tx).unwrap();
             let json_receipt = serde_json::to_string(&receipt).unwrap();
-            let execution = self.execute_in_evm((tx.clone(), receipt).into()).await;
+            let evm_input = EvmInput::from_external_transaction(tx.clone(), receipt);
+            let execution = self.execute_in_evm(evm_input).await;
 
             // handle execution result
             match execution {
@@ -118,12 +119,14 @@ impl EthExecutor {
                 .get(&external_transaction.hash)
                 .ok_or(anyhow!("receipt not found for transaction {}", external_transaction.hash))?;
 
+            // TODO: this conversion should probably not be happening and instead the external transaction can be used directly
             let transaction_input: TransactionInput = match external_transaction.to_owned().try_into() {
                 Ok(transaction_input) => transaction_input,
                 Err(e) => return Err(anyhow!("failed to convert external transaction into TransactionInput: {:?}", e)),
             };
 
-            let execution = self.execute_in_evm(transaction_input.clone().into()).await?;
+            let evm_input = EvmInput::from_eth_transaction(transaction_input.clone());
+            let execution = self.execute_in_evm(evm_input).await?;
 
             execution.compare_with_receipt(external_receipt)?;
 
@@ -176,7 +179,8 @@ impl EthExecutor {
         // TODO: must have a stop condition like timeout or max number of retries
         let (execution, block) = loop {
             // execute and check conflicts before mining block
-            let execution = self.execute_in_evm(transaction.clone().into()).await?;
+            let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+            let execution = self.execute_in_evm(evm_input).await?;
             if let Some(conflicts) = self.eth_storage.check_conflicts(&execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;
@@ -223,7 +227,8 @@ impl EthExecutor {
             "executing read-only transaction"
         );
 
-        let execution = self.execute_in_evm((input, point_in_time).into()).await?;
+        let evm_input = EvmInput::from_eth_call(input, point_in_time);
+        let execution = self.execute_in_evm(evm_input).await?;
         Ok(execution)
     }
 
