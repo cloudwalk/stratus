@@ -25,7 +25,9 @@ pub trait EthStorage: Send + Sync {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    // Retrieves the last mined block number.
+    /// Retrieves the current block number.
+    ///
+    // The current block number is the latest block that was mined.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Atomically increments the block number, returning the new value.
@@ -53,13 +55,13 @@ pub trait EthStorage: Send + Sync {
     /// Retrieves logs from the storage.
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
-    /// Persists atomically all changes from a block.
+    /// Persists block with transactions and account changes.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
-    /// Persists initial accounts (test accounts or genesis accounts).
-    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
+    /// Persists accounts with initial state (test accounts or genesis accounts).
+    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
-    /// Temporarily stores account changes during block production
+    /// Persists accounts changes from an execution without having to create a new block.
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
 
     /// Resets all state to a specific block number.
