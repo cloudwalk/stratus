@@ -20,7 +20,6 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterTopicCombination;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::storage::EthStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 

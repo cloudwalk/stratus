@@ -31,7 +31,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::postgres::types::PostgresLog;
 use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
-use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
 use crate::eth::storage::PermanentStorage;
 use crate::infra::postgres::Postgres;
