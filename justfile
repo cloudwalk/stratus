@@ -262,3 +262,20 @@ contracts-test-brlc-compound:
 # Contracts: Remove all the cloned repositories
 contracts-remove:
     cd e2e-contracts && ./remove-contracts.sh
+
+# Contracts: Start Stratus and run contracts test
+contracts-test-stratus:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    RUST_LOG=info just run -a 0.0.0.0:3000 &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+
+    echo "-> Running E2E Contracts tests"
+    just e2e-contracts
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
