@@ -26,7 +26,6 @@ use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::UnixTime;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -38,7 +37,6 @@ use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
-use crate::log_and_err;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -171,6 +169,9 @@ async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<J
 
 #[cfg(feature = "evm-set-timestamp")]
 async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    use crate::eth::primitives::UnixTime;
+    use crate::log_and_err;
+
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
     let latest = ctx.storage.read_block(&BlockSelection::Latest).await?;
     match latest {

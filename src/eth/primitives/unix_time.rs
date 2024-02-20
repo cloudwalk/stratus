@@ -13,7 +13,9 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicI64;
 #[cfg(feature = "evm-set-timestamp")]
 use std::sync::atomic::AtomicU64;
+#[cfg(feature = "evm-set-timestamp")]
 use std::sync::atomic::Ordering::Acquire;
+#[cfg(feature = "evm-set-timestamp")]
 use std::sync::atomic::Ordering::SeqCst;
 
 use chrono::Utc;
@@ -23,8 +25,6 @@ use fake::Faker;
 use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
-
-use crate::log_and_err;
 
 #[cfg(feature = "evm-set-timestamp")]
 pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
@@ -40,6 +40,7 @@ impl UnixTime {
 
     #[cfg(feature = "evm-set-timestamp")]
     pub fn set_offset(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
+        use crate::log_and_err;
         let now = Utc::now().timestamp() as u64;
 
         if *timestamp != 0 && *timestamp < *latest_timestamp {
