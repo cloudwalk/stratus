@@ -197,7 +197,7 @@ impl EthExecutor {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?;
-            if let Some(conflicts) = self.storage.check_conflicts(&execution).await? {
+            if let Some(conflicts) = TemporaryStorage::check_conflicts(&*self.storage, &execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;
             }

@@ -12,6 +12,8 @@ use clap::Parser;
 use nonempty::NonEmpty;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
+use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
@@ -180,12 +182,11 @@ pub enum StorageConfig {
 impl StorageConfig {
     /// Initializes the storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let postgres = match self {
+        let perm = match self {
             // Self::InMemory => Ok(Arc::new(InMemoryStorage::default().metrified())),
-            Self::Postgres { url } => Arc::new(Postgres::new(url).await?),
+            Self::Postgres { url } => Arc::new(RwLock::new(Postgres::new(url).await?)),
             _ => {todo!()}
         };
-        let perm = postgres;
         Ok(Arc::new(
             StratusStorage::new(
                     InMemoryStorage::default(),

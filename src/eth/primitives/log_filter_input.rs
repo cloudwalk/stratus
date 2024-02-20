@@ -22,6 +22,7 @@ use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::StratusStorage;
+use crate::eth::storage::TemporaryStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
 #[serde_as]
@@ -63,7 +64,7 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Present => storage.read_current_block_number().await?,
+            StoragePointInTime::Present => TemporaryStorage::read_current_block_number(&**storage).await?,
             StoragePointInTime::Past(number) => number,
         };
         let to = match to {
