@@ -45,7 +45,7 @@ pub trait PermanentStorage: Send + Sync {
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
     /// Persists initial accounts (test accounts or genesis accounts).
-    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
+    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
