@@ -9,33 +9,27 @@ source $(dirname $0)/_functions.sh
 # ------------------------------------------------------------------------------
 
 # Clone a project to the projects directory.
-clone() {
+remove() {
     repo=$1
     target=repos/$repo
 
-    mkdir -p repos
-
     if [ -d $target ]; then
-        log "Updating: $repo"
-        git -C $target pull
+        log "Removing: $repo"
+        rm -rf $target
     else
-        log "Cloning: $repo"
-        # git clone git@github.com:cloudwalk/$repo.git $target
-        git clone https://github.com/cloudwalk/$repo.git $target
+        log "Already removed: $repo"
+        log "Nothing to do, leaving"
     fi
-
-    log "Installing dependencies: $repo"
-    npm --prefix $target --silent install
 }
 
 # ------------------------------------------------------------------------------
 # Execution
 # ------------------------------------------------------------------------------
 
-log "Cloning or updating repositories"
-clone brlc-multisig
-clone brlc-periphery
-clone brlc-token
-clone compound-periphery
-clone brlc-yield-streamer
-clone brlc-pix-cashier
+log "Removing repositories"
+remove brlc-multisig
+remove brlc-periphery
+remove brlc-token
+remove compound-periphery
+remove brlc-yield-streamer
+remove brlc-pix-cashier

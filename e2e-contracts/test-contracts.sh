@@ -21,9 +21,13 @@ test() {
 
     # test
     npx hardhat test --bail --network stratus test/$test.test.ts
+    result_code=$?
 
     # go back to previous directory
     cd -
+
+    # exit with same return code as the test
+    exit $result_code
 }
 
 # ------------------------------------------------------------------------------
