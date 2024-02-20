@@ -28,7 +28,7 @@ use crate::log_and_err;
 pub static TIME_OFFSET: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(debug_assertions)]
-pub static OFFSET_TIME: AtomicU64 = AtomicU64::new(0);
+pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
@@ -45,7 +45,7 @@ impl UnixTime {
         }
 
         let diff: u64 = if *timestamp == 0 { 0 } else { *timestamp - now };
-        match OFFSET_TIME.fetch_update(SeqCst, SeqCst, |_| Some(*timestamp)) {
+        match NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(*timestamp)) {
             Ok(_) => {}
             Err(_) => return log_and_err!("failed to to set the next block's timestamp"),
         };
@@ -57,12 +57,12 @@ impl UnixTime {
 
     #[cfg(debug_assertions)]
     pub fn now() -> Self {
-        let offset_time = OFFSET_TIME.load(Acquire);
+        let offset_time = NEXT_TIMESTAMP.load(Acquire);
         let time_offset = TIME_OFFSET.load(Acquire);
         match offset_time {
             0 => Self(Utc::now().timestamp() as u64 + time_offset),
             _ => {
-                let _ = OFFSET_TIME.fetch_update(SeqCst, SeqCst, |_| Some(0));
+                let _ = NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(0));
                 Self(offset_time)
             }
         }
