@@ -232,7 +232,7 @@ impl EthStorage for InMemoryStorage {
         Ok(())
     }
 
-    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
         let mut state = self.lock_write().await;
