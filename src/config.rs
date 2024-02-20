@@ -184,7 +184,7 @@ impl StorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let perm = match self {
             // Self::InMemory => Ok(Arc::new(InMemoryStorage::default().metrified())),
-            Self::Postgres { url } => Arc::new(RwLock::new(Postgres::new(url).await?)),
+            Self::Postgres { url } => Arc::new(Postgres::new(url).await?),
             _ => {todo!()}
         };
         Ok(Arc::new(

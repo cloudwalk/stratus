@@ -50,9 +50,17 @@ impl InMemoryStorage {
     }
 
     /// Resets state and returns it
-    pub fn flush(&mut self) {
-        self.state = RwLock::new(InMemoryStorageState::default());
-        self.block_number = Default::default();
+    pub async fn flush(&self) {
+        // self.state = RwLock::new(InMemoryStorageState::default());
+        // self.block_number = Default::default();
+        let mut state = self.lock_write().await;
+        state.accounts.clear();
+        state.transactions.clear();
+        state.blocks_by_hash.clear();
+        state.blocks_by_number.clear();
+        state.logs.clear();
+
+        self.block_number.store(0, Ordering::SeqCst);
     }
 }
 
