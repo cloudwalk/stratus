@@ -47,14 +47,10 @@ impl UnixTime {
         }
 
         let diff: i64 = if *timestamp == 0 { 0 } else { (*timestamp as i128 - now as i128) as i64 };
-        match NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(*timestamp)) {
-            Ok(_) => {}
-            Err(_) => return log_and_err!("failed to to set the next block's timestamp"),
-        };
-        match TIME_OFFSET.fetch_update(SeqCst, SeqCst, |_| Some(diff)) {
-            Ok(_) => Ok(()),
-            Err(_) => log_and_err!("failed to to set the offset"),
-        }
+        tracing::debug!(?diff);
+        NEXT_TIMESTAMP.store(*timestamp, SeqCst);
+        TIME_OFFSET.store(diff, SeqCst);
+        Ok(())
     }
 
     #[cfg(debug_assertions)]
