@@ -14,6 +14,7 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
+use crate::log_and_err;
 use crate::config::Environment;
 use crate::config::StratusConfig;
 use crate::eth::primitives::Address;
@@ -169,9 +170,13 @@ async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<J
 }
 
 #[cfg(debug_assertions)]
-async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    UnixTime::set_offset(timestamp)?;
+    let latest = ctx.storage.read_block(&BlockSelection::Latest).await?;
+    match latest {
+        Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
+        None => return log_and_err!("reading latest block returned None")?
+    }
     Ok(serde_json::to_value(timestamp).unwrap())
 }
 

@@ -12,12 +12,14 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering::Acquire;
 use std::sync::atomic::Ordering::SeqCst;
 
-use anyhow::anyhow;
 use chrono::Utc;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-use metrics::atomics::AtomicU64;
+#[cfg(debug_assertions)]
+use std::sync::atomic::AtomicI64;
+#[cfg(debug_assertions)]
+use std::sync::atomic::AtomicU64;
 use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
@@ -25,7 +27,7 @@ use sqlx::error::BoxDynError;
 use crate::log_and_err;
 
 #[cfg(debug_assertions)]
-pub static TIME_OFFSET: AtomicU64 = AtomicU64::new(0);
+pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
 
 #[cfg(debug_assertions)]
 pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
@@ -37,14 +39,14 @@ impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
 
     #[cfg(debug_assertions)]
-    pub fn set_offset(timestamp: UnixTime) -> anyhow::Result<()> {
+    pub fn set_offset(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
         let now = Utc::now().timestamp() as u64;
 
-        if *timestamp != 0 && *timestamp < now {
-            return log_and_err!("timestamp can't be in the past");
+        if *timestamp != 0 && *timestamp < *latest_timestamp {
+            return log_and_err!("timestamp can't be before the latest block");
         }
 
-        let diff: u64 = if *timestamp == 0 { 0 } else { *timestamp - now };
+        let diff: i64 = if *timestamp == 0 { 0 } else { (*timestamp as i128 - now as i128) as i64 };
         match NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(*timestamp)) {
             Ok(_) => {}
             Err(_) => return log_and_err!("failed to to set the next block's timestamp"),
@@ -60,7 +62,7 @@ impl UnixTime {
         let offset_time = NEXT_TIMESTAMP.load(Acquire);
         let time_offset = TIME_OFFSET.load(Acquire);
         match offset_time {
-            0 => Self(Utc::now().timestamp() as u64 + time_offset),
+            0 => Self((Utc::now().timestamp() as i128 + time_offset as i128) as u64),
             _ => {
                 let _ = NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(0));
                 Self(offset_time)
