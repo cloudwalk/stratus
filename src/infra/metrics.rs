@@ -92,7 +92,10 @@ metrics! {
     histogram storage_save_block{success},
 
     "Duration of storage reset operation."
-    histogram storage_reset{success}
+    histogram storage_reset{success},
+
+    "Duration of storage commit operation."
+    histogram storage_commit{success}
 }
 
 // -----------------------------------------------------------------------------

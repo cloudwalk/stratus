@@ -2,6 +2,9 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 
+use super::PermanentStorage;
+use super::StratusStorage;
+use super::TemporaryStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -16,42 +19,18 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+use crate::eth::storage::EthStorage;
 use crate::infra::metrics;
 
 /// Proxy storage that tracks metrics.
-pub struct MetrifiedStorage<T: EthStorage> {
-    inner: T,
+pub struct MetrifiedStorage{
+    inner: StratusStorage,
 }
 
-impl<T: EthStorage> MetrifiedStorage<T> {
-    pub fn new(inner: T) -> Self {
+impl MetrifiedStorage {
+    pub fn new(inner: StratusStorage) -> Self {
         Self { inner }
-    }
-}
-
-#[async_trait]
-impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let start = Instant::now();
-        let result = self.inner.check_conflicts(execution).await;
-        metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
-        result
-    }
-
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let start = Instant::now();
-        let result = self.inner.read_current_block_number().await;
-        metrics::inc_storage_read_current_block_number(start.elapsed(), result.is_ok());
-        result
-    }
-
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let start = Instant::now();
-        let result = self.inner.increment_block_number().await;
-        metrics::inc_storage_increment_block_number(start.elapsed(), result.is_ok());
-        result
     }
 
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
@@ -61,23 +40,101 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
         result
     }
 
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        let start = Instant::now();
-        let result = self.inner.maybe_read_account(address, point_in_time).await;
-        metrics::inc_storage_maybe_read_account(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
-        result
-    }
-
     async fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         let start = Instant::now();
         let result = self.inner.read_slot(address, slot, point_in_time).await;
         metrics::inc_storage_read_slot(start.elapsed(), point_in_time, result.is_ok());
         result
     }
+}
+
+impl EthStorage for MetrifiedStorage {}
+
+#[async_trait]
+impl TemporaryStorage for MetrifiedStorage {
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        let start = Instant::now();
+        let result = TemporaryStorage::check_conflicts(&self.inner, execution).await;
+        metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        result
+    }
+
+    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+        let start = Instant::now();
+        let result = TemporaryStorage::read_current_block_number(&self.inner).await;
+        metrics::inc_storage_read_current_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+        let start = Instant::now();
+        let result = TemporaryStorage::increment_block_number(&self.inner).await;
+        metrics::inc_storage_increment_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        let start = Instant::now();
+        let result = TemporaryStorage::maybe_read_account(&self.inner, address, point_in_time).await;
+        metrics::inc_storage_maybe_read_account(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        result
+    }
 
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         let start = Instant::now();
-        let result = self.inner.maybe_read_slot(address, slot_index, point_in_time).await;
+        let result = TemporaryStorage::maybe_read_slot(&self.inner, address, slot_index, point_in_time).await;
+        metrics::inc_storage_maybe_read_slot(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        result
+    }
+
+    async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        let start = Instant::now();
+        let result = TemporaryStorage::commit(&self.inner, block).await;
+        metrics::inc_storage_commit(start.elapsed(), result.is_ok());
+        result
+    }
+
+    async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = TemporaryStorage::save_account_changes(&self.inner, number, execution).await;
+        metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
+        result
+    }
+
+    async fn reset(&self) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = TemporaryStorage::reset(&self.inner).await;
+        metrics::inc_storage_reset(start.elapsed(), result.is_ok());
+        result
+    }
+}
+
+#[async_trait]
+impl PermanentStorage for MetrifiedStorage {
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        let start = Instant::now();
+        let result = PermanentStorage::check_conflicts(&self.inner, execution).await;
+        metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        result
+    }
+
+    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+        let start = Instant::now();
+        let result = PermanentStorage::read_current_block_number(&self.inner).await;
+        metrics::inc_storage_read_current_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        let start = Instant::now();
+        let result = PermanentStorage::maybe_read_account(&self.inner, address, point_in_time).await;
+        metrics::inc_storage_maybe_read_account(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        result
+    }
+
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        let start = Instant::now();
+        let result = PermanentStorage::maybe_read_slot(&self.inner, address, slot_index, point_in_time).await;
         metrics::inc_storage_maybe_read_slot(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
         result
     }
@@ -119,14 +176,14 @@ impl<T: EthStorage> EthStorage for MetrifiedStorage<T> {
 
     async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.inner.save_account_changes(number, execution).await;
+        let result = PermanentStorage::save_account_changes(&self.inner, number, execution).await;
         metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
         result
     }
 
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.inner.reset(number).await;
+        let result = PermanentStorage::reset(&self.inner, number).await;
         metrics::inc_storage_reset(start.elapsed(), result.is_ok());
         result
     }

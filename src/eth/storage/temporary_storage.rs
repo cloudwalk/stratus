@@ -14,7 +14,7 @@ use crate::eth::primitives::StoragePointInTime;
 /// Temporary storage (in-between blocks) operations
 // TODO: add Metrified method
 #[async_trait]
-pub trait TemporaryStorage: Send + Sync {
+pub trait TemporaryStorage: Send + Sync  {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
 

@@ -178,11 +178,13 @@ pub enum StorageConfig {
 impl StorageConfig {
     /// Initializes the storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+        let temp = InMemoryStorage::default();
+
         let perm: Arc<dyn PermanentStorage> = match self {
             Self::InMemory => Arc::new(InMemoryStorage::default()),
             Self::Postgres { url } => Arc::new(Postgres::new(url).await?),
         };
-        Ok(Arc::new(StratusStorage::new(InMemoryStorage::default(), perm)))
+        Ok(Arc::new(StratusStorage::new(temp, perm)))
     }
 }
 

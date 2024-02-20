@@ -5,8 +5,10 @@ use async_trait::async_trait;
 
 use super::permanent_storage::PermanentStorage;
 use super::temporary_storage::TemporaryStorage;
+use super::EthStorage;
 use super::EthStorageError;
 use super::InMemoryStorage;
+use super::MetrifiedStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -31,6 +33,12 @@ pub struct StratusStorage {
 impl StratusStorage {
     pub fn new(temp: InMemoryStorage, perm: Arc<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
+    }
+    
+    /// Wraps the current storage with a proxy that collects execution metrics.
+    pub fn metrified(self) -> MetrifiedStorage
+    {
+        MetrifiedStorage::new(self)
     }
 
     /// Retrieves an account from the storage. Returns default value when not found.
@@ -86,6 +94,8 @@ impl StratusStorage {
         self.perm.save_accounts(accounts).await
     }
 }
+
+impl EthStorage for StratusStorage {}
 
 #[async_trait]
 impl TemporaryStorage for StratusStorage {
