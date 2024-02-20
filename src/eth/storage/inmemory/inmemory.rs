@@ -365,7 +365,7 @@ impl TemporaryStorage for InMemoryStorage {
             }
         }
     }
-    
+
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let mut state = self.lock_write().await;
 

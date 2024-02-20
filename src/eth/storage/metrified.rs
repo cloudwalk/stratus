@@ -19,7 +19,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::EthStorage;
+
 use crate::eth::storage::EthStorageError;
 use crate::infra::metrics;
 
@@ -85,7 +85,7 @@ impl TemporaryStorage for MetrifiedStorage {
         result
     }
 
-        async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let start = Instant::now();
         let result = TemporaryStorage::save_block(&self.inner, block).await;
         metrics::inc_storage_save_block(start.elapsed(), result.is_ok());

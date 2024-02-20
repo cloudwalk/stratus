@@ -206,8 +206,7 @@ impl EthExecutor {
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
             match self.eth_storage.commit(block.clone()).await {
-                Ok(()) => {
-                }
+                Ok(()) => {}
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");
                     continue;
