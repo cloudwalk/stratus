@@ -267,7 +267,7 @@ contracts-remove:
 contracts-test-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
-    RUST_LOG=info just run -a 0.0.0.0:3000 &
+    RUST_LOG=info just run -a 0.0.0.0:3000 > /dev/null &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
