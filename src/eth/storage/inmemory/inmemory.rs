@@ -28,8 +28,9 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::inmemory::InMemoryHistory;
-use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::TemporaryStorage;
 
 /// In-memory implementation using maps.
 #[derive(Debug)]
@@ -85,18 +86,13 @@ impl Default for InMemoryStorage {
 }
 
 #[async_trait]
-impl EthStorage for InMemoryStorage {
+impl PermanentStorage for InMemoryStorage {
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
 
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
-    }
-
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(next.into())
     }
 
     // -------------------------------------------------------------------------
@@ -297,6 +293,100 @@ impl EthStorage for InMemoryStorage {
         let mut state = self.lock_write().await;
         state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
         state.blocks_by_hash.insert(block.hash().clone(), block);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl TemporaryStorage for InMemoryStorage {
+    // -------------------------------------------------------------------------
+    // Block number operations
+    // -------------------------------------------------------------------------
+
+    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+        Ok(self.block_number.load(Ordering::SeqCst).into())
+    }
+
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
+        Ok(next.into())
+    }
+
+    // -------------------------------------------------------------------------
+    // State operations
+    // ------------------------------------------------------------------------
+
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        let state_lock = self.state.read().await;
+        Ok(check_conflicts(&state_lock, execution))
+    }
+
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        tracing::debug!(%address, "reading account");
+
+        let state = self.lock_read().await;
+
+        match state.accounts.get(address) {
+            Some(account) => {
+                let account = Account {
+                    address: address.clone(),
+                    balance: account.balance.get_at_point(point_in_time).unwrap_or_default(),
+                    nonce: account.nonce.get_at_point(point_in_time).unwrap_or_default(),
+                    bytecode: account.bytecode.get_at_point(point_in_time).unwrap_or_default(),
+                };
+                tracing::trace!(%address, ?account, "account found");
+                Ok(Some(account))
+            }
+
+            None => {
+                tracing::trace!(%address, "account not found");
+                Ok(None)
+            }
+        }
+    }
+
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
+
+        let state = self.lock_read().await;
+        let Some(account) = state.accounts.get(address) else {
+            tracing::trace!(%address, "account not found");
+            return Ok(Default::default());
+        };
+
+        match account.slots.get(slot_index) {
+            Some(slot_history) => {
+                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
+                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
+                Ok(Some(slot))
+            }
+
+            None => {
+                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
+                Ok(None)
+            }
+        }
+    }
+
+    /// Commits changes to permanent storage and flushes overlay storage
+    /// Basically calls the `save_block` method from the permanent storage, which
+    /// will by definition update accounts, slots, transactions, logs etc
+    async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        self.save_block(block).await?;
+        TemporaryStorage::reset(self).await?;
+
+        Ok(())
+    }
+
+    async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        let mut state_lock = self.lock_write().await;
+        save_account_changes(&mut state_lock, number, execution);
+        Ok(())
+    }
+
+    async fn reset(&self) -> anyhow::Result<()> {
+        self.flush().await;
+
         Ok(())
     }
 }

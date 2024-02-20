@@ -90,7 +90,7 @@ pub struct CommonConfig {
     pub env: Environment,
 
     /// Storage implementation.
-    #[arg(short = 's', long = "storage", env = "STORAGE")]
+    #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
     pub storage: StorageConfig,
 
     /// Number of EVM instances to run.
@@ -178,12 +178,9 @@ pub enum StorageConfig {
 impl StorageConfig {
     /// Initializes the storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let perm = match self {
-            // Self::InMemory => Ok(Arc::new(InMemoryStorage::default().metrified())),
+        let perm: Arc<dyn PermanentStorage> = match self {
+            Self::InMemory => Arc::new(InMemoryStorage::default()),
             Self::Postgres { url } => Arc::new(Postgres::new(url).await?),
-            _ => {
-                todo!()
-            }
         };
         Ok(Arc::new(StratusStorage::new(InMemoryStorage::default(), perm)))
     }

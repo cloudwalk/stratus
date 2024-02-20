@@ -21,7 +21,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::EthStorage;
 
 pub struct StratusStorage {
     temp: InMemoryStorage,
@@ -36,9 +35,9 @@ impl StratusStorage {
 
     /// Retrieves an account from the storage. Returns default value when not found.
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
-        match self.temp.maybe_read_account(address, point_in_time).await? {
+        match TemporaryStorage::maybe_read_account(self, address, point_in_time).await? {
             Some(account) => Ok(account),
-            None => match self.perm.maybe_read_account(address, point_in_time).await? {
+            None => match PermanentStorage::maybe_read_account(self, address, point_in_time).await? {
                 Some(account) => Ok(account),
                 None => Ok(Account {
                     address: address.clone(),
@@ -50,9 +49,9 @@ impl StratusStorage {
 
     /// Retrieves an slot from the storage. Returns default value when not found.
     pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
-        match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
+        match TemporaryStorage::maybe_read_slot(self, address, slot_index, point_in_time).await? {
             Some(slot) => Ok(slot),
-            None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
+            None => match PermanentStorage::maybe_read_slot(self, address, slot_index, point_in_time).await? {
                 Some(slot) => Ok(slot),
                 None => Ok(Slot {
                     index: slot_index.clone(),
@@ -67,7 +66,7 @@ impl StratusStorage {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
-                let current_block = self.temp.read_current_block_number().await?;
+                let current_block = TemporaryStorage::read_current_block_number(self).await?;
                 if number <= &current_block {
                     Ok(StoragePointInTime::Past(*number))
                 } else {
@@ -92,27 +91,27 @@ impl StratusStorage {
 impl TemporaryStorage for StratusStorage {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
-        self.temp.read_current_block_number().await
+        TemporaryStorage::read_current_block_number(&self.temp).await
     }
 
     /// Atomically increments the block number, returning the new value.
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        self.temp.increment_block_number().await
+        TemporaryStorage::increment_block_number(self).await
     }
 
     /// Checks if the transaction execution conflicts with the current storage state.
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        self.temp.check_conflicts(execution).await
+        TemporaryStorage::check_conflicts(&self.temp, execution).await
     }
 
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        self.temp.maybe_read_account(address, point_in_time).await
+        TemporaryStorage::maybe_read_account(&self.temp, address, point_in_time).await
     }
 
     /// Retrieves an slot from the storage. Returns Option when not found.
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        self.temp.maybe_read_slot(address, slot_index, point_in_time).await
+        TemporaryStorage::maybe_read_slot(&self.temp, address, slot_index, point_in_time).await
     }
 
     /// Commits changes to permanent storage and flushes overlay storage
@@ -120,14 +119,14 @@ impl TemporaryStorage for StratusStorage {
     /// will by definition update accounts, slots, transactions, logs etc
     async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         self.perm.save_block(block).await?;
-        TemporaryStorage::reset(self).await?;
+        TemporaryStorage::reset(&self.temp).await?;
 
         Ok(())
     }
 
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
-        self.temp.save_account_changes(block_number, execution).await
+        TemporaryStorage::save_account_changes(&self.temp, block_number, execution).await
     }
 
     /// Resets all state to a specific block number.
