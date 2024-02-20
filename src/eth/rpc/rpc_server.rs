@@ -14,7 +14,6 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
-use crate::log_and_err;
 use crate::config::Environment;
 use crate::config::StratusConfig;
 use crate::eth::primitives::Address;
@@ -39,6 +38,7 @@ use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::EthStorage;
 use crate::eth::EthExecutor;
+use crate::log_and_err;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -175,7 +175,7 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
     let latest = ctx.storage.read_block(&BlockSelection::Latest).await?;
     match latest {
         Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
-        None => return log_and_err!("reading latest block returned None")?
+        None => return log_and_err!("reading latest block returned None")?,
     }
     Ok(serde_json::to_value(timestamp).unwrap())
 }

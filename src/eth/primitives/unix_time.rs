@@ -9,6 +9,10 @@
 use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::str::FromStr;
+#[cfg(debug_assertions)]
+use std::sync::atomic::AtomicI64;
+#[cfg(debug_assertions)]
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Acquire;
 use std::sync::atomic::Ordering::SeqCst;
 
@@ -16,10 +20,6 @@ use chrono::Utc;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-#[cfg(debug_assertions)]
-use std::sync::atomic::AtomicI64;
-#[cfg(debug_assertions)]
-use std::sync::atomic::AtomicU64;
 use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
