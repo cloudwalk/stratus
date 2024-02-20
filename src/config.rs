@@ -12,21 +12,17 @@ use clap::Parser;
 use nonempty::NonEmpty;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
-use tokio::sync::Mutex;
-use tokio::sync::RwLock;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::primitives::Address;
 use crate::eth::storage::test_accounts;
-use crate::eth::storage::EthStorage;
-use crate::eth::storage::EthStorageError;
 use crate::eth::storage::InMemoryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StratusStorage;
 use crate::eth::EthExecutor;
-use crate::infra;
 use crate::infra::postgres::Postgres;
 
 /// Configuration for main Stratus service.
@@ -94,7 +90,7 @@ pub struct CommonConfig {
     pub env: Environment,
 
     /// Storage implementation.
-    #[arg(short = 's', long = "storage", env = "STORAGE", )]
+    #[arg(short = 's', long = "storage", env = "STORAGE")]
     pub storage: StorageConfig,
 
     /// Number of EVM instances to run.
@@ -185,14 +181,11 @@ impl StorageConfig {
         let perm = match self {
             // Self::InMemory => Ok(Arc::new(InMemoryStorage::default().metrified())),
             Self::Postgres { url } => Arc::new(Postgres::new(url).await?),
-            _ => {todo!()}
+            _ => {
+                todo!()
+            }
         };
-        Ok(Arc::new(
-            StratusStorage::new(
-                    InMemoryStorage::default(),
-                    perm
-                )
-        ))
+        Ok(Arc::new(StratusStorage::new(InMemoryStorage::default(), perm)))
     }
 }
 

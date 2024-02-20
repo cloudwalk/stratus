@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::config::Environment;
 use crate::eth::rpc::RpcSubscriptions;
-use crate::eth::storage::{EthStorage, StratusStorage};
+use crate::eth::storage::StratusStorage;
 use crate::eth::EthExecutor;
 
 pub struct RpcContext {

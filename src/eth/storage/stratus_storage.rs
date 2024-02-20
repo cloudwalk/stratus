@@ -2,10 +2,6 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use tokio::sync::Mutex;
-use tokio::sync::RwLock;
-use tokio::sync::RwLockReadGuard;
-use tokio::sync::RwLockWriteGuard;
 
 use super::permanent_storage::PermanentStorage;
 use super::temporary_storage::TemporaryStorage;
@@ -35,9 +31,7 @@ pub struct StratusStorage {
 #[allow(dead_code)]
 impl StratusStorage {
     pub fn new(temp: InMemoryStorage, perm: Arc<dyn PermanentStorage>) -> Self {
-        Self {
-            temp, perm
-        }
+        Self { temp, perm }
     }
 
     /// Retrieves an account from the storage. Returns default value when not found.
@@ -138,7 +132,9 @@ impl TemporaryStorage for StratusStorage {
 
     /// Resets all state to a specific block number.
     async fn reset(&self) -> anyhow::Result<()> {
-        Ok(self.temp.flush().await)
+        self.temp.flush().await;
+
+        Ok(())
     }
 }
 
