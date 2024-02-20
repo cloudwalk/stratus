@@ -50,10 +50,8 @@ impl InMemoryStorage {
         self.state.write().await
     }
 
-    /// Resets state and returns it
+    /// Flushes in-memory state
     pub async fn flush(&self) {
-        // self.state = RwLock::new(InMemoryStorageState::default());
-        // self.block_number = Default::default();
         let mut state = self.lock_write().await;
         state.accounts.clear();
         state.transactions.clear();
@@ -386,7 +384,6 @@ impl TemporaryStorage for InMemoryStorage {
 
     async fn reset(&self) -> anyhow::Result<()> {
         self.flush().await;
-
         Ok(())
     }
 }
