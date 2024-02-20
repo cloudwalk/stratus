@@ -20,7 +20,8 @@ clone() {
         git -C $target pull
     else
         log "Cloning: $repo"
-        git clone git@github.com:cloudwalk/$repo.git $target
+        # git clone git@github.com:cloudwalk/$repo.git $target
+        git clone https://github.com/cloudwalk/$repo.git $target
     fi
 
     log "Installing dependencies: $repo"
