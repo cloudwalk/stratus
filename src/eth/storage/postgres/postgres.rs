@@ -656,7 +656,7 @@ impl EthStorage for Postgres {
         Ok(nextval.into())
     }
 
-    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
         for acc in accounts {

@@ -195,6 +195,6 @@ impl PermanentStorage for StratusStorage {
 
     /// Enables pre-genesis accounts
     async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        self.perm.save_initial_accounts(accounts).await
+        self.perm.save_accounts(accounts).await
     }
 }
