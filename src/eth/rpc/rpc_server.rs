@@ -104,9 +104,9 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
 
 fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyhow::Result<RpcModule<RpcContext>> {
     // debug
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "evm-set-timestamp")]
     module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "evm-mine")]
     module.register_async_method("evm_mine", evm_mine)?;
 
     if env.is_development() {
@@ -163,13 +163,13 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
     Ok(serde_json::to_value(number).unwrap())
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "evm-mine")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     ctx.executor.mine_empty_block().await?;
     Ok(serde_json::to_value(true).unwrap())
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "evm-set-timestamp")]
 async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
     let latest = ctx.storage.read_block(&BlockSelection::Latest).await?;

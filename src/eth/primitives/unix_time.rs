@@ -9,9 +9,9 @@
 use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::str::FromStr;
-#[cfg(debug_assertions)]
+#[cfg(feature = "evm-set-timestamp")]
 use std::sync::atomic::AtomicI64;
-#[cfg(debug_assertions)]
+#[cfg(feature = "evm-set-timestamp")]
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Acquire;
 use std::sync::atomic::Ordering::SeqCst;
@@ -26,10 +26,10 @@ use sqlx::error::BoxDynError;
 
 use crate::log_and_err;
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "evm-set-timestamp")]
 pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "evm-set-timestamp")]
 pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -38,7 +38,7 @@ pub struct UnixTime(u64);
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "evm-set-timestamp")]
     pub fn set_offset(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
         let now = Utc::now().timestamp() as u64;
 
@@ -47,13 +47,12 @@ impl UnixTime {
         }
 
         let diff: i64 = if *timestamp == 0 { 0 } else { (*timestamp as i128 - now as i128) as i64 };
-        tracing::debug!(?diff);
         NEXT_TIMESTAMP.store(*timestamp, SeqCst);
         TIME_OFFSET.store(diff, SeqCst);
         Ok(())
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "evm-set-timestamp")]
     pub fn now() -> Self {
         let offset_time = NEXT_TIMESTAMP.load(Acquire);
         let time_offset = TIME_OFFSET.load(Acquire);
@@ -66,7 +65,7 @@ impl UnixTime {
         }
     }
 
-    #[cfg(not(debug_assertions))]
+    #[cfg(not(feature = "evm-set-timestamp"))]
     pub fn now() -> Self {
         Self(Utc::now().timestamp() as u64)
     }

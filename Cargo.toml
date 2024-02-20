@@ -102,3 +102,13 @@ clone_on_ref_ptr = "warn"
 disallowed_names = "warn"
 manual_let_else = "warn"
 semicolon_if_nothing_returned = "warn"
+
+# ------------------------------------------------------------------------------
+# Features
+# ------------------------------------------------------------------------------
+
+[features]
+default = ["tests"]
+tests = ["evm-set-timestamp", "evm-mine"]
+evm-set-timestamp = []
+evm-mine = []
