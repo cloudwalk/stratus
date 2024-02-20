@@ -67,6 +67,7 @@ macro_rules! log_and_err {
     (payload = $payload:expr, $msg:expr) => {
         {
             use anyhow::Context;
+            use anyhow::anyhow;
             tracing::error!(payload = ?$payload, message = %$msg);
             let message = format!("{} | payload={:?}", $msg, $payload);
             Err(anyhow!(message))
@@ -74,6 +75,7 @@ macro_rules! log_and_err {
     };
     ($msg:expr) => {
         {
+            use anyhow::anyhow;
             tracing::error!(message = %$msg);
             Err(anyhow!($msg))
         }
