@@ -34,10 +34,9 @@ impl StratusStorage {
     pub fn new(temp: InMemoryStorage, perm: Arc<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
     }
-    
+
     /// Wraps the current storage with a proxy that collects execution metrics.
-    pub fn metrified(self) -> MetrifiedStorage
-    {
+    pub fn metrified(self) -> MetrifiedStorage {
         MetrifiedStorage::new(self)
     }
 

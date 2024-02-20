@@ -19,12 +19,12 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::EthStorageError;
 use crate::eth::storage::EthStorage;
+use crate::eth::storage::EthStorageError;
 use crate::infra::metrics;
 
 /// Proxy storage that tracks metrics.
-pub struct MetrifiedStorage{
+pub struct MetrifiedStorage {
     inner: StratusStorage,
 }
 
