@@ -26,8 +26,10 @@ test() {
     # go back to previous directory
     cd -
 
-    # exit with same return code as the test
-    exit $result_code
+    # exit with same return code as the test if an error ocurred
+    if [ $result_code -ne 0 ]; then
+        exit $result_code
+    fi
 }
 
 # ------------------------------------------------------------------------------
