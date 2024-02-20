@@ -258,3 +258,7 @@ contracts-test-brlc-multisig:
 # Contracts: Run CompoundPeriphery contract tests
 contracts-test-brlc-compound:
     cd e2e-contracts && ./test-contracts.sh -c
+
+# Contracts: Remove all the cloned repositories
+contracts-remove:
+    cd e2e-contracts && ./remove-contracts.sh
