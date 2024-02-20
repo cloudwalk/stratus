@@ -7,9 +7,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  setup_and_test:
+  contract_test:
     name: Run contracts e2e
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
