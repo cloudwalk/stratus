@@ -32,6 +32,9 @@ pub trait TemporaryStorage: Send + Sync {
 
     /// Commits changes to permanent storage
     async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
+    
+    /// Persist atomically all changes from a block.
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
 
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;

@@ -123,7 +123,7 @@ impl TemporaryStorage for StratusStorage {
         TemporaryStorage::maybe_read_slot(&self.temp, address, slot_index, point_in_time).await
     }
 
-    /// Commits changes to permanent storage and flushes overlay storage
+    /// Commits changes to permanent storage and flushes storage
     /// Basically calls the `save_block` method from the permanent storage, which
     /// will by definition update accounts, slots, transactions, logs etc
     async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
@@ -131,6 +131,11 @@ impl TemporaryStorage for StratusStorage {
         TemporaryStorage::reset(&self.temp).await?;
 
         Ok(())
+    }
+
+    /// Persist atomically all changes from a block.
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        TemporaryStorage::save_block(&self.temp, block).await
     }
 
     /// Temporarily stores account changes during block production

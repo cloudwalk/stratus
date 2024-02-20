@@ -135,7 +135,7 @@ impl EthExecutor {
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
-            self.storage.save_block(block).await?;
+            self.storage.commit(block).await?;
         }
 
         //TODO compare slots/changes
@@ -181,7 +181,7 @@ impl EthExecutor {
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
-        self.storage.save_block(block.clone()).await?;
+        self.storage.commit(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {
             tracing::error!(reason = ?e, "failed to send block notification");
@@ -202,12 +202,11 @@ impl EthExecutor {
                 continue;
             }
 
-            // mine and save block
+            // mine and commit block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match TemporaryStorage::commit(&*self.storage, block.clone()).await {
+            match self.eth_storage.commit(block.clone()).await {
                 Ok(()) => {
-                    TemporaryStorage::reset(&*self.storage);
                 }
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");

@@ -48,8 +48,6 @@ impl MetrifiedStorage {
     }
 }
 
-impl EthStorage for MetrifiedStorage {}
-
 #[async_trait]
 impl TemporaryStorage for MetrifiedStorage {
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
@@ -84,6 +82,13 @@ impl TemporaryStorage for MetrifiedStorage {
         let start = Instant::now();
         let result = TemporaryStorage::maybe_read_slot(&self.inner, address, slot_index, point_in_time).await;
         metrics::inc_storage_maybe_read_slot(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        result
+    }
+
+        async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        let start = Instant::now();
+        let result = TemporaryStorage::save_block(&self.inner, block).await;
+        metrics::inc_storage_save_block(start.elapsed(), result.is_ok());
         result
     }
 
@@ -162,7 +167,7 @@ impl PermanentStorage for MetrifiedStorage {
 
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let start = Instant::now();
-        let result = self.inner.save_block(block).await;
+        let result = PermanentStorage::save_block(&self.inner, block).await;
         metrics::inc_storage_save_block(start.elapsed(), result.is_ok());
         result
     }

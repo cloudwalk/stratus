@@ -365,12 +365,47 @@ impl TemporaryStorage for InMemoryStorage {
             }
         }
     }
+    
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        let mut state = self.lock_write().await;
+
+        // check conflicts
+        for transaction in &block.transactions {
+            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
+                return Err(EthStorageError::Conflict(conflicts));
+            }
+        }
+
+        // save block
+        tracing::debug!(number = %block.number(), "saving block");
+        let block = Arc::new(block);
+        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
+        state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
+
+        // save transactions
+        for transaction in block.transactions.clone() {
+            tracing::debug!(hash = %transaction.input.hash, "saving transaction");
+            state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
+            let is_success = transaction.is_success();
+
+            // save logs
+            if is_success {
+                for log in transaction.logs {
+                    state.logs.push(log);
+                }
+            }
+
+            // save execution changes
+            save_account_changes(&mut state, *block.number(), transaction.execution);
+        }
+        Ok(())
+    }
 
     /// Commits changes to permanent storage and flushes overlay storage
     /// Basically calls the `save_block` method from the permanent storage, which
     /// will by definition update accounts, slots, transactions, logs etc
     async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        self.save_block(block).await?;
+        PermanentStorage::save_block(self, block).await?;
         TemporaryStorage::reset(self).await?;
 
         Ok(())

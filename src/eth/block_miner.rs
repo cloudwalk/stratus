@@ -41,6 +41,11 @@ impl BlockMiner {
         Block::new_with_capacity(BlockNumber::ZERO, UnixTime::from(1702568764), 0)
     }
 
+    async fn mine(&self, block: Block) -> anyhow::Result<()> {
+        
+        Ok(())
+    }
+
     /// Mine one block with no transactions.
     #[cfg(feature = "evm-mine")]
     pub async fn mine_with_no_transactions(&mut self) -> anyhow::Result<Block> {
