@@ -49,9 +49,9 @@ impl StratusStorage {
 
     /// Retrieves an slot from the storage. Returns default value when not found.
     pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
-        match TemporaryStorage::maybe_read_slot(self, address, slot_index, point_in_time).await? {
+        match TemporaryStorage::maybe_read_slot(&self.temp, address, slot_index, point_in_time).await? {
             Some(slot) => Ok(slot),
-            None => match PermanentStorage::maybe_read_slot(self, address, slot_index, point_in_time).await? {
+            None => match PermanentStorage::maybe_read_slot(&*self.perm, address, slot_index, point_in_time).await? {
                 Some(slot) => Ok(slot),
                 None => Ok(Slot {
                     index: slot_index.clone(),
@@ -66,7 +66,7 @@ impl StratusStorage {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
-                let current_block = TemporaryStorage::read_current_block_number(self).await?;
+                let current_block = TemporaryStorage::read_current_block_number(&self.temp).await?;
                 if number <= &current_block {
                     Ok(StoragePointInTime::Past(*number))
                 } else {
@@ -96,7 +96,7 @@ impl TemporaryStorage for StratusStorage {
 
     /// Atomically increments the block number, returning the new value.
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        TemporaryStorage::increment_block_number(self).await
+        TemporaryStorage::increment_block_number(&self.temp).await
     }
 
     /// Checks if the transaction execution conflicts with the current storage state.
