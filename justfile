@@ -178,9 +178,6 @@ e2e-stratus test="":
     echo "-> Starting Stratus"
     RUST_LOG=info just run -a 0.0.0.0:3000 &
 
-    echo "-> Starting Substrate Mock"
-    RUST_LOG=info just run-substrate-mock &
-
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
 
@@ -190,7 +187,6 @@ e2e-stratus test="":
 
     echo "-> Killing Stratus"
     killport 3000
-    killport 3003
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
