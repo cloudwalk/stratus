@@ -78,7 +78,6 @@ async fn get_current_block_number(chain: Arc<BlockchainClient>) -> BlockNumber {
             Err(e) => {
                 tracing::warn!(reason = ?e, "retrying block number retrieval");
             }
-
         }
     }
     end
@@ -205,6 +204,7 @@ async fn db_retrieve_max_downloaded_block(pg: &Postgres, start: BlockNumber, end
     let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_downloaded_block_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_one(&pg.connection_pool)
         .await;
+
     match result {
         Ok(Some(max)) => Ok(Some(max.into())),
         Ok(None) => Ok(None),
@@ -220,8 +220,8 @@ async fn db_insert_balance(pg: &Postgres, address: Address, balance: Wei) -> any
         address.as_ref(),
         TryInto::<BigDecimal>::try_into(balance)?
     )
-        .execute(&pg.connection_pool)
-        .await;
+    .execute(&pg.connection_pool)
+    .await;
 
     match result {
         Ok(_) => Ok(()),
