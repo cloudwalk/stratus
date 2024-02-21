@@ -13,6 +13,8 @@ use fake::Dummy;
 use fake::Faker;
 use revm::primitives::B256 as RevmB256;
 
+use crate::gen_newtype_from;
+
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LogTopic(H256);
@@ -38,6 +40,8 @@ impl Dummy<Faker> for LogTopic {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+gen_newtype_from!(self = LogTopic, other = H256);
+
 impl AsRef<[u8]> for LogTopic {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()

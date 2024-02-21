@@ -14,6 +14,8 @@ use sqlx::error::BoxDynError;
 use crate::gen_newtype_from;
 
 /// Represents a transaction index or log index.
+///
+/// TODO: representing it as u16 is probably wrong because external libs uses u64.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]
 pub struct Index(u16);
 
@@ -34,6 +36,18 @@ gen_newtype_from!(self = Index, other = u16);
 impl From<i32> for Index {
     fn from(value: i32) -> Self {
         Index::new(value as u16)
+    }
+}
+
+impl From<U64> for Index {
+    fn from(value: U64) -> Self {
+        Index::new(value.low_u64() as u16) // TODO: this will break things if the value is bigger than u16
+    }
+}
+
+impl From<U256> for Index {
+    fn from(value: U256) -> Self {
+        Index::new(value.low_u64() as u16) // TODO: this will break things if the value is bigger than u16
     }
 }
 

@@ -59,6 +59,22 @@ impl LogMined {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
+impl From<EthersLog> for LogMined {
+    fn from(value: EthersLog) -> Self {
+        Self {
+            transaction_hash: value.transaction_hash.expect("log must have transaction_hash").into(),
+            transaction_index: value.transaction_index.expect("log must have transaction_index").into(),
+            log_index: value.log_index.expect("log must have log_index").into(),
+            block_number: value.block_number.expect("log must have block_number").into(),
+            block_hash: value.block_hash.expect("log must have block_hash").into(),
+            log: value.into(),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 impl From<LogMined> for EthersLog {
