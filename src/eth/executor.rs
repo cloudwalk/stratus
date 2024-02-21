@@ -174,7 +174,7 @@ impl EthExecutor {
         self.mine_and_execute_transaction(transaction).await
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "evm-mine")]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;

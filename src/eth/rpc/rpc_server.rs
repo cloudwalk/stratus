@@ -26,7 +26,6 @@ use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::UnixTime;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -103,9 +102,9 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
 
 fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyhow::Result<RpcModule<RpcContext>> {
     // debug
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "evm-set-timestamp")]
     module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "evm-mine")]
     module.register_async_method("evm_mine", evm_mine)?;
 
     if env.is_development() {
@@ -162,16 +161,23 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
     Ok(serde_json::to_value(number).unwrap())
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "evm-mine")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     ctx.executor.mine_empty_block().await?;
     Ok(serde_json::to_value(true).unwrap())
 }
 
-#[cfg(debug_assertions)]
-async fn evm_set_next_block_timestamp(params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+#[cfg(feature = "evm-set-timestamp")]
+async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    use crate::eth::primitives::UnixTime;
+    use crate::log_and_err;
+
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    UnixTime::set_offset(timestamp)?;
+    let latest = ctx.storage.read_block(&BlockSelection::Latest).await?;
+    match latest {
+        Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
+        None => return log_and_err!("reading latest block returned None")?,
+    }
     Ok(serde_json::to_value(timestamp).unwrap())
 }
 
