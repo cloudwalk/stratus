@@ -700,7 +700,7 @@ impl PermanentStorage for Postgres {
             .await
             .context("failed to insert nonce")?;
 
-            tx.commit().await.context("Failed to commit transaction")?;
+            tx.commit().await.context("failed to commit transaction")?;
         }
 
         Ok(())
