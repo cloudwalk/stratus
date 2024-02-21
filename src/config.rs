@@ -15,10 +15,11 @@ use tokio::runtime::Runtime;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
+use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
-use crate::eth::storage::test_accounts;
-use crate::eth::storage::EthStorage;
 use crate::eth::storage::InMemoryStorage;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
 use crate::infra::postgres::Postgres;
@@ -114,7 +115,7 @@ pub struct CommonConfig {
 
 impl CommonConfig {
     /// Initializes storage.
-    pub async fn init_storage(&self) -> anyhow::Result<Arc<dyn EthStorage>> {
+    pub async fn init_storage(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let storage = self.storage.init().await?;
         if self.enable_genesis {
             storage.enable_genesis(BlockMiner::genesis()).await?;
@@ -130,7 +131,7 @@ impl CommonConfig {
     }
 
     /// Initializes EthExecutor.
-    pub fn init_executor(&self, storage: Arc<dyn EthStorage>) -> EthExecutor {
+    pub fn init_executor(&self, storage: Arc<StratusStorage>) -> EthExecutor {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(evms = %num_evms, "starting executor");
 
@@ -175,11 +176,14 @@ pub enum StorageConfig {
 
 impl StorageConfig {
     /// Initializes the storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn EthStorage>> {
-        match self {
-            Self::InMemory => Ok(Arc::new(InMemoryStorage::default().metrified())),
-            Self::Postgres { url } => Ok(Arc::new(Postgres::new(url).await?.metrified())),
-        }
+    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+        let temp = Arc::new(InMemoryStorage::default());
+
+        let perm: Arc<dyn PermanentStorage> = match self {
+            Self::InMemory => Arc::new(InMemoryStorage::default()),
+            Self::Postgres { url } => Arc::new(Postgres::new(url).await?),
+        };
+        Ok(Arc::new(StratusStorage::new(temp, perm)))
     }
 }
 

@@ -9,9 +9,9 @@ mod tests {
     use fake::{Dummy, Faker};
     use nonempty::nonempty;
     use stratus::config::StorageConfig;
+    use stratus::eth::primitives::test_accounts;
     use stratus::eth::primitives::TransactionInput;
     use stratus::eth::primitives::Wei;
-    use stratus::eth::storage::test_accounts;
     use stratus::eth::EthExecutor;
 
     use super::*;

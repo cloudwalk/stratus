@@ -19,6 +19,7 @@ use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
 use super::primitives::ExternalTransaction;
+use super::storage::StratusStorage;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -31,8 +32,9 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 
 /// Number of events in the backlog.
@@ -51,7 +53,7 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     // Shared storage backend for persisting blockchain state.
-    storage: Arc<dyn EthStorage>,
+    storage: Arc<StratusStorage>,
 
     // Broadcast channels for notifying subscribers about new blocks and logs.
     block_notifier: broadcast::Sender<Block>,
@@ -60,7 +62,7 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evms: NonEmpty<Box<dyn Evm>>, eth_storage: Arc<dyn EthStorage>) -> Self {
+    pub fn new(evms: NonEmpty<Box<dyn Evm>>, eth_storage: Arc<StratusStorage>) -> Self {
         let evm_tx = spawn_background_evms(evms);
 
         Self {
@@ -75,9 +77,6 @@ impl EthExecutor {
     /// Imports an external block using the offline flow.
     pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
         tracing::info!(number = %block.number(), "importing offline block");
-
-        // keep track of current block because state will be reset to it after execution
-        let current_block = self.storage.read_current_block_number().await?;
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
@@ -104,8 +103,8 @@ impl EthExecutor {
                         return Err(e);
                     };
 
+                    TemporaryStorage::save_account_changes(&*self.storage, block.number(), execution.clone()).await?;
                     // temporarily save state to next transactions from the same block
-                    self.storage.save_account_changes(block.number(), execution.clone()).await?;
                     executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
@@ -117,12 +116,9 @@ impl EthExecutor {
             }
         }
 
-        // reset state to initial block, so we can save the block witl all changes produced by the transactions
-        self.storage.reset(current_block).await?;
-
         let block = Block::from_external(block, executions)?;
-        self.storage.increment_block_number().await?;
-        if let Err(e) = self.storage.save_block(block.clone()).await {
+        PermanentStorage::increment_block_number(&*self.storage).await?;
+        if let Err(e) = self.storage.commit(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
@@ -151,7 +147,7 @@ impl EthExecutor {
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
-            self.storage.save_block(block).await?;
+            self.storage.commit(block).await?;
         }
 
         //TODO compare slots/changes
@@ -197,7 +193,7 @@ impl EthExecutor {
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
-        self.storage.save_block(block.clone()).await?;
+        self.storage.commit(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {
             tracing::error!(reason = ?e, "failed to send block notification");
@@ -213,15 +209,15 @@ impl EthExecutor {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?;
-            if let Some(conflicts) = self.storage.check_conflicts(&execution).await? {
+            if let Some(conflicts) = TemporaryStorage::check_conflicts(&*self.storage, &execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;
             }
 
-            // mine and save block
+            // mine and commit block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.storage.save_block(block.clone()).await {
+            match self.storage.commit(block.clone()).await {
                 Ok(()) => {}
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");
