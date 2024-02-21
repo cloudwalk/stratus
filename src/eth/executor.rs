@@ -27,10 +27,12 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::EthStorageError;
 
 use crate::eth::storage::TemporaryStorage;
@@ -78,38 +80,50 @@ impl EthExecutor {
         tracing::info!(number = %block.number(), "importing offline block");
 
         // re-execute transactions
+        let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
             // find receipt
-            let Some(receipt) = receipts.get(&tx.hash()) else {
+            let Some(receipt) = receipts.get(&tx.hash()).cloned() else {
                 tracing::error!(hash = %tx.hash, "receipt is missing");
                 return Err(anyhow!("receipt missing for hash {}", tx.hash));
             };
 
             // re-execute transaction
-            let json_tx = serde_json::to_string(&tx).unwrap();
-            let json_receipt = serde_json::to_string(&receipt).unwrap();
-            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), receipt);
+            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt);
             let execution = self.execute_in_evm(evm_input).await;
 
             // handle execution result
             match execution {
                 Ok(execution) => {
                     // ensure it matches receipt before saving
-                    if let Err(e) = execution.compare_with_receipt(receipt) {
-                        let execution_logs = serde_json::to_string(&execution.logs).unwrap();
-                        tracing::error!(%json_tx, %json_receipt, %execution_logs, "mismatch reexecuting transaction");
+                    if let Err(e) = execution.compare_with_receipt(&receipt) {
+                        let json_tx = serde_json::to_string(&tx).unwrap();
+                        let json_receipt = serde_json::to_string(&receipt).unwrap();
+                        let json_execution_logs = serde_json::to_string(&execution.logs).unwrap();
+                        tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
                         return Err(e);
                     };
 
-                    TemporaryStorage::save_account_changes(&*self.storage, block.number(), execution).await?;
+                    TemporaryStorage::save_account_changes(&*self.storage, block.number(), execution.clone()).await?;
+                    // temporarily save state to next transactions from the same block
+                    executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
-                    // TODO: must handle this better because some errors can be expected
-                    tracing::error!(%json_tx, %json_receipt, "unexpected error reexecuting transaction");
+                    let json_tx = serde_json::to_string(&tx).unwrap();
+                    let json_receipt = serde_json::to_string(&receipt).unwrap();
+                    tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
                     return Err(e);
                 }
             }
         }
+        
+        let block = Block::from_external(block, executions)?;
+        PermanentStorage::increment_block_number(&*self.storage).await?;
+        if let Err(e) = self.storage.commit(block.clone()).await {
+            let json_block = serde_json::to_string(&block).unwrap();
+            tracing::error!(reason = ?e, %json_block);
+            return Err(e.into());
+        };
 
         Ok(())
     }

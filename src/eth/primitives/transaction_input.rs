@@ -69,13 +69,6 @@ impl Dummy<Faker> for TransactionInput {
     }
 }
 
-#[derive(Debug)]
-pub enum ConversionError {
-    InvalidSigner(anyhow::Error),
-    NoChainId(anyhow::Error),
-    NoWei(anyhow::Error),
-}
-
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
@@ -84,10 +77,7 @@ impl Decodable for TransactionInput {
         let ethers_transaction = EthersTransaction::decode(rlp)?;
         match Self::try_from(ethers_transaction) {
             Ok(transaction) => Ok(transaction),
-            Err(err) => match err {
-                ConversionError::InvalidSigner(_) => Err(rlp::DecoderError::Custom("invalid signer")),
-                _ => Err(rlp::DecoderError::Custom("unknown")),
-            },
+            Err(_) => Err(rlp::DecoderError::Custom("decoding error")),
         }
     }
 }
@@ -95,18 +85,18 @@ impl Decodable for TransactionInput {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-impl TryFrom<EthersTransaction> for TransactionInput {
-    type Error = ConversionError;
 
-    fn try_from(value: EthersTransaction) -> anyhow::Result<Self, ConversionError> {
+/// TODO: this kind of conversion should be infallibe.
+impl TryFrom<EthersTransaction> for TransactionInput {
+    type Error = anyhow::Error;
+
+    fn try_from(value: EthersTransaction) -> anyhow::Result<Self> {
         // extract signer
         let signer: Address = match value.recover_from() {
             Ok(signer) => signer.into(),
             Err(e) => {
                 tracing::warn!(reason = ?e, "failed to recover transaction signer");
-                return Err(ConversionError::InvalidSigner(anyhow!(
-                    "Transaction signer cannot be recovered. Check the transaction signature is valid."
-                )));
+                return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
             }
         };
 
@@ -125,7 +115,7 @@ impl TryFrom<EthersTransaction> for TransactionInput {
             Some(wei) => wei.into(),
             None => {
                 tracing::warn!(reason = %"transaction without gasPrice");
-                return Err(ConversionError::NoWei(anyhow!("Transaction sent without gasPrice is not allowed.")));
+                return Err(anyhow!("Transaction sent without gasPrice is not allowed."));
             }
         };
 

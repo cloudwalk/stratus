@@ -19,6 +19,7 @@ use jsonrpsee::SubscriptionMessage;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
@@ -121,6 +122,23 @@ where
                                  // withdrawals_root: todo!(),
                                  // withdrawals: todo!(),
                                  // other: todo!(),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
+impl From<ExternalBlock> for BlockHeader {
+    fn from(value: ExternalBlock) -> Self {
+        Self {
+            number: value.number(),
+            hash: value.hash(),
+            transactions_root: value.transactions_root.into(),
+            gas: value.gas_used.into(),
+            bloom: value.logs_bloom.unwrap_or_default().into(),
+            timestamp: value.timestamp.into(),
+            parent_hash: value.parent_hash.into(),
         }
     }
 }
