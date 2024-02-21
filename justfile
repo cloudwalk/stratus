@@ -288,3 +288,32 @@ contracts-test-stratus:
     echo "-> Killing Stratus"
     killport 3000
     exit $result_code
+
+# Contracts: Start Stratus with Postgres and run contracts test
+contracts-test-stratus-psql:
+    #!/bin/bash
+    echo "-> Starting Postgres"
+    docker-compose down
+    docker-compose up -d
+
+    echo "-> Waiting Postgres to start"
+    wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+
+    echo "-> Starting Stratus"
+    RUST_LOG=debug just run -a 0.0.0.0:3000 -s {{postgres_url}} > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+
+    echo "-> Running E2E tests"
+    just e2e-contracts
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+
+    echo "-> Killing Postgres"
+    docker-compose down
+
+    echo "** -> Stratus log accessible in ./stratus.log **"
+    exit $result_code
