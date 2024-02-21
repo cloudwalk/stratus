@@ -11,7 +11,6 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
-use super::InMemoryAccount;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -27,6 +26,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::inmemory::InMemoryAccount;
 use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::EthStorageError;
 use crate::eth::storage::PermanentStorage;

@@ -11,11 +11,11 @@ use std::fmt::Debug;
 
 use anyhow::anyhow;
 
-use super::ExternalReceipt;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionResult;
+use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;

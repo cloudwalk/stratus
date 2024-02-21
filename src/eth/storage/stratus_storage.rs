@@ -4,9 +4,6 @@ use std::time::Instant;
 
 use anyhow::anyhow;
 
-use super::permanent_storage::PermanentStorage;
-use super::temporary_storage::TemporaryStorage;
-use super::EthStorageError;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -21,6 +18,9 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::EthStorageError;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::TemporaryStorage;
 use crate::infra::metrics;
 
 pub struct StratusStorage {

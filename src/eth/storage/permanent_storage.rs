@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 
-use super::EthStorageError;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -15,6 +14,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::EthStorageError;
 
 /// Permanent (committed) storage operations
 #[async_trait]
