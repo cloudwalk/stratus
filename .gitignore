@@ -16,6 +16,11 @@ e2e/cache
 # E2E (Solidity contracts)
 e2e-contracts/repos
 
+# E2E (NodeJS)
+node_modules/
+package.json
+package-lock.json
+
 # Build
 /target
 vendor
