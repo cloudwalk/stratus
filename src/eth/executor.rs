@@ -101,7 +101,7 @@ impl EthExecutor {
                         return Err(e);
                     };
 
-                    PermanentStorage::save_account_changes(&*self.storage, block.number(), execution).await?;
+                    TemporaryStorage::save_account_changes(&*self.storage, block.number(), execution).await?;
                 }
                 Err(e) => {
                     // TODO: must handle this better because some errors can be expected

@@ -50,9 +50,6 @@ pub trait PermanentStorage: Send + Sync {
     /// Persists initial accounts (test accounts or genesis accounts).
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
-    /// Temporarily stores account changes during block production
-    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
-
     /// Resets all state to a specific block number.
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
     /// Enables genesis block.

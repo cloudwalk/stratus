@@ -90,7 +90,7 @@ impl PermanentStorage for InMemoryStorage {
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
-
+    
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
         Ok(next.into())
@@ -252,12 +252,6 @@ impl PermanentStorage for InMemoryStorage {
                 .accounts
                 .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
         }
-        Ok(())
-    }
-
-    async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
-        let mut state_lock = self.lock_write().await;
-        save_account_changes(&mut state_lock, number, execution);
         Ok(())
     }
 

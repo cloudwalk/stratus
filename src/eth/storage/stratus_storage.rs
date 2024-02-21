@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use super::permanent_storage::PermanentStorage;
 use super::temporary_storage::TemporaryStorage;
 use super::EthStorageError;
-
+use super::InMemoryStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -240,14 +240,6 @@ impl PermanentStorage for StratusStorage {
         let start = Instant::now();
         let result = self.perm.save_block(block).await;
         metrics::inc_storage_save_block(start.elapsed(), result.is_ok());
-        result
-    }
-
-    /// Temporarily stores account changes during block production
-    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
-        let start = Instant::now();
-        let result = self.perm.save_account_changes(block_number, execution).await;
-        metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
         result
     }
 
