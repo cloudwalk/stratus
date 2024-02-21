@@ -641,21 +641,6 @@ impl PermanentStorage for Postgres {
         Ok(block_number)
     }
 
-    // async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-    //     tracing::debug!("incrementing block number");
-
-    //     let nextval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
-    //         .fetch_one(&self.connection_pool)
-    //         .await
-    //         .unwrap_or_else(|err| {
-    //             tracing::error!(?err, "failed to get block number");
-    //             0
-    //         })
-    //         + 1;
-
-    //     Ok(nextval.into())
-    // }
-
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
