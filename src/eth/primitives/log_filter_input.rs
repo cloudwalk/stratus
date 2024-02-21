@@ -63,7 +63,7 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Present => PermanentStorage::read_current_block_number(&**storage).await?,
+            StoragePointInTime::Present => storage.read_current_block_number().await?,
             StoragePointInTime::Past(number) => number,
         };
         let to = match to {

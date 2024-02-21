@@ -17,7 +17,6 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 
 /// Permanent (committed) storage operations
-// TODO: add Metrified method
 #[async_trait]
 pub trait PermanentStorage: Send + Sync {
     // Retrieves the last mined block number.
@@ -52,6 +51,7 @@ pub trait PermanentStorage: Send + Sync {
 
     /// Resets all state to a specific block number.
     async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+
     /// Enables genesis block.
     ///
     /// TODO: maybe can use save_block from a default method.

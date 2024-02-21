@@ -103,7 +103,7 @@ impl EthExecutor {
                         return Err(e);
                     };
 
-                    TemporaryStorage::save_account_changes(&*self.storage, block.number(), execution.clone()).await?;
+                    self.storage.save_account_changes(block.number(),execution.clone() ).await?;
                     // temporarily save state to next transactions from the same block
                     executions.push((tx, receipt, execution));
                 }
@@ -117,7 +117,7 @@ impl EthExecutor {
         }
 
         let block = Block::from_external(block, executions)?;
-        PermanentStorage::increment_block_number(&*self.storage).await?;
+        self.storage.increment_block_number().await?;
         if let Err(e) = self.storage.commit(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);
@@ -209,7 +209,7 @@ impl EthExecutor {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?;
-            if let Some(conflicts) = TemporaryStorage::check_conflicts(&*self.storage, &execution).await? {
+            if let Some(conflicts) = self.storage.check_conflicts(&execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;
             }

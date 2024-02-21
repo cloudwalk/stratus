@@ -12,7 +12,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 
 /// Temporary storage (in-between blocks) operations
-// TODO: add Metrified method
 #[async_trait]
 pub trait TemporaryStorage: Send + Sync {
     /// Checks if the transaction execution conflicts with the current storage state.

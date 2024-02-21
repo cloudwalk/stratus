@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::anyhow;
-use async_trait::async_trait;
 
 use super::permanent_storage::PermanentStorage;
 use super::temporary_storage::TemporaryStorage;
@@ -38,9 +37,9 @@ impl StratusStorage {
     /// Retrieves an account from the storage. Returns default value when not found.
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         let start = Instant::now();
-        let result = match TemporaryStorage::maybe_read_account(self, address, point_in_time).await? {
+        let result = match self.temp.maybe_read_account(address, point_in_time).await? {
             Some(account) => Ok(account),
-            None => match PermanentStorage::maybe_read_account(self, address, point_in_time).await? {
+            None => match self.perm.maybe_read_account(address, point_in_time).await? {
                 Some(account) => Ok(account),
                 None => Ok(Account {
                     address: address.clone(),
@@ -48,7 +47,6 @@ impl StratusStorage {
                 }),
             },
         };
-
         metrics::inc_storage_read_account(start.elapsed(), point_in_time, result.is_ok());
         result
     }
@@ -56,9 +54,9 @@ impl StratusStorage {
     /// Retrieves an slot from the storage. Returns default value when not found.
     pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         let start = Instant::now();
-        let result = match TemporaryStorage::maybe_read_slot(&*self.temp, address, slot_index, point_in_time).await? {
+        let result = match self.temp.maybe_read_slot( address, slot_index, point_in_time).await? {
             Some(slot) => Ok(slot),
-            None => match PermanentStorage::maybe_read_slot(&*self.perm, address, slot_index, point_in_time).await? {
+            None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
                 Some(slot) => Ok(slot),
                 None => Ok(Slot {
                     index: slot_index.clone(),
@@ -75,7 +73,7 @@ impl StratusStorage {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
-                let current_block = PermanentStorage::read_current_block_number(&*self.perm).await?;
+                let current_block = PermanentStorage::read_current_block_number(self.perm.deref()).await?;
                 if number <= &current_block {
                     Ok(StoragePointInTime::Past(*number))
                 } else {
@@ -91,10 +89,6 @@ impl StratusStorage {
         }
     }
 
-    pub async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        self.perm.save_accounts(accounts).await
-    }
-
     /// Commits changes to permanent storage and flushes temporary storage
     /// Basically calls the `save_block` method from the permanent storage, which
     /// will by definition update accounts, slots, transactions, logs etc
@@ -108,122 +102,40 @@ impl StratusStorage {
         metrics::inc_storage_commit(start.elapsed(), result.is_ok());
         result
     }
-}
 
-#[async_trait]
-impl TemporaryStorage for StratusStorage {
     /// Checks if the transaction execution conflicts with the current storage state.
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
+    pub async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let start = Instant::now();
         let result = TemporaryStorage::check_conflicts(self.temp.deref(), execution).await;
         metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
         result
     }
 
-    /// Retrieves an account from the storage. Returns Option when not found.
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        let start = Instant::now();
-        let result = TemporaryStorage::maybe_read_account(self.temp.deref(), address, point_in_time).await;
-        metrics::inc_storage_maybe_read_account(
-            start.elapsed(),
-            "temp",
-            point_in_time,
-            result.as_ref().is_ok_and(|v| v.is_some()),
-            result.is_ok(),
-        );
-        result
-    }
-
-    /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        let start = Instant::now();
-        let result = TemporaryStorage::maybe_read_slot(self.temp.deref(), address, slot_index, point_in_time).await;
-        metrics::inc_storage_maybe_read_slot(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
-        result
-    }
-
-    /// Persist atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        let start = Instant::now();
-        let result = TemporaryStorage::save_block(self.temp.deref(), block).await;
-        metrics::inc_storage_save_block(start.elapsed(), result.is_ok());
-        result
-    }
-
     /// Temporarily stores account changes during block production
-    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+    pub async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = TemporaryStorage::save_account_changes(self.temp.deref(), block_number, execution).await;
         metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
         result
     }
 
-    /// Resets all state to a specific block number.
-    async fn reset(&self) -> anyhow::Result<()> {
-        let start = Instant::now();
-        let result = TemporaryStorage::reset(self.temp.deref()).await;
-        metrics::inc_storage_reset(start.elapsed(), result.is_ok());
-        result
-    }
-}
-
-#[async_trait]
-impl PermanentStorage for StratusStorage {
-    // -------------------------------------------------------------------------
-    // Block number operations
-    // -------------------------------------------------------------------------
-
     // Retrieves the last mined block number.
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    pub async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         let start = Instant::now();
         let result = self.perm.read_current_block_number().await;
         metrics::inc_storage_read_current_block_number(start.elapsed(), result.is_ok());
         result
     }
 
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+    pub async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         let start = Instant::now();
         let result = self.perm.increment_block_number().await;
         metrics::inc_storage_increment_block_number(start.elapsed(), result.is_ok());
         result
     }
 
-    // -------------------------------------------------------------------------
-    // State operations
-    // -------------------------------------------------------------------------
-
-    /// Checks if the transaction execution conflicts with the current storage state.
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let start = Instant::now();
-        let result = self.perm.check_conflicts(execution).await;
-        metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
-        result
-    }
-
-    /// Retrieves an account from the storage. Returns Option when not found.
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        let start = Instant::now();
-        let result = self.perm.maybe_read_account(address, point_in_time).await;
-        metrics::inc_storage_maybe_read_account(
-            start.elapsed(),
-            "perm",
-            point_in_time,
-            result.as_ref().is_ok_and(|v| v.is_some()),
-            result.is_ok(),
-        );
-        result
-    }
-
-    /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        let start = Instant::now();
-        let result = self.perm.maybe_read_slot(address, slot_index, point_in_time).await;
-        metrics::inc_storage_maybe_read_slot(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
-        result
-    }
-
     /// Retrieves a block from the storage.
-    async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         let start = Instant::now();
         let result = self.perm.read_block(block_selection).await;
         metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
@@ -231,7 +143,7 @@ impl PermanentStorage for StratusStorage {
     }
 
     /// Retrieves a transaction from the storage.
-    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    pub async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         let start = Instant::now();
         let result = self.perm.read_mined_transaction(hash).await;
         metrics::inc_storage_read_mined_transaction(start.elapsed(), result.is_ok());
@@ -239,41 +151,39 @@ impl PermanentStorage for StratusStorage {
     }
 
     /// Retrieves logs from the storage.
-    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    pub async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         let start = Instant::now();
         let result = self.perm.read_logs(filter).await;
         metrics::inc_storage_read_logs(start.elapsed(), result.is_ok());
         result
     }
 
-    /// Persist atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        let start = Instant::now();
-        let result = self.perm.save_block(block).await;
-        metrics::inc_storage_save_block(start.elapsed(), result.is_ok());
-        result
-    }
-
-    /// Resets all state to a specific block number.
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
-        let start = Instant::now();
-        let result = self.perm.reset(number).await;
-        metrics::inc_storage_reset(start.elapsed(), result.is_ok());
-        result
-    }
-
     /// Enables genesis block.
     ///
     /// TODO: maybe can use save_block from a default method.
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
+    pub async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
         self.perm.enable_genesis(genesis).await
     }
 
     /// Enables pre-genesis accounts
-    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    pub async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.perm.save_accounts(accounts).await;
         metrics::inc_storage_save_accounts(start.elapsed(), result.is_ok());
+        result
+    }
+
+    pub async fn reset_temp(&self) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.temp.reset().await;
+        metrics::inc_storage_reset(start.elapsed(), result.is_ok());
+        result
+    }
+
+    pub async fn reset_perm(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.perm.reset(block_number).await;
+        metrics::inc_storage_reset(start.elapsed(), result.is_ok());
         result
     }
 }
