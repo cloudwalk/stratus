@@ -19,13 +19,14 @@
 //! This approach allows for a more dynamic and responsive blockchain, adapting quickly to varying
 //! transaction loads and ensuring timely block generation.
 
+mod block_miner;
 pub mod codegen;
 pub mod evm;
 mod executor;
-pub mod miner;
 pub mod primitives;
 pub mod rpc;
 pub mod storage;
 pub mod sync_parser;
 
+pub use block_miner::BlockMiner;
 pub use executor::EthExecutor;
