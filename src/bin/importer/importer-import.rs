@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         .into_iter()
         .map(|row| Account::new_with_balance(row.address, row.balance))
         .collect_vec();
-    storage.save_accounts(accounts).await?;
+    storage.save_accounts_to_perm(accounts).await?;
 
     // process blocks
     let mut tx = db_init_blocks_cursor(&pg).await?;

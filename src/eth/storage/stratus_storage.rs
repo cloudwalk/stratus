@@ -53,17 +53,17 @@ impl StratusStorage {
         result
     }
 
-    /// Retrieves a block from the storage.
-    pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    // -------------------------------------------------------------------------
+    // State queries
+    // -------------------------------------------------------------------------
+
+    /// Checks if the transaction execution conflicts with the current storage state.
+    pub async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let start = Instant::now();
-        let result = self.perm.read_block(block_selection).await;
-        metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
+        let result = TemporaryStorage::check_conflicts(self.temp.deref(), execution).await;
+        metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
         result
     }
-
-    // -------------------------------------------------------------------------
-    // State operations
-    // -------------------------------------------------------------------------
 
     /// Retrieves an account from the storage. Returns default value when not found.
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
@@ -99,33 +99,11 @@ impl StratusStorage {
         result
     }
 
-    /// Commits changes to permanent storage and flushes temporary storage
-    /// Basically calls the `save_block` method from the permanent storage, which
-    /// will by definition update accounts, slots, transactions, logs etc
-    pub async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    /// Retrieves a block from the storage.
+    pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         let start = Instant::now();
-
-        // save block in permanent storage and resets temporary storage
-        let result = self.perm.save_block(block).await;
-        self.reset_temp().await?;
-
-        metrics::inc_storage_commit(start.elapsed(), result.is_ok());
-        result
-    }
-
-    /// Checks if the transaction execution conflicts with the current storage state.
-    pub async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let start = Instant::now();
-        let result = TemporaryStorage::check_conflicts(self.temp.deref(), execution).await;
-        metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
-        result
-    }
-
-    /// Temporarily stores account changes during block production
-    pub async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
-        let start = Instant::now();
-        let result = self.temp.save_account_changes(block_number, execution).await;
-        metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
+        let result = self.perm.read_block(block_selection).await;
+        metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
         result
     }
 
@@ -145,11 +123,34 @@ impl StratusStorage {
         result
     }
 
-    /// Enables pre-genesis accounts
-    pub async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    // -------------------------------------------------------------------------
+    // State mutations
+    // -------------------------------------------------------------------------
+
+    /// Persist accounts like pre-genesis accounts or test accounts.
+    pub async fn save_accounts_to_perm(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.perm.save_accounts(accounts).await;
         metrics::inc_storage_save_accounts(start.elapsed(), result.is_ok());
+        result
+    }
+
+    /// Persists temporary accounts changes produced during block production.
+    pub async fn save_account_changes_to_temp(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.temp.save_account_changes(block_number, execution).await;
+        metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
+        result
+    }
+
+    /// Commits changes to permanent storage and prepares temporary storage to a new block to be produced.
+    pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+        let start = Instant::now();
+
+        let result = self.perm.save_block(block).await;
+        self.reset_temp().await?;
+
+        metrics::inc_storage_commit(start.elapsed(), result.is_ok());
         result
     }
 

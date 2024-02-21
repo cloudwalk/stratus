@@ -102,7 +102,7 @@ impl EthExecutor {
                     };
 
                     // temporarily save state to next transactions from the same block
-                    self.storage.save_account_changes(block.number(), execution.clone()).await?;
+                    self.storage.save_account_changes_to_temp(block.number(), execution.clone()).await?;
                     executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
@@ -116,7 +116,7 @@ impl EthExecutor {
 
         let block = Block::from_external(block, executions)?;
         self.storage.increment_block_number().await?;
-        if let Err(e) = self.storage.commit(block.clone()).await {
+        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
@@ -145,7 +145,7 @@ impl EthExecutor {
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
-            self.storage.commit(block).await?;
+            self.storage.commit_to_perm(block).await?;
         }
 
         //TODO compare slots/changes
@@ -191,7 +191,7 @@ impl EthExecutor {
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
-        self.storage.commit(block.clone()).await?;
+        self.storage.commit_to_perm(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {
             tracing::error!(reason = ?e, "failed to send block notification");
@@ -215,7 +215,7 @@ impl EthExecutor {
             // mine and commit block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.storage.commit(block.clone()).await {
+            match self.storage.commit_to_perm(block.clone()).await {
                 Ok(()) => {}
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");
