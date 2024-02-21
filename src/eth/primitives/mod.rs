@@ -112,6 +112,7 @@ mod unix_time;
 mod wei;
 
 pub use account::Account;
+pub use account::test_accounts;
 pub use address::Address;
 pub use alias::Signature32Bytes;
 pub use alias::Signature4Bytes;

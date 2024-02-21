@@ -8,7 +8,6 @@ mod storage_error;
 mod stratus_storage;
 mod temporary_storage;
 
-pub use eth_storage::test_accounts;
 pub use inmemory::InMemoryStorage;
 pub use permanent_storage::PermanentStorage;
 pub use storage_error::EthStorageError;

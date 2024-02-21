@@ -211,7 +211,7 @@ async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
 
 // Block
 async fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    let number = TemporaryStorage::read_current_block_number(&*ctx.storage).await?;
+    let number = PermanentStorage::read_current_block_number(&*ctx.storage).await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 

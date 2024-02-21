@@ -50,8 +50,8 @@ impl InMemoryStorage {
         self.state.write().await
     }
 
-    /// Flushes in-memory state
-    pub async fn flush(&self) {
+    /// Clears in-memory state.
+    pub async fn clear(&self) {
         let mut state = self.lock_write().await;
         state.accounts.clear();
         state.transactions.clear();
@@ -89,6 +89,11 @@ impl PermanentStorage for InMemoryStorage {
 
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
+    }
+    
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
+        Ok(next.into())
     }
 
     // -------------------------------------------------------------------------
@@ -296,19 +301,6 @@ impl PermanentStorage for InMemoryStorage {
 #[async_trait]
 impl TemporaryStorage for InMemoryStorage {
     // -------------------------------------------------------------------------
-    // Block number operations
-    // -------------------------------------------------------------------------
-
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
-        Ok(self.block_number.load(Ordering::SeqCst).into())
-    }
-
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(next.into())
-    }
-
-    // -------------------------------------------------------------------------
     // State operations
     // ------------------------------------------------------------------------
 
@@ -399,16 +391,6 @@ impl TemporaryStorage for InMemoryStorage {
         Ok(())
     }
 
-    /// Commits changes to permanent storage and flushes overlay storage
-    /// Basically calls the `save_block` method from the permanent storage, which
-    /// will by definition update accounts, slots, transactions, logs etc
-    async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        PermanentStorage::save_block(self, block).await?;
-        TemporaryStorage::reset(self).await?;
-
-        Ok(())
-    }
-
     async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let mut state_lock = self.lock_write().await;
         save_account_changes(&mut state_lock, number, execution);
@@ -416,8 +398,15 @@ impl TemporaryStorage for InMemoryStorage {
     }
 
     async fn reset(&self) -> anyhow::Result<()> {
-        self.flush().await;
-        self.block_number.store(0, Ordering::SeqCst);
+        let mut state = self.lock_write().await;
+        state.accounts.clear();
+        state.transactions.clear();
+        state.blocks_by_hash.clear();
+        state.blocks_by_number.clear();
+        state.logs.clear();
+
+        // self.block_number.store(0, Ordering::SeqCst);
+
         Ok(())
     }
 }

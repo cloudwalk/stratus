@@ -24,6 +24,8 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::ext::not;
 
+use super::storage::PermanentStorage;
+
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 }
@@ -44,6 +46,8 @@ impl BlockMiner {
     /// Mine one block with no transactions.
     #[cfg(feature = "evm-mine")]
     pub async fn mine_with_no_transactions(&mut self) -> anyhow::Result<Block> {
+        use super::storage::PermanentStorage;
+
         let number = self.storage.increment_block_number().await?;
         Ok(Block::new_with_capacity(number, UnixTime::now(), 0))
     }
@@ -63,7 +67,7 @@ impl BlockMiner {
     /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
     pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, Execution)>) -> anyhow::Result<Block> {
         // init block
-        let number = TemporaryStorage::increment_block_number(&*self.storage).await?;
+        let number = PermanentStorage::increment_block_number(&*self.storage).await?;
         let block_timestamp = transactions
             .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp.cmp(&e2.block_timestamp))
             .1

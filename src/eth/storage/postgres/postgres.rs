@@ -41,6 +41,21 @@ impl PermanentStorage for Postgres {
         Ok(None)
     }
 
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+        tracing::debug!("incrementing block number");
+
+        let nextval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
+            .fetch_one(&self.connection_pool)
+            .await
+            .unwrap_or_else(|err| {
+                tracing::error!(?err, "failed to get block number");
+                0
+            })
+            + 1;
+
+        Ok(nextval.into())
+    }
+
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
         let account = match point_in_time {

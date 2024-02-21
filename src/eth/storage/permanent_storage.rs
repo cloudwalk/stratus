@@ -23,6 +23,9 @@ pub trait PermanentStorage: Send + Sync {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
 
+    /// Atomically increments the block number, returning the new value.
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
+
     /// Checks if the transaction execution conflicts with the current storage state.
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>>;
 

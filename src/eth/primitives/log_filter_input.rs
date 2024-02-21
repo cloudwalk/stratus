@@ -20,6 +20,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterTopicCombination;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 
@@ -63,7 +64,7 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Present => TemporaryStorage::read_current_block_number(&**storage).await?,
+            StoragePointInTime::Present => PermanentStorage::read_current_block_number(&**storage).await?,
             StoragePointInTime::Past(number) => number,
         };
         let to = match to {

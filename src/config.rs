@@ -16,7 +16,7 @@ use tokio::runtime::Runtime;
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::primitives::Address;
-use crate::eth::storage::test_accounts;
+use crate::eth::primitives::test_accounts;
 use crate::eth::storage::InMemoryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
@@ -177,7 +177,7 @@ pub enum StorageConfig {
 impl StorageConfig {
     /// Initializes the storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp = InMemoryStorage::default();
+        let temp = Arc::new(InMemoryStorage::default());
 
         let perm: Arc<dyn PermanentStorage> = match self {
             Self::InMemory => Arc::new(InMemoryStorage::default()),
