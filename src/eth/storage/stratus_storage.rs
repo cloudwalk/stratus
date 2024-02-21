@@ -125,7 +125,13 @@ impl TemporaryStorage for StratusStorage {
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         let start = Instant::now();
         let result = TemporaryStorage::maybe_read_account(self.temp.deref(), address, point_in_time).await;
-        metrics::inc_storage_maybe_read_account(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        metrics::inc_storage_maybe_read_account(
+            start.elapsed(),
+            "temp",
+            point_in_time,
+            result.as_ref().is_ok_and(|v| v.is_some()),
+            result.is_ok(),
+        );
         result
     }
 
@@ -199,7 +205,13 @@ impl PermanentStorage for StratusStorage {
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         let start = Instant::now();
         let result = self.perm.maybe_read_account(address, point_in_time).await;
-        metrics::inc_storage_maybe_read_account(start.elapsed(), point_in_time, result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
+        metrics::inc_storage_maybe_read_account(
+            start.elapsed(),
+            "perm",
+            point_in_time,
+            result.as_ref().is_ok_and(|v| v.is_some()),
+            result.is_ok(),
+        );
         result
     }
 
