@@ -35,9 +35,7 @@ use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
-use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TemporaryStorage;
 use crate::eth::EthExecutor;
 
 // -----------------------------------------------------------------------------
@@ -159,8 +157,8 @@ fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyh
 // Debug
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    TemporaryStorage::reset(&*ctx.storage).await?;
-    PermanentStorage::reset(&*ctx.storage, number).await?;
+    ctx.storage.reset_temp().await?;
+    ctx.storage.reset_perm(number).await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 
@@ -211,7 +209,7 @@ async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
 
 // Block
 async fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    let number = PermanentStorage::read_current_block_number(&*ctx.storage).await?;
+    let number = ctx.storage.read_current_block_number().await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 

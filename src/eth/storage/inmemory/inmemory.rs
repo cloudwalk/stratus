@@ -228,7 +228,7 @@ impl PermanentStorage for InMemoryStorage {
             if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
                 // release lock and rollback to previous block
                 drop(state);
-                PermanentStorage::reset(self, current_block).await?;
+                PermanentStorage::reset_at(self, current_block).await?;
 
                 // inform error
                 return Err(EthStorageError::Conflict(conflicts));
@@ -262,7 +262,7 @@ impl PermanentStorage for InMemoryStorage {
         Ok(())
     }
 
-    async fn reset(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
@@ -284,7 +284,7 @@ impl PermanentStorage for InMemoryStorage {
 
         // remove account changes
         for account in state.accounts.values_mut() {
-            account.reset(block_number);
+            account.reset_at(block_number);
         }
 
         Ok(())
@@ -357,41 +357,6 @@ impl TemporaryStorage for InMemoryStorage {
         }
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
-        let mut state = self.lock_write().await;
-
-        // check conflicts
-        for transaction in &block.transactions {
-            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
-                return Err(EthStorageError::Conflict(conflicts));
-            }
-        }
-
-        // save block
-        tracing::debug!(number = %block.number(), "saving block");
-        let block = Arc::new(block);
-        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
-        state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
-
-        // save transactions
-        for transaction in block.transactions.clone() {
-            tracing::debug!(hash = %transaction.input.hash, "saving transaction");
-            state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
-            let is_success = transaction.is_success();
-
-            // save logs
-            if is_success {
-                for log in transaction.logs {
-                    state.logs.push(log);
-                }
-            }
-
-            // save execution changes
-            save_account_changes(&mut state, *block.number(), transaction.execution);
-        }
-        Ok(())
-    }
-
     async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let mut state_lock = self.lock_write().await;
         save_account_changes(&mut state_lock, number, execution);
@@ -405,8 +370,6 @@ impl TemporaryStorage for InMemoryStorage {
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
         state.logs.clear();
-
-        // self.block_number.store(0, Ordering::SeqCst);
 
         Ok(())
     }
