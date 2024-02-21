@@ -32,9 +32,8 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::EthStorageError;
-
+use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 
@@ -116,7 +115,7 @@ impl EthExecutor {
                 }
             }
         }
-        
+
         let block = Block::from_external(block, executions)?;
         PermanentStorage::increment_block_number(&*self.storage).await?;
         if let Err(e) = self.storage.commit(block.clone()).await {

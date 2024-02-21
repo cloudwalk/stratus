@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use super::permanent_storage::PermanentStorage;
 use super::temporary_storage::TemporaryStorage;
 use super::EthStorageError;
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
