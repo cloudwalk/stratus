@@ -21,7 +21,6 @@ use tokio::sync::Mutex;
 use super::primitives::ExternalTransaction;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
-use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
@@ -33,6 +32,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+use crate::eth::BlockMiner;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
