@@ -59,17 +59,11 @@ metrics! {
     "Duration of storage read_account operation."
     histogram storage_read_account{point_in_time, success},
 
-    "Duration of storage maybe_read_account operation."
-    histogram storage_maybe_read_account{storage_kind, point_in_time, found, success},
-
     "Duration of storage read_block operation."
     histogram storage_read_block{success},
 
     "Duration of storage read_logs operation."
     histogram storage_read_logs{success},
-
-    "Duration of storage maybe_read_slot operation."
-    histogram storage_maybe_read_slot{point_in_time, found, success},
 
     "Duration of storage read_slot operation."
     histogram storage_read_slot{point_in_time, success},

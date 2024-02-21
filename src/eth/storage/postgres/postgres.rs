@@ -700,13 +700,13 @@ impl PermanentStorage for Postgres {
             .await
             .context("failed to insert nonce")?;
 
-            tx.commit().await.context("Failed to commit transaction")?;
+            tx.commit().await.context("failed to commit transaction")?;
         }
 
         Ok(())
     }
 
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+    async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()> {
         sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
             .execute(&self.connection_pool)
             .await?;
