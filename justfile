@@ -32,6 +32,11 @@ run *args="":
 run-release *args="":
     RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
 
+run-substrate-mock:
+    npm init -y
+    npm install express
+    node ./e2e/substrate-sync-mock-server/index.js
+
 # Stratus: Compile with debug options
 build:
     cargo build
@@ -174,6 +179,9 @@ e2e-stratus test="":
     echo "-> Starting Stratus"
     RUST_LOG=info just run -a 0.0.0.0:3000 &
 
+    echo "-> Starting Substrate Mock"
+    RUST_LOG=info just run-substrate-mock &
+
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
 
@@ -183,6 +191,7 @@ e2e-stratus test="":
 
     echo "-> Killing Stratus"
     killport 3000
+    killport 3003
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
@@ -258,3 +267,24 @@ contracts-test-brlc-multisig:
 # Contracts: Run CompoundPeriphery contract tests
 contracts-test-brlc-compound:
     cd e2e-contracts && ./test-contracts.sh -c
+
+# Contracts: Remove all the cloned repositories
+contracts-remove:
+    cd e2e-contracts && ./remove-contracts.sh
+
+# Contracts: Start Stratus and run contracts test
+contracts-test-stratus:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    RUST_LOG=info just run -a 0.0.0.0:3000 > /dev/null &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+
+    echo "-> Running E2E Contracts tests"
+    just e2e-contracts
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code

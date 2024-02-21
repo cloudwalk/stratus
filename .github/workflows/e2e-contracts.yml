@@ -1,17 +1,21 @@
-name: Setup E2E Environment
+name: Contracts E2E tests
 
 on:
-  workflow_call:
-    inputs:
-      test_command:
-        required: true
-        type: string
+  pull_request:
+    branches:
+      - '*'
+  workflow_dispatch:
 
 jobs:
-  setup_and_test:
-    name: Setup and Run E2E
+  contract_test:
+    name: Run contracts e2e
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -31,10 +35,8 @@ jobs:
           asdf install nodejs 20.10.0
           asdf global nodejs 20.10.0
 
-      - name: Set up Test Dependencies
-        run: |
-          cargo install killport
-          cargo install wait-service
+      - name: Set up Test and clone repositories
+        run: just setup
 
       - name: Run e2e tests
-        run: just ${{ inputs.test_command }}
+        run: just contracts-test-stratus
