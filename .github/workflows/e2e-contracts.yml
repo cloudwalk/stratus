@@ -8,7 +8,7 @@ on:
 
 jobs:
   contract_test:
-    name: Run contracts e2e
+    name: Contracts E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
