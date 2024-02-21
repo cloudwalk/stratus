@@ -21,7 +21,6 @@ use crate::eth::storage::InMemoryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StratusStorage;
 use crate::eth::EthExecutor;
 use crate::infra::postgres::Postgres;
 

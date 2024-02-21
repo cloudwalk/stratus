@@ -31,7 +31,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::EthStorageError;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::storage::EthStorageError;
@@ -205,7 +204,7 @@ impl EthExecutor {
             // mine and commit block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.eth_storage.commit(block.clone()).await {
+            match self.storage.commit(block.clone()).await {
                 Ok(()) => {}
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");

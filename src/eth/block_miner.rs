@@ -41,10 +41,6 @@ impl BlockMiner {
         Block::new_with_capacity(BlockNumber::ZERO, UnixTime::from(1702568764), 0)
     }
 
-    async fn mine(&self, _block: Block) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     /// Mine one block with no transactions.
     #[cfg(feature = "evm-mine")]
     pub async fn mine_with_no_transactions(&mut self) -> anyhow::Result<Block> {
@@ -68,7 +64,7 @@ impl BlockMiner {
     pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, Execution)>) -> anyhow::Result<Block> {
         // init block
         let number = TemporaryStorage::increment_block_number(&*self.storage).await?;
-        let block_timpestamp = transactions
+        let block_timestamp = transactions
             .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp.cmp(&e2.block_timestamp))
             .1
             .block_timestamp;
