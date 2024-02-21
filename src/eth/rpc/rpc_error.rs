@@ -19,6 +19,7 @@ pub enum RpcError {
 // -----------------------------------------------------------------------------
 impl From<anyhow::Error> for RpcError {
     fn from(value: anyhow::Error) -> Self {
+        tracing::error!(?value);
         match value.downcast::<ErrorObject>() {
             Ok(err) => RpcError::Response(err),
             Err(err) => RpcError::Generic(err),
