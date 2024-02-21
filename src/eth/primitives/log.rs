@@ -6,6 +6,7 @@
 //! emitting address, topics, and additional data. It also provides conversion
 //! functions to translate between internal and external log representations.
 
+use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
 use revm::primitives::Log as RevmLog;
 
@@ -31,6 +32,16 @@ pub struct Log {
 // ----------------------------------------------------------------------------
 impl From<RevmLog> for Log {
     fn from(value: RevmLog) -> Self {
+        Self {
+            address: value.address.into(),
+            topics: value.topics.into_iter().map_into().collect(),
+            data: value.data.into(),
+        }
+    }
+}
+
+impl From<EthersLog> for Log {
+    fn from(value: EthersLog) -> Self {
         Self {
             address: value.address.into(),
             topics: value.topics.into_iter().map_into().collect(),

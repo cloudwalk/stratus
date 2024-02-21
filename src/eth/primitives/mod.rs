@@ -111,6 +111,7 @@ mod transaction_mined;
 mod unix_time;
 mod wei;
 
+pub use account::test_accounts;
 pub use account::Account;
 pub use address::Address;
 pub use alias::Signature32Bytes;
@@ -136,6 +137,7 @@ pub use execution_value_change::ExecutionValueChange;
 pub use external_block::ExternalBlock;
 pub use external_receipt::ExternalReceipt;
 pub use external_transaction::ExternalTransaction;
+pub use external_transaction::ExternalTransactionExecution;
 pub use gas::Gas;
 pub use hash::Hash;
 pub use index::Index;
