@@ -19,7 +19,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-
 use crate::eth::storage::EthStorageError;
 use crate::infra::metrics;
 
@@ -33,14 +32,14 @@ impl MetrifiedStorage {
         Self { inner }
     }
 
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+    async fn _read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         let start = Instant::now();
         let result = self.inner.read_account(address, point_in_time).await;
         metrics::inc_storage_read_account(start.elapsed(), point_in_time, result.is_ok());
         result
     }
 
-    async fn read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    async fn _read_slot(&self, address: &Address, slot: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         let start = Instant::now();
         let result = self.inner.read_slot(address, slot, point_in_time).await;
         metrics::inc_storage_read_slot(start.elapsed(), point_in_time, result.is_ok());
