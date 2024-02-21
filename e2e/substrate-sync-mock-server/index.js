@@ -1,35 +1,42 @@
 const express = require('express');
+const { Pool } = require('pg');
 const app = express();
 const port = 3003;
 
+// Assuming connectionString is set via an environment variable or command line argument
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+});
+
 app.use(express.json());
 
-app.post('/rpc', (req, res) => {
-    const mockResponse = {
-        "hash": "0x1ff92b3472bc2a4223317ec13d7804fba2b57831480173e4399fc0c50dbd12a2",
-        "size": "0x1f9",
-        "miner": "0x0000000000000000000000000000000000000000",
-        "nonce": "0x0000000000000000",
-        "author": "0x0000000000000000000000000000000000000000",
-        "number": "0x0",
-        "uncles": [],
-        "gasUsed": "0x0",
-        "gasLimit": "0xffffffff",
-        "extraData": "0x",
-        "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-        "stateRoot": "0xf5a3db13ff5fc5b56504c43353506836a0f533dda23a3f7fc6487ebf7de2c18a",
-        "timestamp": "0x0",
-        "difficulty": "0x0",
-        "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
-        "receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-        "transactions": [],
-        "totalDifficulty": "0x0",
-        "transactionsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-    };
-    res.json(mockResponse);
+app.post('/rpc', async (req, res) => {
+    try {
+        // Extract block number from the request and convert from hex to integer
+        const blockNumberHex = req.body.params[0];
+        const blockNumber = parseInt(blockNumberHex, 16); // Convert hex to integer
+
+        const query = `
+            SELECT * FROM external_blocks
+            WHERE external_blocks.number = $1
+            LIMIT 1;
+        `;
+
+        // Execute the query, passing the block number as a parameter
+        const result = await pool.query(query, [blockNumber.toString()]);
+
+        if (result.rows.length > 0) {
+            res.json(result.rows[0]);
+        } else {
+            console.error('No records found for block number:', blockNumber);
+            process.exit(1);
+        }
+    } catch (error) {
+        console.error('Error executing query', error.stack);
+        process.exit(1);
+    }
 });
 
 app.listen(port, () => {
-    console.log(`Mock server listening at http://localhost:${port}`);
+    console.log(`Server listening at http://localhost:${port}`);
 });
