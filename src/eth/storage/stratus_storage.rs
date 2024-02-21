@@ -147,7 +147,7 @@ impl TemporaryStorage for StratusStorage {
 
         // clears temporary storage
         self.temp.flush().await;
-        
+
         metrics::inc_storage_commit(start.elapsed(), result.is_ok());
         result
     }
