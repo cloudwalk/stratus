@@ -383,21 +383,15 @@ fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNum
             .entry(changes.address.clone())
             .or_insert_with(|| InMemoryAccount::new(changes.address));
 
-        // nonce
-        if let Some(nonce) = changes.nonce.take_modified() {
+        // account basic info
+        if let Some(nonce) = changes.nonce.take() {
             account.set_nonce(block_number, nonce);
         }
-
-        // balance
-        if let Some(balance) = changes.balance.take_modified() {
+        if let Some(balance) = changes.balance.take() {
             account.set_balance(block_number, balance);
         }
-
-        // bytecode
-        if is_success {
-            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                account.set_bytecode(block_number, bytecode);
-            }
+        if let Some(Some(bytecode)) = changes.bytecode.take() {
+            account.set_bytecode(block_number, bytecode);
         }
 
         // slots
