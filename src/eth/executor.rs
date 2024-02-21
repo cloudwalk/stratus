@@ -50,7 +50,7 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     // Shared storage backend for persisting blockchain state.
-    eth_storage: Arc<dyn EthStorage>,
+    storage: Arc<dyn EthStorage>,
 
     // Broadcast channels for notifying subscribers about new blocks and logs.
     block_notifier: broadcast::Sender<Block>,
@@ -65,7 +65,7 @@ impl EthExecutor {
         Self {
             evm_tx,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&eth_storage))),
-            eth_storage,
+            storage: eth_storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
         }
@@ -99,7 +99,7 @@ impl EthExecutor {
                         return Err(e);
                     };
 
-                    self.eth_storage.save_account_changes(block.number(), execution).await?;
+                    self.storage.save_account_changes(block.number(), execution).await?;
                 }
                 Err(e) => {
                     // TODO: must handle this better because some errors can be expected
@@ -132,7 +132,7 @@ impl EthExecutor {
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
-            self.eth_storage.save_block(block).await?;
+            self.storage.save_block(block).await?;
         }
 
         //TODO compare slots/changes
@@ -178,7 +178,7 @@ impl EthExecutor {
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
-        self.eth_storage.save_block(block.clone()).await?;
+        self.storage.save_block(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {
             tracing::error!(reason = ?e, "failed to send block notification");
@@ -194,7 +194,7 @@ impl EthExecutor {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?;
-            if let Some(conflicts) = self.eth_storage.check_conflicts(&execution).await? {
+            if let Some(conflicts) = self.storage.check_conflicts(&execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;
             }
@@ -202,7 +202,7 @@ impl EthExecutor {
             // mine and save block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.eth_storage.save_block(block.clone()).await {
+            match self.storage.save_block(block.clone()).await {
                 Ok(()) => {}
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");
