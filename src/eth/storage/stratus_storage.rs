@@ -128,7 +128,7 @@ impl TemporaryStorage for StratusStorage {
     /// will by definition update accounts, slots, transactions, logs etc
     async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         self.perm.save_block(block).await?;
-        TemporaryStorage::reset(&self.temp).await?;
+        self.temp.flush().await;
 
         Ok(())
     }
@@ -145,7 +145,7 @@ impl TemporaryStorage for StratusStorage {
 
     /// Resets all state to a specific block number.
     async fn reset(&self) -> anyhow::Result<()> {
-        self.temp.flush().await;
+        TemporaryStorage::reset(&self.temp).await?;
 
         Ok(())
     }

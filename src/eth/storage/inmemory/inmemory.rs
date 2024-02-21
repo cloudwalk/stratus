@@ -58,8 +58,6 @@ impl InMemoryStorage {
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
         state.logs.clear();
-
-        self.block_number.store(0, Ordering::SeqCst);
     }
 }
 
@@ -419,6 +417,7 @@ impl TemporaryStorage for InMemoryStorage {
 
     async fn reset(&self) -> anyhow::Result<()> {
         self.flush().await;
+        self.block_number.store(0, Ordering::SeqCst);
         Ok(())
     }
 }
