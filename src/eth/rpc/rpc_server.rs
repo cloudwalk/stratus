@@ -35,9 +35,7 @@ use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
-use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TemporaryStorage;
 use crate::eth::EthExecutor;
 
 // -----------------------------------------------------------------------------

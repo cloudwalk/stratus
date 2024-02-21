@@ -33,8 +33,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorageError;
-use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 
 /// Number of events in the backlog.
@@ -103,7 +101,7 @@ impl EthExecutor {
                         return Err(e);
                     };
 
-                    self.storage.save_account_changes(block.number(),execution.clone() ).await?;
+                    self.storage.save_account_changes(block.number(), execution.clone()).await?;
                     // temporarily save state to next transactions from the same block
                     executions.push((tx, receipt, execution));
                 }
