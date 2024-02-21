@@ -32,7 +32,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorageError;
-use crate::eth::storage::PermanentStorage;
+
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 
