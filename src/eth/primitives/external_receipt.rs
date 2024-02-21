@@ -19,6 +19,11 @@ impl ExternalReceipt {
         self.0.block_number.expect("external receipt must have block number").into()
     }
 
+    /// Returns the block hash.
+    pub fn block_hash(&self) -> Hash {
+        self.0.block_hash.expect("external receipt must have block hash").into()
+    }
+
     /// Checks if the receipt is for a transaction that was completed successfully.
     pub fn is_success(&self) -> bool {
         match self.0.status {

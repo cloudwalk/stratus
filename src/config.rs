@@ -15,11 +15,11 @@ use tokio::runtime::Runtime;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
-use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Address;
 use crate::eth::storage::test_accounts;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::InMemoryStorage;
+use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
 use crate::infra::postgres::Postgres;
 

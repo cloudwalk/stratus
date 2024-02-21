@@ -200,12 +200,8 @@ impl EthStorage for InMemoryStorage {
     async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let mut state = self.lock_write().await;
 
-        // check conflicts
-        for transaction in &block.transactions {
-            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
-                return Err(EthStorageError::Conflict(conflicts));
-            }
-        }
+        // keep track of current block if we need to rollback
+        let current_block = self.read_current_block_number().await?;
 
         // save block
         tracing::debug!(number = %block.number(), "saving block");
@@ -216,11 +212,22 @@ impl EthStorage for InMemoryStorage {
         // save transactions
         for transaction in block.transactions.clone() {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
+
+            // check conflicts after each transaction because a transaction can depend on the previous from the same block
+            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
+                // release lock and rollback to previous block
+                drop(state);
+                self.reset(current_block).await?;
+
+                // inform error
+                return Err(EthStorageError::Conflict(conflicts));
+            }
+
+            // save transaction
             state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
-            let is_success = transaction.is_success();
 
             // save logs
-            if is_success {
+            if transaction.is_success() {
                 for log in transaction.logs {
                     state.logs.push(log);
                 }

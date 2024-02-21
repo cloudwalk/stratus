@@ -21,18 +21,19 @@ use tokio::sync::Mutex;
 use super::primitives::ExternalTransaction;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
-use crate::eth::miner::BlockMiner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::EthStorage;
 use crate::eth::storage::EthStorageError;
+use crate::eth::BlockMiner;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -50,7 +51,7 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     // Shared storage backend for persisting blockchain state.
-    eth_storage: Arc<dyn EthStorage>,
+    storage: Arc<dyn EthStorage>,
 
     // Broadcast channels for notifying subscribers about new blocks and logs.
     block_notifier: broadcast::Sender<Block>,
@@ -65,7 +66,7 @@ impl EthExecutor {
         Self {
             evm_tx,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&eth_storage))),
-            eth_storage,
+            storage: eth_storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
         }
@@ -75,39 +76,57 @@ impl EthExecutor {
     pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
         tracing::info!(number = %block.number(), "importing offline block");
 
+        // keep track of current block because state will be reset to it after execution
+        let current_block = self.storage.read_current_block_number().await?;
+
         // re-execute transactions
+        let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
             // find receipt
-            let Some(receipt) = receipts.get(&tx.hash()) else {
+            let Some(receipt) = receipts.get(&tx.hash()).cloned() else {
                 tracing::error!(hash = %tx.hash, "receipt is missing");
                 return Err(anyhow!("receipt missing for hash {}", tx.hash));
             };
 
             // re-execute transaction
-            let json_tx = serde_json::to_string(&tx).unwrap();
-            let json_receipt = serde_json::to_string(&receipt).unwrap();
-            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), receipt);
+            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt);
             let execution = self.execute_in_evm(evm_input).await;
 
             // handle execution result
             match execution {
                 Ok(execution) => {
                     // ensure it matches receipt before saving
-                    if let Err(e) = execution.compare_with_receipt(receipt) {
-                        let execution_logs = serde_json::to_string(&execution.logs).unwrap();
-                        tracing::error!(%json_tx, %json_receipt, %execution_logs, "mismatch reexecuting transaction");
+                    if let Err(e) = execution.compare_with_receipt(&receipt) {
+                        let json_tx = serde_json::to_string(&tx).unwrap();
+                        let json_receipt = serde_json::to_string(&receipt).unwrap();
+                        let json_execution_logs = serde_json::to_string(&execution.logs).unwrap();
+                        tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
                         return Err(e);
                     };
 
-                    self.eth_storage.save_account_changes(block.number(), execution).await?;
+                    // temporarily save state to next transactions from the same block
+                    self.storage.save_account_changes(block.number(), execution.clone()).await?;
+                    executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
-                    // TODO: must handle this better because some errors can be expected
-                    tracing::error!(%json_tx, %json_receipt, "unexpected error reexecuting transaction");
+                    let json_tx = serde_json::to_string(&tx).unwrap();
+                    let json_receipt = serde_json::to_string(&receipt).unwrap();
+                    tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
                     return Err(e);
                 }
             }
         }
+
+        // reset state to initial block, so we can save the block witl all changes produced by the transactions
+        self.storage.reset(current_block).await?;
+
+        let block = Block::from_external(block, executions)?;
+        self.storage.increment_block_number().await?;
+        if let Err(e) = self.storage.save_block(block.clone()).await {
+            let json_block = serde_json::to_string(&block).unwrap();
+            tracing::error!(reason = ?e, %json_block);
+            return Err(e.into());
+        };
 
         Ok(())
     }
@@ -132,7 +151,7 @@ impl EthExecutor {
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
-            self.eth_storage.save_block(block).await?;
+            self.storage.save_block(block).await?;
         }
 
         //TODO compare slots/changes
@@ -178,7 +197,7 @@ impl EthExecutor {
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
-        self.eth_storage.save_block(block.clone()).await?;
+        self.storage.save_block(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {
             tracing::error!(reason = ?e, "failed to send block notification");
@@ -194,7 +213,7 @@ impl EthExecutor {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?;
-            if let Some(conflicts) = self.eth_storage.check_conflicts(&execution).await? {
+            if let Some(conflicts) = self.storage.check_conflicts(&execution).await? {
                 tracing::warn!(?conflicts, "storage conflict detected before mining block");
                 continue;
             }
@@ -202,7 +221,7 @@ impl EthExecutor {
             // mine and save block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.eth_storage.save_block(block.clone()).await {
+            match self.storage.save_block(block.clone()).await {
                 Ok(()) => {}
                 Err(EthStorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");

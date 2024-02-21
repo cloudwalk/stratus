@@ -1,8 +1,11 @@
 use ethers_core::types::Transaction as EthersTransaction;
 
-use crate::eth::primitives::transaction_input::ConversionError;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
+
+pub type ExternalTransactionExecution = (ExternalTransaction, ExternalReceipt, Execution);
 
 #[derive(Debug, Clone, Default, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
@@ -16,7 +19,7 @@ impl ExternalTransaction {
 }
 
 impl TryFrom<ExternalTransaction> for TransactionInput {
-    type Error = ConversionError;
+    type Error = anyhow::Error;
     fn try_from(value: ExternalTransaction) -> Result<Self, Self::Error> {
         value.0.try_into()
     }

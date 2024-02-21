@@ -8,7 +8,6 @@
 //! structure, such as querying block information or broadcasting newly mined
 //! blocks.
 
-use anyhow::anyhow;
 use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
@@ -18,6 +17,7 @@ use serde_json::Value as JsonValue;
 use super::ExternalBlock;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
@@ -35,6 +35,20 @@ impl Block {
             header: BlockHeader::new(number, timestamp),
             transactions: Vec::with_capacity(capacity),
         }
+    }
+
+    /// Creates a new block based on an external block and its local transactions re-execution.
+    ///
+    /// TODO: this kind of conversion should be infallibe.
+    pub fn from_external(block: ExternalBlock, executions: Vec<ExternalTransactionExecution>) -> anyhow::Result<Self> {
+        let mut transactions = Vec::with_capacity(executions.len());
+        for execution in executions {
+            transactions.push(TransactionMined::from_external(execution)?);
+        }
+        Ok(Self {
+            header: block.into(),
+            transactions,
+        })
     }
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
@@ -57,26 +71,6 @@ impl Block {
     /// Returns the block hash.
     pub fn hash(&self) -> &Hash {
         &self.header.hash
-    }
-
-    pub fn cmp_with_external(&self, external_block: &ExternalBlock) -> anyhow::Result<()> {
-        if self.transactions.len() != external_block.transactions.len() {
-            return Err(anyhow!(
-                "block transactions length mismatch, expected: {:?} got: {:?}",
-                external_block.transactions.len(),
-                self.transactions.len()
-            ));
-        }
-
-        let external_tx_root = external_block.transactions_root.into();
-        if self.header.transactions_root != external_tx_root {
-            return Err(anyhow!(
-                "block transactions root mismatch, expected: {:?} got: {:?}",
-                external_tx_root,
-                self.header.transactions_root
-            ));
-        }
-        Ok(())
     }
 }
 
