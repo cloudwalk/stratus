@@ -23,9 +23,6 @@ pub trait TemporaryStorage: Send + Sync {
     /// Retrieves an slot from the storage. Returns Option when not found.
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
 
-    /// Persist atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
-
     /// Temporarily stores account changes during block production
     async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
 

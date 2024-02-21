@@ -36,16 +36,16 @@ impl InMemoryAccount {
     }
 
     /// Resets all account changes to the specified block number.
-    pub fn reset(&mut self, block_number: BlockNumber) {
+    pub fn reset_at(&mut self, block_number: BlockNumber) {
         // SAFETY: ok to unwrap because all historical values starts at block 0
-        self.balance = self.balance.reset(block_number).expect("never empty");
-        self.nonce = self.nonce.reset(block_number).expect("never empty");
-        self.bytecode = self.bytecode.reset(block_number).expect("never empty");
+        self.balance = self.balance.reset_at(block_number).expect("never empty");
+        self.nonce = self.nonce.reset_at(block_number).expect("never empty");
+        self.bytecode = self.bytecode.reset_at(block_number).expect("never empty");
 
         // SAFETY: not ok to unwrap because slot value does not start at block 0
         let mut new_slots = HashMap::with_capacity(self.slots.len());
         for (slot_index, slot_history) in self.slots.iter() {
-            if let Some(new_slot_history) = slot_history.reset(block_number) {
+            if let Some(new_slot_history) = slot_history.reset_at(block_number) {
                 new_slots.insert(slot_index.clone(), new_slot_history);
             }
         }

@@ -39,7 +39,7 @@ where
     }
 
     /// Resets changes to the specified block number.
-    pub fn reset(&self, block_number: BlockNumber) -> Option<InMemoryHistory<T>> {
+    pub fn reset_at(&self, block_number: BlockNumber) -> Option<InMemoryHistory<T>> {
         let history = self.0.iter().filter(|x| x.block_number <= block_number).cloned().collect_vec();
         if history.is_empty() {
             None

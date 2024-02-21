@@ -50,7 +50,7 @@ pub trait PermanentStorage: Send + Sync {
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Resets all state to a specific block number.
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+    async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
 
     /// Enables genesis block.
     ///

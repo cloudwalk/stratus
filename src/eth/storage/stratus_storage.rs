@@ -94,10 +94,10 @@ impl StratusStorage {
     /// will by definition update accounts, slots, transactions, logs etc
     pub async fn commit(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
         let start = Instant::now();
-        let result = self.perm.save_block(block).await;
 
-        // clears temporary storage
-        self.temp.reset().await?;
+        // save block in permanent storage and resets temporary storage        
+        let result = self.perm.save_block(block).await;
+        self.reset_temp().await?;
 
         metrics::inc_storage_commit(start.elapsed(), result.is_ok());
         result
@@ -114,7 +114,7 @@ impl StratusStorage {
     /// Temporarily stores account changes during block production
     pub async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = TemporaryStorage::save_account_changes(self.temp.deref(), block_number, execution).await;
+        let result = self.temp.save_account_changes(block_number, execution).await;
         metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
         result
     }
@@ -182,7 +182,7 @@ impl StratusStorage {
 
     pub async fn reset_perm(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.perm.reset(block_number).await;
+        let result = self.perm.reset_at(block_number).await;
         metrics::inc_storage_reset(start.elapsed(), result.is_ok());
         result
     }
