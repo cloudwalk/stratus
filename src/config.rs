@@ -15,8 +15,8 @@ use tokio::runtime::Runtime;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::test_accounts;
+use crate::eth::primitives::Address;
 use crate::eth::storage::InMemoryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;

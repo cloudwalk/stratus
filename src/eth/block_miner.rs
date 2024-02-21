@@ -11,6 +11,7 @@ use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 
+use super::storage::PermanentStorage;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Execution;
@@ -21,10 +22,8 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TemporaryStorage;
-use crate::ext::not;
 
-use super::storage::PermanentStorage;
+use crate::ext::not;
 
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
