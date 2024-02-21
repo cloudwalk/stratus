@@ -34,7 +34,6 @@ run-release *args="":
 
 run-substrate-mock:
     npm init -y
-    npm install express
     node ./e2e/substrate-sync-mock-server/index.js
 
 # Stratus: Compile with debug options
