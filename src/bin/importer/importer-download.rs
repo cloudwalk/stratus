@@ -66,10 +66,28 @@ async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Ve
     Ok(())
 }
 
+//loop to retrieve the current block number
+async fn get_current_block_number(chain: Arc<BlockchainClient>) -> BlockNumber {
+    let end: BlockNumber;
+    loop {
+        match chain.get_current_block_number().await {
+            Ok(number) => {
+                end = number;
+                break;
+            }
+            Err(e) => {
+                tracing::warn!(reason = ?e, "retrying block number retrieval");
+            }
+
+        }
+    }
+    end
+}
+
 async fn download_blocks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, paralellism: usize) -> anyhow::Result<()> {
     // prepare download block tasks
     let mut start = BlockNumber::ZERO;
-    let end = chain.get_current_block_number().await?;
+    let end = get_current_block_number(Arc::clone(&chain)).await;
     tracing::info!(blocks_by_taks = %BLOCKS_BY_TASK, %start, %end, "preparing block downloads");
 
     let mut tasks = Vec::new();
@@ -202,8 +220,8 @@ async fn db_insert_balance(pg: &Postgres, address: Address, balance: Wei) -> any
         address.as_ref(),
         TryInto::<BigDecimal>::try_into(balance)?
     )
-    .execute(&pg.connection_pool)
-    .await;
+        .execute(&pg.connection_pool)
+        .await;
 
     match result {
         Ok(_) => Ok(()),
