@@ -445,6 +445,8 @@ impl PermanentStorage for Postgres {
         .await
         .context("failed to insert block")?;
 
+        // let account_changes = block.generate_accounts_changes();
+
         for transaction in block.transactions {
             let is_success = transaction.is_success();
             let to = <[u8; 20]>::from(*transaction.input.to.unwrap_or_default());
@@ -472,6 +474,7 @@ impl PermanentStorage for Postgres {
             .await
             .context("failed to insert transaction")?;
 
+            // for change in account_changes {}
             for change in transaction.execution.changes {
                 let (original_nonce, new_nonce) = change.nonce.take_both();
                 let (original_balance, new_balance) = change.balance.take_both();

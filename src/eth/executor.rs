@@ -174,16 +174,16 @@ impl EthExecutor {
             to = ?transaction.to,
             data_len = %transaction.input.len(),
             data = %transaction.input,
-            "executing real transaction"
+            "executing transaction"
         );
 
-        // validate
+        // validates
         if transaction.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
-            return Err(anyhow!("Transaction sent from zero address is not allowed."));
+            return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        //creates a block and performs the necessary notifications
+        // creates a block and performs the necessary notifications
         self.mine_and_execute_transaction(transaction).await
     }
 
@@ -201,7 +201,7 @@ impl EthExecutor {
     }
 
     async fn mine_and_execute_transaction(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
-        // execute transaction until no more conflicts
+        // executes transaction until no more conflicts
         // TODO: must have a stop condition like timeout or max number of retries
         let (execution, block) = loop {
             // execute and check conflicts before mining block

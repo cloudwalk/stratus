@@ -126,7 +126,7 @@ impl StratusStorage {
     // State mutations
     // -------------------------------------------------------------------------
 
-    /// Persist accounts like pre-genesis accounts or test accounts.
+    /// Persists accounts like pre-genesis accounts or test accounts.
     pub async fn save_accounts_to_perm(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.perm.save_accounts(accounts).await;
@@ -134,7 +134,7 @@ impl StratusStorage {
         result
     }
 
-    /// Persists temporary accounts changes produced during block production.
+    /// Temporarily saves account's changes generated during block production.
     pub async fn save_account_changes_to_temp(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.temp.save_account_changes(block_number, execution).await;
@@ -142,10 +142,12 @@ impl StratusStorage {
         result
     }
 
-    /// Commits changes to permanent storage and prepares temporary storage to a new block to be produced.
+    /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
     pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let start = Instant::now();
 
+        // save block to permanent storage and
+        // clears temporary storage
         let result = self.perm.save_block(block).await;
         self.reset_temp().await?;
 
@@ -153,7 +155,7 @@ impl StratusStorage {
         result
     }
 
-    /// Resets temporary storage
+    /// Resets temporary storage.
     pub async fn reset_temp(&self) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.temp.reset().await;
@@ -161,7 +163,7 @@ impl StratusStorage {
         result
     }
 
-    /// Resets permanent storage down to specific block_number
+    /// Resets permanent storage down to specific block_number.
     pub async fn reset_perm(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.perm.reset_at(block_number).await;
