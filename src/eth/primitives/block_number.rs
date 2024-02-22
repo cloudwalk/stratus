@@ -22,7 +22,7 @@ use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-use super::Hash;
+use crate::eth::primitives::Hash;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]

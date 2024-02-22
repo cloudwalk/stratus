@@ -111,6 +111,7 @@ mod transaction_mined;
 mod unix_time;
 mod wei;
 
+pub use account::test_accounts;
 pub use account::Account;
 pub use address::Address;
 pub use alias::Signature32Bytes;

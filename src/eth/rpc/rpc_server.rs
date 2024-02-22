@@ -35,7 +35,7 @@ use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
-use crate::eth::storage::EthStorage;
+use crate::eth::storage::StratusStorage;
 use crate::eth::EthExecutor;
 
 // -----------------------------------------------------------------------------
@@ -43,7 +43,7 @@ use crate::eth::EthExecutor;
 // -----------------------------------------------------------------------------
 
 /// Starts JSON-RPC server.
-pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, config: StratusConfig) -> anyhow::Result<()> {
+pub async fn serve_rpc(executor: EthExecutor, storage: Arc<StratusStorage>, config: StratusConfig) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     let subscriptions_cleaner_handle = Arc::clone(&subs).spawn_subscriptions_cleaner();
@@ -60,7 +60,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<dyn EthStorage>, 
 
         // services
         executor,
-        storage: eth_storage,
+        storage,
 
         // subscriptions
         subs,
@@ -157,7 +157,8 @@ fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyh
 // Debug
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    ctx.storage.reset(number).await?;
+    ctx.storage.reset_temp().await?;
+    ctx.storage.reset_perm(number).await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 

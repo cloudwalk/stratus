@@ -1,6 +1,6 @@
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 
-use super::BlockNumber;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::log_and_err;
 
