@@ -16,10 +16,10 @@ use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
@@ -77,55 +77,32 @@ impl Block {
         &self.header.hash
     }
 
-    /// Compacts all intermediate changes from an account, returning the first previous value as the definitive original value and the last modified value as the definitive modified value.
-    pub fn generate_execution_changes(&self) -> Vec<ExecutionAccountChanges> {
-        let mut temp_map: HashMap<&Address, ExecutionAccountChanges> = HashMap::new();
+    /// Compact block execution changes removing all intermediate changes, keeping only the last value for each modified nonce, balance, bytecode and slot.
+    pub fn compact_execution_changes(&self) -> Vec<ExecutionAccountChanges> {
+        let mut block_compacted_changes: HashMap<Address, ExecutionAccountChanges> = HashMap::new();
         for transaction in &self.transactions {
-            let is_success = transaction.is_success();
-            for change in &transaction.execution.changes {
-                let address = &change.address;
-                // update existent change
-                if let Some(c) = temp_map.get_mut(address) {
-                    let mut temp_change = c.clone();
-                    if let Some(new_nonce) = change.nonce.clone().take_modified() {
-                        temp_change.nonce.set_modified(new_nonce);
+            for transaction_changes in transaction.execution.changes.clone().into_iter() {
+                let account_compacted_changes = block_compacted_changes
+                    .entry(transaction_changes.address.clone())
+                    .or_insert(transaction_changes.clone());
+                if let Some(nonce) = transaction_changes.nonce.take_modified() {
+                    account_compacted_changes.nonce.set_modified(nonce);
+                }
+                if let Some(balance) = transaction_changes.balance.take_modified() {
+                    account_compacted_changes.balance.set_modified(balance);
+                }
+                if let Some(bytecode) = transaction_changes.bytecode.take_modified() {
+                    account_compacted_changes.bytecode.set_modified(bytecode);
+                }
+                for (slot_index, slot) in transaction_changes.slots {
+                    let slot_compacted_changes = account_compacted_changes.slots.entry(slot_index).or_insert(slot.clone());
+                    if let Some(slot_value) = slot.take_modified() {
+                        slot_compacted_changes.set_modified(slot_value);
                     }
-                    if let Some(new_balance) = change.balance.clone().take_modified() {
-                        temp_change.balance.set_modified(new_balance);
-                    }
-                    if is_success {
-                        if let Some(new_bytecode) = change.bytecode.clone().take_modified() {
-                            temp_change.bytecode.set_modified(new_bytecode);
-                        }
-                        for (slot_index, slot) in &change.slots {
-                            if let Some(slot_change) = temp_change.slots.get_mut(slot_index) {
-                                if let Some(new_slot) = slot.clone().take_modified() {
-                                    slot_change.set_modified(new_slot);
-                                }
-                            }
-                        }
-                    }
-                    temp_map.insert(address, temp_change);
-                } else {
-                    let mut temp_change = change.clone();
-                    // insert first change
-                    if is_success {
-                        if let Some(new_bytecode) = change.bytecode.clone().take_modified() {
-                            temp_change.bytecode.set_modified(new_bytecode);
-                        }
-                        for (slot_index, slot) in &change.slots {
-                            if let Some(slot_change) = temp_change.slots.get_mut(slot_index) {
-                                if let Some(new_slot) = slot.clone().take_modified() {
-                                    slot_change.set_modified(new_slot);
-                                }
-                            }
-                        }
-                    }
-                    temp_map.insert(address, temp_change);
                 }
             }
         }
-        temp_map.into_values().collect_vec()
+        block_compacted_changes.into_values().collect_vec()
     }
 }
 
