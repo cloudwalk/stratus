@@ -115,7 +115,7 @@ impl EthExecutor {
         }
 
         let block = Block::from_external(block, executions)?;
-        self.storage.increment_block_number().await?;
+        self.storage.set_block_number(*block.number()).await?;
         if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);

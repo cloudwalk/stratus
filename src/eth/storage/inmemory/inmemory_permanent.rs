@@ -162,6 +162,11 @@ impl PermanentStorage for InMemoryStoragePermanent {
         Ok(next.into())
     }
 
+    async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        self.block_number.store(number.as_u64(), Ordering::SeqCst);
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // State operations
     // ------------------------------------------------------------------------
