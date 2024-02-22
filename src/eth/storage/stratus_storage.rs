@@ -22,6 +22,10 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::infra::metrics;
 
+static TEMP_LABEL: &str = "Temporary";
+static PERM_LABEL: &str = "Permanent";
+static DEFAULT_LABEL: &str = "Default";
+
 pub struct StratusStorage {
     temp: Arc<dyn TemporaryStorage>,
     perm: Arc<dyn PermanentStorage>,
@@ -71,18 +75,18 @@ impl StratusStorage {
         match self.temp.maybe_read_account(address, point_in_time).await? {
             Some(account) => {
                 tracing::debug!("account found in the temporary storage");
-                metrics::inc_storage_read_account(start.elapsed(), point_in_time, true, metrics::StorageType::Temp);
+                metrics::inc_storage_read_account(start.elapsed(), point_in_time, TEMP_LABEL, true);
                 Ok(account)
             }
             None => match self.perm.maybe_read_account(address, point_in_time).await? {
                 Some(account) => {
                     tracing::debug!("account found in the permanent storage");
-                    metrics::inc_storage_read_account(start.elapsed(), point_in_time, true, metrics::StorageType::Perm);
+                    metrics::inc_storage_read_account(start.elapsed(), point_in_time, PERM_LABEL, true);
                     Ok(account)
                 }
                 None => {
                     tracing::debug!("account not found, assuming default value");
-                    metrics::inc_storage_read_account(start.elapsed(), point_in_time, true, metrics::StorageType::None);
+                    metrics::inc_storage_read_account(start.elapsed(), point_in_time, DEFAULT_LABEL, true);
                     Ok(Account {
                         address: address.clone(),
                         ..Account::default()
@@ -99,18 +103,18 @@ impl StratusStorage {
         match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
             Some(slot) => {
                 tracing::debug!("slot found in the temporary storage");
-                metrics::inc_storage_read_slot(start.elapsed(), point_in_time, true, metrics::StorageType::Temp);
+                metrics::inc_storage_read_slot(start.elapsed(), point_in_time, TEMP_LABEL, true);
                 Ok(slot)
             }
             None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
                 Some(slot) => {
                     tracing::debug!("slot found in the permanent storage");
-                    metrics::inc_storage_read_slot(start.elapsed(), point_in_time, true, metrics::StorageType::Perm);
+                    metrics::inc_storage_read_slot(start.elapsed(), point_in_time, PERM_LABEL, true);
                     Ok(slot)
                 }
                 None => {
                     tracing::debug!("slot not found, assuming default value");
-                    metrics::inc_storage_read_slot(start.elapsed(), point_in_time, true, metrics::StorageType::None);
+                    metrics::inc_storage_read_slot(start.elapsed(), point_in_time, DEFAULT_LABEL, true);
                     Ok(Slot {
                         index: slot_index.clone(),
                         ..Default::default()

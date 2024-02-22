@@ -57,7 +57,7 @@ metrics! {
     histogram storage_check_conflicts{conflicted, success},
 
     "Duration of storage read_account operation."
-    histogram storage_read_account{point_in_time, success, origin},
+    histogram storage_read_account{point_in_time, origin, success},
 
     "Duration of storage read_block operation."
     histogram storage_read_block{success},
@@ -66,7 +66,7 @@ metrics! {
     histogram storage_read_logs{success},
 
     "Duration of storage read_slot operation."
-    histogram storage_read_slot{point_in_time, success, origin},
+    histogram storage_read_slot{point_in_time, origin, success},
 
     "Duration of storage read_mined_transaction operation."
     histogram storage_read_mined_transaction{success}
@@ -135,12 +135,6 @@ impl From<bool> for LabelValue {
     }
 }
 
-impl From<StorageType> for LabelValue {
-    fn from(value: StorageType) -> Self {
-        value.to_string().into()
-    }
-}
-
 /// Converts a list of label keys-value pairs to `metrics::Label`. Labels with missing values are filtered out.
 fn into_labels(labels: Vec<(&'static str, LabelValue)>) -> Vec<MetricsLabel> {
     labels
@@ -151,24 +145,6 @@ fn into_labels(labels: Vec<(&'static str, LabelValue)>) -> Vec<MetricsLabel> {
         })
         .map(|(key, value)| MetricsLabel::new(key, value))
         .collect()
-}
-
-/// Labels for storage types
-
-pub enum StorageType {
-    Temp,
-    Perm,
-    None,
-}
-
-impl ToString for StorageType {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Temp => "Temporary".to_owned(),
-            Self::Perm => "Permanent".to_owned(),
-            Self::None => "None".to_owned(),
-        }
-    }
 }
 
 // -----------------------------------------------------------------------------
