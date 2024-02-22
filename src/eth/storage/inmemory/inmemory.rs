@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
+use super::inmemory_account::InMemoryAccount;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -31,8 +32,6 @@ use crate::eth::storage::inmemory::InMemoryAccountTemporary;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
-
-use super::inmemory_account::InMemoryAccount;
 
 /// The inmemory storage is split into two structs. InMemoryStoragePermanent and
 /// InMemoryStorageTemporary to facilitate debugging when using the inmemory storage
@@ -70,7 +69,6 @@ impl InMemoryStoragePermanent {
 trait StorageState<T: InMemoryAccount> {
     fn get_accounts(&self) -> &HashMap<Address, T>;
     fn get_accounts_mut(&mut self) -> &mut HashMap<Address, T>;
-
 
     fn save_account_changes(&mut self, block_number: BlockNumber, execution: Execution) {
         let is_success = execution.is_success();
@@ -125,7 +123,6 @@ trait StorageState<T: InMemoryAccount> {
 
                 // check slots conflicts
                 for (touched_slot_index, touched_slot) in &change.slots {
-
                     if let Some(slot) = account.get_current_slot(touched_slot_index) {
                         if let Some(touched_slot) = touched_slot.take_original_ref() {
                             let slot_value = slot.value.clone();
@@ -159,7 +156,6 @@ impl StorageState<InMemoryAccountPermanent> for InMemoryPermanentStorageState {
         &mut self.accounts
     }
 }
-
 
 impl Default for InMemoryStoragePermanent {
     fn default() -> Self {
@@ -346,9 +342,10 @@ impl PermanentStorage for InMemoryStoragePermanent {
 
         let mut state = self.lock_write().await;
         for account in accounts {
-            state
-                .accounts
-                .insert(account.address.clone(), InMemoryAccountPermanent::new_with_balance(account.address, account.balance));
+            state.accounts.insert(
+                account.address.clone(),
+                InMemoryAccountPermanent::new_with_balance(account.address, account.balance),
+            );
         }
         Ok(())
     }
@@ -392,12 +389,12 @@ impl PermanentStorage for InMemoryStoragePermanent {
 
 #[derive(Debug, Default)]
 pub struct InMemoryStorageTemporary {
-    state: RwLock<InMemoryTemporaryStorageState>
+    state: RwLock<InMemoryTemporaryStorageState>,
 }
 
 #[derive(Debug, Default)]
 struct InMemoryTemporaryStorageState {
-    accounts: HashMap<Address, InMemoryAccountTemporary>
+    accounts: HashMap<Address, InMemoryAccountTemporary>,
 }
 
 impl StorageState<InMemoryAccountTemporary> for InMemoryTemporaryStorageState {
@@ -409,7 +406,6 @@ impl StorageState<InMemoryAccountTemporary> for InMemoryTemporaryStorageState {
         &mut self.accounts
     }
 }
-
 
 impl InMemoryStorageTemporary {
     /// Locks inner state for reading.
@@ -431,7 +427,7 @@ impl TemporaryStorage for InMemoryStorageTemporary {
 
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let state_lock = self.lock_read().await;
-        Ok((&state_lock).check_conflicts(execution))
+        Ok(state_lock.check_conflicts(execution))
     }
 
     async fn maybe_read_account(&self, address: &Address, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {

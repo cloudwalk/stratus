@@ -140,15 +140,15 @@ impl InMemoryAccount for InMemoryAccountTemporary {
     }
 
     fn set_balance(&mut self, _block_number: BlockNumber, balance: Wei) {
-        self.balance = balance
+        self.balance = balance;
     }
 
     fn set_bytecode(&mut self, _block_number: BlockNumber, bytecode: Bytes) {
-        self.bytecode = Some(bytecode)
+        self.bytecode = Some(bytecode);
     }
 
     fn set_nonce(&mut self, _block_number: BlockNumber, nonce: Nonce) {
-        self.nonce = nonce
+        self.nonce = nonce;
     }
 
     fn set_slot(&mut self, _block_number: BlockNumber, slot: Slot) {
