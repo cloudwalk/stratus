@@ -9,12 +9,6 @@ use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 
-/// The inmemory storage is split into two structs. InMemoryStoragePermanent and
-/// InMemoryStorageTemporary to facilitate debugging when using the inmemory storage
-/// for both temp and perm contexts.
-
-/// In-memory implementation using maps.
-
 pub trait StorageState<T: InMemoryAccount> {
     fn get_accounts(&self) -> &HashMap<Address, T>;
     fn get_accounts_mut(&mut self) -> &mut HashMap<Address, T>;
