@@ -295,7 +295,7 @@ contracts-test-stratus-psql:
     wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
 
     echo "-> Starting Stratus"
-    RUST_LOG=debug just run -a 0.0.0.0:3000 -s {{postgres_url}} > stratus.log &
+    RUST_LOG=debug just run-release -a 0.0.0.0:3000 -s {{postgres_url}} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
