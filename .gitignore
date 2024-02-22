@@ -25,3 +25,4 @@ package-lock.json
 /target
 vendor
 stratus.log
+package.json
