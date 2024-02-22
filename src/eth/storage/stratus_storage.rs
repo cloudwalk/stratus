@@ -22,6 +22,10 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::infra::metrics;
 
+static TEMP_LABEL: &str = "temporary";
+static PERM_LABEL: &str = "permanent";
+static DEFAULT_LABEL: &str = "default";
+
 pub struct StratusStorage {
     temp: Arc<dyn TemporaryStorage>,
     perm: Arc<dyn PermanentStorage>,
@@ -67,35 +71,57 @@ impl StratusStorage {
     /// Retrieves an account from the storage. Returns default value when not found.
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         let start = Instant::now();
-        let result = match self.temp.maybe_read_account(address, point_in_time).await? {
-            Some(account) => Ok(account),
+
+        match self.temp.maybe_read_account(address, point_in_time).await? {
+            Some(account) => {
+                tracing::debug!("account found in the temporary storage");
+                metrics::inc_storage_read_account(start.elapsed(), point_in_time, TEMP_LABEL, true);
+                Ok(account)
+            }
             None => match self.perm.maybe_read_account(address, point_in_time).await? {
-                Some(account) => Ok(account),
-                None => Ok(Account {
-                    address: address.clone(),
-                    ..Account::default()
-                }),
+                Some(account) => {
+                    tracing::debug!("account found in the permanent storage");
+                    metrics::inc_storage_read_account(start.elapsed(), point_in_time, PERM_LABEL, true);
+                    Ok(account)
+                }
+                None => {
+                    tracing::debug!("account not found, assuming default value");
+                    metrics::inc_storage_read_account(start.elapsed(), point_in_time, DEFAULT_LABEL, true);
+                    Ok(Account {
+                        address: address.clone(),
+                        ..Account::default()
+                    })
+                }
             },
-        };
-        metrics::inc_storage_read_account(start.elapsed(), point_in_time, result.is_ok());
-        result
+        }
     }
 
     /// Retrieves an slot from the storage. Returns default value when not found.
     pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         let start = Instant::now();
-        let result = match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
-            Some(slot) => Ok(slot),
+
+        match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
+            Some(slot) => {
+                tracing::debug!("slot found in the temporary storage");
+                metrics::inc_storage_read_slot(start.elapsed(), point_in_time, TEMP_LABEL, true);
+                Ok(slot)
+            }
             None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
-                Some(slot) => Ok(slot),
-                None => Ok(Slot {
-                    index: slot_index.clone(),
-                    ..Default::default()
-                }),
+                Some(slot) => {
+                    tracing::debug!("slot found in the permanent storage");
+                    metrics::inc_storage_read_slot(start.elapsed(), point_in_time, PERM_LABEL, true);
+                    Ok(slot)
+                }
+                None => {
+                    tracing::debug!("slot not found, assuming default value");
+                    metrics::inc_storage_read_slot(start.elapsed(), point_in_time, DEFAULT_LABEL, true);
+                    Ok(Slot {
+                        index: slot_index.clone(),
+                        ..Default::default()
+                    })
+                }
             },
-        };
-        metrics::inc_storage_read_slot(start.elapsed(), point_in_time, result.is_ok());
-        result
+        }
     }
 
     /// Retrieves a block from the storage.
