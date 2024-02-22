@@ -26,11 +26,13 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::inmemory::InMemoryAccount;
-use crate::eth::storage::inmemory::InMemoryHistory;
+use crate::eth::storage::inmemory::InMemoryAccountPermanent;
+use crate::eth::storage::inmemory::InMemoryAccountTemporary;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
+
+use super::inmemory_account::InMemoryAccount;
 
 /// The inmemory storage is split into two structs. InMemoryStoragePermanent and
 /// InMemoryStorageTemporary to facilitate debugging when using the inmemory storage
@@ -39,18 +41,18 @@ use crate::eth::storage::TemporaryStorage;
 /// In-memory implementation using maps.
 #[derive(Debug)]
 pub struct InMemoryStoragePermanent {
-    state: RwLock<InMemoryStorageState>,
+    state: RwLock<InMemoryPermanentStorageState>,
     block_number: AtomicU64,
 }
 
 impl InMemoryStoragePermanent {
     /// Locks inner state for reading.
-    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryStorageState> {
+    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
         self.state.read().await
     }
 
     /// Locks inner state for writing.
-    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryStorageState> {
+    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
         self.state.write().await
     }
 
@@ -65,21 +67,106 @@ impl InMemoryStoragePermanent {
     }
 }
 
+trait StorageState<T: InMemoryAccount> {
+    fn get_accounts(&self) -> &HashMap<Address, T>;
+    fn get_accounts_mut(&mut self) -> &mut HashMap<Address, T>;
+
+
+    fn save_account_changes(&mut self, block_number: BlockNumber, execution: Execution) {
+        let is_success = execution.is_success();
+        for changes in execution.changes {
+            let account = self
+                .get_accounts_mut()
+                .entry(changes.address.clone())
+                .or_insert_with(|| T::new(changes.address));
+
+            // account basic info
+            if let Some(nonce) = changes.nonce.take() {
+                account.set_nonce(block_number, nonce);
+            }
+            if let Some(balance) = changes.balance.take() {
+                account.set_balance(block_number, balance);
+            }
+            if let Some(Some(bytecode)) = changes.bytecode.take() {
+                account.set_bytecode(block_number, bytecode);
+            }
+
+            // slots
+            if is_success {
+                for (_, slot) in changes.slots {
+                    if let Some(slot) = slot.take_modified() {
+                        account.set_slot(block_number, slot);
+                    }
+                }
+            }
+        }
+    }
+
+    fn check_conflicts(&self, execution: &Execution) -> Option<ExecutionConflicts> {
+        let mut conflicts = ExecutionConflictsBuilder::default();
+
+        for change in &execution.changes {
+            let address = &change.address;
+
+            if let Some(account) = self.get_accounts().get(address) {
+                // check account info conflicts
+                if let Some(touched_nonce) = change.nonce.take_original_ref() {
+                    let nonce = account.get_current_nonce();
+                    if touched_nonce != nonce {
+                        conflicts.add_nonce(address.clone(), nonce.clone(), touched_nonce.clone());
+                    }
+                }
+                if let Some(touched_balance) = change.balance.take_original_ref() {
+                    let balance = account.get_current_balance();
+                    if touched_balance != balance {
+                        conflicts.add_balance(address.clone(), balance.clone(), touched_balance.clone());
+                    }
+                }
+
+                // check slots conflicts
+                for (touched_slot_index, touched_slot) in &change.slots {
+
+                    if let Some(slot) = account.get_current_slot(touched_slot_index) {
+                        if let Some(touched_slot) = touched_slot.take_original_ref() {
+                            let slot_value = slot.value.clone();
+                            if touched_slot.value != slot_value {
+                                conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        conflicts.build()
+    }
+}
+
 #[derive(Debug, Default)]
-struct InMemoryStorageState {
-    accounts: HashMap<Address, InMemoryAccount>,
+struct InMemoryPermanentStorageState {
+    accounts: HashMap<Address, InMemoryAccountPermanent>,
     transactions: HashMap<Hash, TransactionMined>,
     blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     blocks_by_hash: IndexMap<Hash, Arc<Block>>,
     logs: Vec<LogMined>,
 }
 
+impl StorageState<InMemoryAccountPermanent> for InMemoryPermanentStorageState {
+    fn get_accounts(&self) -> &HashMap<Address, InMemoryAccountPermanent> {
+        &self.accounts
+    }
+
+    fn get_accounts_mut(&mut self) -> &mut HashMap<Address, InMemoryAccountPermanent> {
+        &mut self.accounts
+    }
+}
+
+
 impl Default for InMemoryStoragePermanent {
     fn default() -> Self {
         tracing::info!("starting inmemory storage");
 
         Self {
-            state: RwLock::new(InMemoryStorageState::default()),
+            state: RwLock::new(InMemoryPermanentStorageState::default()),
             block_number: Default::default(),
         }
     }
@@ -106,7 +193,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
 
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let state_lock = self.state.read().await;
-        Ok(check_conflicts(&state_lock, execution))
+        Ok(state_lock.check_conflicts(execution))
     }
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
@@ -229,7 +316,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
 
             // check conflicts after each transaction because a transaction can depend on the previous from the same block
-            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
+            if let Some(conflicts) = state.check_conflicts(&transaction.execution) {
                 // release lock and rollback to previous block
                 drop(state);
                 PermanentStorage::reset_at(self, current_block).await?;
@@ -249,7 +336,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
             }
 
             // save execution changes
-            save_account_changes(&mut state, *block.number(), transaction.execution);
+            state.save_account_changes(*block.number(), transaction.execution);
         }
         Ok(())
     }
@@ -261,7 +348,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
         for account in accounts {
             state
                 .accounts
-                .insert(account.address.clone(), InMemoryAccount::new_with_balance(account.address, account.balance));
+                .insert(account.address.clone(), InMemoryAccountPermanent::new_with_balance(account.address, account.balance));
         }
         Ok(())
     }
@@ -304,22 +391,35 @@ impl PermanentStorage for InMemoryStoragePermanent {
 }
 
 #[derive(Debug, Default)]
-pub struct InMemoryStorageTemporary(InMemoryStoragePermanent);
+pub struct InMemoryStorageTemporary {
+    state: RwLock<InMemoryTemporaryStorageState>
+}
+
+#[derive(Debug, Default)]
+struct InMemoryTemporaryStorageState {
+    accounts: HashMap<Address, InMemoryAccountTemporary>
+}
+
+impl StorageState<InMemoryAccountTemporary> for InMemoryTemporaryStorageState {
+    fn get_accounts(&self) -> &HashMap<Address, InMemoryAccountTemporary> {
+        &self.accounts
+    }
+
+    fn get_accounts_mut(&mut self) -> &mut HashMap<Address, InMemoryAccountTemporary> {
+        &mut self.accounts
+    }
+}
+
 
 impl InMemoryStorageTemporary {
     /// Locks inner state for reading.
-    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryStorageState> {
-        self.0.lock_read().await
+    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
+        self.state.read().await
     }
 
     /// Locks inner state for writing.
-    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryStorageState> {
-        self.0.lock_write().await
-    }
-
-    /// Clears in-memory state.
-    pub async fn clear(&self) {
-        self.0.clear().await;
+    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
+        self.state.write().await
     }
 }
 
@@ -331,10 +431,10 @@ impl TemporaryStorage for InMemoryStorageTemporary {
 
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let state_lock = self.lock_read().await;
-        Ok(check_conflicts(&state_lock, execution))
+        Ok((&state_lock).check_conflicts(execution))
     }
 
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    async fn maybe_read_account(&self, address: &Address, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         let state = self.lock_read().await;
@@ -343,9 +443,9 @@ impl TemporaryStorage for InMemoryStorageTemporary {
             Some(account) => {
                 let account = Account {
                     address: address.clone(),
-                    balance: account.balance.get_at_point(point_in_time).unwrap_or_default(),
-                    nonce: account.nonce.get_at_point(point_in_time).unwrap_or_default(),
-                    bytecode: account.bytecode.get_at_point(point_in_time).unwrap_or_default(),
+                    balance: account.balance.clone(),
+                    nonce: account.nonce.clone(),
+                    bytecode: account.bytecode.clone(),
                 };
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
@@ -368,10 +468,9 @@ impl TemporaryStorage for InMemoryStorageTemporary {
         };
 
         match account.slots.get(slot_index) {
-            Some(slot_history) => {
-                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
+            Some(slot) => {
                 tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
-                Ok(Some(slot))
+                Ok(Some(slot.clone()))
             }
 
             None => {
@@ -383,91 +482,13 @@ impl TemporaryStorage for InMemoryStorageTemporary {
 
     async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
         let mut state_lock = self.lock_write().await;
-        save_account_changes(&mut state_lock, number, execution);
+        state_lock.save_account_changes(number, execution);
         Ok(())
     }
 
     async fn reset(&self) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
         state.accounts.clear();
-        state.transactions.clear();
-        state.blocks_by_hash.clear();
-        state.blocks_by_number.clear();
-        state.logs.clear();
-
         Ok(())
     }
-}
-
-fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNumber, execution: Execution) {
-    let is_success = execution.is_success();
-    for changes in execution.changes {
-        let account = state
-            .accounts
-            .entry(changes.address.clone())
-            .or_insert_with(|| InMemoryAccount::new(changes.address));
-
-        // account basic info
-        if let Some(nonce) = changes.nonce.take() {
-            account.set_nonce(block_number, nonce);
-        }
-        if let Some(balance) = changes.balance.take() {
-            account.set_balance(block_number, balance);
-        }
-        if let Some(Some(bytecode)) = changes.bytecode.take() {
-            account.set_bytecode(block_number, bytecode);
-        }
-
-        // slots
-        if is_success {
-            for (slot_index, slot) in changes.slots {
-                if let Some(slot) = slot.take_modified() {
-                    match account.slots.get_mut(&slot_index) {
-                        Some(slot_history) => {
-                            slot_history.push(block_number, slot);
-                        }
-                        None => {
-                            account.slots.insert(slot_index, InMemoryHistory::new(block_number, slot));
-                        }
-                    };
-                }
-            }
-        }
-    }
-}
-
-fn check_conflicts(state: &InMemoryStorageState, execution: &Execution) -> Option<ExecutionConflicts> {
-    let mut conflicts = ExecutionConflictsBuilder::default();
-
-    for change in &execution.changes {
-        let address = &change.address;
-
-        if let Some(account) = state.accounts.get(address) {
-            // check account info conflicts
-            if let Some(touched_nonce) = change.nonce.take_original_ref() {
-                if touched_nonce != account.nonce.get_current_ref() {
-                    conflicts.add_nonce(address.clone(), account.nonce.get_current(), touched_nonce.clone());
-                }
-            }
-            if let Some(touched_balance) = change.balance.take_original_ref() {
-                if touched_balance != account.balance.get_current_ref() {
-                    conflicts.add_balance(address.clone(), account.balance.get_current(), touched_balance.clone());
-                }
-            }
-
-            // check slots conflicts
-            for (touched_slot_index, touched_slot) in &change.slots {
-                if let Some(slot) = account.slots.get(touched_slot_index) {
-                    if let Some(touched_slot) = touched_slot.take_original_ref() {
-                        let slot_value = slot.get_current().value;
-                        if touched_slot.value != slot_value {
-                            conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    conflicts.build()
 }
