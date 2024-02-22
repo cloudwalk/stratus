@@ -1,6 +1,6 @@
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 
-use super::BlockNumber;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::log_and_err;
 
@@ -17,6 +17,11 @@ impl ExternalReceipt {
     /// Returns the block number.
     pub fn block_number(&self) -> BlockNumber {
         self.0.block_number.expect("external receipt must have block number").into()
+    }
+
+    /// Returns the block hash.
+    pub fn block_hash(&self) -> Hash {
+        self.0.block_hash.expect("external receipt must have block hash").into()
     }
 
     /// Checks if the receipt is for a transaction that was completed successfully.

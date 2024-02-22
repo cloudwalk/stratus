@@ -20,17 +20,17 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
-use crate::eth::storage::EthStorage;
+use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 
 pub struct BlockMiner {
-    storage: Arc<dyn EthStorage>,
+    storage: Arc<StratusStorage>,
 }
 
 impl BlockMiner {
     /// Initializes a new BlockMiner with storage access.
     /// The storage component is crucial for retrieving the current state and persisting new blocks.
-    pub fn new(storage: Arc<dyn EthStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self { storage }
     }
 

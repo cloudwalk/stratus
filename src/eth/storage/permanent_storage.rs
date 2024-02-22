@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 
-use super::EthStorageError;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -15,13 +14,16 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::StorageError;
 
 /// Permanent (committed) storage operations
-// TODO: add Metrified method
 #[async_trait]
 pub trait PermanentStorage: Send + Sync {
     // Retrieves the last mined block number.
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
+
+    /// Atomically increments the block number, returning the new value.
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Checks if the transaction execution conflicts with the current storage state.
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>>;
@@ -42,16 +44,14 @@ pub trait PermanentStorage: Send + Sync {
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     /// Persists atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError>;
 
     /// Persists initial accounts (test accounts or genesis accounts).
-    async fn save_initial_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
-
-    /// Temporarily stores account changes during block production
-    async fn save_account_changes(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()>;
+    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Resets all state to a specific block number.
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+    async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
+
     /// Enables genesis block.
     ///
     /// TODO: maybe can use save_block from a default method.

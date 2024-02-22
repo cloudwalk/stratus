@@ -29,7 +29,7 @@ pub fn init_metrics() {
 
 // JSON-RPC metrics.
 metrics! {
-    category: json_rpc,
+    group: json_rpc,
 
     "Number of JSON-RPC requests that started."
     counter   rpc_requests_started{method, function},
@@ -40,7 +40,7 @@ metrics! {
 
 // Storage block number metrics
 metrics! {
-    category: block_number,
+    group: block_number,
 
     "Duration of storage read_current_block_number operation."
     histogram storage_read_current_block_number{success},
@@ -51,7 +51,7 @@ metrics! {
 
 // Storage reads.
 metrics! {
-    category: storage_read,
+    group: storage_read,
 
     "Duration of storage check_conflicts operation."
     histogram storage_check_conflicts{conflicted, success},
@@ -59,17 +59,11 @@ metrics! {
     "Duration of storage read_account operation."
     histogram storage_read_account{point_in_time, success},
 
-    "Duration of storage maybe_read_account operation."
-    histogram storage_maybe_read_account{point_in_time, found, success},
-
     "Duration of storage read_block operation."
     histogram storage_read_block{success},
 
     "Duration of storage read_logs operation."
     histogram storage_read_logs{success},
-
-    "Duration of storage maybe_read_slot operation."
-    histogram storage_maybe_read_slot{point_in_time, found, success},
 
     "Duration of storage read_slot operation."
     histogram storage_read_slot{point_in_time, success},
@@ -80,7 +74,7 @@ metrics! {
 
 // Storage writes.
 metrics! {
-    category: storage_write,
+    group: storage_write,
 
     "Duration of storage save_accounts operation."
     histogram storage_save_accounts{success},
@@ -92,7 +86,10 @@ metrics! {
     histogram storage_save_block{success},
 
     "Duration of storage reset operation."
-    histogram storage_reset{success}
+    histogram storage_reset{success},
+
+    "Duration of storage commit operation."
+    histogram storage_commit{success}
 }
 
 // -----------------------------------------------------------------------------
@@ -159,7 +156,7 @@ fn into_labels(labels: Vec<(&'static str, LabelValue)>) -> Vec<MetricsLabel> {
 #[doc(hidden)]
 macro_rules! metrics {
     (
-        category: $category:ident,
+        group: $group:ident,
         $(
             $description:literal
             $kind:ident $name:ident{ $($label:ident),+ }
@@ -167,7 +164,7 @@ macro_rules! metrics {
     ) => {
         // Register metrics with description with the provider
         paste! {
-            fn [<register_metrics_for_ $category>]() {
+            fn [<register_metrics_for_ $group>]() {
                 $(
                     metrics_impl_describe!($kind $name $description);
                 )+
@@ -176,7 +173,7 @@ macro_rules! metrics {
 
         // Record metrics
         $(
-            metrics_impl_fn_inc!($kind $name $category $($label)+);
+            metrics_impl_fn_inc!($kind $name $group $($label)+);
         )+
     }
 }
@@ -201,13 +198,13 @@ macro_rules! metrics_impl_describe {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! metrics_impl_fn_inc {
-    (counter $name:ident $category:ident $($label:ident)+) => {
+    (counter $name:ident $group:ident $($label:ident)+) => {
         paste! {
             #[doc = "Add 1 to `" $name "` counter."]
             pub fn [<inc_ $name>]($( $label: impl Into<LabelValue> ),+) {
                 let labels = into_labels(
                     vec![
-                        ("category", stringify!($category).into()),
+                        ("group", stringify!($group).into()),
                         $(
                             (stringify!($label), $label.into()),
                         )+
@@ -217,13 +214,13 @@ macro_rules! metrics_impl_fn_inc {
             }
         }
     };
-    (histogram  $name:ident $category:ident $($label:ident)+) => {
+    (histogram  $name:ident $group:ident $($label:ident)+) => {
         paste! {
             #[doc = "Add operation duration to `" $name "` histogram."]
             pub fn [<inc_ $name>](duration: std::time::Duration, $( $label: impl Into<LabelValue> ),+) {
                 let labels = into_labels(
                     vec![
-                        ("category", stringify!($category).into()),
+                        ("group", stringify!($group).into()),
                         $(
                             (stringify!($label), $label.into()),
                         )+

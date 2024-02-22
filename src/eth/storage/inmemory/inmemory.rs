@@ -11,7 +11,6 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
-use super::InMemoryAccount;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -27,9 +26,11 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::inmemory::InMemoryAccount;
 use crate::eth::storage::inmemory::InMemoryHistory;
-use crate::eth::storage::EthStorage;
-use crate::eth::storage::EthStorageError;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StorageError;
+use crate::eth::storage::TemporaryStorage;
 
 /// In-memory implementation using maps.
 #[derive(Debug)]
@@ -47,6 +48,16 @@ impl InMemoryStorage {
     /// Locks inner state for writing.
     async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryStorageState> {
         self.state.write().await
+    }
+
+    /// Clears in-memory state.
+    pub async fn clear(&self) {
+        let mut state = self.lock_write().await;
+        state.accounts.clear();
+        state.transactions.clear();
+        state.blocks_by_hash.clear();
+        state.blocks_by_number.clear();
+        state.logs.clear();
     }
 }
 
@@ -71,7 +82,7 @@ impl Default for InMemoryStorage {
 }
 
 #[async_trait]
-impl EthStorage for InMemoryStorage {
+impl PermanentStorage for InMemoryStorage {
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -197,15 +208,11 @@ impl EthStorage for InMemoryStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write().await;
 
-        // check conflicts
-        for transaction in &block.transactions {
-            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
-                return Err(EthStorageError::Conflict(conflicts));
-            }
-        }
+        // keep track of current block if we need to rollback
+        let current_block = self.read_current_block_number().await?;
 
         // save block
         tracing::debug!(number = %block.number(), "saving block");
@@ -216,11 +223,22 @@ impl EthStorage for InMemoryStorage {
         // save transactions
         for transaction in block.transactions.clone() {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
+
+            // check conflicts after each transaction because a transaction can depend on the previous from the same block
+            if let Some(conflicts) = check_conflicts(&state, &transaction.execution) {
+                // release lock and rollback to previous block
+                drop(state);
+                PermanentStorage::reset_at(self, current_block).await?;
+
+                // inform error
+                return Err(StorageError::Conflict(conflicts));
+            }
+
+            // save transaction
             state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
-            let is_success = transaction.is_success();
 
             // save logs
-            if is_success {
+            if transaction.is_success() {
                 for log in transaction.logs {
                     state.logs.push(log);
                 }
@@ -244,13 +262,7 @@ impl EthStorage for InMemoryStorage {
         Ok(())
     }
 
-    async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
-        let mut state_lock = self.lock_write().await;
-        save_account_changes(&mut state_lock, number, execution);
-        Ok(())
-    }
-
-    async fn reset(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
@@ -272,7 +284,7 @@ impl EthStorage for InMemoryStorage {
 
         // remove account changes
         for account in state.accounts.values_mut() {
-            account.reset(block_number);
+            account.reset_at(block_number);
         }
 
         Ok(())
@@ -287,6 +299,82 @@ impl EthStorage for InMemoryStorage {
     }
 }
 
+#[async_trait]
+impl TemporaryStorage for InMemoryStorage {
+    // -------------------------------------------------------------------------
+    // State operations
+    // ------------------------------------------------------------------------
+
+    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        let state_lock = self.state.read().await;
+        Ok(check_conflicts(&state_lock, execution))
+    }
+
+    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        tracing::debug!(%address, "reading account");
+
+        let state = self.lock_read().await;
+
+        match state.accounts.get(address) {
+            Some(account) => {
+                let account = Account {
+                    address: address.clone(),
+                    balance: account.balance.get_at_point(point_in_time).unwrap_or_default(),
+                    nonce: account.nonce.get_at_point(point_in_time).unwrap_or_default(),
+                    bytecode: account.bytecode.get_at_point(point_in_time).unwrap_or_default(),
+                };
+                tracing::trace!(%address, ?account, "account found");
+                Ok(Some(account))
+            }
+
+            None => {
+                tracing::trace!(%address, "account not found");
+                Ok(None)
+            }
+        }
+    }
+
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
+
+        let state = self.lock_read().await;
+        let Some(account) = state.accounts.get(address) else {
+            tracing::trace!(%address, "account not found");
+            return Ok(Default::default());
+        };
+
+        match account.slots.get(slot_index) {
+            Some(slot_history) => {
+                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
+                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
+                Ok(Some(slot))
+            }
+
+            None => {
+                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
+                Ok(None)
+            }
+        }
+    }
+
+    async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+        let mut state_lock = self.lock_write().await;
+        save_account_changes(&mut state_lock, number, execution);
+        Ok(())
+    }
+
+    async fn reset(&self) -> anyhow::Result<()> {
+        let mut state = self.lock_write().await;
+        state.accounts.clear();
+        state.transactions.clear();
+        state.blocks_by_hash.clear();
+        state.blocks_by_number.clear();
+        state.logs.clear();
+
+        Ok(())
+    }
+}
+
 fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNumber, execution: Execution) {
     let is_success = execution.is_success();
     for changes in execution.changes {
@@ -295,21 +383,15 @@ fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNum
             .entry(changes.address.clone())
             .or_insert_with(|| InMemoryAccount::new(changes.address));
 
-        // nonce
-        if let Some(nonce) = changes.nonce.take_modified() {
+        // account basic info
+        if let Some(nonce) = changes.nonce.take() {
             account.set_nonce(block_number, nonce);
         }
-
-        // balance
-        if let Some(balance) = changes.balance.take_modified() {
+        if let Some(balance) = changes.balance.take() {
             account.set_balance(block_number, balance);
         }
-
-        // bytecode
-        if is_success {
-            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                account.set_bytecode(block_number, bytecode);
-            }
+        if let Some(Some(bytecode)) = changes.bytecode.take() {
+            account.set_bytecode(block_number, bytecode);
         }
 
         // slots

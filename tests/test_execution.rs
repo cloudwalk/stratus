@@ -9,9 +9,9 @@ mod tests {
     use fake::{Dummy, Faker};
     use nonempty::nonempty;
     use stratus::config::StorageConfig;
+    use stratus::eth::primitives::test_accounts;
     use stratus::eth::primitives::TransactionInput;
     use stratus::eth::primitives::Wei;
-    use stratus::eth::storage::test_accounts;
     use stratus::eth::EthExecutor;
 
     use super::*;
@@ -27,7 +27,7 @@ mod tests {
         fake_transaction_input.gas_limit = 0.into();
 
         let accounts = test_accounts();
-        storage.save_accounts(accounts.clone()).await.unwrap();
+        storage.save_accounts_to_perm(accounts.clone()).await.unwrap();
 
         let address = accounts.last().unwrap().address.clone();
         fake_transaction_input.from = address;

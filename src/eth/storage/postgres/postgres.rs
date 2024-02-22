@@ -31,14 +31,29 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::postgres::types::PostgresLog;
 use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
-use crate::eth::storage::EthStorage;
-use crate::eth::storage::EthStorageError;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StorageError;
 use crate::infra::postgres::Postgres;
 
 #[async_trait]
-impl EthStorage for Postgres {
+impl PermanentStorage for Postgres {
     async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         Ok(None)
+    }
+
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
+        tracing::debug!("incrementing block number");
+
+        let nextval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
+            .fetch_one(&self.connection_pool)
+            .await
+            .unwrap_or_else(|err| {
+                tracing::error!(?err, "failed to get block number");
+                0
+            })
+            + 1;
+
+        Ok(nextval.into())
     }
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
@@ -412,7 +427,7 @@ impl EthStorage for Postgres {
     // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
     // neither worked for some reason I was not able to determine at this time)
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
 
         tracing::debug!(block = ?block, "saving block");
@@ -506,7 +521,7 @@ impl EthStorage for Postgres {
                 // A successful insert/update with no conflicts will have one affected row
                 if account_result.rows_affected() != 1 {
                     tx.rollback().await.context("failed to rollback transaction")?;
-                    let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
+                    let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
                         address: change.address,
                         expected_balance: original_balance,
                         expected_nonce: original_nonce,
@@ -561,7 +576,7 @@ impl EthStorage for Postgres {
                         // A successful insert/update with no conflicts will have one affected row
                         if slot_result.rows_affected() != 1 {
                             tx.rollback().await.context("failed to rollback transaction")?;
-                            let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
+                            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
                                 address: change.address,
                                 slot: idx,
                                 expected: original_value,
@@ -641,21 +656,6 @@ impl EthStorage for Postgres {
         Ok(block_number)
     }
 
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        tracing::debug!("incrementing block number");
-
-        let nextval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
-            .fetch_one(&self.connection_pool)
-            .await
-            .unwrap_or_else(|err| {
-                tracing::error!(?err, "failed to get block number");
-                0
-            })
-            + 1;
-
-        Ok(nextval.into())
-    }
-
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
@@ -700,17 +700,13 @@ impl EthStorage for Postgres {
             .await
             .context("failed to insert nonce")?;
 
-            tx.commit().await.context("Failed to commit transaction")?;
+            tx.commit().await.context("failed to commit transaction")?;
         }
 
         Ok(())
     }
 
-    async fn save_account_changes(&self, _block_number: BlockNumber, _execution: Execution) -> anyhow::Result<()> {
-        todo!();
-    }
-
-    async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+    async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()> {
         sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
             .execute(&self.connection_pool)
             .await?;

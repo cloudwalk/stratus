@@ -13,6 +13,7 @@ use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
@@ -43,6 +44,21 @@ pub struct TransactionMined {
 }
 
 impl TransactionMined {
+    /// Creates a new mined transaction from an external mined transaction that was re-executed locally.
+    ///
+    /// TODO: this kind of conversion should be infallibe.
+    pub fn from_external(execution: ExternalTransactionExecution) -> anyhow::Result<Self> {
+        let (tx, receipt, execution) = execution;
+        Ok(Self {
+            input: tx.try_into()?,
+            execution,
+            block_number: receipt.block_number(),
+            block_hash: receipt.block_hash(),
+            transaction_index: receipt.transaction_index.into(),
+            logs: receipt.0.logs.into_iter().map_into().collect(),
+        })
+    }
+
     /// Check if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
         self.execution.is_success()
