@@ -46,9 +46,4 @@ pub trait PermanentStorage: Send + Sync {
 
     /// Resets all state to a specific block number.
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
-
-    /// Enables genesis block.
-    ///
-    /// TODO: maybe can use save_block from a default method.
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()>;
 }

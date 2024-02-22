@@ -284,14 +284,6 @@ impl PermanentStorage for InMemoryStorage {
 
         Ok(())
     }
-
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
-        let block = Arc::new(genesis);
-        let mut state = self.lock_write().await;
-        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
-        state.blocks_by_hash.insert(block.hash().clone(), block);
-        Ok(())
-    }
 }
 
 #[async_trait]
