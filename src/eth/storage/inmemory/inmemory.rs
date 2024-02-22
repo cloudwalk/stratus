@@ -34,12 +34,12 @@ use crate::eth::storage::TemporaryStorage;
 
 /// In-memory implementation using maps.
 #[derive(Debug)]
-pub struct InMemoryStorage {
+pub struct InMemoryStoragePermanent {
     state: RwLock<InMemoryStorageState>,
     block_number: AtomicU64,
 }
 
-impl InMemoryStorage {
+impl InMemoryStoragePermanent {
     /// Locks inner state for reading.
     async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryStorageState> {
         self.state.read().await
@@ -70,7 +70,7 @@ struct InMemoryStorageState {
     logs: Vec<LogMined>,
 }
 
-impl Default for InMemoryStorage {
+impl Default for InMemoryStoragePermanent {
     fn default() -> Self {
         tracing::info!("starting inmemory storage");
 
@@ -82,7 +82,7 @@ impl Default for InMemoryStorage {
 }
 
 #[async_trait]
-impl PermanentStorage for InMemoryStorage {
+impl PermanentStorage for InMemoryStoragePermanent {
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -299,14 +299,40 @@ impl PermanentStorage for InMemoryStorage {
     }
 }
 
+#[derive(Debug)]
+pub struct InMemoryStorageTemporary(InMemoryStoragePermanent);
+
+impl Default for InMemoryStorageTemporary {
+    fn default() -> Self {
+        Self(InMemoryStoragePermanent::default())
+    }
+}
+
+impl InMemoryStorageTemporary {
+    /// Locks inner state for reading.
+    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryStorageState> {
+        self.0.lock_read().await
+    }
+
+    /// Locks inner state for writing.
+    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryStorageState> {
+        self.0.lock_write().await
+    }
+
+    /// Clears in-memory state.
+    pub async fn clear(&self) {
+        self.0.clear().await
+    }
+}
+
 #[async_trait]
-impl TemporaryStorage for InMemoryStorage {
+impl TemporaryStorage for InMemoryStorageTemporary {
     // -------------------------------------------------------------------------
     // State operations
     // ------------------------------------------------------------------------
 
     async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let state_lock = self.state.read().await;
+        let state_lock = self.lock_read().await;
         Ok(check_conflicts(&state_lock, execution))
     }
 

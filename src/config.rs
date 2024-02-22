@@ -17,7 +17,8 @@ use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
-use crate::eth::storage::InMemoryStorage;
+use crate::eth::storage::InMemoryStoragePermanent;
+use crate::eth::storage::InMemoryStorageTemporary;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -177,10 +178,10 @@ pub enum StorageConfig {
 impl StorageConfig {
     /// Initializes the storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp = Arc::new(InMemoryStorage::default());
+        let temp = Arc::new(InMemoryStorageTemporary::default());
 
         let perm: Arc<dyn PermanentStorage> = match self {
-            Self::InMemory => Arc::new(InMemoryStorage::default()),
+            Self::InMemory => Arc::new(InMemoryStoragePermanent::default()),
             Self::Postgres { url } => Arc::new(Postgres::new(url).await?),
         };
         Ok(Arc::new(StratusStorage::new(temp, perm)))

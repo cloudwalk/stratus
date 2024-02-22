@@ -3,6 +3,7 @@ mod inmemory;
 mod inmemory_account;
 mod inmemory_history;
 
-pub use inmemory::InMemoryStorage;
+pub use inmemory::InMemoryStoragePermanent;
+pub use inmemory::InMemoryStorageTemporary;
 pub use inmemory_account::InMemoryAccount;
 pub use inmemory_history::InMemoryHistory;
