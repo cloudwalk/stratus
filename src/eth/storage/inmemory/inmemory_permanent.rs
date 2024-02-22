@@ -11,29 +11,31 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
-use super::inmemory_account::InMemoryAccount;
-use super::inmemory_account::InMemoryAccountPermanent;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::Wei;
+use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
 #[derive(Debug, Default)]
 struct InMemoryPermanentStorageState {
-    accounts: HashMap<Address, InMemoryAccountPermanent>,
+    accounts: HashMap<Address, InMemoryPermanentAccount>,
     transactions: HashMap<Hash, TransactionMined>,
     blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     blocks_by_hash: IndexMap<Hash, Arc<Block>>,
@@ -41,12 +43,12 @@ struct InMemoryPermanentStorageState {
 }
 
 #[derive(Debug)]
-pub struct InMemoryStoragePermanent {
+pub struct InMemoryPermanentStorage {
     state: RwLock<InMemoryPermanentStorageState>,
     block_number: AtomicU64,
 }
 
-impl InMemoryStoragePermanent {
+impl InMemoryPermanentStorage {
     /// Locks inner state for reading.
     async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
         self.state.read().await
@@ -67,31 +69,39 @@ impl InMemoryStoragePermanent {
         state.logs.clear();
     }
 
-    async fn save_account_changes(state: &mut InMemoryPermanentStorageState, block_number: BlockNumber, execution: Execution) {
+    async fn save_account_changes(state: &mut InMemoryPermanentStorageState, number: BlockNumber, execution: Execution) {
         let is_success = execution.is_success();
         for changes in execution.changes {
             let account = state
                 .accounts
                 .entry(changes.address.clone())
-                .or_insert_with(|| InMemoryAccountPermanent::new(changes.address));
+                .or_insert_with(|| InMemoryPermanentAccount::new_empty(changes.address));
 
             // account basic info
             if let Some(nonce) = changes.nonce.take_modified() {
-                account.set_nonce(block_number, nonce);
+                account.nonce.push(number, nonce);
             }
             if let Some(balance) = changes.balance.take_modified() {
-                account.set_balance(block_number, balance);
+                account.balance.push(number, balance);
             }
 
-            // slots
             if is_success {
+                // bytecode
                 if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                    account.set_bytecode(block_number, bytecode);
+                    account.bytecode.push(number, Some(bytecode));
                 }
 
+                // slots
                 for (_, slot) in changes.slots {
                     if let Some(slot) = slot.take_modified() {
-                        account.set_slot(block_number, slot);
+                        match account.slots.get_mut(&slot.index) {
+                            Some(slot_history) => {
+                                slot_history.push(number, slot);
+                            }
+                            None => {
+                                account.slots.insert(slot.index.clone(), InMemoryHistory::new(number, slot));
+                            }
+                        }
                     }
                 }
             }
@@ -106,26 +116,26 @@ impl InMemoryStoragePermanent {
 
             if let Some(account) = state.accounts.get(address) {
                 // check account info conflicts
-                if let Some(touched_nonce) = change.nonce.take_original_ref() {
-                    let nonce = account.get_current_nonce();
-                    if touched_nonce != nonce {
-                        conflicts.add_nonce(address.clone(), nonce.clone(), touched_nonce.clone());
+                if let Some(original_nonce) = change.nonce.take_original_ref() {
+                    let account_nonce = account.nonce.get_current_ref();
+                    if original_nonce != account_nonce {
+                        conflicts.add_nonce(address.clone(), account_nonce.clone(), original_nonce.clone());
                     }
                 }
-                if let Some(touched_balance) = change.balance.take_original_ref() {
-                    let balance = account.get_current_balance();
-                    if touched_balance != balance {
-                        conflicts.add_balance(address.clone(), balance.clone(), touched_balance.clone());
+                if let Some(original_balance) = change.balance.take_original_ref() {
+                    let account_balance = account.balance.get_current_ref();
+                    if original_balance != account_balance {
+                        conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
                     }
                 }
 
                 // check slots conflicts
-                for (touched_slot_index, touched_slot) in &change.slots {
-                    if let Some(slot) = account.get_current_slot(touched_slot_index) {
-                        if let Some(touched_slot) = touched_slot.take_original_ref() {
-                            let slot_value = slot.value.clone();
-                            if touched_slot.value != slot_value {
-                                conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
+                for (slot_index, slot_change) in &change.slots {
+                    if let Some(account_slot) = account.slots.get(slot_index).map(|value| value.get_current_ref()) {
+                        if let Some(original_slot) = slot_change.take_original_ref() {
+                            let account_slot_value = account_slot.value.clone();
+                            if original_slot.value != account_slot_value {
+                                conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
                             }
                         }
                     }
@@ -136,7 +146,7 @@ impl InMemoryStoragePermanent {
     }
 }
 
-impl Default for InMemoryStoragePermanent {
+impl Default for InMemoryPermanentStorage {
     fn default() -> Self {
         tracing::info!("starting inmemory storage");
 
@@ -148,7 +158,7 @@ impl Default for InMemoryStoragePermanent {
 }
 
 #[async_trait]
-impl PermanentStorage for InMemoryStoragePermanent {
+impl PermanentStorage for InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -294,7 +304,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
             if let Some(conflicts) = Self::check_conflicts(&state, &transaction.execution).await {
                 // release lock and rollback to previous block
                 drop(state);
-                PermanentStorage::reset_at(self, current_block).await?;
+                self.reset_at(current_block).await?;
 
                 // inform error
                 return Err(StorageError::Conflict(conflicts));
@@ -323,7 +333,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
         for account in accounts {
             state.accounts.insert(
                 account.address.clone(),
-                InMemoryAccountPermanent::new_with_balance(account.address, account.balance),
+                InMemoryPermanentAccount::new_with_balance(account.address, account.balance),
             );
         }
         Ok(())
@@ -355,5 +365,50 @@ impl PermanentStorage for InMemoryStoragePermanent {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct InMemoryPermanentAccount {
+    #[allow(dead_code)]
+    address: Address,
+    balance: InMemoryHistory<Wei>,
+    nonce: InMemoryHistory<Nonce>,
+    bytecode: InMemoryHistory<Option<Bytes>>,
+    slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
+}
+
+impl InMemoryPermanentAccount {
+    /// Creates a new empty permanent account.
+    fn new_empty(address: Address) -> Self {
+        Self::new_with_balance(address, Wei::ZERO)
+    }
+
+    /// Creates a new permanent account with initial balance.
+    pub fn new_with_balance(address: Address, balance: Wei) -> Self {
+        Self {
+            address,
+            balance: InMemoryHistory::new_at_zero(balance),
+            nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
+            bytecode: InMemoryHistory::new_at_zero(None),
+            slots: Default::default(),
+        }
+    }
+
+    /// Resets all account changes to the specified block number.
+    pub fn reset_at(&mut self, block_number: BlockNumber) {
+        // SAFETY: ok to unwrap because all historical values starts at block 0
+        self.balance = self.balance.reset_at(block_number).expect("never empty");
+        self.nonce = self.nonce.reset_at(block_number).expect("never empty");
+        self.bytecode = self.bytecode.reset_at(block_number).expect("never empty");
+
+        // SAFETY: not ok to unwrap because slot value does not start at block 0
+        let mut new_slots = HashMap::with_capacity(self.slots.len());
+        for (slot_index, slot_history) in self.slots.iter() {
+            if let Some(new_slot_history) = slot_history.reset_at(block_number) {
+                new_slots.insert(slot_index.clone(), new_slot_history);
+            }
+        }
+        self.slots = new_slots;
     }
 }

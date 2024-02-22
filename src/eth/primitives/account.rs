@@ -35,6 +35,11 @@ pub struct Account {
 }
 
 impl Account {
+    /// Creates a new empty account.
+    pub fn new_empty(address: Address) -> Self {
+        Self::new_with_balance(address, Wei::ZERO)
+    }
+
     /// Creates a new account with initial balance.
     pub fn new_with_balance(address: Address, balance: Wei) -> Self {
         Self {
