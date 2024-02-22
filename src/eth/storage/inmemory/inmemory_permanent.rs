@@ -83,7 +83,6 @@ impl InMemoryStoragePermanent {
                 account.set_balance(block_number, balance);
             }
 
-
             // slots
             if is_success {
                 if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
