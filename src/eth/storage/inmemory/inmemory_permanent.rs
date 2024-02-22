@@ -11,13 +11,16 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
+use super::inmemory_account::InMemoryAccount;
 use super::inmemory_account::InMemoryAccountPermanent;
-use super::inmemory_state::StorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -35,16 +38,6 @@ struct InMemoryPermanentStorageState {
     blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     blocks_by_hash: IndexMap<Hash, Arc<Block>>,
     logs: Vec<LogMined>,
-}
-
-impl StorageState<InMemoryAccountPermanent> for InMemoryPermanentStorageState {
-    fn get_accounts(&self) -> &HashMap<Address, InMemoryAccountPermanent> {
-        &self.accounts
-    }
-
-    fn get_accounts_mut(&mut self) -> &mut HashMap<Address, InMemoryAccountPermanent> {
-        &mut self.accounts
-    }
 }
 
 #[derive(Debug)]
@@ -72,6 +65,73 @@ impl InMemoryStoragePermanent {
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
         state.logs.clear();
+    }
+
+    async fn save_account_changes(state: &mut InMemoryPermanentStorageState, block_number: BlockNumber, execution: Execution) {
+        let is_success = execution.is_success();
+        for changes in execution.changes {
+            let account = state
+                .accounts
+                .entry(changes.address.clone())
+                .or_insert_with(|| InMemoryAccountPermanent::new(changes.address));
+
+            // account basic info
+            if let Some(nonce) = changes.nonce.take() {
+                account.set_nonce(block_number, nonce);
+            }
+            if let Some(balance) = changes.balance.take() {
+                account.set_balance(block_number, balance);
+            }
+            if let Some(Some(bytecode)) = changes.bytecode.take() {
+                account.set_bytecode(block_number, bytecode);
+            }
+
+            // slots
+            if is_success {
+                for (_, slot) in changes.slots {
+                    if let Some(slot) = slot.take_modified() {
+                        account.set_slot(block_number, slot);
+                    }
+                }
+            }
+        }
+    }
+
+    async fn check_conflicts(state: &InMemoryPermanentStorageState, execution: &Execution) -> Option<ExecutionConflicts> {
+        let mut conflicts = ExecutionConflictsBuilder::default();
+
+        for change in &execution.changes {
+            let address = &change.address;
+
+            if let Some(account) = state.accounts.get(address) {
+                // check account info conflicts
+                if let Some(touched_nonce) = change.nonce.take_original_ref() {
+                    let nonce = account.get_current_nonce();
+                    if touched_nonce != nonce {
+                        conflicts.add_nonce(address.clone(), nonce.clone(), touched_nonce.clone());
+                    }
+                }
+                if let Some(touched_balance) = change.balance.take_original_ref() {
+                    let balance = account.get_current_balance();
+                    if touched_balance != balance {
+                        conflicts.add_balance(address.clone(), balance.clone(), touched_balance.clone());
+                    }
+                }
+
+                // check slots conflicts
+                for (touched_slot_index, touched_slot) in &change.slots {
+                    if let Some(slot) = account.get_current_slot(touched_slot_index) {
+                        if let Some(touched_slot) = touched_slot.take_original_ref() {
+                            let slot_value = slot.value.clone();
+                            if touched_slot.value != slot_value {
+                                conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        conflicts.build()
     }
 }
 
@@ -225,7 +285,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
 
             // check conflicts after each transaction because a transaction can depend on the previous from the same block
-            if let Some(conflicts) = state.check_conflicts(&transaction.execution) {
+            if let Some(conflicts) = Self::check_conflicts(&state, &transaction.execution).await {
                 // release lock and rollback to previous block
                 drop(state);
                 PermanentStorage::reset_at(self, current_block).await?;
@@ -245,7 +305,7 @@ impl PermanentStorage for InMemoryStoragePermanent {
             }
 
             // save execution changes
-            state.save_account_changes(*block.number(), transaction.execution);
+            Self::save_account_changes(&mut state, *block.number(), transaction.execution).await;
         }
         Ok(())
     }

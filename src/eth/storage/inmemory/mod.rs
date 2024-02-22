@@ -2,7 +2,6 @@ mod inmemory_account;
 mod inmemory_history;
 mod inmemory_permanent;
 #[allow(clippy::module_inception)]
-mod inmemory_state;
 mod inmemory_temporary;
 
 /// The inmemory storage is split into two structs. InMemoryStoragePermanent and
