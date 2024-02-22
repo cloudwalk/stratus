@@ -13,8 +13,6 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Execution;
-use crate::eth::primitives::ExecutionConflicts;
-use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -44,48 +42,6 @@ impl InMemoryStorageTemporary {
 
 #[async_trait]
 impl TemporaryStorage for InMemoryStorageTemporary {
-    // -------------------------------------------------------------------------
-    // State operations
-    // ------------------------------------------------------------------------
-
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let state = self.lock_read().await;
-        let mut conflicts = ExecutionConflictsBuilder::default();
-
-        for change in &execution.changes {
-            let address = &change.address;
-
-            if let Some(account) = state.accounts.get(address) {
-                // check account info conflicts
-                if let Some(touched_nonce) = change.nonce.take_original_ref() {
-                    let nonce = account.get_current_nonce();
-                    if touched_nonce != nonce {
-                        conflicts.add_nonce(address.clone(), nonce.clone(), touched_nonce.clone());
-                    }
-                }
-                if let Some(touched_balance) = change.balance.take_original_ref() {
-                    let balance = account.get_current_balance();
-                    if touched_balance != balance {
-                        conflicts.add_balance(address.clone(), balance.clone(), touched_balance.clone());
-                    }
-                }
-
-                // check slots conflicts
-                for (touched_slot_index, touched_slot) in &change.slots {
-                    if let Some(slot) = account.get_current_slot(touched_slot_index) {
-                        if let Some(touched_slot) = touched_slot.take_original_ref() {
-                            let slot_value = slot.value.clone();
-                            if touched_slot.value != slot_value {
-                                conflicts.add_slot(address.clone(), touched_slot_index.clone(), slot_value, touched_slot.value.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(conflicts.build())
-    }
-
     async fn maybe_read_account(&self, address: &Address, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 

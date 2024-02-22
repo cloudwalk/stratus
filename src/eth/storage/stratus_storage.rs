@@ -9,7 +9,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Execution;
-use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -67,14 +66,6 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
     // State queries
     // -------------------------------------------------------------------------
-
-    /// Checks if the transaction execution conflicts with the current storage state.
-    pub async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let start = Instant::now();
-        let result = self.temp.check_conflicts(execution).await;
-        metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
-        result
-    }
 
     /// Retrieves an account from the storage. Returns default value when not found.
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
