@@ -36,7 +36,8 @@ impl ExecutionAccountChanges {
     }
 
     /// Creates a new [`ExecutionAccountChanges`] that represents an account being created by this transaction.
-    pub fn from_new_account(account: Account, modified_slots: Vec<Slot>) -> Self {
+    pub fn from_new_account(account: impl Into<Account>, modified_slots: Vec<Slot>) -> Self {
+        let account = account.into();
         let mut changes = Self {
             new_account: true,
             address: account.address,

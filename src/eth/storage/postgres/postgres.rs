@@ -448,7 +448,7 @@ impl PermanentStorage for Postgres {
             i64::try_from(block.header.number).context("failed to convert block number")?,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
-            BigDecimal::try_from(block.header.gas)?,
+            BigDecimal::try_from(block.header.gas.clone())?,
             block.header.bloom.as_ref(),
             i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
             block.header.parent_hash.as_ref()
@@ -456,6 +456,8 @@ impl PermanentStorage for Postgres {
         .execute(&mut *tx)
         .await
         .context("failed to insert block")?;
+
+        let account_changes = block.compact_execution_changes();
 
         for transaction in block.transactions {
             let is_success = transaction.is_success();
@@ -483,132 +485,6 @@ impl PermanentStorage for Postgres {
             .execute(&mut *tx)
             .await
             .context("failed to insert transaction")?;
-
-            for change in transaction.execution.changes {
-                let (original_nonce, new_nonce) = change.nonce.take_both();
-                let (original_balance, new_balance) = change.balance.take_both();
-
-                let new_nonce: Option<BigDecimal> = match new_nonce {
-                    Some(nonce) => Some(nonce.try_into()?),
-                    None => None,
-                };
-
-                let new_balance: Option<BigDecimal> = match new_balance {
-                    Some(balance) => Some(balance.try_into()?),
-                    None => None,
-                };
-
-                let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
-                let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
-
-                let bytecode = if is_success {
-                    change
-                        .bytecode
-                        .take()
-                        .unwrap_or_else(|| {
-                            tracing::debug!("bytecode not set, defaulting to None");
-                            None
-                        })
-                        .map(|val| val.as_ref().to_owned())
-                } else {
-                    None
-                };
-
-                let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-
-                let account_result: PgQueryResult = sqlx::query_file!(
-                    "src/eth/storage/postgres/queries/insert_account.sql",
-                    change.address.as_ref(),
-                    new_nonce.as_ref().unwrap_or(&original_nonce),
-                    new_balance.as_ref().unwrap_or(&original_balance),
-                    bytecode,
-                    block_number,
-                    original_nonce,
-                    original_balance
-                )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert account")?;
-
-                // A successful insert/update with no conflicts will have one affected row
-                if account_result.rows_affected() != 1 {
-                    tx.rollback().await.context("failed to rollback transaction")?;
-                    let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
-                        address: change.address,
-                        expected_balance: original_balance,
-                        expected_nonce: original_nonce,
-                    }]));
-                    return Err(error);
-                }
-
-                if let Some(balance) = new_balance {
-                    sqlx::query_file!(
-                        "src/eth/storage/postgres/queries/insert_historical_balance.sql",
-                        change.address.as_ref(),
-                        balance,
-                        block_number
-                    )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert balance")?;
-                }
-
-                if let Some(nonce) = new_nonce {
-                    sqlx::query_file!(
-                        "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
-                        change.address.as_ref(),
-                        nonce,
-                        block_number
-                    )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert nonce")?;
-                }
-
-                if is_success {
-                    for (slot_idx, value) in change.slots {
-                        let (original_value, val) = value.clone().take_both();
-                        let idx: [u8; 32] = slot_idx.into();
-                        let val: [u8; 32] = val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
-                        let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-                        let original_value: [u8; 32] = original_value.unwrap_or_default().value.into();
-
-                        let slot_result: PgQueryResult = sqlx::query_file!(
-                            "src/eth/storage/postgres/queries/insert_account_slot.sql",
-                            &idx,
-                            &val,
-                            change.address.as_ref(),
-                            block_number,
-                            &original_value
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .context("failed to insert slot")?;
-
-                        // A successful insert/update with no conflicts will have one affected row
-                        if slot_result.rows_affected() != 1 {
-                            tx.rollback().await.context("failed to rollback transaction")?;
-                            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
-                                address: change.address,
-                                slot: idx,
-                                expected: original_value,
-                            }]));
-                            return Err(error);
-                        }
-
-                        sqlx::query_file!(
-                            "src/eth/storage/postgres/queries/insert_historical_slot.sql",
-                            &idx,
-                            &val,
-                            change.address.as_ref(),
-                            block_number
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .context("failed to insert slot to history")?;
-                    }
-                }
-            }
 
             if is_success {
                 for log in transaction.logs {
@@ -648,6 +524,127 @@ impl PermanentStorage for Postgres {
                         .context("failed to insert topic")?;
                     }
                 }
+            }
+        }
+
+        for change in account_changes {
+            // for change in transaction.execution.changes {
+            let (original_nonce, new_nonce) = change.nonce.take_both();
+            let (original_balance, new_balance) = change.balance.take_both();
+
+            let new_nonce: Option<BigDecimal> = match new_nonce {
+                Some(nonce) => Some(nonce.try_into()?),
+                None => None,
+            };
+
+            let new_balance: Option<BigDecimal> = match new_balance {
+                Some(balance) => Some(balance.try_into()?),
+                None => None,
+            };
+
+            let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
+            let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
+
+            let bytecode = change
+                .bytecode
+                .take()
+                .unwrap_or_else(|| {
+                    tracing::debug!("bytecode not set, defaulting to None");
+                    None
+                })
+                .map(|val| val.as_ref().to_owned());
+
+            let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+
+            let account_result: PgQueryResult = sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_account.sql",
+                change.address.as_ref(),
+                new_nonce.as_ref().unwrap_or(&original_nonce),
+                new_balance.as_ref().unwrap_or(&original_balance),
+                bytecode,
+                block_number,
+                original_nonce,
+                original_balance
+            )
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert account")?;
+
+            // A successful insert/update with no conflicts will have one affected row
+            if account_result.rows_affected() != 1 {
+                tx.rollback().await.context("failed to rollback transaction")?;
+                let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
+                    address: change.address,
+                    expected_balance: original_balance,
+                    expected_nonce: original_nonce,
+                }]));
+                return Err(error);
+            }
+
+            if let Some(balance) = new_balance {
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_historical_balance.sql",
+                    change.address.as_ref(),
+                    balance,
+                    block_number
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert balance")?;
+            }
+
+            if let Some(nonce) = new_nonce {
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
+                    change.address.as_ref(),
+                    nonce,
+                    block_number
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert nonce")?;
+            }
+
+            for (slot_idx, value) in change.slots {
+                let (original_value, val) = value.clone().take_both();
+                let idx: [u8; 32] = slot_idx.into();
+                let val: [u8; 32] = val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
+                let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+                let original_value: [u8; 32] = original_value.unwrap_or_default().value.into();
+
+                let slot_result: PgQueryResult = sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_account_slot.sql",
+                    &idx,
+                    &val,
+                    change.address.as_ref(),
+                    block_number,
+                    &original_value
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert slot")?;
+
+                // A successful insert/update with no conflicts will have one affected row
+                if slot_result.rows_affected() != 1 {
+                    tx.rollback().await.context("failed to rollback transaction")?;
+                    let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
+                        address: change.address,
+                        slot: idx,
+                        expected: original_value,
+                    }]));
+                    return Err(error);
+                }
+
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_historical_slot.sql",
+                    &idx,
+                    &val,
+                    change.address.as_ref(),
+                    block_number
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert slot to history")?;
             }
         }
 

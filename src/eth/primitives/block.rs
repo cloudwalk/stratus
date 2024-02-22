@@ -8,14 +8,18 @@
 //! structure, such as querying block information or broadcasting newly mined
 //! blocks.
 
+use std::collections::HashMap;
+
 use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
@@ -71,6 +75,34 @@ impl Block {
     /// Returns the block hash.
     pub fn hash(&self) -> &Hash {
         &self.header.hash
+    }
+
+    /// Compact block execution changes removing all intermediate changes, keeping only the last value for each modified nonce, balance, bytecode and slot.
+    pub fn compact_execution_changes(&self) -> Vec<ExecutionAccountChanges> {
+        let mut block_compacted_changes: HashMap<Address, ExecutionAccountChanges> = HashMap::new();
+        for transaction in &self.transactions {
+            for transaction_changes in transaction.execution.changes.clone().into_iter() {
+                let account_compacted_changes = block_compacted_changes
+                    .entry(transaction_changes.address.clone())
+                    .or_insert(transaction_changes.clone());
+                if let Some(nonce) = transaction_changes.nonce.take_modified() {
+                    account_compacted_changes.nonce.set_modified(nonce);
+                }
+                if let Some(balance) = transaction_changes.balance.take_modified() {
+                    account_compacted_changes.balance.set_modified(balance);
+                }
+                if let Some(bytecode) = transaction_changes.bytecode.take_modified() {
+                    account_compacted_changes.bytecode.set_modified(bytecode);
+                }
+                for (slot_index, slot) in transaction_changes.slots {
+                    let slot_compacted_changes = account_compacted_changes.slots.entry(slot_index).or_insert(slot.clone());
+                    if let Some(slot_value) = slot.take_modified() {
+                        slot_compacted_changes.set_modified(slot_value);
+                    }
+                }
+            }
+        }
+        block_compacted_changes.into_values().collect_vec()
     }
 }
 
