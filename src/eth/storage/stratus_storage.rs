@@ -22,9 +22,9 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::infra::metrics;
 
-static TEMP_LABEL: &str = "Temporary";
-static PERM_LABEL: &str = "Permanent";
-static DEFAULT_LABEL: &str = "Default";
+static TEMP_LABEL: &str = "temporary";
+static PERM_LABEL: &str = "permanent";
+static DEFAULT_LABEL: &str = "default";
 
 pub struct StratusStorage {
     temp: Arc<dyn TemporaryStorage>,
