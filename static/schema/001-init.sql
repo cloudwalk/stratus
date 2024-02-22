@@ -93,3 +93,34 @@ CREATE TABLE IF NOT EXISTS topics (
     ,FOREIGN KEY (block_hash, log_idx) REFERENCES logs (block_hash, log_idx)
     ,PRIMARY KEY (block_hash, log_idx, topic_idx)
 );
+
+
+-- Insert genesis block and the pre-funded account on database creation. These should be
+-- present in the database regardless of how stratus is started.
+
+INSERT INTO blocks(number, hash, transactions_root, gas, logs_bloom, timestamp_in_secs, parent_hash, created_at)
+VALUES (
+    0,
+    decode('011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce', 'hex'),
+    decode('56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421', 'hex'),
+    0,
+    decode('00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000', 'hex'),
+    0,
+    decode('0000000000000000000000000000000000000000000000000000000000000000', 'hex'),
+    current_timestamp
+);
+
+INSERT INTO accounts (address, bytecode, latest_balance, latest_nonce, creation_block)
+VALUES (
+    decode('F56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6', 'hex'),
+    NULL,
+    POWER(2, 256) - 1,
+    0,
+    0
+);
+
+INSERT INTO  historical_balances (address, balance, block_number)
+VALUES (decode('F56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6', 'hex'), POWER(2, 256) - 1, 0);
+
+INSERT INTO  historical_nonces (address, nonce, block_number)
+VALUES (decode('F56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6', 'hex'), 0, 0);
