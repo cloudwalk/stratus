@@ -56,6 +56,14 @@ impl StratusStorage {
         result
     }
 
+    /// Sets the block number to a specific value.
+    pub async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.perm.set_block_number(number).await;
+        metrics::inc_storage_set_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
     // -------------------------------------------------------------------------
     // State queries
     // -------------------------------------------------------------------------

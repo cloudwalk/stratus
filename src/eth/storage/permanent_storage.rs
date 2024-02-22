@@ -23,6 +23,11 @@ pub trait PermanentStorage: Send + Sync {
     /// Atomically increments the block number, returning the new value.
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
+    /// Sets the block number to a specific value.
+    ///
+    /// Should be used only when importing external blocks. To reset the storage to the past, use `reset_at`.
+    async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
 

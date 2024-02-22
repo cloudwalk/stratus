@@ -52,6 +52,11 @@ impl PermanentStorage for Postgres {
         Ok(nextval.into())
     }
 
+    async fn set_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
+        // nothing to do yet because we are not using a sequence
+        Ok(())
+    }
+
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
         let account = match point_in_time {

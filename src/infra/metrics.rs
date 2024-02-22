@@ -46,7 +46,10 @@ metrics! {
     histogram storage_read_current_block_number{success},
 
     "Duration of storage increment_block_number operation."
-    histogram storage_increment_block_number{success}
+    histogram storage_increment_block_number{success},
+
+    "Duration of storage set_block_number operation."
+    histogram storage_set_block_number{success}
 }
 
 // Storage reads.
