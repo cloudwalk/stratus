@@ -100,11 +100,6 @@ impl PermanentStorage for InMemoryStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let state_lock = self.state.read().await;
-        Ok(check_conflicts(&state_lock, execution))
-    }
-
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
@@ -287,14 +282,6 @@ impl PermanentStorage for InMemoryStorage {
             account.reset_at(block_number);
         }
 
-        Ok(())
-    }
-
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
-        let block = Arc::new(genesis);
-        let mut state = self.lock_write().await;
-        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
-        state.blocks_by_hash.insert(block.hash().clone(), block);
         Ok(())
     }
 }

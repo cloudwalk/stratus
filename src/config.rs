@@ -17,11 +17,15 @@ use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::InMemoryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
+use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
 /// Configuration for main Stratus service.
@@ -117,16 +121,34 @@ impl CommonConfig {
     /// Initializes storage.
     pub async fn init_storage(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let storage = self.storage.init().await?;
+
         if self.enable_genesis {
-            storage.enable_genesis(BlockMiner::genesis()).await?;
-        }
-        if self.enable_test_accounts {
-            if self.env.is_production() {
-                tracing::warn!("cannot enable test accounts in production environment");
-            } else {
-                storage.save_accounts_to_perm(test_accounts()).await?;
+            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+            if genesis.is_none() {
+                tracing::info!("enabling genesis block");
+                storage.commit_to_perm(BlockMiner::genesis()).await?;
             }
         }
+
+        if self.enable_test_accounts {
+            if self.env.is_development() {
+                let mut test_accounts_to_insert = Vec::new();
+                for test_account in test_accounts() {
+                    let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
+                    if storage_account.is_empty() {
+                        test_accounts_to_insert.push(test_account);
+                    }
+                }
+
+                if not(test_accounts_to_insert.is_empty()) {
+                    tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
+                    storage.save_accounts_to_perm(test_accounts_to_insert).await?;
+                }
+            } else {
+                tracing::warn!("cannot enable test accounts in non-development environment");
+            }
+        }
+
         Ok(storage)
     }
 
