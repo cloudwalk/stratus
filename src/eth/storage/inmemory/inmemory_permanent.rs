@@ -122,10 +122,10 @@ impl InMemoryPermanentStorage {
                         conflicts.add_nonce(address.clone(), account_nonce.clone(), original_nonce.clone());
                     }
                 }
-                if let Some(orignal_balance) = change.balance.take_original_ref() {
+                if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = account.balance.get_current_ref();
-                    if orignal_balance != account_balance {
-                        conflicts.add_balance(address.clone(), account_balance.clone(), orignal_balance.clone());
+                    if original_balance != account_balance {
+                        conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
                     }
                 }
 
