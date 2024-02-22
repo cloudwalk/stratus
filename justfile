@@ -30,7 +30,7 @@ run *args="":
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
 
 run-substrate-mock:
     npm init -y
