@@ -31,7 +31,7 @@ mod tests {
     use ethers_core::types::U64;
     use hex_literal::hex;
 
-    use super::*; // Import everything from the outer module
+    use super::*;
 
     #[test]
     fn test_parse_receipts() {

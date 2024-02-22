@@ -34,7 +34,6 @@ run-release *args="":
 
 run-substrate-mock:
     npm init -y
-    npm install express
     node ./e2e/substrate-sync-mock-server/index.js
 
 # Stratus: Compile with debug options
@@ -87,7 +86,7 @@ importer-download *args="":
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
 importer-import:
-    cargo run --bin importer-import -- --postgres {{postgres_url}} --storage inmemory
+    cargo run --bin importer-import --release -- --postgres {{postgres_url}} --storage inmemory
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -179,9 +178,6 @@ e2e-stratus test="":
     echo "-> Starting Stratus"
     RUST_LOG=info just run -a 0.0.0.0:3000 &
 
-    echo "-> Starting Substrate Mock"
-    RUST_LOG=info just run-substrate-mock &
-
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
 
@@ -191,7 +187,6 @@ e2e-stratus test="":
 
     echo "-> Killing Stratus"
     killport 3000
-    killport 3003
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus

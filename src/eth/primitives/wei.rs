@@ -113,7 +113,7 @@ impl TryFrom<Wei> for BigDecimal {
 mod tests {
     use sqlx::types::BigDecimal;
 
-    use super::*; // Adjust this as necessary to bring your types into scope
+    use super::*;
 
     #[test]
     fn big_decimal_to_nonce_conversion() {

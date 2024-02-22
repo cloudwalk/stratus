@@ -124,7 +124,7 @@ impl CommonConfig {
             if self.env.is_production() {
                 tracing::warn!("cannot enable test accounts in production environment");
             } else {
-                storage.save_accounts(test_accounts()).await?;
+                storage.save_accounts_to_perm(test_accounts()).await?;
             }
         }
         Ok(storage)

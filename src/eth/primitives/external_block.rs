@@ -1,9 +1,9 @@
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 
-use super::Block;
-use super::BlockNumber;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;

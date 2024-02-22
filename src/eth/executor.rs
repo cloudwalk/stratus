@@ -18,8 +18,6 @@ use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
-use super::primitives::ExternalTransaction;
-use super::storage::StratusStorage;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -27,12 +25,14 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::EthStorageError;
+use crate::eth::storage::StorageError;
+use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 
 /// Number of events in the backlog.
@@ -60,13 +60,13 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evms: NonEmpty<Box<dyn Evm>>, eth_storage: Arc<StratusStorage>) -> Self {
+    pub fn new(evms: NonEmpty<Box<dyn Evm>>, storage: Arc<StratusStorage>) -> Self {
         let evm_tx = spawn_background_evms(evms);
 
         Self {
             evm_tx,
-            miner: Mutex::new(BlockMiner::new(Arc::clone(&eth_storage))),
-            storage: eth_storage,
+            miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
+            storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
         }
@@ -101,8 +101,8 @@ impl EthExecutor {
                         return Err(e);
                     };
 
-                    self.storage.save_account_changes(block.number(), execution.clone()).await?;
                     // temporarily save state to next transactions from the same block
+                    self.storage.save_account_changes_to_temp(block.number(), execution.clone()).await?;
                     executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
@@ -116,7 +116,7 @@ impl EthExecutor {
 
         let block = Block::from_external(block, executions)?;
         self.storage.increment_block_number().await?;
-        if let Err(e) = self.storage.commit(block.clone()).await {
+        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
@@ -145,7 +145,7 @@ impl EthExecutor {
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
-            self.storage.commit(block).await?;
+            self.storage.commit_to_perm(block).await?;
         }
 
         //TODO compare slots/changes
@@ -191,7 +191,7 @@ impl EthExecutor {
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
-        self.storage.commit(block.clone()).await?;
+        self.storage.commit_to_perm(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {
             tracing::error!(reason = ?e, "failed to send block notification");
@@ -215,9 +215,9 @@ impl EthExecutor {
             // mine and commit block
             let mut miner_lock = self.miner.lock().await;
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.storage.commit(block.clone()).await {
+            match self.storage.commit_to_perm(block.clone()).await {
                 Ok(()) => {}
-                Err(EthStorageError::Conflict(conflicts)) => {
+                Err(StorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");
                     continue;
                 }

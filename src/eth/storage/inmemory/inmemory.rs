@@ -11,7 +11,6 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
-use super::InMemoryAccount;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -27,9 +26,10 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::inmemory::InMemoryAccount;
 use crate::eth::storage::inmemory::InMemoryHistory;
-use crate::eth::storage::EthStorageError;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 
 /// In-memory implementation using maps.
@@ -208,7 +208,7 @@ impl PermanentStorage for InMemoryStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write().await;
 
         // keep track of current block if we need to rollback
@@ -231,7 +231,7 @@ impl PermanentStorage for InMemoryStorage {
                 PermanentStorage::reset_at(self, current_block).await?;
 
                 // inform error
-                return Err(EthStorageError::Conflict(conflicts));
+                return Err(StorageError::Conflict(conflicts));
             }
 
             // save transaction
@@ -383,21 +383,15 @@ fn save_account_changes(state: &mut InMemoryStorageState, block_number: BlockNum
             .entry(changes.address.clone())
             .or_insert_with(|| InMemoryAccount::new(changes.address));
 
-        // nonce
-        if let Some(nonce) = changes.nonce.take_modified() {
+        // account basic info
+        if let Some(nonce) = changes.nonce.take() {
             account.set_nonce(block_number, nonce);
         }
-
-        // balance
-        if let Some(balance) = changes.balance.take_modified() {
+        if let Some(balance) = changes.balance.take() {
             account.set_balance(block_number, balance);
         }
-
-        // bytecode
-        if is_success {
-            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                account.set_bytecode(block_number, bytecode);
-            }
+        if let Some(Some(bytecode)) = changes.bytecode.take() {
+            account.set_bytecode(block_number, bytecode);
         }
 
         // slots
