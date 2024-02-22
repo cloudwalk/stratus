@@ -76,18 +76,20 @@ impl InMemoryStoragePermanent {
                 .or_insert_with(|| InMemoryAccountPermanent::new(changes.address));
 
             // account basic info
-            if let Some(nonce) = changes.nonce.take() {
+            if let Some(nonce) = changes.nonce.take_modified() {
                 account.set_nonce(block_number, nonce);
             }
-            if let Some(balance) = changes.balance.take() {
+            if let Some(balance) = changes.balance.take_modified() {
                 account.set_balance(block_number, balance);
             }
-            if let Some(Some(bytecode)) = changes.bytecode.take() {
-                account.set_bytecode(block_number, bytecode);
-            }
+
 
             // slots
             if is_success {
+                if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
+                    account.set_bytecode(block_number, bytecode);
+                }
+
                 for (_, slot) in changes.slots {
                     if let Some(slot) = slot.take_modified() {
                         account.set_slot(block_number, slot);
