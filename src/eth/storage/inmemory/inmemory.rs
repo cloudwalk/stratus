@@ -32,6 +32,11 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 
+/// The inmemory storage is split into two structs. InMemoryStoragePermanent and
+/// InMemoryStorageTemporary to facilitate debugging when using the inmemory storage
+/// for both temp and perm contexts.
+
+
 /// In-memory implementation using maps.
 #[derive(Debug)]
 pub struct InMemoryStoragePermanent {
