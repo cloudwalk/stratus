@@ -160,9 +160,9 @@ impl StratusStorage {
     }
 
     /// Temporarily saves account's changes generated during block production.
-    pub async fn save_account_changes_to_temp(&self, block_number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+    pub async fn save_account_changes_to_temp(&self, execution: Execution) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.temp.save_account_changes(block_number, execution).await;
+        let result = self.temp.save_account_changes(execution).await;
         metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
         result
     }

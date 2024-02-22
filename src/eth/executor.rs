@@ -102,7 +102,7 @@ impl EthExecutor {
                     };
 
                     // temporarily save state to next transactions from the same block
-                    self.storage.save_account_changes_to_temp(block.number(), execution.clone()).await?;
+                    self.storage.save_account_changes_to_temp(execution.clone()).await?;
                     executions.push((tx, receipt, execution));
                 }
                 Err(e) => {

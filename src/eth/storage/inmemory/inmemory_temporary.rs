@@ -7,11 +7,8 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
-use super::inmemory_account::InMemoryAccount;
-use super::inmemory_account::InMemoryAccountTemporary;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -19,16 +16,16 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug, Default)]
-pub struct InMemoryStorageTemporary {
+pub struct InMemoryTemporaryStorage {
     state: RwLock<InMemoryTemporaryStorageState>,
 }
 
 #[derive(Debug, Default)]
 struct InMemoryTemporaryStorageState {
-    accounts: HashMap<Address, InMemoryAccountTemporary>,
+    accounts: HashMap<Address, InMemoryTemporaryAccount>,
 }
 
-impl InMemoryStorageTemporary {
+impl InMemoryTemporaryStorage {
     /// Locks inner state for reading.
     async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
         self.state.read().await
@@ -41,7 +38,7 @@ impl InMemoryStorageTemporary {
 }
 
 #[async_trait]
-impl TemporaryStorage for InMemoryStorageTemporary {
+impl TemporaryStorage for InMemoryTemporaryStorage {
     async fn maybe_read_account(&self, address: &Address, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
@@ -49,11 +46,12 @@ impl TemporaryStorage for InMemoryStorageTemporary {
 
         match state.accounts.get(address) {
             Some(account) => {
+                let info = account.info.clone();
                 let account = Account {
-                    address: address.clone(),
-                    balance: account.balance.clone(),
-                    nonce: account.nonce.clone(),
-                    bytecode: account.bytecode.clone(),
+                    address: info.address,
+                    balance: info.balance,
+                    nonce: info.nonce,
+                    bytecode: info.bytecode,
                 };
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
@@ -88,31 +86,31 @@ impl TemporaryStorage for InMemoryStorageTemporary {
         }
     }
 
-    async fn save_account_changes(&self, number: BlockNumber, execution: Execution) -> anyhow::Result<()> {
+    async fn save_account_changes(&self, execution: Execution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
         let is_success = execution.is_success();
         for changes in execution.changes {
             let account = state
                 .accounts
                 .entry(changes.address.clone())
-                .or_insert_with(|| InMemoryAccountTemporary::new(changes.address));
+                .or_insert_with(|| InMemoryTemporaryAccount::new(changes.address));
 
             // account basic info
             if let Some(nonce) = changes.nonce.take() {
-                account.set_nonce(number, nonce);
+                account.info.nonce = nonce;
             }
             if let Some(balance) = changes.balance.take() {
-                account.set_balance(number, balance);
+                account.info.balance = balance;
             }
             if let Some(Some(bytecode)) = changes.bytecode.take() {
-                account.set_bytecode(number, bytecode);
+                account.info.bytecode = Some(bytecode);
             }
 
             // slots
             if is_success {
                 for (_, slot) in changes.slots {
-                    if let Some(slot) = slot.take_modified() {
-                        account.set_slot(number, slot);
+                    if let Some(slot) = slot.take() {
+                        account.slots.insert(slot.index.clone(), slot);
                     }
                 }
             }
@@ -124,5 +122,21 @@ impl TemporaryStorage for InMemoryStorageTemporary {
         let mut state = self.lock_write().await;
         state.accounts.clear();
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct InMemoryTemporaryAccount {
+    pub info: Account,
+    pub slots: HashMap<SlotIndex, Slot>,
+}
+
+impl InMemoryTemporaryAccount {
+    /// Creates a new temporary account.
+    fn new(address: Address) -> Self {
+        Self {
+            info: Account::new_empty(address),
+            slots: Default::default(),
+        }
     }
 }
