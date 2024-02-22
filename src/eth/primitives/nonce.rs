@@ -24,6 +24,11 @@ pub struct Nonce(U256);
 
 impl Nonce {
     pub const ZERO: Nonce = Nonce(U256::zero());
+
+    /// Checks if current value is zero.
+    pub fn is_zero(&self) -> bool {
+        self == &Self::ZERO
+    }
 }
 
 impl Display for Nonce {
