@@ -285,7 +285,7 @@ contracts-test-stratus:
     exit $result_code
 
 # Contracts: Start Stratus with Postgres and run contracts test
-contracts-test-stratus-psql:
+contracts-test-stratus-postgres:
     #!/bin/bash
     echo "-> Starting Postgres"
     docker-compose down
