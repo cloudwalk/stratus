@@ -158,7 +158,7 @@ fn into_labels(labels: Vec<(&'static str, LabelValue)>) -> Vec<MetricsLabel> {
 pub enum StorageType {
     Temp,
     Perm,
-    None
+    None,
 }
 
 impl ToString for StorageType {
@@ -166,7 +166,7 @@ impl ToString for StorageType {
         match self {
             Self::Temp => "Temporary".to_owned(),
             Self::Perm => "Permanent".to_owned(),
-            Self::None => "None".to_owned()
+            Self::None => "None".to_owned(),
         }
     }
 }
