@@ -28,8 +28,8 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::inmemory::InMemoryAccount;
 use crate::eth::storage::inmemory::InMemoryHistory;
-use crate::eth::storage::EthStorageError;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 
 /// In-memory implementation using maps.
@@ -208,7 +208,7 @@ impl PermanentStorage for InMemoryStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write().await;
 
         // keep track of current block if we need to rollback
@@ -231,7 +231,7 @@ impl PermanentStorage for InMemoryStorage {
                 PermanentStorage::reset_at(self, current_block).await?;
 
                 // inform error
-                return Err(EthStorageError::Conflict(conflicts));
+                return Err(StorageError::Conflict(conflicts));
             }
 
             // save transaction

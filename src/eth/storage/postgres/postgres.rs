@@ -31,8 +31,8 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::postgres::types::PostgresLog;
 use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
-use crate::eth::storage::EthStorageError;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StorageError;
 use crate::infra::postgres::Postgres;
 
 #[async_trait]
@@ -427,7 +427,7 @@ impl PermanentStorage for Postgres {
     // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
     // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
     // neither worked for some reason I was not able to determine at this time)
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
 
         tracing::debug!(block = ?block, "saving block");
@@ -521,7 +521,7 @@ impl PermanentStorage for Postgres {
                 // A successful insert/update with no conflicts will have one affected row
                 if account_result.rows_affected() != 1 {
                     tx.rollback().await.context("failed to rollback transaction")?;
-                    let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
+                    let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
                         address: change.address,
                         expected_balance: original_balance,
                         expected_nonce: original_nonce,
@@ -576,7 +576,7 @@ impl PermanentStorage for Postgres {
                         // A successful insert/update with no conflicts will have one affected row
                         if slot_result.rows_affected() != 1 {
                             tx.rollback().await.context("failed to rollback transaction")?;
-                            let error: EthStorageError = EthStorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
+                            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
                                 address: change.address,
                                 slot: idx,
                                 expected: original_value,

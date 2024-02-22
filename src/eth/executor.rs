@@ -31,7 +31,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::EthStorageError;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 
@@ -60,13 +60,13 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evms: NonEmpty<Box<dyn Evm>>, eth_storage: Arc<StratusStorage>) -> Self {
+    pub fn new(evms: NonEmpty<Box<dyn Evm>>, storage: Arc<StratusStorage>) -> Self {
         let evm_tx = spawn_background_evms(evms);
 
         Self {
             evm_tx,
-            miner: Mutex::new(BlockMiner::new(Arc::clone(&eth_storage))),
-            storage: eth_storage,
+            miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
+            storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
         }
@@ -217,7 +217,7 @@ impl EthExecutor {
             let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
             match self.storage.commit_to_perm(block.clone()).await {
                 Ok(()) => {}
-                Err(EthStorageError::Conflict(conflicts)) => {
+                Err(StorageError::Conflict(conflicts)) => {
                     tracing::warn!(?conflicts, "storage conflict detected when saving block");
                     continue;
                 }

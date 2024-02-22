@@ -17,8 +17,8 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::EthStorageError;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::infra::metrics;
 
@@ -143,7 +143,7 @@ impl StratusStorage {
     }
 
     /// Commits changes to permanent storage and prepares temporary storage to a new block to be produced.
-    pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), EthStorageError> {
+    pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let start = Instant::now();
 
         let result = self.perm.save_block(block).await;

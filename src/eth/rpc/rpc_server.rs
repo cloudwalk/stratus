@@ -43,7 +43,7 @@ use crate::eth::EthExecutor;
 // -----------------------------------------------------------------------------
 
 /// Starts JSON-RPC server.
-pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<StratusStorage>, config: StratusConfig) -> anyhow::Result<()> {
+pub async fn serve_rpc(executor: EthExecutor, storage: Arc<StratusStorage>, config: StratusConfig) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     let subscriptions_cleaner_handle = Arc::clone(&subs).spawn_subscriptions_cleaner();
@@ -60,7 +60,7 @@ pub async fn serve_rpc(executor: EthExecutor, eth_storage: Arc<StratusStorage>, 
 
         // services
         executor,
-        storage: eth_storage,
+        storage,
 
         // subscriptions
         subs,

@@ -14,7 +14,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::EthStorageError;
+use crate::eth::storage::StorageError;
 
 /// Permanent (committed) storage operations
 #[async_trait]
@@ -44,7 +44,7 @@ pub trait PermanentStorage: Send + Sync {
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     /// Persists atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), EthStorageError>;
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError>;
 
     /// Persists initial accounts (test accounts or genesis accounts).
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
