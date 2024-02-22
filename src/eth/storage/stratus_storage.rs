@@ -195,13 +195,6 @@ impl StratusStorage {
     // Utils
     // -------------------------------------------------------------------------
 
-    /// Enables genesis block.
-    ///
-    /// TODO: maybe can use save_block from a default method.
-    pub async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
-        self.perm.enable_genesis(genesis).await
-    }
-
     /// Translates a block selection to a specific storage point-in-time indicator.
     pub async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
         match block_selection {
