@@ -16,8 +16,7 @@ use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
-use super::ExecutionAccountChanges;
-
+use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -26,6 +25,8 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
+
+use super::ExecutionAccountChanges;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -82,6 +83,7 @@ impl Block {
     pub fn generate_accounts_changes(&self) -> Vec<ExecutionAccountChanges> {
         let mut temp_map: HashMap<&Address, ExecutionAccountChanges> = HashMap::new();
         for transaction in &self.transactions {
+            let is_success = transaction.is_success();
             for change in &transaction.execution.changes {
                 let address = &change.address;
                 // update existent change
@@ -93,13 +95,15 @@ impl Block {
                     if let Some(new_balance) = change.balance.clone().take_modified() {
                         temp_change.balance.set_modified(new_balance);
                     }
-                    if let Some(new_bytecode) = change.bytecode.clone().take_modified() {
-                        temp_change.bytecode.set_modified(new_bytecode);
-                    }
-                    for (slot_index, slot) in &change.slots {
-                        if let Some(slot_change) = temp_change.slots.get_mut(slot_index) {
-                            if let Some(new_slot) = slot.clone().take_modified() {
-                                slot_change.set_modified(new_slot);
+                    if is_success {
+                        if let Some(new_bytecode) = change.bytecode.clone().take_modified() {
+                            temp_change.bytecode.set_modified(new_bytecode);
+                        }
+                        for (slot_index, slot) in &change.slots {
+                            if let Some(slot_change) = temp_change.slots.get_mut(slot_index) {
+                                if let Some(new_slot) = slot.clone().take_modified() {
+                                    slot_change.set_modified(new_slot);
+                                }
                             }
                         }
                     }
