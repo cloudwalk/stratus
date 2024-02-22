@@ -1,35 +1,66 @@
 const express = require('express');
+const fs = require('fs');
+const { parse } = require('csv-parse/sync'); // Ensure to install csv-parse
 const app = express();
 const port = 3003;
 
+// Load and parse CSV data synchronously
+const csvFilePath = './e2e/substrate-sync-mock-server/stratus_test_data.csv';
+const csvContent = fs.readFileSync(csvFilePath, 'utf-8');
+const csvData = parse(csvContent, {
+    columns: true,
+    skip_empty_lines: true
+});
+
 app.use(express.json());
 
+console.log('Loaded', csvData.length, 'rows of data from', csvFilePath);
 app.post('/rpc', (req, res) => {
-    const mockResponse = {
-        "hash": "0x1ff92b3472bc2a4223317ec13d7804fba2b57831480173e4399fc0c50dbd12a2",
-        "size": "0x1f9",
-        "miner": "0x0000000000000000000000000000000000000000",
-        "nonce": "0x0000000000000000",
-        "author": "0x0000000000000000000000000000000000000000",
-        "number": "0x0",
-        "uncles": [],
-        "gasUsed": "0x0",
-        "gasLimit": "0xffffffff",
-        "extraData": "0x",
-        "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-        "stateRoot": "0xf5a3db13ff5fc5b56504c43353506836a0f533dda23a3f7fc6487ebf7de2c18a",
-        "timestamp": "0x0",
-        "difficulty": "0x0",
-        "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
-        "receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-        "transactions": [],
-        "totalDifficulty": "0x0",
-        "transactionsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-    };
-    res.json(mockResponse);
+    console.log('Received RPC request:', req.body);
+    try {
+        if (req.body.method === 'eth_getBlockByNumber') {
+            const blockNumberHex = req.body.params[0];
+            const blockNumber = parseInt(blockNumberHex, 16);
+
+            console.log('Requested block number:', blockNumber);
+                const matchingBlock = csvData.find(row => (row.block_number-1) === blockNumber);
+            if (matchingBlock && matchingBlock.block_payload) {
+                res.json({
+                    jsonrpc: "2.0",
+                    result: JSON.parse(matchingBlock.block_payload),
+                    id: req.body.id
+                });
+            } else {
+                res.status(404).json({ error: "Block not found" });
+            }
+        } else if (req.body.method === 'eth_getTransactionReceipt') {
+            const txHash = req.body.params[0];
+
+            const matchingReceipt = csvData.find(row => ('0x' + row.transaction_hash) === txHash);
+            if (matchingReceipt && matchingReceipt.receipt_payload) {
+                res.json({
+                    jsonrpc: "2.0",
+                    result: JSON.parse(matchingReceipt.receipt_payload),
+                    id: req.body.id
+                });
+            } else {
+                res.status(404).json({ error: "Receipt not found" });
+            }
+        } else if (req.body.method === 'eth_blockNumber') {
+            // Handler for 'eth_blockNumber'
+            const latestBlock = csvData.reduce((max, row) => Math.max(max, row.block_number), 0);
+            res.json({
+                jsonrpc: "2.0",
+                result: `0x${latestBlock.toString(16)}`, // Convert to hex string
+                id: req.body.id
+            });
+        }
+    } catch (error) {
+        console.error('Error processing request:', error);
+        res.status(500).json({ error: "Internal server error" });
+    }
 });
 
 app.listen(port, () => {
-    console.log(`Mock server listening at http://localhost:${port}`);
+    console.log(`Server listening at http://localhost:${port}`);
 });
