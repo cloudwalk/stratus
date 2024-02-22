@@ -28,7 +28,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
-
 #[derive(Debug, Default)]
 struct InMemoryPermanentStorageState {
     accounts: HashMap<Address, InMemoryAccountPermanent>,
@@ -37,7 +36,6 @@ struct InMemoryPermanentStorageState {
     blocks_by_hash: IndexMap<Hash, Arc<Block>>,
     logs: Vec<LogMined>,
 }
-
 
 impl StorageState<InMemoryAccountPermanent> for InMemoryPermanentStorageState {
     fn get_accounts(&self) -> &HashMap<Address, InMemoryAccountPermanent> {
@@ -77,8 +75,6 @@ impl InMemoryStoragePermanent {
     }
 }
 
-
-
 impl Default for InMemoryStoragePermanent {
     fn default() -> Self {
         tracing::info!("starting inmemory storage");
@@ -108,7 +104,6 @@ impl PermanentStorage for InMemoryStoragePermanent {
     // -------------------------------------------------------------------------
     // State operations
     // ------------------------------------------------------------------------
-
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");

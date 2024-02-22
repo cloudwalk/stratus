@@ -15,7 +15,6 @@ use crate::eth::primitives::ExecutionConflictsBuilder;
 
 /// In-memory implementation using maps.
 
-
 pub trait StorageState<T: InMemoryAccount> {
     fn get_accounts(&self) -> &HashMap<Address, T>;
     fn get_accounts_mut(&mut self) -> &mut HashMap<Address, T>;
