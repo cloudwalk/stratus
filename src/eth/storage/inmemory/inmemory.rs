@@ -299,14 +299,8 @@ impl PermanentStorage for InMemoryStoragePermanent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct InMemoryStorageTemporary(InMemoryStoragePermanent);
-
-impl Default for InMemoryStorageTemporary {
-    fn default() -> Self {
-        Self(InMemoryStoragePermanent::default())
-    }
-}
 
 impl InMemoryStorageTemporary {
     /// Locks inner state for reading.
@@ -321,7 +315,7 @@ impl InMemoryStorageTemporary {
 
     /// Clears in-memory state.
     pub async fn clear(&self) {
-        self.0.clear().await
+        self.0.clear().await;
     }
 }
 
