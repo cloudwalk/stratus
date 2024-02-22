@@ -1,10 +1,10 @@
 #[allow(clippy::module_inception)]
-mod inmemory;
+mod inmemory_state;
 mod inmemory_account;
 mod inmemory_history;
+mod inmemory_permanent;
+mod inmemory_temporary;
 
-pub use inmemory::InMemoryStoragePermanent;
-pub use inmemory::InMemoryStorageTemporary;
-pub use inmemory_account::InMemoryAccountPermanent;
-pub use inmemory_account::InMemoryAccountTemporary;
+pub use inmemory_permanent::InMemoryStoragePermanent;
+pub use inmemory_temporary::InMemoryStorageTemporary;
 pub use inmemory_history::InMemoryHistory;
