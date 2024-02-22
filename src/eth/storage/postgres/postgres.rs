@@ -514,9 +514,9 @@ impl PermanentStorage for Postgres {
                 }
             }
         }
-        
+
         for change in account_changes {
-        // for change in transaction.execution.changes {
+            // for change in transaction.execution.changes {
             let (original_nonce, new_nonce) = change.nonce.take_both();
             let (original_balance, new_balance) = change.balance.take_both();
 
@@ -533,15 +533,14 @@ impl PermanentStorage for Postgres {
             let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
             let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
 
-            let bytecode =
-                change
-                    .bytecode
-                    .take()
-                    .unwrap_or_else(|| {
-                        tracing::debug!("bytecode not set, defaulting to None");
-                        None
-                    })
-                    .map(|val| val.as_ref().to_owned());
+            let bytecode = change
+                .bytecode
+                .take()
+                .unwrap_or_else(|| {
+                    tracing::debug!("bytecode not set, defaulting to None");
+                    None
+                })
+                .map(|val| val.as_ref().to_owned());
 
             let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
 
