@@ -33,6 +33,7 @@ use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::infra::postgres::Postgres;
+use crate::log_and_err;
 
 #[async_trait]
 impl PermanentStorage for Postgres {
@@ -135,7 +136,7 @@ impl PermanentStorage for Postgres {
                 let block_number = i64::try_from(current)?;
 
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -157,7 +158,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by latest"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -183,7 +188,7 @@ impl PermanentStorage for Postgres {
 
             BlockSelection::Hash(hash) => {
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_hash.sql", hash.as_ref(),)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -201,7 +206,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by hash"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -229,7 +238,7 @@ impl PermanentStorage for Postgres {
                 let block_number = i64::try_from(*number)?;
 
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -251,7 +260,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by number"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -278,7 +291,7 @@ impl PermanentStorage for Postgres {
                 let block_number = 0i64;
 
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -300,7 +313,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by earlist"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -720,18 +737,6 @@ impl PermanentStorage for Postgres {
         sqlx::query_file!("src/eth/storage/postgres/queries/update_account_slots_reset_value.sql")
             .execute(&self.connection_pool)
             .await?;
-
-        Ok(())
-    }
-
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
-        let existing_genesis = sqlx::query_file!("src/eth/storage/postgres/queries/select_genesis.sql")
-            .fetch_optional(&self.connection_pool)
-            .await?;
-
-        if existing_genesis.is_none() {
-            self.save_block(genesis).await?;
-        }
 
         Ok(())
     }

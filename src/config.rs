@@ -17,6 +17,8 @@ use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockSelection;
 use crate::eth::storage::InMemoryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
@@ -117,13 +119,20 @@ impl CommonConfig {
     /// Initializes storage.
     pub async fn init_storage(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let storage = self.storage.init().await?;
+
         if self.enable_genesis {
-            storage.enable_genesis(BlockMiner::genesis()).await?;
+            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+            if genesis.is_none() {
+                tracing::info!("enabling genesis block");
+                storage.commit_to_perm(BlockMiner::genesis()).await?;
+            }
         }
+
         if self.enable_test_accounts {
             if self.env.is_production() {
                 tracing::warn!("cannot enable test accounts in production environment");
             } else {
+                tracing::info!("enabling test accounts");
                 storage.save_accounts_to_perm(test_accounts()).await?;
             }
         }
