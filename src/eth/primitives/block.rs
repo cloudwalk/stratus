@@ -16,8 +16,7 @@ use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
-use super::ExecutionAccountChanges;
-
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -79,7 +78,7 @@ impl Block {
     }
 
     /// Compacts all intermediate changes from an account, returning the first previous value as the definitive original value and the last modified value as the definitive modified value.
-    pub fn generate_accounts_changes(&self) -> Vec<ExecutionAccountChanges> {
+    pub fn generate_execution_changes(&self) -> Vec<ExecutionAccountChanges> {
         let mut temp_map: HashMap<&Address, ExecutionAccountChanges> = HashMap::new();
         for transaction in &self.transactions {
             let is_success = transaction.is_success();
@@ -108,8 +107,21 @@ impl Block {
                     }
                     temp_map.insert(address, temp_change);
                 } else {
+                    let mut temp_change = change.clone();
                     // insert first change
-                    temp_map.insert(address, change.clone());
+                    if is_success {
+                        if let Some(new_bytecode) = change.bytecode.clone().take_modified() {
+                            temp_change.bytecode.set_modified(new_bytecode);
+                        }
+                        for (slot_index, slot) in &change.slots {
+                            if let Some(slot_change) = temp_change.slots.get_mut(slot_index) {
+                                if let Some(new_slot) = slot.clone().take_modified() {
+                                    slot_change.set_modified(new_slot);
+                                }
+                            }
+                        }
+                    }
+                    temp_map.insert(address, temp_change);
                 }
             }
         }
