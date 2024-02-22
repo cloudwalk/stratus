@@ -100,11 +100,6 @@ impl PermanentStorage for InMemoryStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let state_lock = self.state.read().await;
-        Ok(check_conflicts(&state_lock, execution))
-    }
-
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
