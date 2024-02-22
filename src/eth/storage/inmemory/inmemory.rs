@@ -36,7 +36,6 @@ use crate::eth::storage::TemporaryStorage;
 /// InMemoryStorageTemporary to facilitate debugging when using the inmemory storage
 /// for both temp and perm contexts.
 
-
 /// In-memory implementation using maps.
 #[derive(Debug)]
 pub struct InMemoryStoragePermanent {
