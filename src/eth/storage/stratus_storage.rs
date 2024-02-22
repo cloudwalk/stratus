@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -60,7 +59,7 @@ impl StratusStorage {
     /// Checks if the transaction execution conflicts with the current storage state.
     pub async fn check_conflicts(&self, execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
         let start = Instant::now();
-        let result = TemporaryStorage::check_conflicts(self.temp.deref(), execution).await;
+        let result = self.temp.check_conflicts(execution).await;
         metrics::inc_storage_check_conflicts(start.elapsed(), result.as_ref().is_ok_and(|v| v.is_some()), result.is_ok());
         result
     }
@@ -186,7 +185,7 @@ impl StratusStorage {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
-                let current_block = PermanentStorage::read_current_block_number(self.perm.deref()).await?;
+                let current_block = self.perm.read_current_block_number().await?;
                 if number <= &current_block {
                     Ok(StoragePointInTime::Past(*number))
                 } else {
