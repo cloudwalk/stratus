@@ -95,6 +95,14 @@ metrics! {
     histogram storage_commit{success}
 }
 
+// Execution and commit.
+metrics! {
+    group: execution_and_commit,
+
+    "Duration of execution and commit operation."
+    histogram execution_and_commit{success}
+}
+
 // -----------------------------------------------------------------------------
 // Labels
 // -----------------------------------------------------------------------------
