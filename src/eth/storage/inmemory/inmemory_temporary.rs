@@ -88,7 +88,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     async fn save_account_changes(&self, execution: Execution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
-        let is_success = execution.is_success();
         for changes in execution.changes {
             let account = state
                 .accounts
@@ -107,11 +106,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
             }
 
             // slots
-            if is_success {
-                for (_, slot) in changes.slots {
-                    if let Some(slot) = slot.take() {
-                        account.slots.insert(slot.index.clone(), slot);
-                    }
+            for (_, slot) in changes.slots {
+                if let Some(slot) = slot.take() {
+                    account.slots.insert(slot.index.clone(), slot);
                 }
             }
         }
