@@ -15,6 +15,9 @@ setup:
     @echo "* Installing Cargo wait-service"
     cargo install wait-service
 
+    @echo "* Installing Cargo flamegraph"
+    cargo install flamegraph
+
     @echo "* Cloning Solidity repositories"
     just contracts-clone
 
@@ -231,6 +234,7 @@ e2e-lint:
     fi
     node_modules/.bin/prettier . --write
 
+# E2E: profiles rpc sync and generates a flamegraph
 e2e-flamegraph:
     # Start PostgreSQL with Docker Compose
     echo "Starting PostgreSQL with Docker Compose..."
@@ -252,7 +256,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph..."
-    sudo CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
+    sudo CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc
 
 
 # ------------------------------------------------------------------------------
