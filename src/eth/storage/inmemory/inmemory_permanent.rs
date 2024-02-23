@@ -308,7 +308,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
 
         // save block execution changes
-        Self::save_account_changes(&mut state, *block.number(), block.compact_account_changes()).await;
+        Self::save_account_changes(&mut state, *block.number(), account_changes).await;
 
         Ok(())
     }
