@@ -16,6 +16,7 @@ use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
 
@@ -103,6 +104,12 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Hash {
 impl sqlx::Type<sqlx::Postgres> for Hash {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+impl PgHasArrayType for Hash {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <&[u8; 32] as PgHasArrayType>::array_type_info()
     }
 }
 

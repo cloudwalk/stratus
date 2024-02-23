@@ -14,8 +14,11 @@ use std::str::FromStr;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
+use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
@@ -69,6 +72,24 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Gas {
 impl sqlx::Type<sqlx::Postgres> for Gas {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Gas {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        match BigDecimal::try_from(self.clone()) {
+            Ok(res) => res.encode(buf),
+            Err(err) => {
+                tracing::error!(?err, "failed to encode gas");
+                IsNull::Yes
+            }
+        }
+    }
+}
+
+impl PgHasArrayType for Gas {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }
 

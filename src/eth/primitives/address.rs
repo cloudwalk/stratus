@@ -24,6 +24,7 @@ use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 use sqlx::Decode;
 
 use crate::gen_newtype_from;
@@ -118,6 +119,12 @@ impl sqlx::Type<sqlx::Postgres> for Address {
     }
 }
 
+impl PgHasArrayType for Address {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <[u8; 20] as PgHasArrayType>::array_type_info()
+    }
+}
+
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
         self.0.as_bytes()
@@ -164,6 +171,6 @@ impl From<Address> for [u8; 20] {
 // -----------------------------------------------------------------------------
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Address {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        self.0 .0.encode(buf)
+        self.0.0.encode(buf)
     }
 }

@@ -8,8 +8,11 @@
 
 use ethereum_types::U256;
 use ethereum_types::U64;
+use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
+use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
 
@@ -65,6 +68,18 @@ impl sqlx::Type<sqlx::Postgres> for Index {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         // HACK: Actually SERIAL, sqlx was panicking
         sqlx::postgres::PgTypeInfo::with_name("INT4")
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Index {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        <i32 as sqlx::Encode<sqlx::Postgres>>::encode(i32::from(self.0), buf)
+    }
+}
+
+impl PgHasArrayType for Index {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <i32 as PgHasArrayType>::array_type_info()
     }
 }
 

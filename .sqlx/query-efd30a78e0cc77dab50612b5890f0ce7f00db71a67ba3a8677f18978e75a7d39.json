@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO historical_balances (address, balance, block_number)\n            SELECT * FROM UNNEST($1::bytea[], $2::numeric[], $3::int8[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "ByteaArray",
+        "NumericArray",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "efd30a78e0cc77dab50612b5890f0ce7f00db71a67ba3a8677f18978e75a7d39"
+}

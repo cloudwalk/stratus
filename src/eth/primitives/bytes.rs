@@ -15,12 +15,11 @@ use ethers_core::types::Bytes as EthersBytes;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::Bytes as RevmBytes;
 use revm::primitives::Output as RevmOutput;
-use sqlx::database::HasValueRef;
-use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
 
-#[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]
+#[derive(Clone, Default, Eq, PartialEq, fake::Dummy, sqlx::Type)]
+#[sqlx(transparent)]
 pub struct Bytes(Vec<u8>);
 
 impl Display for Bytes {
@@ -105,21 +104,6 @@ impl From<RevmOutput> for Bytes {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Conversions: sqlx -> Self
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Bytes {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <Vec<u8> as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for Bytes {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

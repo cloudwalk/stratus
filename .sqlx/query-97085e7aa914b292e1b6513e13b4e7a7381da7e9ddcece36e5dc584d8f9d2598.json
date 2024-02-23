@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO topics (topic, transaction_hash, transaction_idx, log_idx, topic_idx, block_number, block_hash)\n            SELECT * FROM UNNEST($1::bytea[], $2::bytea[], $3::int4[], $4::int4[], $5::int4[], $6::int8[], $7::bytea[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "ByteaArray",
+        "ByteaArray",
+        "Int4Array",
+        "Int4Array",
+        "Int4Array",
+        "Int8Array",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "97085e7aa914b292e1b6513e13b4e7a7381da7e9ddcece36e5dc584d8f9d2598"
+}

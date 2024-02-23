@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -14,6 +15,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionConflict;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
@@ -27,9 +29,17 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::postgres::types::AccountBatch;
+use crate::eth::storage::postgres::types::HistoricalBalanceBatch;
+use crate::eth::storage::postgres::types::HistoricalNonceBatch;
+use crate::eth::storage::postgres::types::HistoricalSlotBatch;
+use crate::eth::storage::postgres::types::LogBatch;
 use crate::eth::storage::postgres::types::PostgresLog;
 use crate::eth::storage::postgres::types::PostgresTopic;
 use crate::eth::storage::postgres::types::PostgresTransaction;
+use crate::eth::storage::postgres::types::SlotBatch;
+use crate::eth::storage::postgres::types::TopicBatch;
+use crate::eth::storage::postgres::types::TransactionBatch;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::infra::postgres::Postgres;
@@ -99,10 +109,11 @@ impl PermanentStorage for Postgres {
         let slot_index: [u8; 32] = slot_index.clone().into();
 
         let slot = match point_in_time {
-            StoragePointInTime::Present =>
+            StoragePointInTime::Present => {
                 sqlx::query_file_as!(Slot, "src/eth/storage/postgres/queries/select_slot.sql", address.as_ref(), slot_index.as_ref())
                     .fetch_optional(&self.connection_pool)
-                    .await?,
+                    .await?
+            }
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_as!(
@@ -440,10 +451,14 @@ impl PermanentStorage for Postgres {
         Ok(result.into_iter().filter(|log| filter.matches(log)).collect())
     }
 
-    // The type conversions are ugly, but they are acting as a placeholder until we decide if we'll use
-    // byte arrays for numbers. Implementing the trait sqlx::Encode for the eth primitives would make
-    // this much easier to work with (note: I tried implementing Encode for both Hash and Nonce and
-    // neither worked for some reason I was not able to determine at this time)
+    // TODO: It might be possible to either:
+    //        1- Aggregate all queries in a single network call
+    //        2- Get the futures for the queries and run them concurrently.
+    // The second approach would be easy to implement if we began more than one transaction,
+    // but we want everything to happen in only one transaction so that we can rollback in
+    // case of conflicts.
+    // The first would be easy if sqlx supported pipelining  (https://github.com/launchbadge/sqlx/issues/408)
+    // like tokio_postgres does https://docs.rs/tokio-postgres/0.4.0-rc.3/tokio_postgres/#pipelining
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
 
@@ -464,69 +479,32 @@ impl PermanentStorage for Postgres {
 
         let account_changes = block.compact_account_changes();
 
-        for transaction in block.transactions {
+        let mut transaction_batch = TransactionBatch::default();
+        let mut log_batch = LogBatch::default();
+        let mut topic_batch = TopicBatch::default();
+        let mut account_batch = AccountBatch::default();
+        let mut historical_nonce_batch = HistoricalNonceBatch::default();
+        let mut historical_balance_batch = HistoricalBalanceBatch::default();
+        let mut slot_batch = SlotBatch::default();
+        let mut historical_slot_batch = HistoricalSlotBatch::default();
+
+        for mut transaction in block.transactions {
             let is_success = transaction.is_success();
-            let to = <[u8; 20]>::from(*transaction.input.to.unwrap_or_default());
-            sqlx::query_file!(
-                "src/eth/storage/postgres/queries/insert_transaction.sql",
-                transaction.input.hash.as_ref(),
-                transaction.input.signer.as_ref(),
-                BigDecimal::try_from(transaction.input.nonce)?,
-                transaction.input.signer.as_ref(),
-                &to,
-                *transaction.input.input,
-                *transaction.execution.output,
-                BigDecimal::try_from(transaction.execution.gas)?,
-                BigDecimal::try_from(transaction.input.gas_price)?,
-                i32::from(transaction.transaction_index),
-                i64::try_from(transaction.block_number).context("failed to convert block number")?,
-                transaction.block_hash.as_ref(),
-                &<[u8; 8]>::from(transaction.input.v),
-                &<[u8; 32]>::from(transaction.input.r),
-                &<[u8; 32]>::from(transaction.input.s),
-                BigDecimal::try_from(transaction.input.value)?,
-                transaction.execution.result.to_string()
-            )
-            .execute(&mut *tx)
-            .await
-            .context("failed to insert transaction")?;
+            let logs = std::mem::take(&mut transaction.logs);
+            transaction_batch.push(transaction);
 
             if is_success {
-                for log in transaction.logs {
-                    let addr = log.log.address.as_ref();
-                    let data = log.log.data;
-                    let tx_hash = log.transaction_hash.as_ref();
-                    let tx_idx = i32::from(log.transaction_index);
-                    let lg_idx = i32::from(log.log_index);
-                    let b_number = i64::try_from(log.block_number).context("failed to convert block number")?;
-                    let b_hash = log.block_hash.as_ref();
-                    sqlx::query_file!(
-                        "src/eth/storage/postgres/queries/insert_log.sql",
-                        addr,
-                        *data,
-                        tx_hash,
-                        tx_idx,
-                        lg_idx,
-                        b_number,
-                        b_hash
-                    )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert log")?;
-                    for (idx, topic) in log.log.topics.into_iter().enumerate() {
-                        sqlx::query_file!(
-                            "src/eth/storage/postgres/queries/insert_topic.sql",
-                            topic.as_ref(),
-                            tx_hash,
-                            tx_idx,
-                            lg_idx,
-                            i32::try_from(idx).context("failed to convert topic idx")?,
-                            b_number,
-                            b_hash
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .context("failed to insert topic")?;
+                for mut log in logs {
+                    let topics = std::mem::take(&mut log.log.topics);
+                    let tx_hash = log.transaction_hash.clone();
+                    let log_index = log.log_index;
+                    let tx_index = log.transaction_index;
+                    let b_number = log.block_number;
+                    let b_hash = log.block_hash.clone();
+
+                    log_batch.push(log);
+                    for (idx, topic) in topics.into_iter().enumerate() {
+                        topic_batch.push(topic, idx, tx_hash.clone(), tx_index, log_index, b_number, b_hash.clone())?;
                     }
                 }
             }
@@ -537,127 +515,226 @@ impl PermanentStorage for Postgres {
             let (original_nonce, new_nonce) = change.nonce.take_both();
             let (original_balance, new_balance) = change.balance.take_both();
 
-            let new_nonce: Option<BigDecimal> = match new_nonce {
-                Some(nonce) => Some(nonce.try_into()?),
-                None => None,
-            };
+            let original_nonce = original_nonce.unwrap_or_default();
+            let original_balance = original_balance.unwrap_or_default();
 
-            let new_balance: Option<BigDecimal> = match new_balance {
-                Some(balance) => Some(balance.try_into()?),
-                None => None,
-            };
+            let bytecode = change.bytecode.take().unwrap_or_else(|| {
+                tracing::debug!("bytecode not set, defaulting to None");
+                None
+            });
 
-            let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
-            let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
-
-            let bytecode = change
-                .bytecode
-                .take()
-                .unwrap_or_else(|| {
-                    tracing::debug!("bytecode not set, defaulting to None");
-                    None
-                })
-                .map(|val| val.as_ref().to_owned());
-
-            let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-
-            let account_result: PgQueryResult = sqlx::query_file!(
-                "src/eth/storage/postgres/queries/insert_account.sql",
-                change.address.as_ref(),
-                new_nonce.as_ref().unwrap_or(&original_nonce),
-                new_balance.as_ref().unwrap_or(&original_balance),
+            account_batch.push(
+                change.address.clone(),
+                new_nonce.clone().unwrap_or(original_nonce.clone()),
+                new_balance.clone().unwrap_or(original_balance.clone()),
                 bytecode,
-                block_number,
+                block.header.number,
                 original_nonce,
-                original_balance
-            )
-            .execute(&mut *tx)
-            .await
-            .context("failed to insert account")?;
-
-            // A successful insert/update with no conflicts will have one affected row
-            if account_result.rows_affected() != 1 {
-                tx.rollback().await.context("failed to rollback transaction")?;
-                let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
-                    address: change.address,
-                    expected_balance: original_balance,
-                    expected_nonce: original_nonce,
-                }]));
-                return Err(error);
-            }
+                original_balance,
+            );
 
             if let Some(balance) = new_balance {
-                sqlx::query_file!(
-                    "src/eth/storage/postgres/queries/insert_historical_balance.sql",
-                    change.address.as_ref(),
-                    balance,
-                    block_number
-                )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert balance")?;
+                historical_balance_batch.push(change.address.clone(), balance, block.header.number);
             }
 
             if let Some(nonce) = new_nonce {
-                sqlx::query_file!(
-                    "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
-                    change.address.as_ref(),
-                    nonce,
-                    block_number
-                )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert nonce")?;
+                historical_nonce_batch.push(change.address.clone(), nonce, block.header.number);
             }
 
             for (slot_idx, value) in change.slots {
                 let (original_value, val) = value.clone().take_both();
-                let idx: [u8; 32] = slot_idx.into();
-                let val: [u8; 32] = match val {
-                    Some(s) => s.value.into(),
+
+                let new_value = match val {
+                    Some(s) => s.value,
                     None => {
                         tracing::trace!("slot value not set, skipping");
                         continue;
                     }
                 };
-                let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-                let original_value: [u8; 32] = original_value.unwrap_or_default().value.into();
+                let original_value = original_value.unwrap_or_default().value;
 
-                let slot_result: PgQueryResult = sqlx::query_file!(
-                    "src/eth/storage/postgres/queries/insert_account_slot.sql",
-                    &idx,
-                    &val,
-                    change.address.as_ref(),
-                    block_number,
-                    &original_value
-                )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert slot")?;
-
-                // A successful insert/update with no conflicts will have one affected row
-                if slot_result.rows_affected() != 1 {
-                    tx.rollback().await.context("failed to rollback transaction")?;
-                    let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
-                        address: change.address,
-                        slot: idx,
-                        expected: original_value,
-                    }]));
-                    return Err(error);
-                }
-
-                sqlx::query_file!(
-                    "src/eth/storage/postgres/queries/insert_historical_slot.sql",
-                    &idx,
-                    &val,
-                    change.address.as_ref(),
-                    block_number
-                )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert slot to history")?;
+                slot_batch.push(change.address.clone(), slot_idx.clone(), new_value.clone(), block.header.number, original_value);
+                historical_slot_batch.push(change.address.clone(), slot_idx, new_value, block.header.number);
             }
         }
+
+        sqlx::query!(
+            r#"
+            INSERT INTO transactions (hash       , signer_address, nonce        , address_from,  address_to, input      , output     , gas          , gas_price    , idx_in_block, block_number, block_hash  , v           , r           , s           , value         , result)
+            SELECT * FROM      UNNEST($1::bytea[], $2::bytea[]   , $3::numeric[], $4::bytea[] , $5::bytea[], $6::bytea[], $7::bytea[], $8::numeric[], $9::numeric[], $10::int4[]  , $11::int8[] , $12::bytea[], $13::bytea[], $14::bytea[], $15::bytea[], $16::numeric[], $17::text[])
+            "#,
+            transaction_batch.hash as _,
+            transaction_batch.signer as _,
+            transaction_batch.nonce as _,
+            transaction_batch.from as _,
+            transaction_batch.to as _,
+            transaction_batch.input as _,
+            transaction_batch.output as _,
+            transaction_batch.gas as _,
+            transaction_batch.gas_price as _,
+            transaction_batch.index as _,
+            transaction_batch.block_number as _,
+            transaction_batch.block_hash as _,
+            transaction_batch.v as _,
+            transaction_batch.r as _,
+            transaction_batch.s as _,
+            transaction_batch.value as _,
+            &transaction_batch.result
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert transactions")?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO logs (address, data, transaction_hash, transaction_idx, log_idx, block_number, block_hash)
+            SELECT * FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::int4[], $5::int4[], $6::int8[], $7::bytea[])
+            "#,
+            log_batch.address as _,
+            log_batch.data as _,
+            log_batch.transaction_hash as _,
+            log_batch.transaction_index as _,
+            log_batch.log_index as _,
+            log_batch.block_number as _,
+            log_batch.block_hash as _
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert logs")?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO topics (topic, transaction_hash, transaction_idx, log_idx, topic_idx, block_number, block_hash)
+            SELECT * FROM UNNEST($1::bytea[], $2::bytea[], $3::int4[], $4::int4[], $5::int4[], $6::int8[], $7::bytea[])
+            "#,
+            topic_batch.topic as _,
+            topic_batch.transaction_hash as _,
+            topic_batch.transaction_index as _,
+            topic_batch.log_index as _,
+            topic_batch.index as _,
+            topic_batch.block_number as _,
+            topic_batch.block_hash as _,
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert topics")?;
+
+        let accounts_length = account_batch.address.len();
+
+        // TODO: It might be possible to get the originals without having to peform a subquery
+        let account_result = sqlx::query!(
+            r#"
+            WITH account_updates
+            AS (SELECT *
+                FROM UNNEST($1::bytea[], $2::bytea[], $3::numeric[], $4::numeric[], $5::int8[], $6::numeric[], $7::numeric[])
+                AS t(address, bytecode, new_balance, new_nonce, creation_block, original_balance, original_nonce)
+            )
+            INSERT INTO accounts (address, bytecode, latest_balance, latest_nonce, creation_block)
+            SELECT address, bytecode, new_balance, new_nonce, creation_block
+            FROM account_updates
+            ON CONFLICT (address) DO
+            UPDATE
+            SET latest_nonce = EXCLUDED.latest_nonce,
+                latest_balance = EXCLUDED.latest_balance
+            WHERE accounts.latest_nonce = (SELECT original_nonce FROM account_updates WHERE account_updates.address=accounts.address)
+                AND accounts.latest_balance = (SELECT original_balance FROM account_updates WHERE account_updates.address=accounts.address)
+            "#,
+            account_batch.address as _,
+            account_batch.bytecode as _,
+            account_batch.new_balance as _,
+            account_batch.new_nonce as _,
+            account_batch.block_number as _,
+            account_batch.original_balance as _,
+            account_batch.original_nonce as _,
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert accounts")?;
+
+        if account_result.rows_affected() != accounts_length as u64 {
+            tx.rollback().await.context("failed to rollback transaction")?;
+            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account]));
+            return Err(error);
+        }
+
+        sqlx::query!(
+            r#"
+            INSERT INTO historical_nonces (address, nonce, block_number)
+            SELECT * FROM UNNEST($1::bytea[], $2::numeric[], $3::int8[])
+            "#,
+            historical_nonce_batch.address as _,
+            historical_nonce_batch.nonce as _,
+            historical_nonce_batch.block_number as _
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert historical nonce")?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO historical_balances (address, balance, block_number)
+            SELECT * FROM UNNEST($1::bytea[], $2::numeric[], $3::int8[])
+            "#,
+            historical_balance_batch.address as _,
+            historical_balance_batch.balance as _,
+            historical_balance_batch.block_number as _
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert historical balance")?;
+
+        let slots_length = slot_batch.index.len();
+
+        // TODO: It might be possible to get the originals without having to peform a subquery
+        let slot_result = sqlx::query!(
+            r#"
+            WITH slot_updates
+            AS (SELECT *
+                FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::int8[], $5::bytea[])
+                AS t(idx, value, account_address, creation_block, original_value)
+            )
+            INSERT INTO account_slots (idx, value, account_address, creation_block)
+            SELECT idx, value, account_address, creation_block
+            FROM slot_updates
+            ON CONFLICT (idx, account_address) DO
+            UPDATE
+            SET value = EXCLUDED.value
+            WHERE account_slots.value = (
+                SELECT original_value
+                FROM slot_updates
+                WHERE slot_updates.idx = EXCLUDED.idx
+                    AND slot_updates.account_address = EXCLUDED.account_address)
+            "#,
+            slot_batch.index as _,
+            slot_batch.value as _,
+            slot_batch.address as _,
+            slot_batch.block_number as _,
+            slot_batch.original_value as _
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert accounts")?;
+
+        if slot_result.rows_affected() != slots_length as u64 {
+            let a = slot_result.rows_affected();
+            tx.rollback().await.context("failed to rollback transaction")?;
+            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot]));
+            return Err(error);
+        }
+
+        sqlx::query!(
+            r#"
+            INSERT INTO historical_slots (idx, value, account_address, block_number)
+            SELECT * FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[],$4::int8[])
+            "#,
+            historical_slot_batch.index as _,
+            historical_slot_batch.value as _,
+            historical_slot_batch.address as _,
+            historical_slot_batch.block_number as _
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert historical balance")?;
 
         tx.commit().await.context("failed to commit transaction")?;
 
@@ -766,12 +843,13 @@ fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<
     let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
         match partitions.get_mut(&topic.transaction_hash) {
-            Some(transaction_logs) =>
+            Some(transaction_logs) => {
                 if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
                     part.push(topic);
                 } else {
                     transaction_logs.insert(topic.log_idx, vec![topic]);
-                },
+                }
+            }
             None => {
                 partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
             }
