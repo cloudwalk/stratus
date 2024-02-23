@@ -79,7 +79,7 @@ impl FromStr for Hash {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> Self
+// sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {

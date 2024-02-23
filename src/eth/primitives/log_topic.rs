@@ -64,6 +64,10 @@ impl From<LogTopic> for H256 {
     }
 }
 
+// -----------------------------------------------------------------------------
+// sqlx traits
+// -----------------------------------------------------------------------------
+
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for LogTopic {
     fn encode(self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull
     where

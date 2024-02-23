@@ -55,7 +55,7 @@ impl From<U256> for Index {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> Self
+// sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {

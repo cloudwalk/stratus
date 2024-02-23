@@ -76,7 +76,7 @@ impl From<SlotIndex> for ethereum_types::U256 {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> SlotIndex
+// sqlx traits for SlotIndex
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
@@ -169,7 +169,7 @@ impl From<SlotValue> for RevmU256 {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> SlotValue
+// sqlx traits for SlotValue
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotValue {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {

@@ -151,7 +151,7 @@ impl From<BlockNumber> for [u8; 8] {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx
+// sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
