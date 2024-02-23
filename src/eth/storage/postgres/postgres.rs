@@ -613,7 +613,13 @@ impl PermanentStorage for Postgres {
             for (slot_idx, value) in change.slots {
                 let (original_value, val) = value.clone().take_both();
                 let idx: [u8; 32] = slot_idx.into();
-                let val: [u8; 32] = val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
+                let val: [u8; 32] = match val {
+                    Some(s) => s.value.into(),
+                    None => {
+                        tracing::trace!("slot value not set, skipping");
+                        break;
+                    }
+                };
                 let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
                 let original_value: [u8; 32] = original_value.unwrap_or_default().value.into();
 
