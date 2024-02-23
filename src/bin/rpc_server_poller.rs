@@ -64,16 +64,24 @@ async fn main() -> anyhow::Result<()> {
             .import(ethers_core_block.into(), ethers_core_receipts.into_iter().map(|(k, v)| (k, v.into())).collect())
             .await?;
         current_block_number = current_block_number.next();
-        if current_block_number >= Arc::clone(&chain).get_current_block_number().await? {
+        let current_substrate_block = Arc::clone(&chain).get_current_block_number().await?;
+        if current_block_number >= current_substrate_block {
             tracing::info!("waiting for block number: {}", current_block_number);
             tokio::time::sleep(POLL_LATENCY).await;
+
+            //XXX this is here in order for the flamegraph profiler to work, without this the loop never ends
+            if let Ok(_) = std::env::var("CARGO_PROFILE_RELEASE_DEBUG") {
+                break;
+            }
         }
     }
+    Ok(())
 }
 
 async fn block_json(chain: Arc<BlockchainClient>, current: BlockNumber) -> anyhow::Result<String> {
     // keep trying to download until success
     //TODO add a backoff limit, not to give up, but to raise latency in hope of network recovery
+    //TODO add a sleep to avoid spamming the network
     loop {
         match timeout(POLL_LATENCY, chain.get_block_by_number(current)).await {
             Ok(Ok(block)) => {
