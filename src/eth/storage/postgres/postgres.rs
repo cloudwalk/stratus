@@ -456,22 +456,7 @@ impl PermanentStorage for Postgres {
     // The first would be easy if sqlx supported pipelining  (https://github.com/launchbadge/sqlx/issues/408)
     // like tokio_postgres does https://docs.rs/tokio-postgres/0.4.0-rc.3/tokio_postgres/#pipelining
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
-        let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
-
         tracing::debug!(block = ?block, "saving block");
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_block.sql",
-            i64::try_from(block.header.number).context("failed to convert block number")?,
-            block.header.hash.as_ref(),
-            block.header.transactions_root.as_ref(),
-            BigDecimal::try_from(block.header.gas.clone())?,
-            block.header.bloom.as_ref(),
-            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
-            block.header.parent_hash.as_ref()
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert block")?;
 
         let account_changes = block.compact_account_changes();
 
@@ -553,6 +538,22 @@ impl PermanentStorage for Postgres {
                 historical_slot_batch.push(change.address.clone(), slot_idx, new_value, block.header.number);
             }
         }
+
+        let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
+
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_block.sql",
+            i64::try_from(block.header.number).context("failed to convert block number")?,
+            block.header.hash.as_ref(),
+            block.header.transactions_root.as_ref(),
+            BigDecimal::try_from(block.header.gas.clone())?,
+            block.header.bloom.as_ref(),
+            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
+            block.header.parent_hash.as_ref()
+        )
+        .execute(&mut *tx)
+        .await
+        .context("failed to insert block")?;
 
         sqlx::query!(
             r#"
