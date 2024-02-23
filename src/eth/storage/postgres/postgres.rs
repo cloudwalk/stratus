@@ -109,11 +109,10 @@ impl PermanentStorage for Postgres {
         let slot_index: [u8; 32] = slot_index.clone().into();
 
         let slot = match point_in_time {
-            StoragePointInTime::Present => {
+            StoragePointInTime::Present =>
                 sqlx::query_file_as!(Slot, "src/eth/storage/postgres/queries/select_slot.sql", address.as_ref(), slot_index.as_ref())
                     .fetch_optional(&self.connection_pool)
-                    .await?
-            }
+                    .await?,
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_as!(
@@ -843,13 +842,12 @@ fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<
     let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
         match partitions.get_mut(&topic.transaction_hash) {
-            Some(transaction_logs) => {
+            Some(transaction_logs) =>
                 if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
                     part.push(topic);
                 } else {
                     transaction_logs.insert(topic.log_idx, vec![topic]);
-                }
-            }
+                },
             None => {
                 partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
             }

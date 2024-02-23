@@ -171,6 +171,6 @@ impl From<Address> for [u8; 20] {
 // -----------------------------------------------------------------------------
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Address {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        self.0.0.encode(buf)
+        self.0 .0.encode(buf)
     }
 }

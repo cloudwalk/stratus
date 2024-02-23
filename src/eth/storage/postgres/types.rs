@@ -155,7 +155,7 @@ pub struct TransactionBatch {
     pub r: Vec<[u8; 32]>,
     pub s: Vec<[u8; 32]>,
     pub value: Vec<Wei>,
-    pub result: Vec<String>
+    pub result: Vec<String>,
 }
 
 impl TransactionBatch {
@@ -188,7 +188,7 @@ pub struct LogBatch {
     pub transaction_index: Vec<Index>,
     pub log_index: Vec<Index>,
     pub block_number: Vec<BlockNumber>,
-    pub block_hash: Vec<Hash>
+    pub block_hash: Vec<Hash>,
 }
 
 impl LogBatch {
@@ -211,11 +211,20 @@ pub struct TopicBatch {
     pub log_index: Vec<Index>,
     pub index: Vec<i32>,
     pub block_number: Vec<BlockNumber>,
-    pub block_hash: Vec<Hash>
+    pub block_hash: Vec<Hash>,
 }
 
 impl TopicBatch {
-    pub fn push(&mut self, topic: LogTopic, idx: usize, tx_hash: Hash, tx_idx: Index, log_idx: Index, block_number: BlockNumber, block_hash: Hash) -> anyhow::Result<()> {
+    pub fn push(
+        &mut self,
+        topic: LogTopic,
+        idx: usize,
+        tx_hash: Hash,
+        tx_idx: Index,
+        log_idx: Index,
+        block_number: BlockNumber,
+        block_hash: Hash,
+    ) -> anyhow::Result<()> {
         self.topic.push(topic);
         self.index.push(i32::try_from(idx).context("failed to convert topic idx")?);
         self.block_hash.push(block_hash);
@@ -235,11 +244,20 @@ pub struct AccountBatch {
     pub bytecode: Vec<Option<Bytes>>,
     pub block_number: Vec<BlockNumber>,
     pub original_nonce: Vec<Nonce>,
-    pub original_balance: Vec<Wei>
+    pub original_balance: Vec<Wei>,
 }
 
 impl AccountBatch {
-    pub fn push(&mut self, address: Address, new_nonce: Nonce, new_balance: Wei, bytecode: Option<Bytes>, block_number: BlockNumber, original_nonce: Nonce, original_balance: Wei) {
+    pub fn push(
+        &mut self,
+        address: Address,
+        new_nonce: Nonce,
+        new_balance: Wei,
+        bytecode: Option<Bytes>,
+        block_number: BlockNumber,
+        original_nonce: Nonce,
+        original_balance: Wei,
+    ) {
         self.address.push(address);
         self.new_nonce.push(new_nonce);
         self.new_balance.push(new_balance);
@@ -254,7 +272,7 @@ impl AccountBatch {
 pub struct HistoricalNonceBatch {
     pub address: Vec<Address>,
     pub nonce: Vec<Nonce>,
-    pub block_number: Vec<BlockNumber>
+    pub block_number: Vec<BlockNumber>,
 }
 
 impl HistoricalNonceBatch {
@@ -269,7 +287,7 @@ impl HistoricalNonceBatch {
 pub struct HistoricalBalanceBatch {
     pub address: Vec<Address>,
     pub balance: Vec<Wei>,
-    pub block_number: Vec<BlockNumber>
+    pub block_number: Vec<BlockNumber>,
 }
 
 impl HistoricalBalanceBatch {
@@ -286,7 +304,7 @@ pub struct SlotBatch {
     pub value: Vec<SlotValue>,
     pub address: Vec<Address>,
     pub block_number: Vec<BlockNumber>,
-    pub original_value: Vec<SlotValue>
+    pub original_value: Vec<SlotValue>,
 }
 
 impl SlotBatch {
@@ -304,7 +322,7 @@ pub struct HistoricalSlotBatch {
     pub address: Vec<Address>,
     pub index: Vec<SlotIndex>,
     pub value: Vec<SlotValue>,
-    pub block_number: Vec<BlockNumber>
+    pub block_number: Vec<BlockNumber>,
 }
 
 impl HistoricalSlotBatch {
