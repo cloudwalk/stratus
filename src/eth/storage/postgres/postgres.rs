@@ -14,7 +14,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionConflict;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
@@ -34,13 +33,10 @@ use crate::eth::storage::postgres::types::PostgresTransaction;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::infra::postgres::Postgres;
+use crate::log_and_err;
 
 #[async_trait]
 impl PermanentStorage for Postgres {
-    async fn check_conflicts(&self, _execution: &Execution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        Ok(None)
-    }
-
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("incrementing block number");
 
@@ -54,6 +50,11 @@ impl PermanentStorage for Postgres {
             + 1;
 
         Ok(nextval.into())
+    }
+
+    async fn set_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
+        // nothing to do yet because we are not using a sequence
+        Ok(())
     }
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
@@ -140,7 +141,7 @@ impl PermanentStorage for Postgres {
                 let block_number = i64::try_from(current)?;
 
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -162,7 +163,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by latest"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -188,7 +193,7 @@ impl PermanentStorage for Postgres {
 
             BlockSelection::Hash(hash) => {
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_hash.sql", hash.as_ref(),)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -206,7 +211,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by hash"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -234,7 +243,7 @@ impl PermanentStorage for Postgres {
                 let block_number = i64::try_from(*number)?;
 
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -256,7 +265,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by number"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -283,7 +296,7 @@ impl PermanentStorage for Postgres {
                 let block_number = 0i64;
 
                 let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
-                    .fetch_one(&self.connection_pool);
+                    .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -305,7 +318,11 @@ impl PermanentStorage for Postgres {
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
                 let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
-                let header = res.0?;
+                let header = match res.0 {
+                    Ok(Some(header)) => header,
+                    Ok(None) => return Ok(None),
+                    Err(e) => return log_and_err!(reason = e, "failed to query block by earlist"),
+                };
                 let transactions = res.1?;
                 let logs = res.2?.into_iter();
                 let topics = res.3?.into_iter();
@@ -436,7 +453,7 @@ impl PermanentStorage for Postgres {
             i64::try_from(block.header.number).context("failed to convert block number")?,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
-            BigDecimal::try_from(block.header.gas)?,
+            BigDecimal::try_from(block.header.gas.clone())?,
             block.header.bloom.as_ref(),
             i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
             block.header.parent_hash.as_ref()
@@ -444,6 +461,8 @@ impl PermanentStorage for Postgres {
         .execute(&mut *tx)
         .await
         .context("failed to insert block")?;
+
+        let account_changes = block.compact_account_changes();
 
         for transaction in block.transactions {
             let is_success = transaction.is_success();
@@ -471,132 +490,6 @@ impl PermanentStorage for Postgres {
             .execute(&mut *tx)
             .await
             .context("failed to insert transaction")?;
-
-            for change in transaction.execution.changes {
-                let (original_nonce, new_nonce) = change.nonce.take_both();
-                let (original_balance, new_balance) = change.balance.take_both();
-
-                let new_nonce: Option<BigDecimal> = match new_nonce {
-                    Some(nonce) => Some(nonce.try_into()?),
-                    None => None,
-                };
-
-                let new_balance: Option<BigDecimal> = match new_balance {
-                    Some(balance) => Some(balance.try_into()?),
-                    None => None,
-                };
-
-                let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
-                let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
-
-                let bytecode = if is_success {
-                    change
-                        .bytecode
-                        .take()
-                        .unwrap_or_else(|| {
-                            tracing::debug!("bytecode not set, defaulting to None");
-                            None
-                        })
-                        .map(|val| val.as_ref().to_owned())
-                } else {
-                    None
-                };
-
-                let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-
-                let account_result: PgQueryResult = sqlx::query_file!(
-                    "src/eth/storage/postgres/queries/insert_account.sql",
-                    change.address.as_ref(),
-                    new_nonce.as_ref().unwrap_or(&original_nonce),
-                    new_balance.as_ref().unwrap_or(&original_balance),
-                    bytecode,
-                    block_number,
-                    original_nonce,
-                    original_balance
-                )
-                .execute(&mut *tx)
-                .await
-                .context("failed to insert account")?;
-
-                // A successful insert/update with no conflicts will have one affected row
-                if account_result.rows_affected() != 1 {
-                    tx.rollback().await.context("failed to rollback transaction")?;
-                    let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
-                        address: change.address,
-                        expected_balance: original_balance,
-                        expected_nonce: original_nonce,
-                    }]));
-                    return Err(error);
-                }
-
-                if let Some(balance) = new_balance {
-                    sqlx::query_file!(
-                        "src/eth/storage/postgres/queries/insert_historical_balance.sql",
-                        change.address.as_ref(),
-                        balance,
-                        block_number
-                    )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert balance")?;
-                }
-
-                if let Some(nonce) = new_nonce {
-                    sqlx::query_file!(
-                        "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
-                        change.address.as_ref(),
-                        nonce,
-                        block_number
-                    )
-                    .execute(&mut *tx)
-                    .await
-                    .context("failed to insert nonce")?;
-                }
-
-                if is_success {
-                    for (slot_idx, value) in change.slots {
-                        let (original_value, val) = value.clone().take_both();
-                        let idx: [u8; 32] = slot_idx.into();
-                        let val: [u8; 32] = val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
-                        let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
-                        let original_value: [u8; 32] = original_value.unwrap_or_default().value.into();
-
-                        let slot_result: PgQueryResult = sqlx::query_file!(
-                            "src/eth/storage/postgres/queries/insert_account_slot.sql",
-                            &idx,
-                            &val,
-                            change.address.as_ref(),
-                            block_number,
-                            &original_value
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .context("failed to insert slot")?;
-
-                        // A successful insert/update with no conflicts will have one affected row
-                        if slot_result.rows_affected() != 1 {
-                            tx.rollback().await.context("failed to rollback transaction")?;
-                            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
-                                address: change.address,
-                                slot: idx,
-                                expected: original_value,
-                            }]));
-                            return Err(error);
-                        }
-
-                        sqlx::query_file!(
-                            "src/eth/storage/postgres/queries/insert_historical_slot.sql",
-                            &idx,
-                            &val,
-                            change.address.as_ref(),
-                            block_number
-                        )
-                        .execute(&mut *tx)
-                        .await
-                        .context("failed to insert slot to history")?;
-                    }
-                }
-            }
 
             if is_success {
                 for log in transaction.logs {
@@ -636,6 +529,127 @@ impl PermanentStorage for Postgres {
                         .context("failed to insert topic")?;
                     }
                 }
+            }
+        }
+
+        for change in account_changes {
+            // for change in transaction.execution.changes {
+            let (original_nonce, new_nonce) = change.nonce.take_both();
+            let (original_balance, new_balance) = change.balance.take_both();
+
+            let new_nonce: Option<BigDecimal> = match new_nonce {
+                Some(nonce) => Some(nonce.try_into()?),
+                None => None,
+            };
+
+            let new_balance: Option<BigDecimal> = match new_balance {
+                Some(balance) => Some(balance.try_into()?),
+                None => None,
+            };
+
+            let original_nonce: BigDecimal = original_nonce.unwrap_or_default().try_into()?;
+            let original_balance: BigDecimal = original_balance.unwrap_or_default().try_into()?;
+
+            let bytecode = change
+                .bytecode
+                .take()
+                .unwrap_or_else(|| {
+                    tracing::debug!("bytecode not set, defaulting to None");
+                    None
+                })
+                .map(|val| val.as_ref().to_owned());
+
+            let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+
+            let account_result: PgQueryResult = sqlx::query_file!(
+                "src/eth/storage/postgres/queries/insert_account.sql",
+                change.address.as_ref(),
+                new_nonce.as_ref().unwrap_or(&original_nonce),
+                new_balance.as_ref().unwrap_or(&original_balance),
+                bytecode,
+                block_number,
+                original_nonce,
+                original_balance
+            )
+            .execute(&mut *tx)
+            .await
+            .context("failed to insert account")?;
+
+            // A successful insert/update with no conflicts will have one affected row
+            if account_result.rows_affected() != 1 {
+                tx.rollback().await.context("failed to rollback transaction")?;
+                let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account {
+                    address: change.address,
+                    expected_balance: original_balance,
+                    expected_nonce: original_nonce,
+                }]));
+                return Err(error);
+            }
+
+            if let Some(balance) = new_balance {
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_historical_balance.sql",
+                    change.address.as_ref(),
+                    balance,
+                    block_number
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert balance")?;
+            }
+
+            if let Some(nonce) = new_nonce {
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
+                    change.address.as_ref(),
+                    nonce,
+                    block_number
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert nonce")?;
+            }
+
+            for (slot_idx, value) in change.slots {
+                let (original_value, val) = value.clone().take_both();
+                let idx: [u8; 32] = slot_idx.into();
+                let val: [u8; 32] = val.ok_or(anyhow::anyhow!("critical: no change for slot"))?.value.into(); // the or condition should never happen
+                let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
+                let original_value: [u8; 32] = original_value.unwrap_or_default().value.into();
+
+                let slot_result: PgQueryResult = sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_account_slot.sql",
+                    &idx,
+                    &val,
+                    change.address.as_ref(),
+                    block_number,
+                    &original_value
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert slot")?;
+
+                // A successful insert/update with no conflicts will have one affected row
+                if slot_result.rows_affected() != 1 {
+                    tx.rollback().await.context("failed to rollback transaction")?;
+                    let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot {
+                        address: change.address,
+                        slot: idx,
+                        expected: original_value,
+                    }]));
+                    return Err(error);
+                }
+
+                sqlx::query_file!(
+                    "src/eth/storage/postgres/queries/insert_historical_slot.sql",
+                    &idx,
+                    &val,
+                    change.address.as_ref(),
+                    block_number
+                )
+                .execute(&mut *tx)
+                .await
+                .context("failed to insert slot to history")?;
             }
         }
 
@@ -725,18 +739,6 @@ impl PermanentStorage for Postgres {
         sqlx::query_file!("src/eth/storage/postgres/queries/update_account_slots_reset_value.sql")
             .execute(&self.connection_pool)
             .await?;
-
-        Ok(())
-    }
-
-    async fn enable_genesis(&self, genesis: Block) -> anyhow::Result<()> {
-        let existing_genesis = sqlx::query_file!("src/eth/storage/postgres/queries/select_genesis.sql")
-            .fetch_optional(&self.connection_pool)
-            .await?;
-
-        if existing_genesis.is_none() {
-            self.save_block(genesis).await?;
-        }
 
         Ok(())
     }

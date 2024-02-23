@@ -30,7 +30,7 @@ run *args="":
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
 
 run-substrate-mock:
     npm init -y
@@ -86,8 +86,8 @@ importer-download *args="":
     cargo run --bin importer-download -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
-importer-import:
-    cargo run --bin importer-import --release -- --postgres {{postgres_url}} --storage inmemory
+importer-import *args="":
+    cargo run --bin importer-import --release -- --postgres {{postgres_url}} {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -307,4 +307,33 @@ contracts-test-stratus:
 
     echo "-> Killing Stratus"
     killport 3000
+    exit $result_code
+
+# Contracts: Start Stratus with Postgres and run contracts test
+contracts-test-stratus-postgres:
+    #!/bin/bash
+    echo "-> Starting Postgres"
+    docker-compose down
+    docker-compose up -d
+
+    echo "-> Waiting Postgres to start"
+    wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+
+    echo "-> Starting Stratus"
+    RUST_LOG=debug just run-release -a 0.0.0.0:3000 -s {{postgres_url}} > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+
+    echo "-> Running E2E tests"
+    just e2e-contracts
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+
+    echo "-> Killing Postgres"
+    docker-compose down
+
+    echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code

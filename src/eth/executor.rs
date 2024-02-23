@@ -102,7 +102,7 @@ impl EthExecutor {
                     };
 
                     // temporarily save state to next transactions from the same block
-                    self.storage.save_account_changes_to_temp(block.number(), execution.clone()).await?;
+                    self.storage.save_account_changes_to_temp(execution.clone()).await?;
                     executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
@@ -115,7 +115,7 @@ impl EthExecutor {
         }
 
         let block = Block::from_external(block, executions)?;
-        self.storage.increment_block_number().await?;
+        self.storage.set_block_number(*block.number()).await?;
         if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);
@@ -174,16 +174,16 @@ impl EthExecutor {
             to = ?transaction.to,
             data_len = %transaction.input.len(),
             data = %transaction.input,
-            "executing real transaction"
+            "executing transaction"
         );
 
-        // validate
+        // validates
         if transaction.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
-            return Err(anyhow!("Transaction sent from zero address is not allowed."));
+            return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        //creates a block and performs the necessary notifications
+        // creates a block and performs the necessary notifications
         self.mine_and_execute_transaction(transaction).await
     }
 
@@ -201,16 +201,12 @@ impl EthExecutor {
     }
 
     async fn mine_and_execute_transaction(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
-        // execute transaction until no more conflicts
+        // executes transaction until no more conflicts
         // TODO: must have a stop condition like timeout or max number of retries
         let (execution, block) = loop {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?;
-            if let Some(conflicts) = self.storage.check_conflicts(&execution).await? {
-                tracing::warn!(?conflicts, "storage conflict detected before mining block");
-                continue;
-            }
 
             // mine and commit block
             let mut miner_lock = self.miner.lock().await;

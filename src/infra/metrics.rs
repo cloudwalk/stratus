@@ -46,7 +46,10 @@ metrics! {
     histogram storage_read_current_block_number{success},
 
     "Duration of storage increment_block_number operation."
-    histogram storage_increment_block_number{success}
+    histogram storage_increment_block_number{success},
+
+    "Duration of storage set_block_number operation."
+    histogram storage_set_block_number{success}
 }
 
 // Storage reads.
@@ -57,7 +60,7 @@ metrics! {
     histogram storage_check_conflicts{conflicted, success},
 
     "Duration of storage read_account operation."
-    histogram storage_read_account{point_in_time, success},
+    histogram storage_read_account{origin, point_in_time, success},
 
     "Duration of storage read_block operation."
     histogram storage_read_block{success},
@@ -66,7 +69,7 @@ metrics! {
     histogram storage_read_logs{success},
 
     "Duration of storage read_slot operation."
-    histogram storage_read_slot{point_in_time, success},
+    histogram storage_read_slot{origin, point_in_time, success},
 
     "Duration of storage read_mined_transaction operation."
     histogram storage_read_mined_transaction{success}
