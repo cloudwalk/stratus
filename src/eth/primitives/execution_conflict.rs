@@ -1,6 +1,5 @@
 use nonempty::NonEmpty;
 
-
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;

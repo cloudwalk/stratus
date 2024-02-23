@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
-
 use anyhow::Context;
 use async_trait::async_trait;
 use nonempty::nonempty;
-
 use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
 use sqlx::Row;
@@ -15,7 +13,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-
 use crate::eth::primitives::ExecutionConflict;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
