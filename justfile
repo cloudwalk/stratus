@@ -244,9 +244,9 @@ e2e-flamegraph:
 
     # Start the substrate mock server in the background
     echo "Starting substrate mock server..."
+    killport 3003
     (just run-substrate-mock &) && \
     echo "Waiting for the substrate mock server to be ready..."
-    killport 3003
     wait-service --tcp 0.0.0.0:3003 -t 300 -- echo
     echo "Substrate mock server is ready."
 
