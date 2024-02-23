@@ -462,7 +462,7 @@ impl PermanentStorage for Postgres {
         .await
         .context("failed to insert block")?;
 
-        let account_changes = block.compact_execution_changes();
+        let account_changes = block.compact_account_changes();
 
         for transaction in block.transactions {
             let is_success = transaction.is_success();

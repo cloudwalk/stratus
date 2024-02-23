@@ -285,7 +285,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let mut state = self.lock_write().await;
 
         // check conflicts before persisting any state changes
-        let account_changes = block.compact_execution_changes();
+        let account_changes = block.compact_account_changes();
         if let Some(conflicts) = Self::check_conflicts(&state, &account_changes).await {
             return Err(StorageError::Conflict(conflicts));
         }
@@ -308,7 +308,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
 
         // save block execution changes
-        Self::save_account_changes(&mut state, *block.number(), block.compact_execution_changes()).await;
+        Self::save_account_changes(&mut state, *block.number(), block.compact_account_changes()).await;
 
         Ok(())
     }

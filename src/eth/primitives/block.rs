@@ -77,8 +77,8 @@ impl Block {
         &self.header.hash
     }
 
-    /// Compact block execution changes removing all intermediate changes, keeping only the last value for each modified nonce, balance, bytecode and slot.
-    pub fn compact_execution_changes(&self) -> Vec<ExecutionAccountChanges> {
+    /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.
+    pub fn compact_account_changes(&self) -> Vec<ExecutionAccountChanges> {
         let mut block_compacted_changes: HashMap<Address, ExecutionAccountChanges> = HashMap::new();
         for transaction in &self.transactions {
             for transaction_changes in transaction.execution.changes.clone().into_iter() {
