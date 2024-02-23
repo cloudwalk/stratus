@@ -11,3 +11,7 @@ services:
     volumes:
       - "./static/schema/001-init.sql:/docker-entrypoint-initdb.d/001-schema.sql"
       - "./static/schema/002-schema-external-rpc.sql:/docker-entrypoint-initdb.d/002-schema.sql"
+      - "postgres-data:/var/lib/postgresql/data"
+
+volumes:
+  postgres-data:
