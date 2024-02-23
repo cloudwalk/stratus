@@ -34,6 +34,7 @@ run-release *args="":
 
 run-substrate-mock:
     npm init -y
+    npm install csv-parse pg express
     node ./e2e/substrate-sync-mock-server/index.js
 
 # Stratus: Compile with debug options
@@ -229,6 +230,30 @@ e2e-lint:
         cd e2e
     fi
     node_modules/.bin/prettier . --write
+
+e2e-flamegraph:
+    # Start PostgreSQL with Docker Compose
+    echo "Starting PostgreSQL with Docker Compose..."
+    docker-compose down
+    docker-compose up -d --force-recreate
+
+    # Wait for PostgreSQL to be ready
+    echo "Waiting for PostgreSQL to be ready..."
+    wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+    echo "PostgreSQL is ready."
+
+    # Start the substrate mock server in the background
+    echo "Starting substrate mock server..."
+    (just run-substrate-mock &) && \
+    echo "Waiting for the substrate mock server to be ready..."
+    killport 3003
+    wait-service --tcp 0.0.0.0:3003 -t 300 -- echo
+    echo "Substrate mock server is ready."
+
+    # Run cargo flamegraph with necessary environment variables
+    echo "Running cargo flamegraph..."
+    sudo CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
+
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
