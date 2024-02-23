@@ -17,7 +17,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
@@ -69,9 +69,8 @@ impl InMemoryPermanentStorage {
         state.logs.clear();
     }
 
-    async fn save_account_changes(state: &mut InMemoryPermanentStorageState, number: BlockNumber, execution: Execution) {
-        let is_success = execution.is_success();
-        for changes in execution.changes {
+    async fn save_account_changes(state: &mut InMemoryPermanentStorageState, number: BlockNumber, account_changes: Vec<ExecutionAccountChanges>) {
+        for changes in account_changes {
             let account = state
                 .accounts
                 .entry(changes.address.clone())
@@ -85,22 +84,20 @@ impl InMemoryPermanentStorage {
                 account.balance.push(number, balance);
             }
 
-            if is_success {
-                // bytecode
-                if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                    account.bytecode.push(number, Some(bytecode));
-                }
+            // bytecode
+            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
+                account.bytecode.push(number, Some(bytecode));
+            }
 
-                // slots
-                for (_, slot) in changes.slots {
-                    if let Some(slot) = slot.take_modified() {
-                        match account.slots.get_mut(&slot.index) {
-                            Some(slot_history) => {
-                                slot_history.push(number, slot);
-                            }
-                            None => {
-                                account.slots.insert(slot.index.clone(), InMemoryHistory::new(number, slot));
-                            }
+            // slots
+            for (_, slot) in changes.slots {
+                if let Some(slot) = slot.take_modified() {
+                    match account.slots.get_mut(&slot.index) {
+                        Some(slot_history) => {
+                            slot_history.push(number, slot);
+                        }
+                        None => {
+                            account.slots.insert(slot.index.clone(), InMemoryHistory::new(number, slot));
                         }
                     }
                 }
@@ -108,10 +105,10 @@ impl InMemoryPermanentStorage {
         }
     }
 
-    async fn check_conflicts(state: &InMemoryPermanentStorageState, execution: &Execution) -> Option<ExecutionConflicts> {
+    async fn check_conflicts(state: &InMemoryPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
-        for change in &execution.changes {
+        for change in account_changes {
             let address = &change.address;
 
             if let Some(account) = state.accounts.get(address) {
@@ -287,8 +284,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write().await;
 
-        // keep track of current block if we need to rollback
-        let current_block = self.read_current_block_number().await?;
+        // check conflicts before persisting any state changes
+        let account_changes = block.compact_execution_changes();
+        if let Some(conflicts) = Self::check_conflicts(&state, &account_changes).await {
+            return Err(StorageError::Conflict(conflicts));
+        }
 
         // save block
         tracing::debug!(number = %block.number(), "saving block");
@@ -299,30 +299,17 @@ impl PermanentStorage for InMemoryPermanentStorage {
         // save transactions
         for transaction in block.transactions.clone() {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
-
-            // check conflicts after each transaction because a transaction can depend on the previous from the same block
-            if let Some(conflicts) = Self::check_conflicts(&state, &transaction.execution).await {
-                // release lock and rollback to previous block
-                drop(state);
-                self.reset_at(current_block).await?;
-
-                // inform error
-                return Err(StorageError::Conflict(conflicts));
-            }
-
-            // save transaction
             state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
-
-            // save logs
             if transaction.is_success() {
                 for log in transaction.logs {
                     state.logs.push(log);
                 }
             }
-
-            // save execution changes
-            Self::save_account_changes(&mut state, *block.number(), transaction.execution).await;
         }
+
+        // save block execution changes
+        Self::save_account_changes(&mut state, *block.number(), block.compact_execution_changes()).await;
+
         Ok(())
     }
 

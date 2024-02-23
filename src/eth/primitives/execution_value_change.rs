@@ -1,5 +1,3 @@
-use crate::ext::not;
-
 /// Changes that happened to an account value during a transaction.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionValueChange<T>
@@ -20,10 +18,6 @@ pub enum ValueState<T> {
 impl<T> ValueState<T> {
     pub fn is_set(&self) -> bool {
         matches!(self, Self::Set(_))
-    }
-
-    pub fn is_not_set(&self) -> bool {
-        not(self.is_set())
     }
 
     pub fn take(self) -> Option<T> {
@@ -65,9 +59,6 @@ where
 
     /// Sets the modified value of an original value.
     pub fn set_modified(&mut self, value: T) {
-        if self.original.is_not_set() {
-            tracing::warn!("setting modified value without original value present.");
-        }
         self.modified = ValueState::Set(value);
     }
 
