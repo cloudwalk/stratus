@@ -555,11 +555,8 @@ impl PermanentStorage for Postgres {
         .await
         .context("failed to insert block")?;
 
-        sqlx::query!(
-            r#"
-            INSERT INTO transactions (hash       , signer_address, nonce        , address_from,  address_to, input      , output     , gas          , gas_price    , idx_in_block, block_number, block_hash  , v           , r           , s           , value         , result)
-            SELECT * FROM      UNNEST($1::bytea[], $2::bytea[]   , $3::numeric[], $4::bytea[] , $5::bytea[], $6::bytea[], $7::bytea[], $8::numeric[], $9::numeric[], $10::int4[]  , $11::int8[] , $12::bytea[], $13::bytea[], $14::bytea[], $15::bytea[], $16::numeric[], $17::text[])
-            "#,
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_transaction_batch.sql",
             transaction_batch.hash as _,
             transaction_batch.signer as _,
             transaction_batch.nonce as _,
@@ -582,11 +579,8 @@ impl PermanentStorage for Postgres {
         .await
         .context("failed to insert transactions")?;
 
-        sqlx::query!(
-            r#"
-            INSERT INTO logs (address, data, transaction_hash, transaction_idx, log_idx, block_number, block_hash)
-            SELECT * FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::int4[], $5::int4[], $6::int8[], $7::bytea[])
-            "#,
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_log_batch.sql",
             log_batch.address as _,
             log_batch.data as _,
             log_batch.transaction_hash as _,
@@ -599,11 +593,8 @@ impl PermanentStorage for Postgres {
         .await
         .context("failed to insert logs")?;
 
-        sqlx::query!(
-            r#"
-            INSERT INTO topics (topic, transaction_hash, transaction_idx, log_idx, topic_idx, block_number, block_hash)
-            SELECT * FROM UNNEST($1::bytea[], $2::bytea[], $3::int4[], $4::int4[], $5::int4[], $6::int8[], $7::bytea[])
-            "#,
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_topic_batch.sql",
             topic_batch.topic as _,
             topic_batch.transaction_hash as _,
             topic_batch.transaction_index as _,
@@ -619,23 +610,8 @@ impl PermanentStorage for Postgres {
         let accounts_length = account_batch.address.len();
 
         // TODO: It might be possible to get the originals without having to peform a subquery
-        let account_result = sqlx::query!(
-            r#"
-            WITH account_updates
-            AS (SELECT *
-                FROM UNNEST($1::bytea[], $2::bytea[], $3::numeric[], $4::numeric[], $5::int8[], $6::numeric[], $7::numeric[])
-                AS t(address, bytecode, new_balance, new_nonce, creation_block, original_balance, original_nonce)
-            )
-            INSERT INTO accounts (address, bytecode, latest_balance, latest_nonce, creation_block)
-            SELECT address, bytecode, new_balance, new_nonce, creation_block
-            FROM account_updates
-            ON CONFLICT (address) DO
-            UPDATE
-            SET latest_nonce = EXCLUDED.latest_nonce,
-                latest_balance = EXCLUDED.latest_balance
-            WHERE accounts.latest_nonce = (SELECT original_nonce FROM account_updates WHERE account_updates.address=accounts.address)
-                AND accounts.latest_balance = (SELECT original_balance FROM account_updates WHERE account_updates.address=accounts.address)
-            "#,
+        let account_result = sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_account_batch.sql",
             account_batch.address as _,
             account_batch.bytecode as _,
             account_batch.new_balance as _,
@@ -654,11 +630,8 @@ impl PermanentStorage for Postgres {
             return Err(error);
         }
 
-        sqlx::query!(
-            r#"
-            INSERT INTO historical_nonces (address, nonce, block_number)
-            SELECT * FROM UNNEST($1::bytea[], $2::numeric[], $3::int8[])
-            "#,
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_historical_nonce_batch.sql",
             historical_nonce_batch.address as _,
             historical_nonce_batch.nonce as _,
             historical_nonce_batch.block_number as _
@@ -667,11 +640,8 @@ impl PermanentStorage for Postgres {
         .await
         .context("failed to insert historical nonce")?;
 
-        sqlx::query!(
-            r#"
-            INSERT INTO historical_balances (address, balance, block_number)
-            SELECT * FROM UNNEST($1::bytea[], $2::numeric[], $3::int8[])
-            "#,
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_historical_balance_batch.sql",
             historical_balance_batch.address as _,
             historical_balance_batch.balance as _,
             historical_balance_batch.block_number as _
@@ -683,25 +653,8 @@ impl PermanentStorage for Postgres {
         let slots_length = slot_batch.index.len();
 
         // TODO: It might be possible to get the originals without having to peform a subquery
-        let slot_result = sqlx::query!(
-            r#"
-            WITH slot_updates
-            AS (SELECT *
-                FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::int8[], $5::bytea[])
-                AS t(idx, value, account_address, creation_block, original_value)
-            )
-            INSERT INTO account_slots (idx, value, account_address, creation_block)
-            SELECT idx, value, account_address, creation_block
-            FROM slot_updates
-            ON CONFLICT (idx, account_address) DO
-            UPDATE
-            SET value = EXCLUDED.value
-            WHERE account_slots.value = (
-                SELECT original_value
-                FROM slot_updates
-                WHERE slot_updates.idx = EXCLUDED.idx
-                    AND slot_updates.account_address = EXCLUDED.account_address)
-            "#,
+        let slot_result = sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_slot_batch.sql",
             slot_batch.index as _,
             slot_batch.value as _,
             slot_batch.address as _,
@@ -719,11 +672,8 @@ impl PermanentStorage for Postgres {
             return Err(error);
         }
 
-        sqlx::query!(
-            r#"
-            INSERT INTO historical_slots (idx, value, account_address, block_number)
-            SELECT * FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[],$4::int8[])
-            "#,
+        sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_historical_slot_batch.sql",
             historical_slot_batch.index as _,
             historical_slot_batch.value as _,
             historical_slot_batch.address as _,
