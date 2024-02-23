@@ -12,6 +12,7 @@ e2e/typechain-types
 e2e/node_modules
 e2e/substrate-sync-mock-server/node_modules
 e2e/cache
+flamegraph.svg
 
 # E2E (Solidity contracts)
 e2e-contracts/repos
@@ -25,3 +26,4 @@ package-lock.json
 /target
 vendor
 stratus.log
+
