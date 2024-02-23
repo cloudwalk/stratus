@@ -451,8 +451,8 @@ impl PermanentStorage for Postgres {
     //        1- Aggregate all queries in a single network call
     //        2- Get the futures for the queries and run them concurrently.
     // The second approach would be easy to implement if we began more than one transaction,
-    // but we want everything to happen in only one transaction so that we can rollback in
-    // case of conflicts.
+    // and we relaxed the relations in the database but we want everything to happen
+    // in only one transaction so that we can rollback in case of conflicts.
     // The first would be easy if sqlx supported pipelining  (https://github.com/launchbadge/sqlx/issues/408)
     // like tokio_postgres does https://docs.rs/tokio-postgres/0.4.0-rc.3/tokio_postgres/#pipelining
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
