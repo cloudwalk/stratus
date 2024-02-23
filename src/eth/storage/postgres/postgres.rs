@@ -617,7 +617,7 @@ impl PermanentStorage for Postgres {
                     Some(s) => s.value.into(),
                     None => {
                         tracing::trace!("slot value not set, skipping");
-                        break;
+                        continue;
                     }
                 };
                 let block_number = i64::try_from(block.header.number).context("failed to convert block number")?;
