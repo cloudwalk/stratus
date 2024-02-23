@@ -1,5 +1,5 @@
 use nonempty::NonEmpty;
-use sqlx::types::BigDecimal;
+
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;

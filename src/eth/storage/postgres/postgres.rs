@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::ops::Deref;
+
 
 use anyhow::Context;
 use async_trait::async_trait;
 use nonempty::nonempty;
-use sqlx::postgres::PgQueryResult;
+
 use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
 use sqlx::Row;
@@ -15,7 +15,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Bytes;
+
 use crate::eth::primitives::ExecutionConflict;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
@@ -715,7 +715,7 @@ impl PermanentStorage for Postgres {
         .context("failed to insert accounts")?;
 
         if slot_result.rows_affected() != slots_length as u64 {
-            let a = slot_result.rows_affected();
+            let _a = slot_result.rows_affected();
             tx.rollback().await.context("failed to rollback transaction")?;
             let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot]));
             return Err(error);
