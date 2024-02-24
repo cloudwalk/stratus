@@ -86,7 +86,7 @@ update:
 # ------------------------------------------------------------------------------
 # Importer: Download external RPC blocks to temporary storage
 importer-download *args="":
-    cargo run --bin importer-download -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
+    cargo run --bin importer-download --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
 importer-import *args="":
