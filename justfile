@@ -65,8 +65,8 @@ lint:
     @just _lint
 
 # Stratus: Lint and check code formatting
-lint-check:
-    @just _lint --check
+lint-check nightly-version="":
+    @just _lint "{{nightly-version}}" --check "-D warnings"
 
 # Stratus: Compile SQLx queries
 sqlx:
