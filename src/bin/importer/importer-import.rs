@@ -102,7 +102,7 @@ async fn keep_loading_blocks(
                 },
             Err(_) => {
                 cancellation.cancel();
-                break "error loading loading blocks";
+                break "error loading blocks";
             }
         };
 
