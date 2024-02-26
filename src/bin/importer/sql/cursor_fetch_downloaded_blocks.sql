@@ -1,2 +1,2 @@
-fetch 10000
+fetch 50000
 from cur_downloaded_blocks

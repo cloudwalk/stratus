@@ -91,6 +91,7 @@ async fn loop_postgres_loader(
         }
 
         // find blocks
+        tracing::info!("retrieving more blocks to process");
         let blocks = match db_fetch_blocks(&mut tx).await {
             Ok(blocks) =>
                 if blocks.is_empty() {
@@ -113,7 +114,7 @@ async fn loop_postgres_loader(
             break "error loading receipts";
         };
 
-        // feed to backlog
+        // send to backlog
         if backlog.send((blocks, receipts)).await.is_err() {
             cancellation.cancel();
             break "error sending tasks to importer";

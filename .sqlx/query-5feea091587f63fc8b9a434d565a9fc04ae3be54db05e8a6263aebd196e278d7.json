@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "fetch 10000\nfrom cur_downloaded_blocks",
+  "query": "fetch 50000\nfrom cur_downloaded_blocks",
   "describe": {
     "columns": [],
     "parameters": {
@@ -8,5 +8,5 @@
     },
     "nullable": []
   },
-  "hash": "97917074a8e91cd4227e92963b00393375a0c87a90436c676724ad2a6d5d2c1c"
+  "hash": "5feea091587f63fc8b9a434d565a9fc04ae3be54db05e8a6263aebd196e278d7"
 }
