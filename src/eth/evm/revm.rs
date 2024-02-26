@@ -8,12 +8,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use revm::primitives::KECCAK_EMPTY;
-use revm::primitives::AccountInfo as RevmAccountInfo;
 use anyhow::anyhow;
 use itertools::Itertools;
 use revm::interpreter::analysis::to_analysed;
 use revm::interpreter::InstructionResult;
+use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
@@ -24,6 +23,7 @@ use revm::primitives::SpecId;
 use revm::primitives::State as RevmState;
 use revm::primitives::TransactTo;
 use revm::primitives::B256;
+use revm::primitives::KECCAK_EMPTY;
 use revm::primitives::U256;
 use revm::Database;
 use revm::Inspector;
@@ -131,7 +131,7 @@ struct RevmDatabaseSession {
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 
-    bytecodes: HashMap<Address, RevmBytecode>
+    bytecodes: HashMap<Address, RevmBytecode>,
 }
 
 impl RevmDatabaseSession {
@@ -140,7 +140,7 @@ impl RevmDatabaseSession {
             storage,
             input,
             storage_changes: Default::default(),
-            bytecodes: HashMap::new()
+            bytecodes: HashMap::new(),
         }
     }
 }
@@ -176,7 +176,7 @@ impl Database for RevmDatabaseSession {
             nonce: account.nonce.into(),
             balance: account.balance.into(),
             code_hash: KECCAK_EMPTY,
-            code: bytecode
+            code: bytecode,
         }))
     }
 
