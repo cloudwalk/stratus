@@ -55,7 +55,6 @@ clean:
 
 # Stratus: Build documentation
 doc:
-    @just test-doc
     cargo +nightly doc --no-deps
 
 # Stratus: Lint and format code
