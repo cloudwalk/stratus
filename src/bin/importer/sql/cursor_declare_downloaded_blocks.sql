@@ -1,4 +1,4 @@
-declare cur_downloaded_blocks cursor for
+declare cur_downloaded_blocks no scroll cursor for
 select number, payload
 from external_blocks
 where number >= $1
