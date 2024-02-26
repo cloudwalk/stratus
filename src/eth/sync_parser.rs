@@ -27,7 +27,6 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use ethers_core::types::H256;
     use ethers_core::types::U64;
     use hex_literal::hex;
 

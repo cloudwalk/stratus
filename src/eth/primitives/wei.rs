@@ -150,8 +150,6 @@ impl TryFrom<Wei> for BigDecimal {
 
 #[cfg(test)]
 mod tests {
-    use sqlx::types::BigDecimal;
-
     use super::*;
 
     #[test]
