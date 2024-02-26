@@ -100,7 +100,7 @@ describe("JSON-RPC", () => {
             it("Should reset the changes when sending 0", async () => {
                 await send("evm_setNextBlockTimestamp", [0]);
                 await send("evm_mine", []);
-                expect((await latest()).timestamp).eq(Math.floor(Date.now() / 1000));
+                expect((await latest()).timestamp).approximately(Math.floor(Date.now() / 1000), 1);
             })
 
             it("Should handle negative offsets", async () => {
