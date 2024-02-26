@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH account_updates\nAS (SELECT *\n    FROM UNNEST($1::bytea[], $2::bytea[], $3::numeric[], $4::numeric[], $5::int8[], $6::numeric[], $7::numeric[])\n    AS t(address, bytecode, new_balance, new_nonce, creation_block, original_balance, original_nonce)\n)\nINSERT INTO accounts (address, bytecode, latest_balance, latest_nonce, creation_block)\nSELECT address, bytecode, new_balance, new_nonce, creation_block\nFROM account_updates\nON CONFLICT (address) DO\nUPDATE\nSET latest_nonce = EXCLUDED.latest_nonce,\n    latest_balance = EXCLUDED.latest_balance\nWHERE accounts.latest_nonce = (SELECT original_nonce FROM account_updates WHERE account_updates.address=accounts.address)\n    AND accounts.latest_balance = (SELECT original_balance FROM account_updates WHERE account_updates.address=accounts.address)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "ByteaArray",
+        "ByteaArray",
+        "NumericArray",
+        "NumericArray",
+        "Int8Array",
+        "NumericArray",
+        "NumericArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "543358477649335ff0baff592375aad55c95ce185e49e5f7d5f9401a4a572a10"
+}

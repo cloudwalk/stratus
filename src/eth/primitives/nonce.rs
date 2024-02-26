@@ -12,8 +12,11 @@ use std::str::FromStr;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
+use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
 use sqlx::Decode;
 
@@ -58,12 +61,30 @@ impl TryFrom<BigDecimal> for Nonce {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> Self
+// sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Nonce {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.try_into()?)
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Nonce {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        match BigDecimal::try_from(self.clone()) {
+            Ok(res) => res.encode(buf),
+            Err(err) => {
+                tracing::error!(?err, "failed to encode nonce");
+                IsNull::Yes
+            }
+        }
+    }
+}
+
+impl PgHasArrayType for Nonce {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }
 
