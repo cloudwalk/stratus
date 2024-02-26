@@ -108,7 +108,7 @@ impl EthExecutor {
 
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.clone()).await?;
-                    metrics::inc_execution_and_commit(start.elapsed(), true);
+                    metrics::inc_execution(start.elapsed(), true);
                     executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
@@ -147,6 +147,7 @@ impl EthExecutor {
 
             let evm_input = EvmInput::from_eth_transaction(transaction_input.clone());
             let execution = self.execute_in_evm(evm_input).await?;
+            metrics::inc_execution(start.elapsed(), true);
 
             execution.compare_with_receipt(external_receipt)?;
 

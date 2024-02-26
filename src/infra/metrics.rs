@@ -95,12 +95,15 @@ metrics! {
     histogram storage_commit{success}
 }
 
-// Execution and commit.
+// Execution
 metrics! {
     group: execution_and_commit,
 
     "Duration of execution and commit operation."
-    histogram execution_and_commit{success}
+    histogram execution_and_commit{success},
+
+    "Duration of execution and commit operation."
+    histogram execution{success}
 }
 
 // -----------------------------------------------------------------------------
