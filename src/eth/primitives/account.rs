@@ -52,7 +52,7 @@ impl Account {
 
     /// Checks the current account is empty.
     ///
-    /// https://eips.ethereum.org/EIPS/eip-7523#:~:text=An%20empty%20account%20is%20an%20account
+    /// <https://eips.ethereum.org/EIPS/eip-7523#:~:text=An%20empty%20account%20is%20an%20account>
     pub fn is_empty(&self) -> bool {
         self.nonce.is_zero() && self.balance.is_zero() && self.bytecode.is_none()
     }
