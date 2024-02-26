@@ -127,6 +127,7 @@ impl EthExecutor {
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
         };
+        metrics::inc_execution_and_commit(start.elapsed(), true);
 
         Ok(())
     }
