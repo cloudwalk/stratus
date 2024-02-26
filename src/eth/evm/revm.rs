@@ -5,12 +5,17 @@
 //! interacting with the project's storage backend to manage state. `Revm` embodies the practical application
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use revm::primitives::KECCAK_EMPTY;
+use revm::primitives::AccountInfo as RevmAccountInfo;
 use anyhow::anyhow;
 use anyhow::Context;
 use itertools::Itertools;
+use revm::interpreter::analysis::to_analysed;
+use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
@@ -138,6 +143,8 @@ struct RevmDatabaseSession {
 
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
+
+    bytecodes: HashMap<Address, RevmBytecode>
 }
 
 impl RevmDatabaseSession {
@@ -147,6 +154,7 @@ impl RevmDatabaseSession {
             input,
             storage_changes: Default::default(),
             metrics: Default::default(),
+            bytecodes: HashMap::new()
         }
     }
 }
@@ -174,7 +182,18 @@ impl Database for RevmDatabaseSession {
                 .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account.clone()));
         }
 
-        Ok(Some(account.into()))
+        let bytecode = if let Some(bytes) = account.bytecode {
+            Some(self.bytecodes.entry(address).or_insert(to_analysed(bytes.into())).clone())
+        } else {
+            None
+        };
+
+        Ok(Some(RevmAccountInfo {
+            nonce: account.nonce.into(),
+            balance: account.balance.into(),
+            code_hash: KECCAK_EMPTY,
+            code: bytecode
+        }))
     }
 
     fn code_by_hash(&mut self, _: B256) -> anyhow::Result<RevmBytecode> {
