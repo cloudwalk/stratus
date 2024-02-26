@@ -43,10 +43,10 @@ async fn main() -> anyhow::Result<()> {
         .collect_vec();
     storage.save_accounts_to_perm(accounts).await?;
 
-    // load blocks in background
-    tokio::spawn(loop_postgres_loader(pg, cancellation.clone(), backlog_tx.clone()));
+    // load blocks and receipts in background
+    tokio::spawn(keep_loading_blocks(pg, cancellation.clone(), backlog_tx.clone()));
 
-    // import transactions in foreground
+    // import blocks and transactions in foreground
     let reason = loop {
         // retrieve new tasks to execute
         let Some((blocks, receipts)) = backlog_rx.recv().await else {
@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
 // -----------------------------------------------------------------------------
 // Postgres block loader
 // -----------------------------------------------------------------------------
-async fn loop_postgres_loader(
+async fn keep_loading_blocks(
     // services
     pg: Arc<Postgres>,
     cancellation: CancellationToken,
