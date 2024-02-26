@@ -35,9 +35,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-
 use crate::infra::metrics;
-
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -79,6 +77,7 @@ impl EthExecutor {
     /// Imports an external block using the offline flow.
     pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
         tracing::info!(number = %block.number(), "importing offline block");
+        let import_start = Instant::now();
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
@@ -127,7 +126,7 @@ impl EthExecutor {
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
         };
-        metrics::inc_execution_and_commit(start.elapsed(), true);
+        metrics::inc_execution_and_commit(import_start.elapsed(), true);
 
         Ok(())
     }
