@@ -1,5 +1,6 @@
 version: "2"
 services:
+
   postgres:
     image: postgres
     environment:
@@ -12,6 +13,18 @@ services:
       - "./static/schema/001-init.sql:/docker-entrypoint-initdb.d/001-schema.sql"
       - "./static/schema/002-schema-external-rpc.sql:/docker-entrypoint-initdb.d/002-schema.sql"
       - "postgres-data:/var/lib/postgresql/data"
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./static/prometheus.yaml:/etc/prometheus/prometheus.yaml
+    ports:
+      - 9090:9090
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--log.level=debug"
 
 volumes:
   postgres-data:
