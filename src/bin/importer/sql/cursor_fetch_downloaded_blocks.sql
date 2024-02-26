@@ -1,2 +1,2 @@
-fetch forward 100
+fetch forward 500000
 from cur_downloaded_blocks
