@@ -18,6 +18,8 @@ use revm::primitives::Output as RevmOutput;
 
 use crate::gen_newtype_from;
 
+pub type BytecodeHash = [u8; 32];
+
 #[derive(Clone, Default, Eq, PartialEq, fake::Dummy, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct Bytes(Vec<u8>);

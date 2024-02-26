@@ -7,8 +7,10 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 use anyhow::anyhow;
+use ethers_core::utils::keccak256;
 use itertools::Itertools;
 use revm::interpreter::analysis::to_analysed;
 use revm::interpreter::InstructionResult;
@@ -34,6 +36,7 @@ use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BytecodeHash;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionAccountChanges;
@@ -52,6 +55,9 @@ use crate::ext::OptionExt;
 pub struct Revm {
     evm: EVM<RevmDatabaseSession>,
     storage: Arc<StratusStorage>,
+
+    /// Analysed bytecodes.
+    bytecodes: Arc<RwLock<HashMap<BytecodeHash, RevmBytecode>>>,
 }
 
 impl Revm {
@@ -67,7 +73,11 @@ impl Revm {
         // evm tx config
         evm.env.tx.gas_priority_fee = None;
 
-        Self { evm, storage }
+        Self {
+            evm,
+            storage,
+            bytecodes: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 }
 
@@ -75,7 +85,7 @@ impl Evm for Revm {
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution> {
         // configure session
         let evm = &mut self.evm;
-        let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.clone());
+        let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.clone(), Arc::clone(&self.bytecodes));
         evm.database(session);
 
         // configure evm block
@@ -106,7 +116,19 @@ impl Evm for Revm {
         match evm_result {
             Ok(result) => {
                 let session = evm.take_db();
-                Ok(parse_revm_execution(result, session.input, session.storage_changes)?)
+
+                // cache new bytecodes generated during this transaction
+                let has_new_bytecodes = session.has_new_bytecodes();
+                let result = parse_revm_execution(result, session.input, session.storage_changes)?;
+                if result.is_success() && has_new_bytecodes {
+                    let mut bytecodes_write_lock = self.bytecodes.write().unwrap();
+                    for (bytecode_hash, bytecode) in session.new_analysed_bytecodes {
+                        bytecodes_write_lock.insert(bytecode_hash, bytecode);
+                    }
+                    drop(bytecodes_write_lock);
+                }
+
+                Ok(result)
             }
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
@@ -131,17 +153,28 @@ struct RevmDatabaseSession {
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 
-    bytecodes: HashMap<Address, RevmBytecode>,
+    /// All analysed bytecodes that are cached.
+    all_analysed_bytecodes: Arc<RwLock<HashMap<BytecodeHash, RevmBytecode>>>,
+
+    /// New analysed bytecodes crated during this transaction execution.
+    new_analysed_bytecodes: Vec<(BytecodeHash, RevmBytecode)>,
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<StratusStorage>, input: EvmInput) -> Self {
+    /// Creates a new [`RevmDatabaseSession`].
+    pub fn new(storage: Arc<StratusStorage>, input: EvmInput, all_bytecodes: Arc<RwLock<HashMap<BytecodeHash, RevmBytecode>>>) -> Self {
         Self {
             storage,
             input,
             storage_changes: Default::default(),
-            bytecodes: HashMap::new(),
+            all_analysed_bytecodes: all_bytecodes,
+            new_analysed_bytecodes: Vec::new(),
         }
+    }
+
+    /// Indicates if new bytecodes were analysed during the transaction execution associated with this session.
+    pub fn has_new_bytecodes(&self) -> bool {
+        not(self.new_analysed_bytecodes.is_empty())
     }
 }
 
@@ -166,11 +199,21 @@ impl Database for RevmDatabaseSession {
                 .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account.clone()));
         }
 
-        let bytecode = if let Some(bytes) = account.bytecode {
-            Some(self.bytecodes.entry(address).or_insert(to_analysed(bytes.into())).clone())
-        } else {
-            None
-        };
+        // get bytecode from cache or analyse and cache it
+        let mut bytecode: Option<RevmBytecode> = None;
+        if let Some(bytes) = account.bytecode {
+            // TODO: maybe we should use the code_hash attribute from account here?
+            let bytecode_hash = keccak256(bytes.as_ref());
+
+            let bytecodes_read_lock = self.all_analysed_bytecodes.read().unwrap();
+            if let Some(cached_bytecode) = bytecodes_read_lock.get(&bytecode_hash) {
+                bytecode = Some(cached_bytecode.clone());
+            } else {
+                let analysed_bytecode = to_analysed(bytes.into());
+                self.new_analysed_bytecodes.push((bytecode_hash, analysed_bytecode.clone()));
+                bytecode = Some(analysed_bytecode);
+            }
+        }
 
         Ok(Some(RevmAccountInfo {
             nonce: account.nonce.into(),
