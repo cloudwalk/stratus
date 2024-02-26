@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH slot_updates\nAS (SELECT *\n    FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::int8[], $5::bytea[])\n    AS t(idx, value, account_address, creation_block, original_value)\n)\nINSERT INTO account_slots (idx, value, account_address, creation_block)\nSELECT idx, value, account_address, creation_block\nFROM slot_updates\nON CONFLICT (idx, account_address) DO\nUPDATE\nSET value = EXCLUDED.value\nWHERE account_slots.value = (\n    SELECT original_value\n    FROM slot_updates\n    WHERE slot_updates.idx = EXCLUDED.idx\n        AND slot_updates.account_address = EXCLUDED.account_address)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "ByteaArray",
+        "ByteaArray",
+        "ByteaArray",
+        "Int8Array",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7706f571976b7e4b370201cb74515cf750c166146e9501ec6be67683087c403f"
+}

@@ -12,6 +12,7 @@ use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::B256 as RevmB256;
+use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
 
@@ -60,5 +61,34 @@ impl From<RevmB256> for LogTopic {
 impl From<LogTopic> for H256 {
     fn from(value: LogTopic) -> Self {
         value.0
+    }
+}
+
+// -----------------------------------------------------------------------------
+// sqlx traits
+// -----------------------------------------------------------------------------
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for LogTopic {
+    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull
+    where
+        Self: Sized,
+    {
+        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
+    }
+
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull {
+        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for LogTopic {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+impl PgHasArrayType for LogTopic {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <&[u8; 32] as PgHasArrayType>::array_type_info()
     }
 }

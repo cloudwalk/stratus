@@ -24,6 +24,7 @@ use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 use sqlx::Decode;
 
 use crate::gen_newtype_from;
@@ -103,7 +104,7 @@ impl From<NameOrAddress> for Address {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> Self
+// sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Address {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
@@ -118,9 +119,21 @@ impl sqlx::Type<sqlx::Postgres> for Address {
     }
 }
 
+impl PgHasArrayType for Address {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <[u8; 20] as PgHasArrayType>::array_type_info()
+    }
+}
+
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
         self.0.as_bytes()
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Address {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        self.0 .0.encode(buf)
     }
 }
 
@@ -156,14 +169,5 @@ impl From<Address> for Token {
 impl From<Address> for [u8; 20] {
     fn from(value: Address) -> Self {
         H160::from(value.clone()).0
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Conversions: Self -> sqlx
-// -----------------------------------------------------------------------------
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Address {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        self.0 .0.encode(buf)
     }
 }

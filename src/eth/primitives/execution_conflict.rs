@@ -1,5 +1,4 @@
 use nonempty::NonEmpty;
-use sqlx::types::BigDecimal;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
@@ -68,15 +67,7 @@ pub enum ExecutionConflict {
         actual: SlotValue,
     },
 
-    Account {
-        address: Address,
-        expected_nonce: BigDecimal,
-        expected_balance: BigDecimal,
-    },
+    Account,
 
-    PgSlot {
-        address: Address,
-        slot: [u8; 32],
-        expected: [u8; 32],
-    },
+    PgSlot,
 }

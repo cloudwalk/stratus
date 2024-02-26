@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread;
+use std::time::Instant;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
@@ -34,6 +35,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
+use crate::infra::metrics;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -75,10 +77,12 @@ impl EthExecutor {
     /// Imports an external block using the offline flow.
     pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
         tracing::info!(number = %block.number(), "importing offline block");
+        let import_start = Instant::now();
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
+            let start = Instant::now();
             // find receipt
             let Some(receipt) = receipts.get(&tx.hash()).cloned() else {
                 tracing::error!(hash = %tx.hash, "receipt is missing");
@@ -103,6 +107,7 @@ impl EthExecutor {
 
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.clone()).await?;
+                    metrics::inc_execution(start.elapsed(), true);
                     executions.push((tx, receipt, execution));
                 }
                 Err(e) => {
@@ -121,12 +126,14 @@ impl EthExecutor {
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
         };
+        metrics::inc_execution_and_commit(import_start.elapsed(), true);
 
         Ok(())
     }
 
     pub async fn import(&self, external_block: ExternalBlock, external_receipts: HashMap<H256, ExternalReceipt>) -> anyhow::Result<()> {
         for external_transaction in <EthersBlock<ExternalTransaction>>::from(external_block.clone()).transactions {
+            let start = Instant::now();
             // Find the receipt for the current transaction.
             let external_receipt = external_receipts
                 .get(&external_transaction.hash)
@@ -140,12 +147,14 @@ impl EthExecutor {
 
             let evm_input = EvmInput::from_eth_transaction(transaction_input.clone());
             let execution = self.execute_in_evm(evm_input).await?;
+            metrics::inc_execution(start.elapsed(), true);
 
             execution.compare_with_receipt(external_receipt)?;
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
 
             self.storage.commit_to_perm(block).await?;
+            metrics::inc_execution_and_commit(start.elapsed(), true);
         }
 
         //TODO compare slots/changes

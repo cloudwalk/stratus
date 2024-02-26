@@ -12,8 +12,11 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
+use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
+use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 use sqlx::Decode;
 
 use crate::gen_newtype_from;
@@ -73,7 +76,7 @@ impl From<SlotIndex> for ethereum_types::U256 {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> SlotIndex
+// sqlx traits for SlotIndex
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
@@ -85,6 +88,25 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
 impl sqlx::Type<sqlx::Postgres> for SlotIndex {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotIndex {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.clone().into(), buf)
+    }
+
+    fn encode(self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull
+    where
+        Self: Sized,
+    {
+        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.into(), buf)
+    }
+}
+
+impl PgHasArrayType for SlotIndex {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <[u8; 32] as PgHasArrayType>::array_type_info()
     }
 }
 
@@ -147,7 +169,7 @@ impl From<SlotValue> for RevmU256 {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx -> SlotValue
+// sqlx traits for SlotValue
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotValue {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
@@ -159,5 +181,24 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotValue {
 impl sqlx::Type<sqlx::Postgres> for SlotValue {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("BYTEA")
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotValue {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.clone().into(), buf)
+    }
+
+    fn encode(self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull
+    where
+        Self: Sized,
+    {
+        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.into(), buf)
+    }
+}
+
+impl PgHasArrayType for SlotValue {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <[u8; 32] as PgHasArrayType>::array_type_info()
     }
 }

@@ -19,8 +19,11 @@ use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
+use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
+use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
+use sqlx::postgres::PgHasArrayType;
 
 use crate::eth::primitives::Hash;
 use crate::gen_newtype_from;
@@ -148,7 +151,7 @@ impl From<BlockNumber> for [u8; 8] {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: sqlx
+// sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
@@ -162,5 +165,23 @@ impl sqlx::Type<sqlx::Postgres> for BlockNumber {
         // HACK: Actually BIGSERIAL, in theory
         // they are equal
         sqlx::postgres::PgTypeInfo::with_name("INT8")
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for BlockNumber {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+        match i64::try_from(*self) {
+            Ok(res) => <i64 as sqlx::Encode<sqlx::Postgres>>::encode(res, buf),
+            Err(err) => {
+                tracing::error!(?err, "failed to encode BlockNumber");
+                IsNull::Yes
+            }
+        }
+    }
+}
+
+impl PgHasArrayType for BlockNumber {
+    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
+        <i64 as PgHasArrayType>::array_type_info()
     }
 }
