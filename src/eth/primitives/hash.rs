@@ -35,7 +35,7 @@ impl Hash {
         Self(H256::random())
     }
 
-    // Returns the zero hash
+    /// Returns the zero hash
     pub fn zero() -> Self {
         Self(H256::zero())
     }
