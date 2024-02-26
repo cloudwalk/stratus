@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "fetch forward 50000\nfrom cur_downloaded_blocks",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "069501efbc15e599099f5bca7e580c94218d244aad0f2783e2b48bfc63bd979a"
+}
