@@ -539,15 +539,8 @@ impl PermanentStorage for Postgres {
             }
         }
 
-        let expected_affected_rows = 1
-            + transaction_batch.block_hash.len()
-            + log_batch.address.len()
-            + topic_batch.block_hash.len()
-            + account_batch.address.len()
-            + slot_batch.address.len()
-            + historical_balance_batch.address.len()
-            + historical_nonce_batch.address.len()
-            + historical_slot_batch.address.len();
+        let expected_modified_slots = slot_batch.address.len();
+        let expected_modified_accounts = account_batch.address.len();
 
         let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
 
@@ -618,12 +611,18 @@ impl PermanentStorage for Postgres {
         .await
         .context("failed to insert block")?;
 
-        let rows_affected: BigDecimal = block_result.affected_rows.unwrap_or_default();
-        tracing::debug!(?expected_affected_rows, ?rows_affected, "EXPECTED AAAAA");
+        let modified_accounts = block_result.modified_accounts.unwrap_or_default() as usize;
+        let modified_slots = block_result.modified_slots.unwrap_or_default() as usize;
 
-        if rows_affected != BigDecimal::from(expected_affected_rows as u64) {
+        if modified_accounts != expected_modified_accounts {
             tx.rollback().await.context("failed to rollback transaction")?;
             let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account]));
+            return Err(error);
+        }
+
+        if modified_slots != expected_modified_slots {
+            tx.rollback().await.context("failed to rollback transaction")?;
+            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot]));
             return Err(error);
         }
 

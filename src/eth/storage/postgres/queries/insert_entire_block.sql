@@ -211,21 +211,7 @@ historical_slots_insert AS (
     RETURNING 1 as res
 )
 
-SELECT Sum(count) as affected_rows FROM
-    ((SELECT count(*) AS count FROM block_insert)
-        UNION ALL
-        SELECT count(*) AS count FROM transaction_insert
-        UNION ALL
-        SELECT count(*) AS count FROM log_insert
-        UNION ALL
-        SELECT count(*) AS count FROM topic_insert
-        UNION ALL
-        SELECT count(*) AS count FROM account_insert
-        UNION ALL
-        SELECT count(*) AS count FROM slot_insert
-        UNION ALL
-        SELECT count(*) AS count FROM historical_balance_insert
-        UNION ALL
-        SELECT count(*) AS count FROM historical_nonce_insert
-        UNION ALL
-        SELECT count(*) AS count FROM historical_slots_insert);
+SELECT modified_accounts, modified_slots FROM
+(SELECT count(*) AS modified_accounts FROM account_insert)
+CROSS JOIN
+(SELECT count(*) AS modified_slots FROM slot_insert);
