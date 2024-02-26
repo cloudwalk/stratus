@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "declare cur_downloaded_blocks no scroll cursor for\nselect number, payload\nfrom external_blocks\nwhere number >= $1\norder by number;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c7a8b37a28adf84c5edcb53b2e9c80230a2d262be0f7b6001ae6219fd37b2ff1"
+}
