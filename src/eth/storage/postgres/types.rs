@@ -215,6 +215,7 @@ pub struct TopicBatch {
 }
 
 impl TopicBatch {
+    #[allow(clippy::too_many_arguments)]
     pub fn push(
         &mut self,
         topic: LogTopic,
@@ -248,6 +249,7 @@ pub struct AccountBatch {
 }
 
 impl AccountBatch {
+    #[allow(clippy::too_many_arguments)]
     pub fn push(
         &mut self,
         address: Address,

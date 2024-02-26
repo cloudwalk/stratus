@@ -25,6 +25,7 @@ pub fn init_metrics() {
     register_metrics_for_block_number();
     register_metrics_for_storage_read();
     register_metrics_for_storage_write();
+    register_metrics_for_executor();
 }
 
 // JSON-RPC metrics.
@@ -95,15 +96,15 @@ metrics! {
     histogram storage_commit{success}
 }
 
-// Execution
+// Execution metrics.
 metrics! {
-    group: execution_and_commit,
+    group: executor,
+
+    "Duration of execution operation."
+    histogram execution{success},
 
     "Duration of execution and commit operation."
-    histogram execution_and_commit{success},
-
-    "Duration of execution and commit operation."
-    histogram execution{success}
+    histogram execution_and_commit{success}
 }
 
 // -----------------------------------------------------------------------------

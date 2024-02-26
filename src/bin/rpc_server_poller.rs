@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(POLL_LATENCY).await;
 
             //XXX this is here in order for the flamegraph profiler to work, without this the loop never ends
-            if let Ok(_) = std::env::var("CARGO_PROFILE_RELEASE_DEBUG") {
+            if std::env::var("CARGO_PROFILE_RELEASE_DEBUG").is_ok() {
                 break;
             }
         }
