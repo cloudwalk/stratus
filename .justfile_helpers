@@ -1,6 +1,6 @@
-_lint fmt-flag="" clippy-flag="":
-    cargo +nightly fmt --all {{fmt-flag}}
-    cargo +nightly clippy --all-targets -- {{clippy-flag}}
+_lint version="" fmt-flag="" clippy-flag="":
+    cargo +nightly{{version}} fmt --all {{fmt-flag}}
+    cargo +nightly{{version}} clippy --all-targets -- {{clippy-flag}}
 
 [unix]
 _outdated:
