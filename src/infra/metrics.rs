@@ -21,11 +21,18 @@ pub fn init_metrics() {
     tracing::info!("starting metrics");
 
     PrometheusBuilder::new().install().expect("failed to start metrics");
+
+    // api metrics
     register_metrics_for_json_rpc();
-    register_metrics_for_block_number();
+
+    // executor metrics
+    register_metrics_for_executor();
+    register_metrics_for_evm();
+
+    // storage metrics
+    register_metrics_for_storage_block_number();
     register_metrics_for_storage_read();
     register_metrics_for_storage_write();
-    register_metrics_for_executor();
 }
 
 // JSON-RPC metrics.
@@ -41,15 +48,15 @@ metrics! {
 
 // Storage block number metrics
 metrics! {
-    group: block_number,
+    group: storage_block_number,
 
-    "Duration of storage read_current_block_number operation."
+    "Time to execute storage read_current_block_number operation."
     histogram storage_read_current_block_number{success},
 
-    "Duration of storage increment_block_number operation."
+    "Time to execute storage increment_block_number operation."
     histogram storage_increment_block_number{success},
 
-    "Duration of storage set_block_number operation."
+    "Time to execute storage set_block_number operation."
     histogram storage_set_block_number{success}
 }
 
@@ -57,22 +64,19 @@ metrics! {
 metrics! {
     group: storage_read,
 
-    "Duration of storage check_conflicts operation."
-    histogram storage_check_conflicts{conflicted, success},
+    "Time to execute storage read_account operation."
+    histogram storage_read_account{kind, point_in_time, success},
 
-    "Duration of storage read_account operation."
-    histogram storage_read_account{origin, point_in_time, success},
-
-    "Duration of storage read_block operation."
+    "Time to execute storage read_block operation."
     histogram storage_read_block{success},
 
-    "Duration of storage read_logs operation."
+    "Time to execute storage read_logs operation."
     histogram storage_read_logs{success},
 
-    "Duration of storage read_slot operation."
-    histogram storage_read_slot{origin, point_in_time, success},
+    "Time to execute storage read_slot operation."
+    histogram storage_read_slot{kind, point_in_time, success},
 
-    "Duration of storage read_mined_transaction operation."
+    "Time to execute storage read_mined_transaction operation."
     histogram storage_read_mined_transaction{success}
 }
 
@@ -80,19 +84,19 @@ metrics! {
 metrics! {
     group: storage_write,
 
-    "Duration of storage save_accounts operation."
+    "Time to execute storage save_accounts operation."
     histogram storage_save_accounts{success},
 
-    "Duration of storage save_account_changes operation."
+    "Time to execute storage save_account_changes operation."
     histogram storage_save_account_changes{success},
 
-    "Duration of storage save_block operation."
+    "Time to execute storage save_block operation."
     histogram storage_save_block{success},
 
-    "Duration of storage reset operation."
-    histogram storage_reset{success},
+    "Time to execute storage reset operation."
+    histogram storage_reset{kind, success},
 
-    "Duration of storage commit operation."
+    "Time to execute storage commit operation."
     histogram storage_commit{success}
 }
 
@@ -100,11 +104,30 @@ metrics! {
 metrics! {
     group: executor,
 
-    "Duration of execution operation."
-    histogram execution{success},
+    "Time to execute import_offline operation."
+    histogram executor_import_offline{},
 
-    "Duration of execution and commit operation."
-    histogram execution_and_commit{success}
+    "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
+    histogram executor_import_offline_transaction{},
+
+    "Time to execute import_online operation."
+    histogram executor_import_online{},
+
+    "Time to execute and persist a single transaction inside import_online operation."
+    histogram executor_import_online_transaction{},
+
+    "Time to execute a transaction received with eth_sendRawTransaction."
+    histogram executor_transact{success},
+
+    "Time to execute a transaction received with eth_call or eth_estimateGas."
+    histogram executor_call{success}
+}
+
+metrics! {
+    group: evm,
+
+    "Time to execute EVM execution."
+    histogram evm_execution{point_in_time, success}
 }
 
 // -----------------------------------------------------------------------------
@@ -174,7 +197,7 @@ macro_rules! metrics {
         group: $group:ident,
         $(
             $description:literal
-            $kind:ident $name:ident{ $($label:ident),+ }
+            $kind:ident $name:ident{ $($label:ident),* }
         ),+
     ) => {
         // Register metrics with description with the provider
@@ -188,7 +211,7 @@ macro_rules! metrics {
 
         // Record metrics
         $(
-            metrics_impl_fn_inc!($kind $name $group $($label)+);
+            metrics_impl_fn_inc!($kind $name $group $($label)*);
         )+
     }
 }
@@ -213,7 +236,7 @@ macro_rules! metrics_impl_describe {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! metrics_impl_fn_inc {
-    (counter $name:ident $group:ident $($label:ident)+) => {
+    (counter $name:ident $group:ident $($label:ident)*) => {
         paste! {
             #[doc = "Add 1 to `" $name "` counter."]
             pub fn [<inc_ $name>]($( $label: impl Into<LabelValue> ),+) {
@@ -229,16 +252,16 @@ macro_rules! metrics_impl_fn_inc {
             }
         }
     };
-    (histogram  $name:ident $group:ident $($label:ident)+) => {
+    (histogram  $name:ident $group:ident $($label:ident)*) => {
         paste! {
             #[doc = "Add operation duration to `" $name "` histogram."]
-            pub fn [<inc_ $name>](duration: std::time::Duration, $( $label: impl Into<LabelValue> ),+) {
+            pub fn [<inc_ $name>](duration: std::time::Duration, $( $label: impl Into<LabelValue> ),*) {
                 let labels = into_labels(
                     vec![
                         ("group", stringify!($group).into()),
                         $(
                             (stringify!($label), $label.into()),
-                        )+
+                        )*
                     ]
                 );
                 histogram!(stringify!([<stratus_$name>]), duration, labels)

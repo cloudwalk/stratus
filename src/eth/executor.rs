@@ -76,13 +76,13 @@ impl EthExecutor {
 
     /// Imports an external block using the offline flow.
     pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
+        let start = Instant::now();
         tracing::info!(number = %block.number(), "importing offline block");
-        let import_start = Instant::now();
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
-            let start = Instant::now();
+            let tx_start = Instant::now();
             // find receipt
             let Some(receipt) = receipts.get(&tx.hash()).cloned() else {
                 tracing::error!(hash = %tx.hash, "receipt is missing");
@@ -107,8 +107,8 @@ impl EthExecutor {
 
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.clone()).await?;
-                    metrics::inc_execution(start.elapsed(), true);
                     executions.push((tx, receipt, execution));
+                    metrics::inc_executor_import_offline_transaction(tx_start.elapsed());
                 }
                 Err(e) => {
                     let json_tx = serde_json::to_string(&tx).unwrap();
@@ -119,6 +119,7 @@ impl EthExecutor {
             }
         }
 
+        // commit block
         let block = Block::from_external(block, executions)?;
         self.storage.set_block_number(*block.number()).await?;
         if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
@@ -126,14 +127,16 @@ impl EthExecutor {
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
         };
-        metrics::inc_execution_and_commit(import_start.elapsed(), true);
 
+        metrics::inc_executor_import_offline(start.elapsed());
         Ok(())
     }
 
     pub async fn import(&self, external_block: ExternalBlock, external_receipts: HashMap<H256, ExternalReceipt>) -> anyhow::Result<()> {
+        let start = Instant::now();
+
         for external_transaction in <EthersBlock<ExternalTransaction>>::from(external_block.clone()).transactions {
-            let start = Instant::now();
+            let tx_start = Instant::now();
             // Find the receipt for the current transaction.
             let external_receipt = external_receipts
                 .get(&external_transaction.hash)
@@ -147,21 +150,15 @@ impl EthExecutor {
 
             let evm_input = EvmInput::from_eth_transaction(transaction_input.clone());
             let execution = self.execute_in_evm(evm_input).await?;
-            metrics::inc_execution(start.elapsed(), true);
-
             execution.compare_with_receipt(external_receipt)?;
+            metrics::inc_executor_import_online_transaction(tx_start.elapsed());
 
             let block = self.miner.lock().await.mine_with_one_transaction(transaction_input, execution).await?;
-
             self.storage.commit_to_perm(block).await?;
-            metrics::inc_execution_and_commit(start.elapsed(), true);
+            metrics::inc_executor_import_online(tx_start.elapsed());
         }
 
-        //TODO compare slots/changes
-        //TODO compare nonce
-        //TODO compare balance
-        //XXX panic in case of bad comparisson
-
+        metrics::inc_executor_import_online(start.elapsed());
         Ok(())
     }
 
@@ -175,6 +172,7 @@ impl EthExecutor {
     ///
     /// TODO: too much cloning that can be optimized here.
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
+        let start = Instant::now();
         tracing::info!(
             hash = %transaction.hash,
             nonce = %transaction.nonce,
@@ -193,7 +191,10 @@ impl EthExecutor {
         }
 
         // creates a block and performs the necessary notifications
-        self.mine_and_execute_transaction(transaction).await
+        let result = self.mine_and_execute_transaction(transaction).await;
+        metrics::inc_executor_transact(start.elapsed(), result.is_ok());
+
+        result
     }
 
     #[cfg(feature = "evm-mine")]
@@ -250,6 +251,7 @@ impl EthExecutor {
 
     /// Execute a function and return the function output. State changes are ignored.
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
+        let start = Instant::now();
         tracing::info!(
             from = ?input.from,
             to = ?input.to,
@@ -259,8 +261,9 @@ impl EthExecutor {
         );
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
-        let execution = self.execute_in_evm(evm_input).await?;
-        Ok(execution)
+        let result = self.execute_in_evm(evm_input).await;
+        metrics::inc_executor_call(start.elapsed(), result.is_ok());
+        result
     }
 
     /// Submits a transaction to the EVM and awaits for its execution.

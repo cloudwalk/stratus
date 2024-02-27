@@ -6,6 +6,7 @@
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::anyhow;
 use itertools::Itertools;
@@ -43,6 +44,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
@@ -69,6 +71,8 @@ impl Revm {
 
 impl Evm for Revm {
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution> {
+        let start = Instant::now();
+
         // configure session
         let evm = &mut self.evm;
         let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.clone());
@@ -99,16 +103,20 @@ impl Evm for Revm {
         #[cfg(not(debug_assertions))]
         let evm_result = evm.transact();
 
-        match evm_result {
-            Ok(result) => {
-                let session = evm.take_db();
-                Ok(parse_revm_execution(result, session.input, session.storage_changes)?)
-            }
+        // parse result and track metrics
+        let session = evm.take_db();
+        let point_in_time = session.input.point_in_time.clone();
+
+        let result = match evm_result {
+            Ok(result) => Ok(parse_revm_execution(result, session.input, session.storage_changes)),
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
                 Err(anyhow!("Error executing EVM transaction. Check logs for more information."))
             }
-        }
+        };
+        metrics::inc_evm_execution(start.elapsed(), &point_in_time, result.is_ok());
+
+        result
     }
 }
 
@@ -224,19 +232,19 @@ impl Inspector<RevmDatabaseSession> for RevmInspector {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> anyhow::Result<Execution> {
+fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Execution {
     let (result, output, logs, gas) = parse_revm_result(revm_result.result);
-    let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
+    let execution_changes = parse_revm_state(revm_result.state, execution_changes);
 
     tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
-    Ok(Execution {
+    Execution {
         result,
         output,
         logs,
         gas,
         block_timestamp: input.block_timestamp,
         changes: execution_changes.into_values().collect(),
-    })
+    }
 }
 
 fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
@@ -263,7 +271,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
     }
 }
 
-fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> anyhow::Result<ExecutionChanges> {
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> ExecutionChanges {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
         if address.is_ignored() {
@@ -299,11 +307,12 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         // status: touched (updated)
         else if account_updated {
             let Some(existing_account) = execution_changes.get_mut(&address) else {
-                tracing::error!(keys = ?execution_changes.keys(), reason = "account was updated, but it was not loaded by evm", %address);
-                return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
+                tracing::error!(keys = ?execution_changes.keys(), %address, "account updated, but not loaded by evm");
+                // TODO: panic! only when in dev-mode or try to refactor to avoid panic!
+                panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
             };
             existing_account.apply_changes(account, account_modified_slots);
         }
     }
-    Ok(execution_changes)
+    execution_changes
 }
