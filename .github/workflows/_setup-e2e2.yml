@@ -10,7 +10,7 @@ on:
 jobs:
   setup_and_test:
     name: Setup and Run E2E
-    runs-on: stratus-runner
+    runs-on: [self-hosted, stratus-runner]
     timeout-minutes: 25
     steps:
       - name: Checkout code
