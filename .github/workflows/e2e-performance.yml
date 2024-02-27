@@ -12,6 +12,9 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml@main
     with:
       test_command: 'e2e-flamegraph'
+    concurrency:
+      group: ${{ github.workflow }}-flamegraph-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
 
   comment-on-pr:
     name: Comment on PR with Artifact Link
