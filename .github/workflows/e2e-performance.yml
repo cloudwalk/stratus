@@ -8,15 +8,12 @@ on:
 
 jobs:
   e2e-stratus:
-    name: E2E Stratus in-memory
-    runs-on: ubuntu-latest
+    name: E2E Stratus
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      test_command: 'e2e-flamegraph'
 
     steps:
-      - name: Invoke Reusable Workflow for E2E Setup and Test
-        uses: ./.github/workflows/_setup-e2e.yml
-        with:
-          test_command: 'e2e-flamegraph'
-
       - name: Upload Flamegraph
         uses: actions/upload-artifact@v2
         with:
