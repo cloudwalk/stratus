@@ -10,7 +10,6 @@ jobs:
   e2e-stratus:
     name: E2E Stratus flamegraph
     uses: ./.github/workflows/_setup-e2e.yml
-    runs-on: [self-hosted, stratus-runner]
     with:
       test_command: 'e2e-flamegraph'
 
