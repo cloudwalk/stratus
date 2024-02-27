@@ -26,7 +26,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// Native token amount in wei.
-#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 pub struct Wei(U256);
 
 impl Wei {
