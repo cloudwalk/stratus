@@ -123,4 +123,29 @@ impl Execution {
         }
         Ok(())
     }
+
+    /// Apply execution costs of an external transaction.
+    ///
+    /// External transactions are re-executed locally with max gas and zero gas price,
+    /// so the paid amount is applied after execution based on the receipt.
+    pub fn apply_execution_costs(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
+        // do nothing if execution cost is zero
+        let execution_cost = receipt.execution_cost();
+        if execution_cost.is_zero() {
+            return Ok(());
+        }
+
+        // find sender changes (this can be improved if changes is HashMap)
+        let sender_address: Address = receipt.0.from.into();
+        let sender_changes = self.changes.iter_mut().find(|c| c.address == sender_address);
+        let Some(sender_changes) = sender_changes else {
+            return log_and_err!("sender changes not present in execution when applying execution costs");
+        };
+
+        // subtract execution cost from sender balance
+        let current_balance = sender_changes.balance.take_ref().expect("balance is never None").clone();
+        let new_balance = current_balance - execution_cost; // TODO: handle underflow, but it should not happen
+        sender_changes.balance.set_modified(new_balance);
+        Ok(())
+    }
 }
