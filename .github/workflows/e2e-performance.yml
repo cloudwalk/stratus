@@ -7,30 +7,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  e2e-stratus:
-    name: E2E Stratus in-memory
+  call-e2e-tests:
+    name: Call E2E Stratus Workflow
+    uses: ./.github/workflows/_setup-e2e.yml@main
+    with:
+      test_command: 'e2e-flamegraph'
+
+  comment-on-pr:
+    name: Comment on PR with Artifact Link
+    needs: call-e2e-tests
     runs-on: ubuntu-latest
-
     steps:
-      - name: Invoke Reusable Workflow for E2E Setup and Test
-        uses: ./.github/workflows/_setup-e2e.yml
-        with:
-          test_command: 'e2e-flamegraph'
-
-      - name: Upload Flamegraph
-        uses: actions/upload-artifact@v2
-        with:
-          name: flamegraph
-          path: path/to/flamegraph.svg # Make sure to use the correct path where the flamegraph is saved
-
       - name: Post PR Comment with Artifact Link
         uses: actions/github-script@v5
-        if: github.event_name == 'pull_request'
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             const artifactUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            const commentBody = `The flamegraph is available for download in the Actions tab: [Download Flamegraph](${artifactUrl})`;
+            const commentBody = `E2E test artifacts are available for review. You can download the flamegraph from the Actions run: [Download Flamegraph](${artifactUrl})`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
