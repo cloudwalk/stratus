@@ -1,4 +1,4 @@
-name: Performance E2E tests
+name: Performance E2E Tests
 
 on:
   pull_request:
@@ -8,30 +8,11 @@ on:
 
 jobs:
   e2e-stratus:
-    name: E2E Stratus
+    name: E2E Stratus flamegraph
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       test_command: 'e2e-flamegraph'
 
-    steps:
-      - name: Upload Flamegraph
-        uses: actions/upload-artifact@v2
-        with:
-          name: flamegraph
-          path: path/to/flamegraph.svg # Make sure to use the correct path where the flamegraph is saved
-
-      - name: Post PR Comment with Artifact Link
-        uses: actions/github-script@v5
-        if: github.event_name == 'pull_request'
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const artifactUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            const commentBody = `The flamegraph is available for download in the Actions tab: [Download Flamegraph](${artifactUrl})`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: commentBody
-            });
+    concurrency:
+      group: ${{ github.workflow }}-inmemory-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
