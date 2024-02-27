@@ -36,5 +36,9 @@ jobs:
           cargo install killport
           cargo install wait-service
 
+      - name: Install flamegraph
+        if: contains(inputs.test_command, 'flamegraph')
+        run: cargo install flamegraph
+
       - name: Run e2e tests
         run: just ${{ inputs.test_command }}
