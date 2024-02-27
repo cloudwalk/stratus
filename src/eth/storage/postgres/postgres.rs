@@ -539,24 +539,20 @@ impl PermanentStorage for Postgres {
             }
         }
 
+        let expected_modified_slots = slot_batch.address.len();
+        let expected_modified_accounts = account_batch.address.len();
+
         let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
 
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_block.sql",
+        let block_result = sqlx::query_file!(
+            "src/eth/storage/postgres/queries/insert_entire_block.sql",
             i64::try_from(block.header.number).context("failed to convert block number")?,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
             BigDecimal::try_from(block.header.gas.clone())?,
             block.header.bloom.as_ref(),
             i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
-            block.header.parent_hash.as_ref()
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert block")?;
-
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_transaction_batch.sql",
+            block.header.parent_hash.as_ref(),
             transaction_batch.hash as _,
             transaction_batch.signer as _,
             transaction_batch.nonce as _,
@@ -573,28 +569,14 @@ impl PermanentStorage for Postgres {
             transaction_batch.r as _,
             transaction_batch.s as _,
             transaction_batch.value as _,
-            &transaction_batch.result
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert transactions")?;
-
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_log_batch.sql",
+            &transaction_batch.result,
             log_batch.address as _,
             log_batch.data as _,
             log_batch.transaction_hash as _,
             log_batch.transaction_index as _,
             log_batch.log_index as _,
             log_batch.block_number as _,
-            log_batch.block_hash as _
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert logs")?;
-
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_topic_batch.sql",
+            log_batch.block_hash as _,
             topic_batch.topic as _,
             topic_batch.transaction_hash as _,
             topic_batch.transaction_index as _,
@@ -602,16 +584,6 @@ impl PermanentStorage for Postgres {
             topic_batch.index as _,
             topic_batch.block_number as _,
             topic_batch.block_hash as _,
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert topics")?;
-
-        let accounts_length = account_batch.address.len();
-
-        // TODO: It might be possible to get the originals without having to peform a subquery
-        let account_result = sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_account_batch.sql",
             account_batch.address as _,
             account_batch.bytecode as _,
             account_batch.new_balance as _,
@@ -619,69 +591,40 @@ impl PermanentStorage for Postgres {
             account_batch.block_number as _,
             account_batch.original_balance as _,
             account_batch.original_nonce as _,
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert accounts")?;
-
-        if account_result.rows_affected() != accounts_length as u64 {
-            tx.rollback().await.context("failed to rollback transaction")?;
-            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account]));
-            return Err(error);
-        }
-
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_historical_nonce_batch.sql",
-            historical_nonce_batch.address as _,
-            historical_nonce_batch.nonce as _,
-            historical_nonce_batch.block_number as _
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert historical nonce")?;
-
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_historical_balance_batch.sql",
-            historical_balance_batch.address as _,
-            historical_balance_batch.balance as _,
-            historical_balance_batch.block_number as _
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert historical balance")?;
-
-        let slots_length = slot_batch.index.len();
-
-        // TODO: It might be possible to get the originals without having to peform a subquery
-        let slot_result = sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_slot_batch.sql",
             slot_batch.index as _,
             slot_batch.value as _,
             slot_batch.address as _,
             slot_batch.block_number as _,
-            slot_batch.original_value as _
-        )
-        .execute(&mut *tx)
-        .await
-        .context("failed to insert accounts")?;
-
-        if slot_result.rows_affected() != slots_length as u64 {
-            let _a = slot_result.rows_affected();
-            tx.rollback().await.context("failed to rollback transaction")?;
-            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot]));
-            return Err(error);
-        }
-
-        sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_historical_slot_batch.sql",
+            slot_batch.original_value as _,
+            historical_nonce_batch.address as _,
+            historical_nonce_batch.nonce as _,
+            historical_nonce_batch.block_number as _,
+            historical_balance_batch.address as _,
+            historical_balance_batch.balance as _,
+            historical_balance_batch.block_number as _,
             historical_slot_batch.index as _,
             historical_slot_batch.value as _,
             historical_slot_batch.address as _,
             historical_slot_batch.block_number as _
         )
-        .execute(&mut *tx)
+        .fetch_one(&mut *tx)
         .await
-        .context("failed to insert historical balance")?;
+        .context("failed to insert block")?;
+
+        let modified_accounts = block_result.modified_accounts.unwrap_or_default() as usize;
+        let modified_slots = block_result.modified_slots.unwrap_or_default() as usize;
+
+        if modified_accounts != expected_modified_accounts {
+            tx.rollback().await.context("failed to rollback transaction")?;
+            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account]));
+            return Err(error);
+        }
+
+        if modified_slots != expected_modified_slots {
+            tx.rollback().await.context("failed to rollback transaction")?;
+            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot]));
+            return Err(error);
+        }
 
         tx.commit().await.context("failed to commit transaction")?;
 
