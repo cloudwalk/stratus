@@ -9,7 +9,7 @@ on:
 jobs:
   e2e-stratus:
     name: E2E Stratus flamegraph
-    uses: ./.github/workflows/_setup-e2e.yml
+    uses: ./.github/workflows/_setup-e2e2.yml
     with:
       test_command: 'e2e-flamegraph'
 
