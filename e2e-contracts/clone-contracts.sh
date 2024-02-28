@@ -43,7 +43,7 @@ clone() {
 log "Cloning or updating repositories"
 clone brlc-multisig       918a226
 clone brlc-periphery      b8d507a
-clone brlc-token          55770b9
+clone brlc-token          86d5d4f
 clone compound-periphery  e4d68df
 clone brlc-yield-streamer e63d8ba
 clone brlc-pix-cashier    00cc007
