@@ -2,7 +2,6 @@
 
 use serde_json::Value as JsonValue;
 use sqlx::types::BigDecimal;
-use sqlx::Row;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
@@ -18,10 +17,10 @@ use stratus::log_and_err;
 
 // Blocks
 
-pub async fn pg_retrieve_max_downloaded_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
-    tracing::debug!(%start, %end, "retrieving max downloaded block");
+pub async fn pg_retrieve_max_external_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
+    tracing::debug!(%start, %end, "retrieving max external block");
 
-    let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_downloaded_block_in_range.sql", start.as_i64(), end.as_i64())
+    let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_external_block_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_one(&pg.connection_pool)
         .await;
 
@@ -32,45 +31,10 @@ pub async fn pg_retrieve_max_downloaded_block(pg: &Postgres, start: BlockNumber,
     }
 }
 
-pub async fn pg_retrieve_max_imported_block(pg: &Postgres) -> anyhow::Result<Option<BlockNumber>> {
-    tracing::debug!("retrieving max imported block");
-
-    let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_imported_block.sql")
-        .fetch_one(&pg.connection_pool)
-        .await;
-
-    let block_number: i64 = match result {
-        Ok(Some(max)) => max,
-        Ok(None) => return Ok(None),
-        Err(e) => return log_and_err!(reason = e, "failed to retrieve max block number"),
-    };
-
-    Ok(Some(block_number.into()))
-}
-
-pub async fn pg_init_blocks_cursor(pg: &Postgres) -> anyhow::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
-    let start = match pg_retrieve_max_imported_block(pg).await? {
-        Some(number) => number.next(),
-        None => BlockNumber::ZERO,
-    };
-    tracing::info!(%start, "initing blocks cursor");
-
-    let mut tx = pg.start_transaction().await?;
-    let result = sqlx::query_file!("src/bin/importer/sql/cursor_declare_downloaded_blocks.sql", start.as_i64())
-        .execute(&mut *tx)
-        .await;
-
-    match result {
-        Ok(_) => Ok(tx),
-        Err(e) => log_and_err!(reason = e, "failed to open postgres cursor"),
-    }
-}
-
-pub async fn pg_fetch_blocks(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> anyhow::Result<Vec<BlockRow>> {
-    tracing::debug!("fetching more blocks");
-
-    let result = sqlx::query_file_scalar!("src/bin/importer/sql/cursor_fetch_downloaded_blocks.sql")
-        .fetch_all(&mut **tx)
+pub async fn pg_retrieve_external_blocks_in_range(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<BlockRow>> {
+    tracing::debug!(%start, %end, "retrieving external blocks in range");
+    let result = sqlx::query_file!("src/bin/importer/sql/select_external_blocks_in_range.sql", start.as_i64(), end.as_i64())
+        .fetch_all(&pg.connection_pool)
         .await;
 
     match result {
@@ -78,23 +42,23 @@ pub async fn pg_fetch_blocks(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> 
             let mut parsed_rows: Vec<BlockRow> = Vec::with_capacity(rows.len());
             for row in rows {
                 let parsed = BlockRow {
-                    number: row.get_unchecked::<'_, i64, usize>(0).into(),
-                    payload: row.get_unchecked::<'_, JsonValue, usize>(1).try_into()?,
+                    number: row.number.into(),
+                    payload: row.payload.try_into()?,
                 };
                 parsed_rows.push(parsed);
             }
             Ok(parsed_rows)
         }
-        Err(e) => log_and_err!(reason = e, "failed to fetch blocks from cursor"),
+        Err(e) => log_and_err!(reason = e, "failed to retrieve external blocks"),
     }
 }
 
 // Receipts
 
-pub async fn pg_retrieve_downloaded_receipts(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ReceiptRow>> {
-    tracing::debug!(%start, %end, "retrieving receipts in range");
+pub async fn pg_retrieve_external_receipts_in_range(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ReceiptRow>> {
+    tracing::debug!(%start, %end, "retrieving external receipts in range");
 
-    let result = sqlx::query_file!("src/bin/importer/sql/select_downloaded_receipts_in_range.sql", start.as_i64(), end.as_i64())
+    let result = sqlx::query_file!("src/bin/importer/sql/select_external_receipts_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_all(&pg.connection_pool)
         .await;
 
@@ -106,7 +70,6 @@ pub async fn pg_retrieve_downloaded_receipts(pg: &Postgres, start: BlockNumber, 
                     block_number: row.block_number.into(),
                     payload: row.payload.try_into()?,
                 };
-
                 parsed_rows.push(parsed);
             }
             Ok(parsed_rows)
@@ -117,23 +80,23 @@ pub async fn pg_retrieve_downloaded_receipts(pg: &Postgres, start: BlockNumber, 
 
 // Balances
 
-pub async fn pg_retrieve_downloaded_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
-    tracing::debug!("retrieving downloaded balances");
+pub async fn pg_retrieve_external_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
+    tracing::debug!("retrieving external balances");
 
-    let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_downloaded_balances.sql")
+    let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_external_balances.sql")
         .fetch_all(&pg.connection_pool)
         .await;
 
     match result {
         Ok(accounts) => Ok(accounts),
-        Err(e) => log_and_err!(reason = e, "failed to retrieve downloaded balances"),
+        Err(e) => log_and_err!(reason = e, "failed to retrieve external balances"),
     }
 }
 
 // -----------------------------------------------------------------------------
 // Inserts
 // -----------------------------------------------------------------------------
-pub async fn pg_insert_balance(pg: &Postgres, address: Address, balance: Wei) -> anyhow::Result<()> {
+pub async fn pg_insert_external_balance(pg: &Postgres, address: Address, balance: Wei) -> anyhow::Result<()> {
     tracing::debug!(%address, %balance, "saving external balance");
 
     let result = sqlx::query_file!(
@@ -150,7 +113,12 @@ pub async fn pg_insert_balance(pg: &Postgres, address: Address, balance: Wei) ->
     }
 }
 
-pub async fn pg_insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()> {
+pub async fn pg_insert_external_block_and_receipts(
+    pg: &Postgres,
+    number: BlockNumber,
+    block: JsonValue,
+    receipts: Vec<(Hash, JsonValue)>,
+) -> anyhow::Result<()> {
     tracing::debug!(?block, ?receipts, "saving external block and receipts");
 
     let mut tx = pg.start_transaction().await?;
