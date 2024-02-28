@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select block_number, payload\nfrom external_receipts\nwhere block_number >= $1 and block_number <= $2;",
+  "query": "select\n    block_number,\n    payload\nfrom external_receipts\nwhere block_number >= $1 and block_number <= $2;",
   "describe": {
     "columns": [
       {
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "86a8b3ca23e91ea82eab7f3902355523ee2b91f53da6a36c6fd8851f0f214975"
+  "hash": "730e617474d8bb7970702970ba162c321c80d3e77c1b364e101ae96f4d42e2f9"
 }
