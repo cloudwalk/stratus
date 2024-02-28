@@ -35,7 +35,7 @@ pub struct BlockNumber(U64);
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());
     pub const ONE: BlockNumber = BlockNumber(U64::one());
-    pub const MAX: BlockNumber = BlockNumber(U64([i64::MAX as u64])); // use i64 to avoid overflow PostgreSQL because it max limit is i64, not u64.
+    pub const MAX: BlockNumber = BlockNumber(U64([i64::MAX as u64])); // use i64 to avoid overflow PostgreSQL because its max limit is i64, not u64.
 
     /// Calculates the keccak256 hash of the block number.
     pub fn hash(&self) -> Hash {
