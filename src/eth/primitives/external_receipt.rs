@@ -1,7 +1,10 @@
+use ethereum_types::U256;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Wei;
+use crate::ext::OptionExt;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
@@ -22,6 +25,13 @@ impl ExternalReceipt {
     /// Returns the block hash.
     pub fn block_hash(&self) -> Hash {
         self.0.block_hash.expect("external receipt must have block hash").into()
+    }
+
+    /// Retuns the effective price the sender had to pay to execute the transaction.
+    pub fn execution_cost(&self) -> Wei {
+        let gas_price = self.0.effective_gas_price.map_into().unwrap_or(U256::zero());
+        let gas_used = self.0.gas_used.map_into().unwrap_or(U256::zero());
+        (gas_price * gas_used).into()
     }
 
     /// Checks if the receipt is for a transaction that was completed successfully.

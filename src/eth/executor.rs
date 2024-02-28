@@ -95,7 +95,10 @@ impl EthExecutor {
 
             // handle execution result
             match execution {
-                Ok(execution) => {
+                Ok(mut execution) => {
+                    // apply execution costs that were not consided when re-executing the transaction
+                    execution.apply_execution_costs(&receipt)?;
+
                     // ensure it matches receipt before saving
                     if let Err(e) = execution.compare_with_receipt(&receipt) {
                         let json_tx = serde_json::to_string(&tx).unwrap();
