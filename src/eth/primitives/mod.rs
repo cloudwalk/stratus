@@ -149,6 +149,7 @@ pub use log_mined::LogMined;
 pub use log_topic::LogTopic;
 pub use nonce::Nonce;
 pub use slot::Slot;
+pub use slot::SlotSample;
 pub use slot::SlotIndex;
 pub use slot::SlotValue;
 pub use storage_point_in_time::StoragePointInTime;

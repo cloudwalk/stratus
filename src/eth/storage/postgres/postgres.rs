@@ -24,6 +24,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::postgres::types::AccountBatch;
@@ -106,10 +107,11 @@ impl PermanentStorage for Postgres {
         let slot_index: [u8; 32] = slot_index.clone().into();
 
         let slot = match point_in_time {
-            StoragePointInTime::Present =>
+            StoragePointInTime::Present => {
                 sqlx::query_file_as!(Slot, "src/eth/storage/postgres/queries/select_slot.sql", address.as_ref(), slot_index.as_ref())
                     .fetch_optional(&self.connection_pool)
-                    .await?,
+                    .await?
+            }
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_as!(
@@ -715,6 +717,18 @@ impl PermanentStorage for Postgres {
 
         Ok(())
     }
+
+    async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: Option<u64>) -> anyhow::Result<Vec<SlotSample>> {
+        let seed = seed.unwrap_or(1);
+        let slots_sample = sqlx::query_as::<_, SlotSample>(include_str!("queries/select_random_slot_sample.sql"))
+            .bind(seed as i64)
+            .bind(start)
+            .bind(end)
+            .bind(max_samples as i64)
+            .fetch_all(&self.connection_pool)
+            .await?;
+        Ok(slots_sample)
+    }
 }
 
 fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<TransactionHash, Vec<PostgresLog>> {
@@ -733,12 +747,13 @@ fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<
     let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
         match partitions.get_mut(&topic.transaction_hash) {
-            Some(transaction_logs) =>
+            Some(transaction_logs) => {
                 if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
                     part.push(topic);
                 } else {
                     transaction_logs.insert(topic.log_idx, vec![topic]);
-                },
+                }
+            }
             None => {
                 partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
             }

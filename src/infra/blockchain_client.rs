@@ -8,6 +8,9 @@ use serde_json::Value as JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotValue;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 use crate::log_and_err;
 
@@ -74,6 +77,24 @@ impl BlockchainClient {
 
         match result {
             Ok(receipt) => Ok(receipt),
+            Err(e) => log_and_err!(reason = e, "failed to retrieve account balance"),
+        }
+    }
+
+    /// Retrieves a slot at some block.
+    pub async fn get_storage_at(&self, address: &Address, index: &SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<SlotValue> {
+        tracing::debug!(%address, ?point_in_time, "retrieving account balance");
+
+        let address = serde_json::to_value(address)?;
+        let index = serde_json::to_value(index)?;
+        let number = match point_in_time {
+            StoragePointInTime::Present => serde_json::to_value("latest")?,
+            StoragePointInTime::Past(number) => serde_json::to_value(number)?
+        };
+        let result = self.http.request::<SlotValue, Vec<JsonValue>>("eth_getStorageAt", vec![address, index, number]).await;
+
+        match result {
+            Ok(value) => Ok(value),
             Err(e) => log_and_err!(reason = e, "failed to retrieve account balance"),
         }
     }

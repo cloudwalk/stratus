@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
@@ -13,7 +14,9 @@ use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::Wei;
+use stratus::eth::storage::StratusStorage;
 use stratus::infra::postgres::Postgres;
+use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use stratus::log_and_err;
 use tokio::sync::mpsc;
@@ -21,6 +24,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Number of tasks in backlog: (BACKLOG_SIZE * BacklogTask)
 const BACKLOG_SIZE: usize = 10;
+const RPC_TIMEOUT: Duration = Duration::from_secs(2);
 type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 
 #[tokio::main(flavor = "current_thread")]
@@ -45,6 +49,14 @@ async fn main() -> anyhow::Result<()> {
 
     // load blocks and receipts in background
     tokio::spawn(keep_loading_blocks(pg, cancellation.clone(), backlog_tx.clone()));
+    if config.validate_state {
+        tokio::spawn(keep_comparing_state(
+            Arc::clone(&storage),
+            config.external_rpc,
+            config.max_samples,
+            BlockNumber::from(config.comparison_period),
+        ));
+    }
 
     // import blocks and transactions in foreground
     let reason = loop {
@@ -73,6 +85,43 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn keep_comparing_state(storage: Arc<StratusStorage>, external_rpc: String, max_sample_size: u64, compare_after: BlockNumber) -> anyhow::Result<()> {
+    let chain = BlockchainClient::new(&external_rpc, RPC_TIMEOUT)?;
+    let mut latest_compared_block = storage.read_current_block_number().await?;
+    loop {
+        let current_imported_block = storage.read_current_block_number().await?;
+        if current_imported_block - latest_compared_block >= compare_after {
+            compare_state(&chain, Arc::clone(&storage), latest_compared_block, current_imported_block, max_sample_size).await?;
+            latest_compared_block = current_imported_block;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+async fn compare_state(
+    chain: &BlockchainClient,
+    storage: Arc<StratusStorage>,
+    start: BlockNumber,
+    end: BlockNumber,
+    max_sample_size: u64,
+) -> anyhow::Result<()> {
+    let slots = storage.get_slots_sample(start, end, max_sample_size, Some(1)).await?;
+    for sampled_slot in slots {
+        if chain
+            .get_storage_at(
+                &sampled_slot.address,
+                &sampled_slot.slot.index,
+                stratus::eth::primitives::StoragePointInTime::Past(sampled_slot.block_number),
+            )
+            .await?
+            != sampled_slot.slot.value
+        {
+            return Err(anyhow::anyhow!("State mismatch on slot {:?}", sampled_slot));
+        }
+    }
+    Ok(())
+}
+
 // -----------------------------------------------------------------------------
 // Postgres block loader
 // -----------------------------------------------------------------------------
@@ -93,13 +142,13 @@ async fn keep_loading_blocks(
         // find blocks
         tracing::info!("retrieving more blocks to process");
         let blocks = match db_fetch_blocks(&mut tx).await {
-            Ok(blocks) =>
+            Ok(blocks) => {
                 if blocks.is_empty() {
                     cancellation.cancel();
                     break "no more blocks to process";
-                } else {
-                    blocks
-                },
+                }
+                blocks
+            }
             Err(_) => {
                 cancellation.cancel();
                 break "error loading blocks";

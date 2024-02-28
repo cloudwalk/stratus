@@ -71,6 +71,18 @@ pub struct ImporterImportConfig {
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
+
+    #[arg(short = 'v', long = "validate-state", env = "VALIDATE-STATE", default_value_t = false, requires = "external_rpc")]
+    pub validate_state: bool,
+
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", requires = "validate_state")]
+    pub external_rpc: String,
+
+    #[arg(short = 'm', long = "max-samples", env = "MAX_SAMPLES", default_value_t = 1000, requires = "validate_state")]
+    pub max_samples: u64,
+
+    #[arg(short = 'p', long = "comparison-period", env = "COMPARISON_PERIOD", default_value_t = 1000, requires = "validate_state")]
+    pub comparison_period: u64,
 }
 
 /// Configuration for rpc-poller binary.
