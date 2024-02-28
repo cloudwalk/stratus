@@ -49,6 +49,8 @@ async fn main() -> anyhow::Result<()> {
 
     // load blocks and receipts in background
     tokio::spawn(keep_loading_blocks(pg, cancellation.clone(), backlog_tx.clone()));
+
+    // validate state in background
     if config.validate_state {
         tokio::spawn(keep_validating_state(
             Arc::clone(&storage),
@@ -91,7 +93,11 @@ async fn keep_validating_state(storage: Arc<StratusStorage>, external_rpc: Strin
     loop {
         let current_imported_block = storage.read_current_block_number().await?;
         if current_imported_block - latest_compared_block >= compare_after {
-            validate_state(&chain, Arc::clone(&storage), latest_compared_block, current_imported_block, max_sample_size).await?;
+            let result = validate_state(&chain, Arc::clone(&storage), latest_compared_block, current_imported_block, max_sample_size)
+                .await;
+            if let Err(err) = result {
+                panic!("{}", err.to_string());
+            }
             latest_compared_block = current_imported_block;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -107,16 +113,20 @@ async fn validate_state(
 ) -> anyhow::Result<()> {
     let slots = storage.get_slots_sample(start, end, max_sample_size, Some(1)).await?;
     for sampled_slot in slots {
-        if chain
+        let expected_value = chain
             .get_storage_at(
                 &sampled_slot.address,
                 &sampled_slot.slot.index,
                 stratus::eth::primitives::StoragePointInTime::Past(sampled_slot.block_number),
             )
-            .await?
-            != sampled_slot.slot.value
-        {
-            return Err(anyhow::anyhow!("State mismatch on slot {:?}", sampled_slot));
+            .await?;
+        if sampled_slot.slot.value != expected_value {
+            return Err(anyhow::anyhow!(
+                "State mismatch on slot {:?}, expected: {:?}, found: {:?}",
+                sampled_slot,
+                expected_value,
+                sampled_slot.slot.value
+            ));
         }
     }
     Ok(())
