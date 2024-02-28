@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     // load blocks and receipts in background
     tokio::spawn(keep_loading_blocks(pg, cancellation.clone(), backlog_tx.clone()));
     if config.validate_state {
-        tokio::spawn(keep_comparing_state(
+        tokio::spawn(keep_validating_state(
             Arc::clone(&storage),
             config.external_rpc,
             config.max_samples,
@@ -85,20 +85,20 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn keep_comparing_state(storage: Arc<StratusStorage>, external_rpc: String, max_sample_size: u64, compare_after: BlockNumber) -> anyhow::Result<()> {
+async fn keep_validating_state(storage: Arc<StratusStorage>, external_rpc: String, max_sample_size: u64, compare_after: BlockNumber) -> anyhow::Result<()> {
     let chain = BlockchainClient::new(&external_rpc, RPC_TIMEOUT)?;
     let mut latest_compared_block = storage.read_current_block_number().await?;
     loop {
         let current_imported_block = storage.read_current_block_number().await?;
         if current_imported_block - latest_compared_block >= compare_after {
-            compare_state(&chain, Arc::clone(&storage), latest_compared_block, current_imported_block, max_sample_size).await?;
+            validate_state(&chain, Arc::clone(&storage), latest_compared_block, current_imported_block, max_sample_size).await?;
             latest_compared_block = current_imported_block;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
-async fn compare_state(
+async fn validate_state(
     chain: &BlockchainClient,
     storage: Arc<StratusStorage>,
     start: BlockNumber,
