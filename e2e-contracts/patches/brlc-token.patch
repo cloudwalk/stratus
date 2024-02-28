@@ -1,5 +1,5 @@
 diff --git a/test/base/CWToken.complex.test.ts b/test/base/CWToken.complex.test.ts
-index 267986e..1ce7e46 100644
+index 267986e..1ef6e0e 100644
 --- a/test/base/CWToken.complex.test.ts
 +++ b/test/base/CWToken.complex.test.ts
 @@ -55,6 +55,21 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
@@ -33,11 +33,13 @@ index 267986e..1ce7e46 100644
      const { token, amounts } = props;
      if (amounts.mint > 0) {
        await proveTx(token.connect(deployer).mint(user.address, amounts.mint));
-@@ -272,14 +287,14 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -271,15 +286,15 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+ 
    describe("Frozen and premint balances", async () => {
      let timestamp: number;
-     before(async () => {
+-    before(async () => {
 -      timestamp = (await time.latest()) + 100;
++    beforeEach(async () => {
 +      timestamp = (await latest()) + 100;
      });
      it("Transfer to purpose account - test 5 with release awaiting", async () => {
@@ -131,11 +133,13 @@ index 267986e..1ce7e46 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -504,14 +519,14 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -503,15 +518,15 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+ 
    describe("Premint and restricted balances", async () => {
      let timestamp: number;
-     before(async () => {
+-    before(async () => {
 -      timestamp = (await time.latest()) + 100;
++    beforeEach(async () => {
 +      timestamp = (await latest()) + 100;
      });
      it("Transfer to purpose account - test 5 with release awaiting", async () => {
@@ -229,11 +233,13 @@ index 267986e..1ce7e46 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -768,7 +783,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -767,8 +782,8 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+ 
    describe("Frozen, restricted and premint balances", async () => {
      let timestamp: number;
-     before(async () => {
+-    before(async () => {
 -      timestamp = (await time.latest()) + 100;
++    beforeEach(async () => {
 +      timestamp = (await latest()) + 100;
      });
      it("Transfer to purpose account - test 5 with release awaiting", async () => {
@@ -328,11 +334,13 @@ index 267986e..1ce7e46 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -1298,12 +1313,12 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1297,13 +1312,13 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+ 
    describe("Premint balance only, no frozen balance or restricted balance", async () => {
      let timestamp: number;
-     before(async () => {
+-    before(async () => {
 -      timestamp = await time.latest() + 100;
++    beforeEach(async () => {
 +      timestamp = await latest() + 100;
      });
      it("Transfer to purpose account with release awaiting - test 5", async () => {
