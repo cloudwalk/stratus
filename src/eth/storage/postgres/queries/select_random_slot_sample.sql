@@ -1,8 +1,8 @@
 SELECT
-    idx as "index: _",
-    value as "value: _",
-    account_address as "address: _",
-    block_number as "block_number: _"
+    idx as "index!: _",
+    value as "value!: _",
+    account_address as "address!: _",
+    block_number as "block_number!: _"
 FROM
     (SELECT
         setseed($1),
