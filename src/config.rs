@@ -111,6 +111,10 @@ pub struct StateValidatorConfig {
     /// What method to use when validating.
     #[arg(short = 'm', long = "method", env = "METHOD")]
     pub method: ValidatorMethodConfig,
+
+    /// How many concurrent validation tasks to run
+    #[arg(short = 'c', long = "concurrent-tasks", env = "CONCURRENT_TASKS", default_value_t = 10)]
+    pub concurrent_tasks: u16,
 }
 
 /// Common configuration that can be used by any binary.

@@ -7,10 +7,11 @@ use stratus::eth::primitives::BlockNumber;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
+use tokio::task::JoinSet;
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(2);
 
-#[tokio::main()]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: StateValidatorConfig = init_global_services();
@@ -20,29 +21,33 @@ async fn main() -> anyhow::Result<()> {
     let interval = BlockNumber::from(config.interval);
 
     let mut latest_compared_block = BlockNumber::ZERO;
+
+    let mut futures = JoinSet::new();
     loop {
         let current_block = storage.read_current_block_number().await?;
-        if current_block - latest_compared_block >= interval {
-            let result = validate_state(
-                &config.method,
+        if current_block - latest_compared_block >= interval && futures.len() < config.concurrent_tasks as usize {
+            let future = validate_state(
+                config.method.clone(),
                 Arc::clone(&storage),
                 latest_compared_block,
                 latest_compared_block + interval,
                 config.sample_size,
                 config.seed,
-            )
-            .await;
-            if let Err(err) = result {
-                panic!("{}", err);
-            }
+            );
+
+            futures.spawn(future);
+
             latest_compared_block = latest_compared_block + interval;
+        } else {
+            if let Some(res) = futures.join_next().await {
+                res??
+            }
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
 async fn validate_state(
-    method: &ValidatorMethodConfig,
+    method: ValidatorMethodConfig,
     storage: Arc<StratusStorage>,
     start: BlockNumber,
     end: BlockNumber,
@@ -51,7 +56,7 @@ async fn validate_state(
 ) -> anyhow::Result<()> {
     match method {
         ValidatorMethodConfig::Rpc { url } => {
-            let chain = BlockchainClient::new(url, RPC_TIMEOUT)?;
+            let chain = BlockchainClient::new(&url, RPC_TIMEOUT)?;
             validate_state_rpc(&chain, storage, start, end, max_sample_size, seed).await
         }
         _ => todo!(),
@@ -66,7 +71,7 @@ async fn validate_state_rpc(
     max_sample_size: u64,
     seed: u64,
 ) -> anyhow::Result<()> {
-    println!("Validating state {:?}, {:?}", start, end);
+    tracing::debug!("Validating state {:?}, {:?}", start, end);
     let seed = match seed {
         0 => {
             let mut rng = rand::thread_rng();
@@ -83,6 +88,7 @@ async fn validate_state_rpc(
                 stratus::eth::primitives::StoragePointInTime::Past(sampled_slot.block_number),
             )
             .await?;
+
         if sampled_slot.value != expected_value {
             return Err(anyhow::anyhow!(
                 "State mismatch on slot {:?}, expected value: {:?}, found: {:?}",
