@@ -364,7 +364,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let samples = state
             .accounts
             .iter()
-            .filter(|(_, account_info)| account_info.bytecode.get_current().is_some())
+            .filter(|(_, account_info)| account_info.is_contract())
             .flat_map(|(_, contract)| {
                 contract
                     .slots
@@ -436,5 +436,9 @@ impl InMemoryPermanentAccount {
             }
         }
         self.slots = new_slots;
+    }
+
+    fn is_contract(&self) -> bool {
+        self.bytecode.get_current().is_some()
     }
 }
