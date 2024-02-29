@@ -96,14 +96,21 @@ pub struct StateValidatorConfig {
     #[clap(flatten)]
     pub common: CommonConfig,
 
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", requires = "validate_state")]
-    pub external_rpc: String,
-
+    /// How many slots to validate per batch. 0 means every slot.
     #[arg(short = 'm', long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
     pub sample_size: u64,
 
+    /// Seed to use when sampling. 0 for random seed.
+    #[arg(long = "seed", env = "SEED", default_value_t = 0, requires = "sample_size")]
+    pub seed: u64,
+
+    /// Validate in batches of n blocks.
     #[arg(short = 'i', long = "inverval", env = "INVERVAL", default_value_t = 1000)]
     pub interval: u64,
+
+    /// What method to use when validating.
+    #[arg(long = "method", env = "METHOD")]
+    pub method: ValidatorMethodConfig,
 }
 
 /// Common configuration that can be used by any binary.
@@ -239,6 +246,23 @@ impl FromStr for StorageConfig {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown storage: {}", s)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, strum::Display)]
+pub enum ValidatorMethodConfig {
+    Rpc { url: String },
+    CompareTables
+}
+
+impl FromStr for ValidatorMethodConfig {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "compare_tables" => Ok(Self::CompareTables),
+            s => Ok(Self::Rpc { url: s.to_string() })
         }
     }
 }
