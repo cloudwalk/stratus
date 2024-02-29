@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use crate::config::Environment;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
 use crate::eth::EthExecutor;
@@ -18,7 +17,6 @@ pub struct RpcContext {
     pub executor: EthExecutor,
     pub storage: Arc<StratusStorage>,
     pub subs: Arc<RpcSubscriptions>,
-    pub env: Environment,
 }
 
 impl Debug for RpcContext {
@@ -26,7 +24,6 @@ impl Debug for RpcContext {
         f.debug_struct("RpcContext")
             .field("chain_id", &self.chain_id)
             .field("client_version", &self.client_version)
-            .field("environment", &self.env)
             .field("gas_price", &self.gas_price)
             .finish_non_exhaustive()
     }
