@@ -52,7 +52,7 @@ pub struct ImporterDownloadConfig {
     #[arg(long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
 
-    /// Number of parallel block downloads.
+    /// Number of parallel downloads.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
 
@@ -67,6 +67,10 @@ pub struct ImporterImportConfig {
     /// Postgres connection URL.
     #[arg(short = 'd', long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
+
+    /// Number of parallel database fetches.
+    #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
+    pub paralellism: usize,
 
     #[deref]
     #[clap(flatten)]

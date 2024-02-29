@@ -1,19 +1,19 @@
+mod _postgres;
+
 use std::cmp::min;
 use std::sync::Arc;
 use std::time::Duration;
 
+use _postgres::*;
 use anyhow::anyhow;
 use anyhow::Context;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use itertools::Itertools;
-use serde_json::Value as JsonValue;
-use sqlx::types::BigDecimal;
 use stratus::config::ImporterDownloadConfig;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
-use stratus::eth::primitives::Wei;
 use stratus::ext::not;
 use stratus::infra::postgres::Postgres;
 use stratus::infra::BlockchainClient;
@@ -48,7 +48,7 @@ async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Ve
     }
 
     // retrieve downloaded balances
-    let downloaded_balances = db_retrieve_balances(pg).await?;
+    let downloaded_balances = pg_retrieve_external_balances(pg).await?;
     let downloaded_balances_addresses = downloaded_balances.iter().map(|balance| &balance.address).collect_vec();
 
     // keep only accounts that must be downloaded
@@ -60,7 +60,7 @@ async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Ve
     // download missing balances
     for address in address_to_download {
         let balance = chain.get_balance(&address, Some(BlockNumber::ZERO)).await?;
-        db_insert_balance(pg, address, balance).await?;
+        pg_insert_external_balance(pg, address, balance).await?;
     }
 
     Ok(())
@@ -95,7 +95,7 @@ async fn download_blocks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, parale
 
 async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
     // calculate current block
-    let mut current = match db_retrieve_max_downloaded_block(&pg, start, end_inclusive).await? {
+    let mut current = match pg_retrieve_max_external_block(&pg, start, end_inclusive).await? {
         Some(number) => number.next(),
         None => start,
     };
@@ -147,7 +147,7 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
             }
 
             // save block and receipts
-            if let Err(e) = db_insert_block_and_receipts(&pg, current, block_json, receipts_json).await {
+            if let Err(e) = pg_insert_external_block_and_receipts(&pg, current, block_json, receipts_json).await {
                 tracing::warn!(reason = ?e, "retrying because failed to save block");
                 continue;
             }
@@ -160,101 +160,7 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
 }
 
 // -----------------------------------------------------------------------------
-// Postgres
-// -----------------------------------------------------------------------------
-
-struct BalanceRow {
-    address: Address,
-    #[allow(dead_code)] // allow it because the SQL returns it, even if it is not used
-    balance: Wei,
-}
-
-async fn db_retrieve_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
-    tracing::debug!("retrieving downloaded balances");
-
-    let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_downloaded_balances.sql")
-        .fetch_all(&pg.connection_pool)
-        .await;
-    match result {
-        Ok(accounts) => Ok(accounts),
-        Err(e) => log_and_err!(reason = e, "failed to retrieve downloaded balances"),
-    }
-}
-
-async fn db_retrieve_max_downloaded_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
-    tracing::debug!(%start, %end, "retrieving max downloaded block");
-
-    let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_downloaded_block_in_range.sql", start.as_i64(), end.as_i64())
-        .fetch_one(&pg.connection_pool)
-        .await;
-    match result {
-        Ok(Some(max)) => Ok(Some(max.into())),
-        Ok(None) => Ok(None),
-        Err(e) => log_and_err!(reason = e, "failed to retrieve max block number"),
-    }
-}
-
-async fn db_insert_balance(pg: &Postgres, address: Address, balance: Wei) -> anyhow::Result<()> {
-    tracing::debug!(%address, %balance, "saving external balance");
-
-    let result = sqlx::query_file!(
-        "src/bin/importer/sql/insert_external_balance.sql",
-        address.as_ref(),
-        TryInto::<BigDecimal>::try_into(balance)?
-    )
-    .execute(&pg.connection_pool)
-    .await;
-
-    match result {
-        Ok(_) => Ok(()),
-        Err(e) => log_and_err!(reason = e, "failed to insert external balance"),
-    }
-}
-
-async fn db_insert_block_and_receipts(pg: &Postgres, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()> {
-    tracing::debug!(?block, ?receipts, "saving external block and receipts");
-
-    let mut tx = pg.start_transaction().await?;
-
-    // insert block
-    let result = sqlx::query_file!("src/bin/importer/sql/insert_external_block.sql", number.as_i64(), block)
-        .execute(&mut *tx)
-        .await;
-
-    match result {
-        Ok(_) => {}
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-            tracing::warn!(reason = ?e, "block unique violation, skipping");
-        }
-        Err(e) => {
-            return log_and_err!(reason = e, "failed to insert block");
-        }
-    }
-
-    // insert receipts
-    for (hash, receipt) in receipts {
-        let result = sqlx::query_file!("src/bin/importer/sql/insert_external_receipt.sql", hash.as_ref(), number.as_i64(), receipt)
-            .execute(&mut *tx)
-            .await;
-
-        match result {
-            Ok(_) => {}
-            Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-                tracing::warn!(reason = ?e, "receipt unique violation, skipping");
-            }
-            Err(e) => {
-                return log_and_err!(reason = e, "failed to insert receipt");
-            }
-        }
-    }
-
-    pg.commit_transaction(tx).await?;
-
-    Ok(())
-}
-
-// -----------------------------------------------------------------------------
-// Minimum RPC structs
+// Blockchain RPC structs
 // -----------------------------------------------------------------------------
 
 #[derive(serde::Deserialize)]
