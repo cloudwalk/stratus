@@ -77,7 +77,7 @@ async fn validate_state_rpc(
         }
         n => n,
     };
-    let slots = storage.get_slots_sample(start, end, max_sample_size, seed).await?;
+    let slots = storage.read_slots_sample(start, end, max_sample_size, seed).await?;
     for sampled_slot in slots {
         let expected_value = chain
             .get_storage_at(

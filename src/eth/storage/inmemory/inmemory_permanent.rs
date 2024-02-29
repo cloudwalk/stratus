@@ -358,7 +358,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
         let state = self.lock_read().await;
 
         let samples = state

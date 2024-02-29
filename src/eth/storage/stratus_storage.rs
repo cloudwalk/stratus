@@ -222,7 +222,7 @@ impl StratusStorage {
         }
     }
 
-    pub async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        self.perm.get_slots_sample(start, end, max_samples, seed).await
+    pub async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        self.perm.read_slots_sample(start, end, max_samples, seed).await
     }
 }

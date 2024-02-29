@@ -717,7 +717,7 @@ impl PermanentStorage for Postgres {
         Ok(())
     }
 
-    async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
         let seed = (seed as f64 / 100.0).fract();
         let max_samples: Option<i64> = match max_samples {
             0 => None,
