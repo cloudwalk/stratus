@@ -46,23 +46,12 @@ metrics! {
     histogram rpc_requests_finished{method, function, success}
 }
 
-// Storage block number metrics
-metrics! {
-    group: storage_block_number,
-
-    "Time to execute storage read_current_block_number operation."
-    histogram storage_read_current_block_number{success},
-
-    "Time to execute storage increment_block_number operation."
-    histogram storage_increment_block_number{success},
-
-    "Time to execute storage set_block_number operation."
-    histogram storage_set_block_number{success}
-}
-
 // Storage reads.
 metrics! {
     group: storage_read,
+
+    "Time to execute storage read_current_block_number operation."
+    histogram storage_read_current_block_number{success},
 
     "Time to execute storage read_account operation."
     histogram storage_read_account{kind, point_in_time, success},
@@ -83,6 +72,12 @@ metrics! {
 // Storage writes.
 metrics! {
     group: storage_write,
+
+    "Time to execute storage increment_block_number operation."
+    histogram storage_increment_block_number{success},
+
+    "Time to execute storage set_block_number operation."
+    histogram storage_set_block_number{success},
 
     "Time to execute storage save_accounts operation."
     histogram storage_save_accounts{success},
@@ -123,6 +118,7 @@ metrics! {
     histogram executor_call{success}
 }
 
+// EVM metrics.
 metrics! {
     group: evm,
 

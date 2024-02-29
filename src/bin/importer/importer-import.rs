@@ -86,9 +86,9 @@ async fn execute_block_importer(
         }
 
         // imports transactions
-        let block_start = blocks.first().unwrap().number;
-        let block_end = blocks.last().unwrap().number;
-        tracing::info!(%block_start, %block_end, receipts = %receipts_by_hash.len(), "importing blocks");
+        let start = blocks.first().unwrap().number;
+        let end = blocks.last().unwrap().number;
+        tracing::info!(%start, %end, receipts = %receipts_by_hash.len(), "importing blocks");
         for block in blocks {
             executor.import_offline(block.payload, &receipts_by_hash).await?;
         }
