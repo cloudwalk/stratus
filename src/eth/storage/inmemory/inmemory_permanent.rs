@@ -7,6 +7,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use metrics::atomics::AtomicU64;
+use rand::rngs::StdRng;
+use rand::seq::IteratorRandom;
+use rand::SeedableRng;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
@@ -356,7 +359,39 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: Option<u64>) -> anyhow::Result<Vec<SlotSample>> {
-        todo!();
+        let state = self.lock_read().await;
+        let contracts: Vec<_> = state
+            .accounts
+            .iter()
+            .filter(|(_, account_info)| account_info.bytecode.get_current().is_some())
+            .collect();
+
+        let sample_per_contract = max_samples / contracts.len() as u64;
+
+        let mut rng = StdRng::seed_from_u64(seed.unwrap_or(0));
+        let mut slot_sample = vec![];
+        for (_, contract_info) in contracts {
+            slot_sample.append(
+                &mut contract_info
+                    .slots
+                    .values()
+                    .flat_map(|slot_history| Vec::from((*slot_history).clone()))
+                    .filter_map(|slot| {
+                        if slot.block_number >= start && slot.block_number < end {
+                            Some(SlotSample {
+                                address: contract_info.address.clone(),
+                                block_number: slot.block_number,
+                                index: slot.value.index,
+                                value: slot.value.value,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .choose_multiple(&mut rng, sample_per_contract as usize),
+            );
+        }
+        Ok(slot_sample)
     }
 }
 
