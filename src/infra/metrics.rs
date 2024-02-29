@@ -30,7 +30,6 @@ pub fn init_metrics() {
     register_metrics_for_evm();
 
     // storage metrics
-    register_metrics_for_storage_block_number();
     register_metrics_for_storage_read();
     register_metrics_for_storage_write();
 }
