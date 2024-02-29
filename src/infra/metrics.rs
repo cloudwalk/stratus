@@ -14,13 +14,26 @@ use crate::metrics;
 use crate::metrics_impl_describe;
 use crate::metrics_impl_fn_inc;
 
+/// Buckets to fit metrics.
+const BUCKETS: [f64; 37] = [
+    0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, // 0.1ms to 0.9ms
+    0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, // 1ms to 9ms
+    0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, // 10ms to 90ms
+    0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, // 100ms to 900ms
+    1.0, // 1s or more
+];
+
 /// Init application global metrics.
 ///
 /// Default configuration runs metrics exporter on port 9000.
 pub fn init_metrics() {
     tracing::info!("starting metrics");
 
-    PrometheusBuilder::new().install().expect("failed to start metrics");
+    PrometheusBuilder::new()
+        .set_buckets(&BUCKETS)
+        .unwrap()
+        .install()
+        .expect("failed to start metrics");
 
     // api metrics
     register_metrics_for_json_rpc();
@@ -30,7 +43,6 @@ pub fn init_metrics() {
     register_metrics_for_evm();
 
     // storage metrics
-    register_metrics_for_storage_block_number();
     register_metrics_for_storage_read();
     register_metrics_for_storage_write();
 }
@@ -46,23 +58,12 @@ metrics! {
     histogram rpc_requests_finished{method, function, success}
 }
 
-// Storage block number metrics
-metrics! {
-    group: storage_block_number,
-
-    "Time to execute storage read_current_block_number operation."
-    histogram storage_read_current_block_number{success},
-
-    "Time to execute storage increment_block_number operation."
-    histogram storage_increment_block_number{success},
-
-    "Time to execute storage set_block_number operation."
-    histogram storage_set_block_number{success}
-}
-
 // Storage reads.
 metrics! {
     group: storage_read,
+
+    "Time to execute storage read_current_block_number operation."
+    histogram storage_read_current_block_number{success},
 
     "Time to execute storage read_account operation."
     histogram storage_read_account{kind, point_in_time, success},
@@ -83,6 +84,12 @@ metrics! {
 // Storage writes.
 metrics! {
     group: storage_write,
+
+    "Time to execute storage increment_block_number operation."
+    histogram storage_increment_block_number{success},
+
+    "Time to execute storage set_block_number operation."
+    histogram storage_set_block_number{success},
 
     "Time to execute storage save_accounts operation."
     histogram storage_save_accounts{success},
