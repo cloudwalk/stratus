@@ -48,7 +48,7 @@ async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Ve
     }
 
     // retrieve downloaded balances
-    let downloaded_balances = pg_retrieve_downloaded_balances(pg).await?;
+    let downloaded_balances = pg_retrieve_external_balances(pg).await?;
     let downloaded_balances_addresses = downloaded_balances.iter().map(|balance| &balance.address).collect_vec();
 
     // keep only accounts that must be downloaded
@@ -60,7 +60,7 @@ async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Ve
     // download missing balances
     for address in address_to_download {
         let balance = chain.get_balance(&address, Some(BlockNumber::ZERO)).await?;
-        pg_insert_balance(pg, address, balance).await?;
+        pg_insert_external_balance(pg, address, balance).await?;
     }
 
     Ok(())
@@ -95,7 +95,7 @@ async fn download_blocks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, parale
 
 async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
     // calculate current block
-    let mut current = match pg_retrieve_max_downloaded_block(&pg, start, end_inclusive).await? {
+    let mut current = match pg_retrieve_max_external_block(&pg, start, end_inclusive).await? {
         Some(number) => number.next(),
         None => start,
     };
@@ -147,7 +147,7 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
             }
 
             // save block and receipts
-            if let Err(e) = pg_insert_block_and_receipts(&pg, current, block_json, receipts_json).await {
+            if let Err(e) = pg_insert_external_block_and_receipts(&pg, current, block_json, receipts_json).await {
                 tracing::warn!(reason = ?e, "retrying because failed to save block");
                 continue;
             }
