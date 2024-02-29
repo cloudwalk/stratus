@@ -28,12 +28,12 @@ setup:
 # Stratus: Run main service with debug options
 run *args="":
     #!/bin/bash
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
     exit 0
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --release --bin stratus -- --enable-genesis --enable-test-accounts {{args}}
+    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
 
 run-substrate-mock:
     npm init -y
@@ -85,11 +85,11 @@ update:
 # ------------------------------------------------------------------------------
 # Importer: Download external RPC blocks to temporary storage
 importer-download *args="":
-    cargo run --bin importer-download --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
+    RUST_LOG={{env("RUST_LOG", "importer-download=info,stratus=info")}} cargo run --bin importer-download --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
 importer-import *args="":
-    cargo run --bin importer-import --release -- --postgres {{postgres_url}} {{args}}
+    RUST_LOG={{env("RUST_LOG", "importer-import=info,stratus=info")}} cargo run --bin importer-import   --features dev --release -- --postgres {{postgres_url}} {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
