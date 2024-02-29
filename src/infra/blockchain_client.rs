@@ -89,9 +89,12 @@ impl BlockchainClient {
         let index = serde_json::to_value(index)?;
         let number = match point_in_time {
             StoragePointInTime::Present => serde_json::to_value("latest")?,
-            StoragePointInTime::Past(number) => serde_json::to_value(number)?
+            StoragePointInTime::Past(number) => serde_json::to_value(number)?,
         };
-        let result = self.http.request::<SlotValue, Vec<JsonValue>>("eth_getStorageAt", vec![address, index, number]).await;
+        let result = self
+            .http
+            .request::<SlotValue, Vec<JsonValue>>("eth_getStorageAt", vec![address, index, number])
+            .await;
 
         match result {
             Ok(value) => Ok(value),

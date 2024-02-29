@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rand::Rng;
-use stratus::config::{StateValidatorConfig, ValidatorMethodConfig};
+use stratus::config::StateValidatorConfig;
+use stratus::config::ValidatorMethodConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::BlockchainClient;
@@ -16,7 +17,6 @@ async fn main() -> anyhow::Result<()> {
     // init services
     let config: StateValidatorConfig = init_global_services();
     let storage = config.init_storage().await?;
-
 
     let interval = BlockNumber::from(config.interval);
 
@@ -38,10 +38,8 @@ async fn main() -> anyhow::Result<()> {
             futures.spawn(future);
 
             latest_compared_block = latest_compared_block + interval;
-        } else {
-            if let Some(res) = futures.join_next().await {
-                res??
-            }
+        } else if let Some(res) = futures.join_next().await {
+            res??;
         }
     }
 }
@@ -76,7 +74,7 @@ async fn validate_state_rpc(
         0 => {
             let mut rng = rand::thread_rng();
             rng.gen()
-        },
+        }
         n => n,
     };
     let slots = storage.get_slots_sample(start, end, max_sample_size, seed).await?;

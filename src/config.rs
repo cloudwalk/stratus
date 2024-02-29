@@ -257,7 +257,7 @@ impl FromStr for StorageConfig {
 #[derive(Clone, Debug, strum::Display)]
 pub enum ValidatorMethodConfig {
     Rpc { url: String },
-    CompareTables
+    CompareTables,
 }
 
 impl FromStr for ValidatorMethodConfig {
@@ -266,7 +266,7 @@ impl FromStr for ValidatorMethodConfig {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "compare_tables" => Ok(Self::CompareTables),
-            s => Ok(Self::Rpc { url: s.to_string() })
+            s => Ok(Self::Rpc { url: s.to_string() }),
         }
     }
 }

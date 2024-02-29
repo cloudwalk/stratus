@@ -19,11 +19,9 @@ use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
 use sqlx::Decode;
 
-use crate::gen_newtype_from;
-use crate::eth::primitives::BlockNumber;
-
 use super::Address;
-
+use crate::eth::primitives::BlockNumber;
+use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
@@ -212,5 +210,5 @@ pub struct SlotSample {
     pub address: Address,
     pub block_number: BlockNumber,
     pub index: SlotIndex,
-    pub value: SlotValue
+    pub value: SlotValue,
 }
