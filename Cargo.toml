@@ -94,6 +94,10 @@ path = "src/bin/importer/importer-import.rs"
 name = "rpc-server-poller"
 path = "src/bin/rpc_server_poller.rs"
 
+[[bin]]
+name = "state-validator"
+path = "src/bin/importer/state-validator.rs"
+
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------

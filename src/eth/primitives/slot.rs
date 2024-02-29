@@ -25,7 +25,7 @@ use crate::eth::primitives::BlockNumber;
 use super::Address;
 
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
     pub index: SlotIndex,
     pub value: SlotValue,
@@ -207,10 +207,10 @@ impl PgHasArrayType for SlotValue {
     }
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, sqlx::Decode)]
 pub struct SlotSample {
     pub address: Address,
     pub block_number: BlockNumber,
-    #[sqlx(flatten)]
-    pub slot: Slot
+    pub index: SlotIndex,
+    pub value: SlotValue
 }

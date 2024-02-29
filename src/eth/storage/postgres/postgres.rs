@@ -720,14 +720,18 @@ impl PermanentStorage for Postgres {
 
     async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: Option<u64>) -> anyhow::Result<Vec<SlotSample>> {
         let seed = seed.unwrap_or(1);
-        let slots_sample = sqlx::query_as::<_, SlotSample>(include_str!("queries/select_random_slot_sample.sql"))
-            .bind(seed as i64)
-            .bind(start)
-            .bind(end)
-            .bind(max_samples as i64)
-            .fetch_all(&self.connection_pool)
-            .await?;
-        Ok(slots_sample)
+        let slots_sample_rows = sqlx::query_file_as!(
+            SlotSample,
+            "src/eth/storage/postgres/queries/select_random_slot_sample.sql",
+            seed as i64,
+            start as _,
+            end as _,
+            max_samples as i64
+        )
+        .fetch_all(&self.connection_pool)
+        .await?;
+
+        Ok(slots_sample_rows)
     }
 }
 
