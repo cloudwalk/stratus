@@ -97,7 +97,7 @@ pub struct StateValidatorConfig {
     pub common: CommonConfig,
 
     /// How many slots to validate per batch. 0 means every slot.
-    #[arg(short = 'm', long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
+    #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
     pub sample_size: u64,
 
     /// Seed to use when sampling. 0 for random seed.
@@ -109,7 +109,7 @@ pub struct StateValidatorConfig {
     pub interval: u64,
 
     /// What method to use when validating.
-    #[arg(long = "method", env = "METHOD")]
+    #[arg(short = 'm', long = "method", env = "METHOD")]
     pub method: ValidatorMethodConfig,
 }
 

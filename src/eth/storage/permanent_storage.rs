@@ -53,5 +53,5 @@ pub trait PermanentStorage: Send + Sync {
     /// Resets all state to a specific block number.
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
 
-    async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: Option<u64>) -> anyhow::Result<Vec<SlotSample>>;
+    async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
 }

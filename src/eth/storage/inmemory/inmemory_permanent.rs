@@ -358,12 +358,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: Option<u64>) -> anyhow::Result<Vec<SlotSample>> {
-        let mut rng = StdRng::seed_from_u64(seed.unwrap_or(0));
+    async fn get_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        let state = self.lock_read().await;
 
-        let samples = self
-            .lock_read()
-            .await
+        let samples = state
             .accounts
             .iter()
             .filter(|(_, account_info)| account_info.bytecode.get_current().is_some())
@@ -384,10 +382,15 @@ impl PermanentStorage for InMemoryPermanentStorage {
                             None
                         }
                     })
-            })
-            .choose_multiple(&mut rng, max_samples as usize);
+            });
 
-        Ok(samples)
+        match max_samples {
+            0 => Ok(samples.collect()),
+            n => {
+                let mut rng = StdRng::seed_from_u64(seed);
+                Ok(samples.choose_multiple(&mut rng, n as usize))
+            }
+        }
     }
 }
 
