@@ -8,3 +8,4 @@ scrape_configs:
     static_configs:
       - targets:
         - host.docker.internal:9000
+        - 192.168.0.14:9000

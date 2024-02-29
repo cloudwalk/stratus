@@ -104,7 +104,7 @@ metrics! {
     histogram storage_reset{kind, success},
 
     "Time to execute storage commit operation."
-    histogram storage_commit{success}
+    histogram storage_commit{size_by_tx, size_by_gas, success}
 }
 
 // Execution metrics.

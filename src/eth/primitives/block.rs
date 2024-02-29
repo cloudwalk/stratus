@@ -19,6 +19,7 @@ use serde_json::Value as JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockSize;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalTransactionExecution;
@@ -53,6 +54,32 @@ impl Block {
             header: block.into(),
             transactions,
         })
+    }
+
+    /// Calculates block size by the number of transactions.
+    ///
+    /// TODO: statistics must be colleted to determine the ideal way to classify.
+    pub fn size_by_transactions(&self) -> BlockSize {
+        match self.transactions.len() {
+            0 => BlockSize::Empty,
+            1..=5 => BlockSize::Small,
+            6..=10 => BlockSize::Medium,
+            11..=15 => BlockSize::Large,
+            _ => BlockSize::Huge,
+        }
+    }
+
+    /// Calculates block size by consumed gas.
+    ///
+    /// TODO: statistics must be colleted to determine the ideal way to classify.
+    pub fn size_by_gas(&self) -> BlockSize {
+        match self.header.gas.as_u64() {
+            0 => BlockSize::Empty,
+            1..=499_999 => BlockSize::Small,
+            500_000..=999_999 => BlockSize::Medium,
+            1_000_000..=1_999_999 => BlockSize::Large,
+            _ => BlockSize::Huge,
+        }
     }
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
