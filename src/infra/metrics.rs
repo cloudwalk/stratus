@@ -14,13 +14,24 @@ use crate::metrics;
 use crate::metrics_impl_describe;
 use crate::metrics_impl_fn_inc;
 
+/// Buckets in seconds.
+const BUCKETS: [f64; 29] = [
+    //
+    0.0005, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+    0.7, 0.8, 0.9, 1.0,
+];
+
 /// Init application global metrics.
 ///
 /// Default configuration runs metrics exporter on port 9000.
 pub fn init_metrics() {
     tracing::info!("starting metrics");
 
-    PrometheusBuilder::new().install().expect("failed to start metrics");
+    PrometheusBuilder::new()
+        .set_buckets(&BUCKETS)
+        .unwrap()
+        .install()
+        .expect("failed to start metrics");
 
     // api metrics
     register_metrics_for_json_rpc();
