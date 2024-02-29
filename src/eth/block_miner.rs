@@ -41,7 +41,7 @@ impl BlockMiner {
     }
 
     /// Mine one block with no transactions.
-    #[cfg(feature = "evm-mine")]
+    #[cfg(feature = "dev")]
     pub async fn mine_with_no_transactions(&mut self) -> anyhow::Result<Block> {
         let number = self.storage.increment_block_number().await?;
         Ok(Block::new_with_capacity(number, UnixTime::now(), 0))

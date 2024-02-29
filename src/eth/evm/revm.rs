@@ -10,7 +10,6 @@ use std::time::Instant;
 
 use anyhow::anyhow;
 use itertools::Itertools;
-use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
@@ -23,7 +22,6 @@ use revm::primitives::TransactTo;
 use revm::primitives::B256;
 use revm::primitives::U256;
 use revm::Database;
-use revm::Inspector;
 use revm::EVM;
 use tokio::runtime::Handle;
 
@@ -97,10 +95,6 @@ impl Evm for Revm {
         tx.value = input.value.into();
 
         // execute evm
-        #[cfg(debug_assertions)]
-        let evm_result = evm.inspect(RevmInspector {});
-
-        #[cfg(not(debug_assertions))]
         let evm_result = evm.transact();
 
         // parse result and track metrics
@@ -199,32 +193,6 @@ impl Database for RevmDatabaseSession {
 
     fn block_hash(&mut self, _: U256) -> anyhow::Result<B256> {
         todo!()
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Inspector
-// -----------------------------------------------------------------------------
-struct RevmInspector;
-
-impl Inspector<RevmDatabaseSession> for RevmInspector {
-    fn step(&mut self, _interpreter: &mut revm::interpreter::Interpreter, _: &mut revm::EVMData<'_, RevmDatabaseSession>) -> InstructionResult {
-        // let arg1 = unsafe { *interpreter.instruction_pointer.add(1) };
-        // let arg2 = unsafe { *interpreter.instruction_pointer.add(2) };
-        // println!(
-        //     "{:02x} {:<9} {:<4x} {:<4x} {:?}",
-        //     interpreter.current_opcode(),
-        //     opcode::OPCODE_JUMPMAP[interpreter.current_opcode() as usize].unwrap(),
-        //     arg1,
-        //     arg2,
-        //     interpreter.stack.data(),
-        // );
-        // use revm::interpreter::opcode;
-        // match opcode::OPCODE_JUMPMAP[_interpreter.current_opcode() as usize] {
-        //     Some(opcode) => println!("{} ", opcode),
-        //     None => println!("{:#x} ", _interpreter.current_opcode() as usize),
-        // }
-        InstructionResult::Continue
     }
 }
 

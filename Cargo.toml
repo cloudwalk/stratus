@@ -114,7 +114,5 @@ semicolon_if_nothing_returned = "warn"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["tests"]
-tests = ["evm-set-timestamp", "evm-mine"]
-evm-set-timestamp = []
-evm-mine = []
+default = []
+dev = [] # Development features that help debugging and testing.
