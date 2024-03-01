@@ -18,6 +18,7 @@ use jsonrpsee::SubscriptionMessage;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNonce;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Difficulty;
@@ -26,9 +27,6 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::UnixTime;
-
-use crate::eth::primitives::Nonce;
-
 
 /// Special hash used in block mining to indicate no uncle blocks.
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
@@ -55,7 +53,7 @@ pub struct BlockHeader {
     pub size: Size,
     pub state_root: Hash,
     pub total_difficulty: Difficulty,
-    pub nonce: Nonce
+    pub nonce: BlockNonce,
 }
 
 impl BlockHeader {
@@ -79,7 +77,7 @@ impl BlockHeader {
             size: Size::default(),
             state_root: Hash::zero(),
             total_difficulty: Difficulty::default(),
-            nonce: Nonce::default()
+            nonce: BlockNonce::default(),
         }
     }
 }
@@ -104,7 +102,7 @@ impl Dummy<Faker> for BlockHeader {
             size: faker.fake_with_rng(rng),
             state_root: faker.fake_with_rng(rng),
             total_difficulty: faker.fake_with_rng(rng),
-            nonce: faker.fake_with_rng(rng)
+            nonce: faker.fake_with_rng(rng),
         }
     }
 }
@@ -188,7 +186,7 @@ impl From<ExternalBlock> for BlockHeader {
             size: value.size.unwrap_or_default().into(),
             state_root: value.state_root.into(),
             total_difficulty: value.total_difficulty.unwrap_or_default().into(),
-            nonce: value.nonce.unwrap_or_default().into()
+            nonce: value.nonce.unwrap_or_default().into(),
         }
     }
 }

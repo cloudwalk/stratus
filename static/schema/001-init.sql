@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     size NUMERIC NOT NULL CHECK (gas_used >= 0),
     state_root BYTEA NOT NULL CHECK (LENGTH(state_root) = 32),
     total_difficulty NUMERIC NOT NULL CHECK (total_difficulty >= 0),
-    nonce NUMERIC NOT NULL CHECK (nonce >= 0),
+    nonce BYTEA NOT NULL CHECK (LENGTH(nonce) = 8),
     created_at TIMESTAMP NOT NULL,
     PRIMARY KEY (number, hash)
 );
@@ -148,7 +148,7 @@ VALUES (
     505, -- size
     decode('c7cc35e75df400dd94a7f2a4db18729e87dacab31eacc7ab4a26b41fc5e32937', 'hex'), -- state_root
     0, -- total_difficulty
-    0, -- nonce
+    decode('0000000000000000', 'hex'), -- nonce
     current_timestamp -- created_at
 );
 

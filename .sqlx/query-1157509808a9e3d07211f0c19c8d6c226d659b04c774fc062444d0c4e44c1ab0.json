@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n    number as \"number: _\",\n    hash as \"hash: _\",\n    transactions_root as \"transactions_root: _\",\n    gas_limit as \"gas_limit: _\",\n    gas_used as \"gas_used: _\",\n    logs_bloom as \"bloom: _\",\n    timestamp_in_secs as \"timestamp: _\",\n    parent_hash as \"parent_hash: _\",\n    author as \"author: _\",\n    extra_data as \"extra_data: _\",\n    miner as \"miner: _\",\n    difficulty as \"difficulty: _\",\n    receipts_root as \"receipts_root: _\",\n    uncle_hash as \"uncle_hash: _\",\n    size as \"size: _\",\n    state_root as \"state_root: _\",\n    total_difficulty as \"total_difficulty: _\"\nFROM blocks\nWHERE hash = $1\n",
+  "query": "SELECT\n    number as \"number: _\",\n    hash as \"hash: _\",\n    transactions_root as \"transactions_root: _\",\n    gas_limit as \"gas_limit: _\",\n    gas_used as \"gas_used: _\",\n    logs_bloom as \"bloom: _\",\n    timestamp_in_secs as \"timestamp: _\",\n    parent_hash as \"parent_hash: _\",\n    author as \"author: _\",\n    extra_data as \"extra_data: _\",\n    miner as \"miner: _\",\n    difficulty as \"difficulty: _\",\n    receipts_root as \"receipts_root: _\",\n    uncle_hash as \"uncle_hash: _\",\n    size as \"size: _\",\n    state_root as \"state_root: _\",\n    total_difficulty as \"total_difficulty: _\",\n    nonce as \"nonce: _\"\nFROM blocks\nWHERE hash = $1\n",
   "describe": {
     "columns": [
       {
@@ -87,6 +87,11 @@
         "ordinal": 16,
         "name": "total_difficulty: _",
         "type_info": "Numeric"
+      },
+      {
+        "ordinal": 17,
+        "name": "nonce: _",
+        "type_info": "Numeric"
       }
     ],
     "parameters": {
@@ -109,10 +114,11 @@
       false,
       false,
       false,
-      true,
       false,
-      true
+      false,
+      false,
+      false
     ]
   },
-  "hash": "01a8fd8efaa48a554704dce29f9b8009feadd37f186df26d462b9b0d92218cc1"
+  "hash": "1157509808a9e3d07211f0c19c8d6c226d659b04c774fc062444d0c4e44c1ab0"
 }

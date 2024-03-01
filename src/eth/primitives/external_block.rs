@@ -1,16 +1,14 @@
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
 use crate::log_and_err;
-
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Bytes;
-
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
@@ -41,7 +39,6 @@ impl ExternalBlock {
     pub fn extra_data(&mut self) -> Bytes {
         std::mem::take(&mut self.0.extra_data).into()
     }
-
 }
 
 // -----------------------------------------------------------------------------
