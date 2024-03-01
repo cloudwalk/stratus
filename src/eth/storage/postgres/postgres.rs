@@ -24,6 +24,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::postgres::types::AccountBatch;
@@ -714,6 +715,27 @@ impl PermanentStorage for Postgres {
             .await?;
 
         Ok(())
+    }
+
+    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        let seed = (seed as f64 / 100.0).fract();
+        let max_samples: Option<i64> = match max_samples {
+            0 => None,
+            n => Some(n as i64),
+        };
+
+        let slots_sample_rows = sqlx::query_file_as!(
+            SlotSample,
+            "src/eth/storage/postgres/queries/select_random_slot_sample.sql",
+            seed,
+            start as _,
+            end as _,
+            max_samples
+        )
+        .fetch_all(&self.connection_pool)
+        .await?;
+
+        Ok(slots_sample_rows)
     }
 }
 

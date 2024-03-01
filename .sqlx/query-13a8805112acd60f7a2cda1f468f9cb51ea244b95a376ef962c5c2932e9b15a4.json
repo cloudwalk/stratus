@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n    idx as \"index!: _\",\n    value as \"value!: _\",\n    account_address as \"address!: _\",\n    block_number as \"block_number!: _\"\nFROM\n    (SELECT\n        setseed($1),\n        null as \"idx\",\n        null as \"value\",\n        null as \"account_address\",\n        null as \"block_number\"\n    UNION ALL\n    SELECT\n        null,\n        idx,\n        value,\n        account_address,\n        block_number\n    FROM historical_slots\n    WHERE block_number >= $2 AND block_number < $3\n    OFFSET 1\n    )\nORDER BY random()\nLIMIT $4;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "index!: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "value!: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "address!: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "block_number!: _",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "13a8805112acd60f7a2cda1f468f9cb51ea244b95a376ef962c5c2932e9b15a4"
+}
