@@ -10,7 +10,7 @@ use sqlx::Decode;
 
 use crate::gen_newtype_from;
 
-/// BlockNonce of an Ethereum account (wallet or contract).
+/// The nonce of an Ethereum block.
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct BlockNonce(H64);
 
