@@ -247,14 +247,13 @@ e2e-flamegraph:
     psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
     echo "PostgreSQL is ready."
 
-    if ! netstat -tuln | grep -q ':3003\s'; then
-        echo "Starting substrate mock server..."
-        just run-substrate-mock &
-        echo "Waiting for the substrate mock server to be ready..."
-        wait-service --tcp 0.0.0.0:3003 -t 300 -- echo "Substrate mock server is ready."
-    else
-        echo "Port 3003 is already in use."
-    fi
+    # Start the substrate mock server in the background
+    echo "Starting substrate mock server..."
+    killport 3003
+    just run-substrate-mock &
+    echo "Waiting for the substrate mock server to be ready..." &
+    wait-service --tcp 0.0.0.0:3003 -t 300 -- echo
+    echo "Substrate mock server is ready."
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph..."
