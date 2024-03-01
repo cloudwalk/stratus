@@ -47,13 +47,13 @@ pub struct BlockHeader {
     pub author: Address,
     pub extra_data: Bytes,
     pub miner: Address,
-    pub difficulty: Difficulty,
+    pub difficulty: Difficulty, // is always 0x0
     pub receipts_root: Hash,
-    pub uncle_hash: Hash,
+    pub uncle_hash: Hash, // is always 0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347
     pub size: Size,
     pub state_root: Hash,
-    pub total_difficulty: Difficulty,
-    pub nonce: BlockNonce,
+    pub total_difficulty: Difficulty, // is always 0x0
+    pub nonce: BlockNonce, // is always 0x0000000000000000
 }
 
 impl BlockHeader {
