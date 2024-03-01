@@ -53,7 +53,7 @@ pub struct BlockHeader {
     pub size: Size,
     pub state_root: Hash,
     pub total_difficulty: Difficulty, // is always 0x0
-    pub nonce: BlockNonce, // is always 0x0000000000000000
+    pub nonce: BlockNonce,            // is always 0x0000000000000000
 }
 
 impl BlockHeader {
