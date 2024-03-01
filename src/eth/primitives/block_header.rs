@@ -32,7 +32,7 @@ use crate::eth::primitives::UnixTime;
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
 
 /// Special hash used in block mining to indicate no transaction root and no receipts root.
-const HASH_EMPTY_TRIE_HASH: Hash = Hash::new(hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"));
+const HASH_EMPTY_TRIE: Hash = Hash::new(hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"));
 
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -63,7 +63,7 @@ impl BlockHeader {
         Self {
             number,
             hash: number.hash(),
-            transactions_root: HASH_EMPTY_TRIE_HASH,
+            transactions_root: HASH_EMPTY_TRIE,
             gas_used: Gas::ZERO,
             gas_limit: Gas::ZERO,
             bloom: LogsBloom::default(),
@@ -73,10 +73,10 @@ impl BlockHeader {
             extra_data: Bytes::default(),
             miner: Address::default(),
             difficulty: Difficulty::default(),
-            receipts_root: HASH_EMPTY_TRIE_HASH,
+            receipts_root: HASH_EMPTY_TRIE,
             uncle_hash: HASH_EMPTY_UNCLES,
             size: Size::default(),
-            state_root: HASH_EMPTY_TRIE_HASH,
+            state_root: HASH_EMPTY_TRIE,
             total_difficulty: Difficulty::default(),
             nonce: BlockNonce::default(),
         }
@@ -145,7 +145,7 @@ where
 
             // transactions
             transactions_root: header.transactions_root.into(),
-            receipts_root: HASH_EMPTY_TRIE_HASH.into(),
+            receipts_root: HASH_EMPTY_TRIE.into(),
 
             // data
             logs_bloom: Some(*header.bloom),
