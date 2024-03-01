@@ -239,6 +239,7 @@ e2e-flamegraph:
     echo "Starting PostgreSQL with Docker Compose..."
     docker-compose down
     docker-compose up -d --force-recreate
+    psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
 
     # Wait for PostgreSQL to be ready
     echo "Waiting for PostgreSQL to be ready..."
@@ -255,7 +256,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph..."
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
 
 
 # ------------------------------------------------------------------------------
