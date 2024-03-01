@@ -10,6 +10,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StorageError;
@@ -51,4 +52,6 @@ pub trait PermanentStorage: Send + Sync {
 
     /// Resets all state to a specific block number.
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
+
+    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
 }

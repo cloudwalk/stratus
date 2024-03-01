@@ -9,14 +9,6 @@
 use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::str::FromStr;
-#[cfg(feature = "evm-set-timestamp")]
-use std::sync::atomic::AtomicI64;
-#[cfg(feature = "evm-set-timestamp")]
-use std::sync::atomic::AtomicU64;
-#[cfg(feature = "evm-set-timestamp")]
-use std::sync::atomic::Ordering::Acquire;
-#[cfg(feature = "evm-set-timestamp")]
-use std::sync::atomic::Ordering::SeqCst;
 
 use chrono::Utc;
 use ethereum_types::U256;
@@ -26,47 +18,23 @@ use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 
-#[cfg(feature = "evm-set-timestamp")]
-pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
-
-#[cfg(feature = "evm-set-timestamp")]
-pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
 
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
 
-    #[cfg(feature = "evm-set-timestamp")]
-    pub fn set_offset(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
-        use crate::log_and_err;
-        let now = Utc::now().timestamp() as u64;
-
-        if *timestamp != 0 && *timestamp < *latest_timestamp {
-            return log_and_err!("timestamp can't be before the latest block");
-        }
-
-        let diff: i64 = if *timestamp == 0 { 0 } else { (*timestamp as i128 - now as i128) as i64 };
-        NEXT_TIMESTAMP.store(*timestamp, SeqCst);
-        TIME_OFFSET.store(diff, SeqCst);
-        Ok(())
-    }
-
-    #[cfg(feature = "evm-set-timestamp")]
+    #[cfg(feature = "dev")]
     pub fn now() -> Self {
-        let offset_time = NEXT_TIMESTAMP.load(Acquire);
-        let time_offset = TIME_OFFSET.load(Acquire);
-        match offset_time {
-            0 => Self((Utc::now().timestamp() as i128 + time_offset as i128) as u64),
-            _ => {
-                let _ = NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(0));
-                Self(offset_time)
-            }
-        }
+        offset::now()
     }
 
-    #[cfg(not(feature = "evm-set-timestamp"))]
+    #[cfg(feature = "dev")]
+    pub fn set_offset(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
+        offset::set(timestamp, latest_timestamp)
+    }
+
+    #[cfg(not(feature = "dev"))]
     pub fn now() -> Self {
         Self(Utc::now().timestamp() as u64)
     }
@@ -154,5 +122,44 @@ impl TryFrom<UnixTime> for i32 {
 
     fn try_from(timestamp: UnixTime) -> Result<i32, TryFromIntError> {
         timestamp.0.try_into()
+    }
+}
+
+#[cfg(feature = "dev")]
+mod offset {
+    use std::sync::atomic::AtomicI64;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering::Acquire;
+    use std::sync::atomic::Ordering::SeqCst;
+
+    use super::*;
+
+    pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
+    pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
+
+    pub fn set(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
+        use crate::log_and_err;
+        let now = Utc::now().timestamp() as u64;
+
+        if *timestamp != 0 && *timestamp < *latest_timestamp {
+            return log_and_err!("timestamp can't be before the latest block");
+        }
+
+        let diff: i64 = if *timestamp == 0 { 0 } else { (*timestamp as i128 - now as i128) as i64 };
+        NEXT_TIMESTAMP.store(*timestamp, SeqCst);
+        TIME_OFFSET.store(diff, SeqCst);
+        Ok(())
+    }
+
+    pub fn now() -> UnixTime {
+        let offset_time = NEXT_TIMESTAMP.load(Acquire);
+        let time_offset = TIME_OFFSET.load(Acquire);
+        match offset_time {
+            0 => UnixTime((Utc::now().timestamp() as i128 + time_offset as i128) as u64),
+            _ => {
+                let _ = NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(0));
+                UnixTime(offset_time)
+            }
+        }
     }
 }

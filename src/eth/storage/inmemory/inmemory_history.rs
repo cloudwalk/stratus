@@ -6,15 +6,15 @@ use nonempty::NonEmpty;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::StoragePointInTime;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
 where
     T: Clone + Debug;
 
 #[derive(Clone, Debug, derive_new::new)]
 pub struct InMemoryHistoryValue<T> {
-    block_number: BlockNumber,
-    value: T,
+    pub block_number: BlockNumber,
+    pub value: T,
 }
 
 impl<T> InMemoryHistory<T>
@@ -69,5 +69,11 @@ where
     /// Returns the most recent value as reference.
     pub fn get_current_ref(&self) -> &T {
         &self.0.last().value
+    }
+}
+
+impl<T: Clone + Debug> From<InMemoryHistory<T>> for Vec<InMemoryHistoryValue<T>> {
+    fn from(value: InMemoryHistory<T>) -> Self {
+        value.0.into()
     }
 }
