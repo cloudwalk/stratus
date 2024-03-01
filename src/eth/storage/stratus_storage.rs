@@ -172,14 +172,14 @@ impl StratusStorage {
         let start = Instant::now();
 
         // compute labels
-        let size_by_tx = block.size_by_transactions();
-        let size_by_gas = block.size_by_gas();
+        let label_size_by_tx = block.label_size_by_transactions();
+        let label_size_by_gas = block.label_size_by_gas();
 
         // save block to permanent storage and clears temporary storage
         let result = self.perm.save_block(block).await;
         self.reset_temp().await?;
 
-        metrics::inc_storage_commit(start.elapsed(), size_by_tx, size_by_gas, result.is_ok());
+        metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
         result
     }
 

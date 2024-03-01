@@ -19,7 +19,6 @@ use serde_json::Value as JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSize;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalTransactionExecution;
@@ -56,29 +55,33 @@ impl Block {
         })
     }
 
-    /// Calculates block size by the number of transactions.
-    ///
-    /// TODO: statistics must be colleted to determine the ideal way to classify.
-    pub fn size_by_transactions(&self) -> BlockSize {
+    /// Calculates block size label by the number of transactions.
+    pub fn label_size_by_transactions(&self) -> &'static str {
         match self.transactions.len() {
-            0 => BlockSize::Empty,
-            1..=5 => BlockSize::Small,
-            6..=10 => BlockSize::Medium,
-            11..=15 => BlockSize::Large,
-            _ => BlockSize::Huge,
+            0 => "0",
+            1..=5 => "1-5",
+            6..=10 => "6-10",
+            11..=15 => "11-15",
+            16..=20 => "16-20",
+            _ => "20+",
         }
     }
 
-    /// Calculates block size by consumed gas.
-    ///
-    /// TODO: statistics must be colleted to determine the ideal way to classify.
-    pub fn size_by_gas(&self) -> BlockSize {
+    /// Calculates block size label by consumed gas.
+    pub fn label_size_by_gas(&self) -> &'static str {
         match self.header.gas.as_u64() {
-            0 => BlockSize::Empty,
-            1..=499_999 => BlockSize::Small,
-            500_000..=999_999 => BlockSize::Medium,
-            1_000_000..=1_999_999 => BlockSize::Large,
-            _ => BlockSize::Huge,
+            0 => "0",
+            1..=1_000_000 => "0-1M",
+            1_000_001..=2_000_000 => "1M-2M",
+            2_000_001..=3_000_000 => "2M-3M",
+            3_000_001..=4_000_000 => "3M-4M",
+            4_000_001..=5_000_000 => "4M-5M",
+            5_000_001..=6_000_000 => "5M-6M",
+            6_000_001..=7_000_000 => "6M-7M",
+            7_000_001..=8_000_000 => "7M-8M",
+            8_000_001..=9_000_000 => "8M-9M",
+            9_000_001..=10_000_000 => "9M-10M",
+            _ => "10M+",
         }
     }
 
