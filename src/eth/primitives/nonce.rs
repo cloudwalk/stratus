@@ -9,6 +9,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use ethereum_types::H64;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
@@ -49,7 +50,7 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32, H64);
 
 impl TryFrom<BigDecimal> for Nonce {
     type Error = anyhow::Error;

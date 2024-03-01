@@ -27,6 +27,9 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::UnixTime;
 
+use crate::eth::primitives::Nonce;
+
+
 /// Special hash used in block mining to indicate no uncle blocks.
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
 
@@ -49,9 +52,10 @@ pub struct BlockHeader {
     pub difficulty: Difficulty,
     pub receipts_root: Hash,
     pub uncle_hash: Hash,
-    pub size: Option<Size>,
+    pub size: Size,
     pub state_root: Hash,
-    pub total_difficulty: Option<Difficulty>,
+    pub total_difficulty: Difficulty,
+    pub nonce: Nonce
 }
 
 impl BlockHeader {
@@ -72,9 +76,10 @@ impl BlockHeader {
             difficulty: Difficulty::default(),
             receipts_root: Hash::zero(),
             uncle_hash: Hash::zero(),
-            size: None,
+            size: Size::default(),
             state_root: Hash::zero(),
-            total_difficulty: None,
+            total_difficulty: Difficulty::default(),
+            nonce: Nonce::default()
         }
     }
 }
@@ -96,9 +101,10 @@ impl Dummy<Faker> for BlockHeader {
             difficulty: faker.fake_with_rng(rng),
             receipts_root: faker.fake_with_rng(rng),
             uncle_hash: faker.fake_with_rng(rng),
-            size: Some(faker.fake_with_rng(rng)),
+            size: faker.fake_with_rng(rng),
             state_root: faker.fake_with_rng(rng),
-            total_difficulty: Some(faker.fake_with_rng(rng)),
+            total_difficulty: faker.fake_with_rng(rng),
+            nonce: faker.fake_with_rng(rng)
         }
     }
 }
@@ -179,9 +185,10 @@ impl From<ExternalBlock> for BlockHeader {
             difficulty: value.difficulty.into(),
             receipts_root: value.receipts_root.into(),
             uncle_hash: value.uncles_hash.into(),
-            size: value.size.map(Size::from),
+            size: value.size.unwrap_or_default().into(),
             state_root: value.state_root.into(),
-            total_difficulty: value.total_difficulty.map(Difficulty::from),
+            total_difficulty: value.total_difficulty.unwrap_or_default().into(),
+            nonce: value.nonce.unwrap_or_default().into()
         }
     }
 }

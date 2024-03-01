@@ -564,6 +564,7 @@ impl PermanentStorage for Postgres {
             block.header.size as _,
             block.header.state_root as _,
             block.header.total_difficulty as _,
+            block.header.nonce as _,
             transaction_batch.hash as _,
             transaction_batch.signer as _,
             transaction_batch.nonce as _,

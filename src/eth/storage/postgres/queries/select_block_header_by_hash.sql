@@ -15,6 +15,7 @@ SELECT
     uncle_hash as "uncle_hash: _",
     size as "size: _",
     state_root as "state_root: _",
-    total_difficulty as "total_difficulty: _"
+    total_difficulty as "total_difficulty: _",
+    nonce as "nonce: _"
 FROM blocks
 WHERE hash = $1

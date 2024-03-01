@@ -14,9 +14,10 @@ CREATE TABLE IF NOT EXISTS blocks (
     difficulty NUMERIC NOT NULL CHECK (difficulty >= 0),
     receipts_root BYTEA NOT NULL CHECK (LENGTH(receipts_root) = 32),
     uncle_hash BYTEA NOT NULL CHECK (LENGTH(uncle_hash) = 32),
-    size NUMERIC CHECK (gas_used >= 0),
+    size NUMERIC NOT NULL CHECK (gas_used >= 0),
     state_root BYTEA NOT NULL CHECK (LENGTH(state_root) = 32),
-    total_difficulty NUMERIC NULL CHECK (total_difficulty >= 0),
+    total_difficulty NUMERIC NOT NULL CHECK (total_difficulty >= 0),
+    nonce NUMERIC NOT NULL CHECK (nonce >= 0),
     created_at TIMESTAMP NOT NULL,
     PRIMARY KEY (number, hash)
 );
@@ -126,6 +127,7 @@ INSERT INTO blocks(
     size,
     state_root,
     total_difficulty,
+    nonce,
     created_at
 )
 VALUES (
@@ -143,9 +145,10 @@ VALUES (
     0, -- difficulty
     decode('56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421', 'hex'), -- receipts_root
     decode('1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347', 'hex'), -- uncle_hash
-    NULL,
+    505, -- size
     decode('c7cc35e75df400dd94a7f2a4db18729e87dacab31eacc7ab4a26b41fc5e32937', 'hex'), -- state_root
-    NULL, -- total_difficulty
+    0, -- total_difficulty
+    0, -- nonce
     current_timestamp -- created_at
 );
 
