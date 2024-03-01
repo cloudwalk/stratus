@@ -19,9 +19,12 @@ use jsonrpsee::SubscriptionMessage;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Size;
 use crate::eth::primitives::UnixTime;
 
 /// Special hash used in block mining to indicate no uncle blocks.
@@ -35,10 +38,20 @@ pub struct BlockHeader {
     pub number: BlockNumber,
     pub hash: Hash,
     pub transactions_root: Hash,
-    pub gas: Gas,
+    pub gas_used: Gas,
+    pub gas_limit: Gas,
     pub bloom: LogsBloom,
     pub timestamp: UnixTime,
     pub parent_hash: Hash,
+    pub author: Address,
+    pub extra_data: Bytes,
+    pub miner: Address,
+    pub difficulty: Difficulty,
+    pub receipts_root: Hash,
+    pub uncle_hash: Hash,
+    pub size: Option<Size>,
+    pub state_root: Hash,
+    pub total_difficulty: Option<Difficulty>,
 }
 
 impl BlockHeader {
@@ -48,10 +61,20 @@ impl BlockHeader {
             number,
             hash: number.hash(),
             transactions_root: HASH_EMPTY_TRANSACTIONS_ROOT,
-            gas: Gas::ZERO,
+            gas_used: Gas::ZERO,
+            gas_limit: Gas::MAX,
             bloom: LogsBloom::default(),
             timestamp,
             parent_hash: number.prev().map(|n| n.hash()).unwrap_or(Hash::zero()),
+            author: Address::default(),
+            extra_data: Bytes::default(),
+            miner: Address::default(),
+            difficulty: Difficulty::default(),
+            receipts_root: Hash::zero(),
+            uncle_hash: Hash::zero(),
+            size: None,
+            state_root: Hash::zero(),
+            total_difficulty: None,
         }
     }
 }
@@ -62,10 +85,20 @@ impl Dummy<Faker> for BlockHeader {
             number: faker.fake_with_rng(rng),
             hash: faker.fake_with_rng(rng),
             transactions_root: faker.fake_with_rng(rng),
-            gas: faker.fake_with_rng(rng),
+            gas_used: faker.fake_with_rng(rng),
             bloom: Default::default(),
             timestamp: faker.fake_with_rng(rng),
             parent_hash: faker.fake_with_rng(rng),
+            gas_limit: faker.fake_with_rng(rng),
+            author: faker.fake_with_rng(rng),
+            extra_data: faker.fake_with_rng(rng),
+            miner: faker.fake_with_rng(rng),
+            difficulty: faker.fake_with_rng(rng),
+            receipts_root: faker.fake_with_rng(rng),
+            uncle_hash: faker.fake_with_rng(rng),
+            size: Some(faker.fake_with_rng(rng)),
+            state_root: faker.fake_with_rng(rng),
+            total_difficulty: Some(faker.fake_with_rng(rng)),
         }
     }
 }
@@ -100,7 +133,7 @@ where
 
             // mining: gas
             gas_limit: Gas::from(100_000_000).into(),
-            gas_used: header.gas.into(),
+            gas_used: header.gas_used.into(),
             base_fee_per_gas: Some(U256::zero()),
             blob_gas_used: None,
             excess_blob_gas: None,
@@ -130,15 +163,25 @@ where
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 impl From<ExternalBlock> for BlockHeader {
-    fn from(value: ExternalBlock) -> Self {
+    fn from(mut value: ExternalBlock) -> Self {
         Self {
             number: value.number(),
             hash: value.hash(),
             transactions_root: value.transactions_root.into(),
-            gas: value.gas_used.into(),
+            gas_used: value.gas_used.into(),
             bloom: value.logs_bloom.unwrap_or_default().into(),
             timestamp: value.timestamp.into(),
             parent_hash: value.parent_hash.into(),
+            gas_limit: value.gas_limit.into(),
+            author: value.author(),
+            extra_data: value.extra_data(),
+            miner: value.author.unwrap_or_default().into(),
+            difficulty: value.difficulty.into(),
+            receipts_root: value.receipts_root.into(),
+            uncle_hash: value.uncles_hash.into(),
+            size: value.size.map(Size::from),
+            state_root: value.state_root.into(),
+            total_difficulty: value.total_difficulty.map(Difficulty::from),
         }
     }
 }

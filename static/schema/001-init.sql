@@ -1,14 +1,24 @@
 -- TODO: maybe call this table `block_headers`
 CREATE TABLE IF NOT EXISTS blocks (
-    number BIGSERIAL NOT NULL CHECK (number >= 0) UNIQUE
-    ,hash BYTEA NOT NULL CHECK (LENGTH(hash) = 32) UNIQUE
-    ,transactions_root BYTEA NOT NULL CHECK (LENGTH(transactions_root) = 32)
-    ,gas NUMERIC NOT NULL CHECK (gas >= 0)
-    ,logs_bloom BYTEA NOT NULL CHECK (LENGTH(logs_bloom) = 256)
-    ,timestamp_in_secs BIGINT NOT NULL CHECK (timestamp_in_secs >= 0)
-    ,parent_hash BYTEA NOT NULL CHECK (LENGTH(parent_hash) = 32) UNIQUE
-    ,created_at TIMESTAMP NOT NULL
-    ,PRIMARY KEY (number, hash)
+    number BIGSERIAL NOT NULL CHECK (number >= 0) UNIQUE,
+    hash BYTEA NOT NULL CHECK (LENGTH(hash) = 32) UNIQUE,
+    transactions_root BYTEA NOT NULL CHECK (LENGTH(transactions_root) = 32),
+    gas_limit NUMERIC NOT NULL CHECK (gas_limit >= 0),
+    gas_used NUMERIC NOT NULL CHECK (gas_used >= 0),
+    logs_bloom BYTEA NOT NULL CHECK (LENGTH(logs_bloom) = 256),
+    timestamp_in_secs BIGINT NOT NULL CHECK (timestamp_in_secs >= 0),
+    parent_hash BYTEA NOT NULL CHECK (LENGTH(parent_hash) = 32) UNIQUE,
+    author BYTEA NOT NULL CHECK (LENGTH(author) = 20),
+    extra_data BYTEA NOT NULL CHECK (LENGTH(extra_data) <= 32),
+    miner BYTEA NOT NULL CHECK (LENGTH(miner) = 20),
+    difficulty NUMERIC NOT NULL CHECK (difficulty >= 0),
+    receipts_root BYTEA NOT NULL CHECK (LENGTH(receipts_root) = 32),
+    uncle_hash BYTEA NOT NULL CHECK (LENGTH(uncle_hash) = 32),
+    size NUMERIC CHECK (gas_used >= 0),
+    state_root BYTEA NOT NULL CHECK (LENGTH(state_root) = 32),
+    total_difficulty NUMERIC NULL CHECK (total_difficulty >= 0),
+    created_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (number, hash)
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
@@ -98,16 +108,45 @@ CREATE TABLE IF NOT EXISTS topics (
 -- Insert genesis block and the pre-funded account on database creation. These should be
 -- present in the database regardless of how stratus is started.
 
-INSERT INTO blocks(number, hash, transactions_root, gas, logs_bloom, timestamp_in_secs, parent_hash, created_at)
+INSERT INTO blocks(
+    number,
+    hash,
+    transactions_root,
+    gas_limit,
+    gas_used,
+    logs_bloom,
+    timestamp_in_secs,
+    parent_hash,
+    author,
+    extra_data,
+    miner,
+    difficulty,
+    receipts_root,
+    uncle_hash,
+    size,
+    state_root,
+    total_difficulty,
+    created_at
+)
 VALUES (
-    0,
-    decode('011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce', 'hex'),
-    decode('56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421', 'hex'),
-    0,
-    decode('00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000', 'hex'),
-    0,
-    decode('0000000000000000000000000000000000000000000000000000000000000000', 'hex'),
-    current_timestamp
+    0, -- number
+    decode('011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce', 'hex'), -- hash
+    decode('56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421', 'hex'), -- transactions_root
+    POWER(2, 256) - 1, -- gas_limit
+    0, -- gas_used
+    decode('00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000', 'hex'), -- logs_bloom
+    0, -- timestamp_in_secs
+    decode('0000000000000000000000000000000000000000000000000000000000000000', 'hex'), -- parent_hash
+    decode('0000000000000000000000000000000000000000', 'hex'), -- author
+    decode('', 'hex'), -- extra_data
+    decode('0000000000000000000000000000000000000000', 'hex'), -- miner
+    0, -- difficulty
+    decode('56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421', 'hex'), -- receipts_root
+    decode('1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347', 'hex'), -- uncle_hash
+    NULL,
+    decode('c7cc35e75df400dd94a7f2a4db18729e87dacab31eacc7ab4a26b41fc5e32937', 'hex'), -- state_root
+    NULL, -- total_difficulty
+    current_timestamp -- created_at
 );
 
 INSERT INTO accounts (address, bytecode, latest_balance, latest_nonce, creation_block)

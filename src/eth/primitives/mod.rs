@@ -110,6 +110,9 @@ mod transaction_input;
 mod transaction_mined;
 mod unix_time;
 mod wei;
+mod difficulty;
+mod size;
+
 
 pub use account::test_accounts;
 pub use account::Account;
@@ -155,6 +158,10 @@ pub use slot::SlotValue;
 pub use storage_point_in_time::StoragePointInTime;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
+pub use difficulty::Difficulty;
+pub use size::Size;
+
+
 pub use unix_time::UnixTime;
 pub use wei::Wei;
 
