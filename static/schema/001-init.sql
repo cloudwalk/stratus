@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     difficulty NUMERIC NOT NULL CHECK (difficulty >= 0),
     receipts_root BYTEA NOT NULL CHECK (LENGTH(receipts_root) = 32),
     uncle_hash BYTEA NOT NULL CHECK (LENGTH(uncle_hash) = 32),
-    size NUMERIC NOT NULL CHECK (gas_used >= 0),
+    size NUMERIC NOT NULL CHECK (size >= 0),
     state_root BYTEA NOT NULL CHECK (LENGTH(state_root) = 32),
     total_difficulty NUMERIC NOT NULL CHECK (total_difficulty >= 0),
     nonce BYTEA NOT NULL CHECK (LENGTH(nonce) = 8),
