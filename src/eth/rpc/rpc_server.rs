@@ -14,9 +14,9 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
-use crate::config::Environment;
 use crate::config::StratusConfig;
 use crate::eth::primitives::Address;
+#[cfg(feature = "dev")]
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
@@ -56,7 +56,6 @@ pub async fn serve_rpc(executor: EthExecutor, storage: Arc<StratusStorage>, conf
         chain_id: 2008,
         client_version: "stratus",
         gas_price: 0,
-        env: config.common.env,
 
         // services
         executor,
@@ -68,9 +67,8 @@ pub async fn serve_rpc(executor: EthExecutor, storage: Arc<StratusStorage>, conf
     tracing::info!(%address, ?ctx, "starting rpc server");
 
     // configure module
-    let env = ctx.env;
     let mut module = RpcModule::<RpcContext>::new(ctx);
-    module = register_methods(module, env)?;
+    module = register_methods(module)?;
 
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
@@ -100,14 +98,12 @@ pub async fn serve_rpc(executor: EthExecutor, storage: Arc<StratusStorage>, conf
     Ok(())
 }
 
-fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyhow::Result<RpcModule<RpcContext>> {
+fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
     // debug
-    #[cfg(feature = "evm-set-timestamp")]
-    module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
-    #[cfg(feature = "evm-mine")]
-    module.register_async_method("evm_mine", evm_mine)?;
-
-    if env.is_development() {
+    #[cfg(feature = "dev")]
+    {
+        module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
+        module.register_async_method("evm_mine", evm_mine)?;
         module.register_async_method("debug_setHead", debug_set_head)?;
     }
 
@@ -155,6 +151,7 @@ fn register_methods(mut module: RpcModule<RpcContext>, env: Environment) -> anyh
 // -----------------------------------------------------------------------------
 
 // Debug
+#[cfg(feature = "dev")]
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset_temp().await?;
@@ -162,13 +159,13 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
     Ok(serde_json::to_value(number).unwrap())
 }
 
-#[cfg(feature = "evm-mine")]
+#[cfg(feature = "dev")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     ctx.executor.mine_empty_block().await?;
     Ok(serde_json::to_value(true).unwrap())
 }
 
-#[cfg(feature = "evm-set-timestamp")]
+#[cfg(feature = "dev")]
 async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     use crate::eth::primitives::UnixTime;
     use crate::log_and_err;

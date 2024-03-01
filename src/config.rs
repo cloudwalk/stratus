@@ -15,10 +15,12 @@ use tokio::runtime::Runtime;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
+#[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+#[cfg(feature = "dev")]
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
@@ -26,6 +28,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
+#[cfg(feature = "dev")]
 use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
@@ -93,10 +96,6 @@ pub struct RpcPollerConfig {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
-    /// Environment where the application is running.
-    #[arg(value_enum, short = 'e', long = "env", env = "ENV", default_value_t = Environment::Development)]
-    pub env: Environment,
-
     /// Storage implementation.
     #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
     pub storage: StorageConfig,
@@ -118,6 +117,7 @@ pub struct CommonConfig {
     pub enable_genesis: bool,
 
     /// Enables test accounts with max wei on startup.
+    #[cfg(feature = "dev")]
     #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
     pub enable_test_accounts: bool,
 }
@@ -135,22 +135,19 @@ impl CommonConfig {
             }
         }
 
+        #[cfg(feature = "dev")]
         if self.enable_test_accounts {
-            if self.env.is_development() {
-                let mut test_accounts_to_insert = Vec::new();
-                for test_account in test_accounts() {
-                    let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
-                    if storage_account.is_empty() {
-                        test_accounts_to_insert.push(test_account);
-                    }
+            let mut test_accounts_to_insert = Vec::new();
+            for test_account in test_accounts() {
+                let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
+                if storage_account.is_empty() {
+                    test_accounts_to_insert.push(test_account);
                 }
+            }
 
-                if not(test_accounts_to_insert.is_empty()) {
-                    tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                    storage.save_accounts_to_perm(test_accounts_to_insert).await?;
-                }
-            } else {
-                tracing::warn!("cannot enable test accounts in non-development environment");
+            if not(test_accounts_to_insert.is_empty()) {
+                tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
+                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
             }
         }
 
@@ -222,38 +219,6 @@ impl FromStr for StorageConfig {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown storage: {}", s)),
-        }
-    }
-}
-
-/// Enviroment where the application is running.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum Environment {
-    Development,
-    Production,
-}
-
-impl Environment {
-    /// Checks if the current environment is production.
-    pub fn is_production(&self) -> bool {
-        matches!(self, Self::Production)
-    }
-
-    /// Checks if the current environment is development.
-    pub fn is_development(&self) -> bool {
-        matches!(self, Self::Development)
-    }
-}
-
-impl FromStr for Environment {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim().to_lowercase();
-        match s.as_str() {
-            "dev" | "development" => Ok(Self::Development),
-            "prod" | "production" => Ok(Self::Production),
-            s => Err(anyhow!("unknown environment: {}", s)),
         }
     }
 }
