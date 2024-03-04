@@ -21,7 +21,7 @@ const BUCKET_FOR_DURATION: [f64; 37] = [
     0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, // 1ms to 9ms
     0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, // 10ms to 90ms
     0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, // 100ms to 900ms
-    1.0, // 1s or more
+    1.,  // 1s or more
 ];
 
 /// Init application global metrics.
@@ -30,7 +30,7 @@ const BUCKET_FOR_DURATION: [f64; 37] = [
 pub fn init_metrics() {
     tracing::info!("starting metrics");
 
-    // get metric definitions.
+    // get metric definitions
     let mut metrics = Vec::new();
     metrics.extend(metrics_for_json_rpc());
     metrics.extend(metrics_for_executor());
@@ -38,16 +38,16 @@ pub fn init_metrics() {
     metrics.extend(metrics_for_storage_read());
     metrics.extend(metrics_for_storage_write());
 
-    // init provider.
+    // init provider and buckets
     let mut builder = PrometheusBuilder::new().set_buckets(&BUCKET_FOR_DURATION).unwrap();
     for metric in &metrics {
-        if not(metric.buckets.is_empty()) {
+        if metric.has_custom_buckets() {
             builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
         }
     }
     builder.install().expect("failed to start metrics");
 
-    // init description after provider start
+    // init metric description (always after provider started)
     for metric in &metrics {
         metric.register_description();
     }
@@ -143,10 +143,10 @@ metrics! {
     histogram_duration evm_execution{point_in_time, success} [],
 
     "Number of accounts reads in a single EVM execution."
-    histogram_counter evm_account_reads{} [0., 1., 2., 3., 4., 5.],
+    histogram_counter evm_execution_account_reads{} [0., 1., 2., 3., 4., 5.],
 
     "Number of slot reads in a single EVM execution."
-    histogram_counter evm_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100.]
+    histogram_counter evm_execution_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100.]
 }
 
 // -----------------------------------------------------------------------------
@@ -305,7 +305,12 @@ struct Metric {
 }
 
 impl Metric {
-    /// Register metric description with the provider.
+    /// Checks if it has custom bucket defined.
+    fn has_custom_buckets(&self) -> bool {
+        not(self.buckets.is_empty())
+    }
+
+    /// Register description with the provider.
     fn register_description(&self) {
         match self.kind {
             "counter" => describe_counter!(self.name, self.description),

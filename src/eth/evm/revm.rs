@@ -112,8 +112,8 @@ impl Evm for Revm {
         };
 
         metrics::inc_evm_execution(start.elapsed(), &point_in_time, result.is_ok());
-        metrics::inc_evm_account_reads(account_reads);
-        metrics::inc_evm_slot_reads(slot_reads);
+        metrics::inc_evm_execution_account_reads(account_reads);
+        metrics::inc_evm_execution_slot_reads(slot_reads);
 
         result
     }
