@@ -29,7 +29,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
         expect(await _contract.get(CHARLIE.address)).eq(0);
     });
 
-    it("Sends parallel transactions", async () => {
+    it("Sends parallel transactions to aggregate value", async () => {
         // prepare transactions
         const expectedBalances: Record<string, number> = {};
         expectedBalances[ALICE.address] = 0;
@@ -66,6 +66,28 @@ describe("Transaction: parallel TestContractBalances", async () => {
         expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address]);
         expect(await _contract.get(BOB.address)).eq(expectedBalances[BOB.address]);
         expect(await _contract.get(CHARLIE.address)).eq(expectedBalances[CHARLIE.address]);
+    });
+
+    it("Sends parallel transactions that should have one success and one fail due to lack of balance", async () => {
+        expect(await _contract.get(BOB.address)).eq(625);
+
+        const signedTxsSub = [];
+
+        for (let i = 0; i < 2; i++) {
+            const nonce = await sendGetNonce(ALICE.address);
+            const tx = await _contract.connect(ALICE.signer()).sub.populateTransaction(BOB.address, 600, {
+                nonce: nonce,
+                ...TX_PARAMS,
+            });
+
+            signedTxsSub.push(await ALICE.signer().signTransaction(tx));
+        }
+
+        const result = await sendRawTransactions(signedTxsSub);
+
+        // only one transaction should be successful
+        expect(await _contract.get(BOB.address)).eq(25);
+        expect(result[1]).eq(undefined);
     });
 });
 
