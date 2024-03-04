@@ -30,6 +30,12 @@ describe("Transaction: serial TestContractBalances", () => {
         _contract = await deployTestContractBalances();
     });
 
+    it("Eth_getCode is not null for deployed contract", async () => {
+        const deployedCode = await send("eth_getCode", [_contract.target, "latest"]);
+        
+        expect(deployedCode).not.eq("0x");
+    });
+
     it("Eth_call works on read function", async () => {
         // prepare transaction object
         const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address])
