@@ -121,10 +121,10 @@ metrics! {
     histogram_duration executor_import_offline{} [],
 
     "Number of accounts read in a single EVM execution."
-    histogram_counter executor_import_offline_account_reads{} [10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 150., 200.],
+    histogram_counter executor_import_offline_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 150., 200.],
 
     "Number of slots read in a single EVM execution."
-    histogram_counter executor_import_offline_slot_reads{} [0., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 1500., 2000., 2500., 3000.],
+    histogram_counter executor_import_offline_slot_reads{} [0., 25., 50., 75., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000.],
 
     "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
     histogram_duration executor_import_offline_transaction{} [],
