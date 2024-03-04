@@ -18,7 +18,7 @@ use jsonrpsee::SubscriptionMessage;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNonce;
+use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Difficulty;
@@ -53,7 +53,7 @@ pub struct BlockHeader {
     pub size: Size,
     pub state_root: Hash,
     pub total_difficulty: Difficulty, // is always 0x0
-    pub nonce: BlockNonce,            // is always 0x0000000000000000
+    pub nonce: MinerNonce,            // is always 0x0000000000000000
 }
 
 impl BlockHeader {
@@ -77,7 +77,7 @@ impl BlockHeader {
             size: Size::default(),
             state_root: HASH_EMPTY_TRIE,
             total_difficulty: Difficulty::default(),
-            nonce: BlockNonce::default(),
+            nonce: MinerNonce::default(),
         }
     }
 }
