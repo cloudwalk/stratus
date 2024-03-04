@@ -303,6 +303,7 @@ macro_rules! metrics_impl_fn_inc {
     };
 }
 
+/// Metric defintion.
 struct Metric {
     kind: &'static str,
     name: &'static str,
@@ -311,7 +312,7 @@ struct Metric {
 }
 
 impl Metric {
-    /// Checks if it has custom bucket defined.
+    /// Checks if metric has custom buckets defined.
     fn has_custom_buckets(&self) -> bool {
         not(self.buckets.is_empty())
     }
