@@ -69,7 +69,7 @@ impl Block {
 
     /// Calculates block size label by consumed gas.
     pub fn label_size_by_gas(&self) -> &'static str {
-        match self.header.gas.as_u64() {
+        match self.header.gas_used.as_u64() {
             0 => "0",
             1..=1_000_000 => "0-1M",
             1_000_001..=2_000_000 => "1M-2M",
