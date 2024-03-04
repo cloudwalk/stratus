@@ -92,6 +92,34 @@ pub struct RpcPollerConfig {
     pub common: CommonConfig,
 }
 
+/// Configuration for importer-import binary.
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct StateValidatorConfig {
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+
+    /// How many slots to validate per batch. 0 means every slot.
+    #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
+    pub sample_size: u64,
+
+    /// Seed to use when sampling. 0 for random seed.
+    #[arg(long = "seed", env = "SEED", default_value_t = 0, requires = "sample_size")]
+    pub seed: u64,
+
+    /// Validate in batches of n blocks.
+    #[arg(short = 'i', long = "inverval", env = "INVERVAL", default_value_t = 1000)]
+    pub interval: u64,
+
+    /// What method to use when validating.
+    #[arg(short = 'm', long = "method", env = "METHOD")]
+    pub method: ValidatorMethodConfig,
+
+    /// How many concurrent validation tasks to run
+    #[arg(short = 'c', long = "concurrent-tasks", env = "CONCURRENT_TASKS", default_value_t = 10)]
+    pub concurrent_tasks: u16,
+}
+
 /// Common configuration that can be used by any binary.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -219,6 +247,55 @@ impl FromStr for StorageConfig {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown storage: {}", s)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, strum::Display)]
+pub enum ValidatorMethodConfig {
+    Rpc { url: String },
+    CompareTables,
+}
+
+impl FromStr for ValidatorMethodConfig {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "compare_tables" => Ok(Self::CompareTables),
+            s => Ok(Self::Rpc { url: s.to_string() }),
+        }
+    }
+}
+
+/// Enviroment where the application is running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Environment {
+    Development,
+    Production,
+}
+
+impl Environment {
+    /// Checks if the current environment is production.
+    pub fn is_production(&self) -> bool {
+        matches!(self, Self::Production)
+    }
+
+    /// Checks if the current environment is development.
+    pub fn is_development(&self) -> bool {
+        matches!(self, Self::Development)
+    }
+}
+
+impl FromStr for Environment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim().to_lowercase();
+        match s.as_str() {
+            "dev" | "development" => Ok(Self::Development),
+            "prod" | "production" => Ok(Self::Production),
+            s => Err(anyhow!("unknown environment: {}", s)),
         }
     }
 }

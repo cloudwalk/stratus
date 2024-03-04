@@ -7,6 +7,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use metrics::atomics::AtomicU64;
+use rand::rngs::StdRng;
+use rand::seq::IteratorRandom;
+use rand::SeedableRng;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
@@ -26,6 +29,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
@@ -353,6 +357,41 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         Ok(())
     }
+
+    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        let state = self.lock_read().await;
+
+        let samples = state
+            .accounts
+            .iter()
+            .filter(|(_, account_info)| account_info.is_contract())
+            .flat_map(|(_, contract)| {
+                contract
+                    .slots
+                    .values()
+                    .flat_map(|slot_history| Vec::from((*slot_history).clone()))
+                    .filter_map(|slot| {
+                        if slot.block_number >= start && slot.block_number < end {
+                            Some(SlotSample {
+                                address: contract.address.clone(),
+                                block_number: slot.block_number,
+                                index: slot.value.index,
+                                value: slot.value.value,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+            });
+
+        match max_samples {
+            0 => Ok(samples.collect()),
+            n => {
+                let mut rng = StdRng::seed_from_u64(seed);
+                Ok(samples.choose_multiple(&mut rng, n as usize))
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -397,5 +436,9 @@ impl InMemoryPermanentAccount {
             }
         }
         self.slots = new_slots;
+    }
+
+    fn is_contract(&self) -> bool {
+        self.bytecode.get_current().is_some()
     }
 }
