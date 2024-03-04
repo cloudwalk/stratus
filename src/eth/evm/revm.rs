@@ -25,6 +25,7 @@ use revm::Database;
 use revm::EVM;
 use tokio::runtime::Handle;
 
+use crate::eth::evm::evm::EvmExecutionResult;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Account;
@@ -33,6 +34,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
@@ -68,7 +70,7 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution> {
+    fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let start = Instant::now();
 
         // configure session
@@ -99,18 +101,22 @@ impl Evm for Revm {
 
         // parse result and track metrics
         let session = evm.take_db();
+        let metrics = session.metrics;
         let point_in_time = session.input.point_in_time.clone();
 
-        let result = match evm_result {
+        let execution = match evm_result {
             Ok(result) => Ok(parse_revm_execution(result, session.input, session.storage_changes)),
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
                 Err(anyhow!("Error executing EVM transaction. Check logs for more information."))
             }
         };
-        metrics::inc_evm_execution(start.elapsed(), &point_in_time, result.is_ok());
 
-        result
+        metrics::inc_evm_execution(start.elapsed(), &point_in_time, execution.is_ok());
+        metrics::inc_evm_execution_account_reads(metrics.account_reads);
+        metrics::inc_evm_execution_slot_reads(metrics.slot_reads);
+
+        execution.map(|x| (x, metrics))
     }
 }
 
@@ -128,6 +134,9 @@ struct RevmDatabaseSession {
 
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
+
+    /// Metrics collected during EVM execution.
+    metrics: ExecutionMetrics,
 }
 
 impl RevmDatabaseSession {
@@ -136,6 +145,7 @@ impl RevmDatabaseSession {
             storage,
             input,
             storage_changes: Default::default(),
+            metrics: Default::default(),
         }
     }
 }
@@ -144,6 +154,8 @@ impl Database for RevmDatabaseSession {
     type Error = anyhow::Error;
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
+        self.metrics.account_reads += 1;
+
         // retrieve account
         let address: Address = revm_address.into();
         let account = Handle::current().block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
@@ -169,10 +181,11 @@ impl Database for RevmDatabaseSession {
     }
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
+        self.metrics.slot_reads += 1;
+
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
-        //instructions?
         let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
 
         // track original value, except if ignored address

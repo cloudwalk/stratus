@@ -10,4 +10,5 @@ mod evm;
 pub mod revm;
 
 pub use evm::Evm;
+pub use evm::EvmExecutionResult;
 pub use evm::EvmInput;
