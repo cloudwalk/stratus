@@ -148,7 +148,7 @@ impl PermanentStorage for Postgres {
 
                 let block_number = i64::try_from(current)?;
 
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number)
                     .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
@@ -550,10 +550,21 @@ impl PermanentStorage for Postgres {
             i64::try_from(block.header.number).context("failed to convert block number")?,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
-            BigDecimal::try_from(block.header.gas.clone())?,
+            block.header.gas_limit as _,
+            block.header.gas_used as _,
             block.header.bloom.as_ref(),
             i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
             block.header.parent_hash.as_ref(),
+            block.header.author as _,
+            block.header.extra_data as _,
+            block.header.miner as _,
+            block.header.difficulty as _,
+            block.header.receipts_root as _,
+            block.header.uncle_hash as _,
+            block.header.size as _,
+            block.header.state_root as _,
+            block.header.total_difficulty as _,
+            block.header.nonce as _,
             transaction_batch.hash as _,
             transaction_batch.signer as _,
             transaction_batch.nonce as _,

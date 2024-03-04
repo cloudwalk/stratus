@@ -14,6 +14,11 @@ describe("JSON-RPC", () => {
                 (await sendExpect("hardhat_reset", [])).eq(true);
             }
         });
+
+        it("Code for non-existent contract is 0x", async () => {
+            const addressWithNothingDeployed = ALICE.address;
+            (await sendExpect("eth_getCode", [addressWithNothingDeployed, "latest"])).eq("0x");
+        });
     });
 
     describe("Metadata", () => {

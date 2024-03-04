@@ -339,7 +339,7 @@ async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Resul
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
     let account = ctx.storage.read_account(&address, &point_in_time).await?;
 
-    Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_zero))
+    Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_null))
 }
 
 // Subscription
@@ -402,4 +402,8 @@ fn hex_num_zero_padded(value: impl Into<U256>) -> String {
 
 fn hex_zero() -> String {
     "0x0".to_owned()
+}
+
+fn hex_null() -> String {
+    "0x".to_owned()
 }
