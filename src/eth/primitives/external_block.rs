@@ -1,9 +1,10 @@
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
@@ -28,6 +29,16 @@ impl ExternalBlock {
     pub fn timestamp(&self) -> UnixTime {
         self.0.timestamp.into()
     }
+
+    /// Returns the block timestamp.
+    pub fn author(&self) -> Address {
+        self.0.author.unwrap_or_default().into()
+    }
+
+    /// Returns the block timestamp.
+    pub fn extra_data(&mut self) -> Bytes {
+        std::mem::take(&mut self.0.extra_data).into()
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -43,15 +54,7 @@ impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
 impl From<ExternalBlock> for Block {
     fn from(value: ExternalBlock) -> Self {
         Block {
-            header: BlockHeader {
-                number: value.number.unwrap().into(),
-                hash: value.hash.unwrap().into(),
-                transactions_root: value.transactions_root.into(),
-                gas: value.gas_used.into(),
-                bloom: value.logs_bloom.unwrap().into(),
-                timestamp: value.timestamp.into(),
-                parent_hash: value.parent_hash.into(),
-            },
+            header: value.into(),
             transactions: vec![],
         }
     }

@@ -127,6 +127,8 @@ impl BlockMiner {
             }
         }
 
+        // TODO: calculate size, state_root, receipts_root, parent_hash
+
         Ok(block)
     }
 }

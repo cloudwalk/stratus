@@ -179,7 +179,7 @@ e2e-stratus test="":
     fi
 
     echo "-> Starting Stratus"
-    RUST_LOG=info just run -a 0.0.0.0:3000 &
+    RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
@@ -239,23 +239,25 @@ e2e-flamegraph:
     echo "Starting PostgreSQL with Docker Compose..."
     docker-compose down
     docker-compose up -d --force-recreate
+    psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
 
     # Wait for PostgreSQL to be ready
     echo "Waiting for PostgreSQL to be ready..."
     wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+    psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
     echo "PostgreSQL is ready."
 
     # Start the substrate mock server in the background
     echo "Starting substrate mock server..."
     killport 3003
-    (just run-substrate-mock &) && \
-    echo "Waiting for the substrate mock server to be ready..."
+    just run-substrate-mock &
+    echo "Waiting for the substrate mock server to be ready..." &
     wait-service --tcp 0.0.0.0:3003 -t 300 -- echo
     echo "Substrate mock server is ready."
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph..."
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
 
 
 # ------------------------------------------------------------------------------
@@ -299,7 +301,7 @@ contracts-remove:
 contracts-test-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
-    RUST_LOG=info just run -a 0.0.0.0:3000 > /dev/null &
+    RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
@@ -338,5 +340,4 @@ contracts-test-stratus-postgres:
     echo "-> Killing Postgres"
     docker-compose down
 
-    echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code

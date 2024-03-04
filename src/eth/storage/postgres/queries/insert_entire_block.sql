@@ -3,13 +3,24 @@ WITH block_insert AS (
         number,
         hash,
         transactions_root,
-        gas,
+        gas_limit,
+        gas_used,
         logs_bloom,
         timestamp_in_secs,
         parent_hash,
+        author,
+        extra_data,
+        miner,
+        difficulty,
+        receipts_root,
+        uncle_hash,
+        size,
+        state_root,
+        total_difficulty,
+        nonce,
         created_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, current_timestamp)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, current_timestamp)
     RETURNING 1 as res
 ),
 
@@ -36,23 +47,23 @@ transaction_insert AS (
     SELECT *
     FROM
         unnest(
-            $8::bytea [],
-            $9::bytea [],
-            $10::numeric [],
-            $11::bytea [],
-            $12::bytea [],
-            $13::bytea [],
-            $14::bytea [],
-            $15::numeric [],
-            $16::numeric [],
-            $17::int4 [],
-            $18::int8 [],
             $19::bytea [],
             $20::bytea [],
-            $21::bytea [],
+            $21::numeric [],
             $22::bytea [],
-            $23::numeric [],
-            $24::text []
+            $23::bytea [],
+            $24::bytea [],
+            $25::bytea [],
+            $26::numeric [],
+            $27::numeric [],
+            $28::int4 [],
+            $29::int8 [],
+            $30::bytea [],
+            $31::bytea [],
+            $32::bytea [],
+            $33::bytea [],
+            $34::numeric [],
+            $35::text []
         )
     RETURNING 1 as res
 ),
@@ -70,13 +81,13 @@ log_insert AS (
     SELECT *
     FROM
         unnest(
-            $25::bytea [],
-            $26::bytea [],
-            $27::bytea [],
-            $28::int4 [],
-            $29::int4 [],
-            $30::int8 [],
-            $31::bytea []
+            $36::bytea [],
+            $37::bytea [],
+            $38::bytea [],
+            $39::int4 [],
+            $40::int4 [],
+            $41::int8 [],
+            $42::bytea []
         )
     RETURNING 1 as res
 ),
@@ -94,13 +105,13 @@ topic_insert AS (
     SELECT *
     FROM
         unnest(
-            $32::bytea [],
-            $33::bytea [],
-            $34::int4 [],
-            $35::int4 [],
-            $36::int4 [],
-            $37::int8 [],
-            $38::bytea []
+            $43::bytea [],
+            $44::bytea [],
+            $45::int4 [],
+            $46::int4 [],
+            $47::int4 [],
+            $48::int8 [],
+            $49::bytea []
         )
     RETURNING 1 as res
 ),
@@ -110,13 +121,13 @@ account_insert AS (
         SELECT *
         FROM
             unnest(
-                $39::bytea [],
-                $40::bytea [],
-                $41::numeric [],
-                $42::numeric [],
-                $43::int8 [],
-                $44::numeric [],
-                $45::numeric []
+                $50::bytea [],
+                $51::bytea [],
+                $52::numeric [],
+                $53::numeric [],
+                $54::int8 [],
+                $55::numeric [],
+                $56::numeric []
             )
             AS t (
                 address,
@@ -163,11 +174,11 @@ slot_insert AS (
         SELECT *
         FROM
             unnest(
-                $46::bytea [],
-                $47::bytea [],
-                $48::bytea [],
-                $49::int8 [],
-                $50::bytea []
+                $57::bytea [],
+                $58::bytea [],
+                $59::bytea [],
+                $60::int8 [],
+                $61::bytea []
             )
             AS t (idx, value, account_address, creation_block, original_value)
     )
@@ -194,20 +205,20 @@ slot_insert AS (
 
 historical_nonce_insert AS (
     INSERT INTO historical_nonces (address, nonce, block_number)
-    SELECT * FROM unnest($51::bytea [], $52::numeric [], $53::int8 [])
+    SELECT * FROM unnest($62::bytea [], $63::numeric [], $64::int8 [])
     RETURNING 1 as res
 ),
 
 historical_balance_insert AS (
     INSERT INTO historical_balances (address, balance, block_number)
-    SELECT * FROM unnest($54::bytea [], $55::numeric [], $56::int8 [])
+    SELECT * FROM unnest($65::bytea [], $66::numeric [], $67::int8 [])
     RETURNING 1 as res
 ),
 
 historical_slots_insert AS (
     INSERT INTO historical_slots (idx, value, account_address, block_number)
     SELECT *
-    FROM unnest($57::bytea [], $58::bytea [], $59::bytea [], $60::int8 [])
+    FROM unnest($68::bytea [], $69::bytea [], $70::bytea [], $71::int8 [])
     RETURNING 1 as res
 )
 
