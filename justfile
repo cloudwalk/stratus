@@ -179,7 +179,7 @@ e2e-stratus test="":
     fi
 
     echo "-> Starting Stratus"
-    RUST_LOG=info just run -a 0.0.0.0:3000 &
+    RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
@@ -301,7 +301,7 @@ contracts-remove:
 contracts-test-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
-    RUST_LOG=info just run -a 0.0.0.0:3000 > /dev/null &
+    RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
@@ -340,5 +340,4 @@ contracts-test-stratus-postgres:
     echo "-> Killing Postgres"
     docker-compose down
 
-    echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
