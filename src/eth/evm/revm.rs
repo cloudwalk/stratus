@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::anyhow;
+use anyhow::Context;
 use itertools::Itertools;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
@@ -103,7 +104,10 @@ impl Evm for Revm {
 
         let result = match evm_result {
             Ok(result) => Ok(parse_revm_execution(result, session.input, session.storage_changes)),
-            Err(e) => Err(anyhow!("Error executing EVM transaction. {:?}", e)),
+            Err(e) => {
+                tracing::warn!(reason = ?e, "evm execution error");
+                Err(e).context("Error executing EVM transaction.")
+            }
         };
         metrics::inc_evm_execution(start.elapsed(), &point_in_time, result.is_ok());
 
