@@ -18,13 +18,13 @@ use jsonrpsee::SubscriptionMessage;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::UnixTime;
 
