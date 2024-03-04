@@ -7,15 +7,16 @@ use metrics::describe_counter;
 use metrics::describe_histogram;
 use metrics::histogram;
 use metrics::Label as MetricsLabel;
+use metrics_exporter_prometheus::Matcher;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use paste::paste;
 
+use crate::ext::not;
 use crate::metrics;
-use crate::metrics_impl_describe;
 use crate::metrics_impl_fn_inc;
 
-/// Buckets to fit metrics.
-const BUCKETS: [f64; 37] = [
+/// Default bucket for duratino based metrics.
+const BUCKET_FOR_DURATION: [f64; 37] = [
     0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, // 0.1ms to 0.9ms
     0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, // 1ms to 9ms
     0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, // 10ms to 90ms
@@ -29,22 +30,27 @@ const BUCKETS: [f64; 37] = [
 pub fn init_metrics() {
     tracing::info!("starting metrics");
 
-    PrometheusBuilder::new()
-        .set_buckets(&BUCKETS)
-        .unwrap()
-        .install()
-        .expect("failed to start metrics");
+    // get metric definitions.
+    let mut metrics = Vec::new();
+    metrics.extend(metrics_for_json_rpc());
+    metrics.extend(metrics_for_executor());
+    metrics.extend(metrics_for_evm());
+    metrics.extend(metrics_for_storage_read());
+    metrics.extend(metrics_for_storage_write());
 
-    // api metrics
-    register_metrics_for_json_rpc();
+    // init provider.
+    let mut builder = PrometheusBuilder::new().set_buckets(&BUCKET_FOR_DURATION).unwrap();
+    for metric in &metrics {
+        if not(metric.buckets.is_empty()) {
+            builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
+        }
+    }
+    builder.install().expect("failed to start metrics");
 
-    // executor metrics
-    register_metrics_for_executor();
-    register_metrics_for_evm();
-
-    // storage metrics
-    register_metrics_for_storage_read();
-    register_metrics_for_storage_write();
+    // init description after provider start
+    for metric in &metrics {
+        metric.register_description();
+    }
 }
 
 // JSON-RPC metrics.
@@ -52,10 +58,10 @@ metrics! {
     group: json_rpc,
 
     "Number of JSON-RPC requests that started."
-    counter   rpc_requests_started{method, function},
+    counter   rpc_requests_started{method, function} [],
 
     "Number of JSON-RPC requests that finished."
-    histogram rpc_requests_finished{method, function, success}
+    histogram_duration rpc_requests_finished{method, function, success} []
 }
 
 // Storage reads.
@@ -63,22 +69,22 @@ metrics! {
     group: storage_read,
 
     "Time to execute storage read_current_block_number operation."
-    histogram storage_read_current_block_number{success},
+    histogram_duration storage_read_current_block_number{success} [],
 
     "Time to execute storage read_account operation."
-    histogram storage_read_account{kind, point_in_time, success},
+    histogram_duration storage_read_account{kind, point_in_time, success} [],
 
     "Time to execute storage read_block operation."
-    histogram storage_read_block{success},
+    histogram_duration storage_read_block{success} [],
 
     "Time to execute storage read_logs operation."
-    histogram storage_read_logs{success},
+    histogram_duration storage_read_logs{success} [],
 
     "Time to execute storage read_slot operation."
-    histogram storage_read_slot{kind, point_in_time, success},
+    histogram_duration storage_read_slot{kind, point_in_time, success} [],
 
     "Time to execute storage read_mined_transaction operation."
-    histogram storage_read_mined_transaction{success}
+    histogram_duration storage_read_mined_transaction{success} []
 }
 
 // Storage writes.
@@ -86,25 +92,25 @@ metrics! {
     group: storage_write,
 
     "Time to execute storage increment_block_number operation."
-    histogram storage_increment_block_number{success},
+    histogram_duration storage_increment_block_number{success} [],
 
     "Time to execute storage set_block_number operation."
-    histogram storage_set_block_number{success},
+    histogram_duration storage_set_block_number{success} [],
 
     "Time to execute storage save_accounts operation."
-    histogram storage_save_accounts{success},
+    histogram_duration storage_save_accounts{success} [],
 
     "Time to execute storage save_account_changes operation."
-    histogram storage_save_account_changes{success},
+    histogram_duration storage_save_account_changes{success} [],
 
     "Time to execute storage save_block operation."
-    histogram storage_save_block{success},
+    histogram_duration storage_save_block{success} [],
 
     "Time to execute storage reset operation."
-    histogram storage_reset{kind, success},
+    histogram_duration storage_reset{kind, success} [],
 
     "Time to execute storage commit operation."
-    histogram storage_commit{size_by_tx, size_by_gas, success}
+    histogram_duration storage_commit{size_by_tx, size_by_gas, success} []
 }
 
 // Execution metrics.
@@ -112,29 +118,35 @@ metrics! {
     group: executor,
 
     "Time to execute import_offline operation."
-    histogram executor_import_offline{},
+    histogram_duration executor_import_offline{} [],
 
     "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
-    histogram executor_import_offline_transaction{},
+    histogram_duration executor_import_offline_transaction{} [],
 
     "Time to execute import_online operation."
-    histogram executor_import_online{},
+    histogram_duration executor_import_online{} [],
 
     "Time to execute and persist a single transaction inside import_online operation."
-    histogram executor_import_online_transaction{},
+    histogram_duration executor_import_online_transaction{} [],
 
     "Time to execute a transaction received with eth_sendRawTransaction."
-    histogram executor_transact{success},
+    histogram_duration executor_transact{success} [],
 
     "Time to execute a transaction received with eth_call or eth_estimateGas."
-    histogram executor_call{success}
+    histogram_duration executor_call{success} []
 }
 
 metrics! {
     group: evm,
 
     "Time to execute EVM execution."
-    histogram evm_execution{point_in_time, success}
+    histogram_duration evm_execution{point_in_time, success} [],
+
+    "Number of accounts reads in a single EVM execution."
+    histogram_counter evm_account_reads{} [0., 1., 2., 3., 4., 5.],
+
+    "Number of slot reads in a single EVM execution."
+    histogram_counter evm_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100.]
 }
 
 // -----------------------------------------------------------------------------
@@ -205,38 +217,30 @@ macro_rules! metrics {
         $(
             $description:literal
             $kind:ident $name:ident{ $($label:ident),* }
+            $buckets:expr
         ),+
     ) => {
-        // Register metrics with description with the provider
+        // Generate function to get metric definition.
         paste! {
-            fn [<register_metrics_for_ $group>]() {
-                $(
-                    metrics_impl_describe!($kind $name $description);
-                )+
+            fn [<metrics_for_ $group>]() -> Vec<Metric> {
+                vec![
+                    $(
+                        Metric {
+                            kind: stringify!($kind),
+                            name: stringify!([<stratus_ $name>]),
+                            description: stringify!($description),
+                            buckets: $buckets.to_vec()
+                        },
+                    )+
+                ]
             }
         }
 
-        // Record metrics
+        // Generate function to record metrics values.
         $(
             metrics_impl_fn_inc!($kind $name $group $($label)*);
         )+
     }
-}
-
-/// Internal - Generates a statement that describe a metrics.
-#[macro_export]
-#[doc(hidden)]
-macro_rules! metrics_impl_describe {
-    (counter $name:ident $description:literal) => {
-        paste! {
-            describe_counter!(stringify!([<stratus_$name>]),  $description)
-        }
-    };
-    (histogram  $name:ident $description:literal) => {
-        paste! {
-            describe_histogram!(stringify!([<stratus_$name>]), $description)
-        }
-    };
 }
 
 /// Internal - Generates a function that increases a metric value.
@@ -259,7 +263,23 @@ macro_rules! metrics_impl_fn_inc {
             }
         }
     };
-    (histogram  $name:ident $group:ident $($label:ident)*) => {
+    (histogram_counter  $name:ident $group:ident $($label:ident)*) => {
+        paste! {
+            #[doc = "Add N to `" $name "` histogram."]
+            pub fn [<inc_ $name>](n: usize, $( $label: impl Into<LabelValue> ),*) {
+                let labels = into_labels(
+                    vec![
+                        ("group", stringify!($group).into()),
+                        $(
+                            (stringify!($label), $label.into()),
+                        )*
+                    ]
+                );
+                histogram!(stringify!([<stratus_$name>]), n as f64, labels)
+            }
+        }
+    };
+    (histogram_duration  $name:ident $group:ident $($label:ident)*) => {
         paste! {
             #[doc = "Add operation duration to `" $name "` histogram."]
             pub fn [<inc_ $name>](duration: std::time::Duration, $( $label: impl Into<LabelValue> ),*) {
@@ -275,4 +295,22 @@ macro_rules! metrics_impl_fn_inc {
             }
         }
     };
+}
+
+struct Metric {
+    kind: &'static str,
+    name: &'static str,
+    description: &'static str,
+    buckets: Vec<f64>,
+}
+
+impl Metric {
+    /// Register metric description with the provider.
+    fn register_description(&self) {
+        match self.kind {
+            "counter" => describe_counter!(self.name, self.description),
+            "histogram_duration" | "histogram_counter" => describe_histogram!(self.name, self.description),
+            _ => {}
+        }
+    }
 }

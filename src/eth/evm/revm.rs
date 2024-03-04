@@ -99,6 +99,8 @@ impl Evm for Revm {
 
         // parse result and track metrics
         let session = evm.take_db();
+        let account_reads = session.account_reads;
+        let slot_reads = session.slot_reads;
         let point_in_time = session.input.point_in_time.clone();
 
         let result = match evm_result {
@@ -108,7 +110,10 @@ impl Evm for Revm {
                 Err(anyhow!("Error executing EVM transaction. Check logs for more information."))
             }
         };
+
         metrics::inc_evm_execution(start.elapsed(), &point_in_time, result.is_ok());
+        metrics::inc_evm_account_reads(account_reads);
+        metrics::inc_evm_slot_reads(slot_reads);
 
         result
     }
@@ -120,6 +125,12 @@ impl Evm for Revm {
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 struct RevmDatabaseSession {
+    /// Number of account reads during this execution.
+    account_reads: usize,
+
+    /// Number of slot reads during this execution.
+    slot_reads: usize,
+
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
 
@@ -133,6 +144,8 @@ struct RevmDatabaseSession {
 impl RevmDatabaseSession {
     pub fn new(storage: Arc<StratusStorage>, input: EvmInput) -> Self {
         Self {
+            account_reads: 0,
+            slot_reads: 0,
             storage,
             input,
             storage_changes: Default::default(),
@@ -144,6 +157,8 @@ impl Database for RevmDatabaseSession {
     type Error = anyhow::Error;
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
+        self.account_reads += 1;
+
         // retrieve account
         let address: Address = revm_address.into();
         let account = Handle::current().block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
@@ -169,10 +184,11 @@ impl Database for RevmDatabaseSession {
     }
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
+        self.slot_reads += 1;
+
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
-        //instructions?
         let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
 
         // track original value, except if ignored address
