@@ -104,8 +104,7 @@ impl Evm for Revm {
         let result = match evm_result {
             Ok(result) => Ok(parse_revm_execution(result, session.input, session.storage_changes)),
             Err(e) => {
-                tracing::warn!(reason = ?e, "evm execution error");
-                Err(anyhow!("Error executing EVM transaction. Check logs for more information."))
+                Err(anyhow!("Error executing EVM transaction. {:?}", e))
             }
         };
         metrics::inc_evm_execution(start.elapsed(), &point_in_time, result.is_ok());
