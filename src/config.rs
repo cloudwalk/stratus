@@ -148,6 +148,10 @@ pub struct CommonConfig {
     #[cfg(feature = "dev")]
     #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
     pub enable_test_accounts: bool,
+
+    /// Prevents clap from breaking when passing `nocapture` options in tests.
+    #[arg(long = "nocapture")]
+    pub nocapture: bool,
 }
 
 impl CommonConfig {
