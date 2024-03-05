@@ -73,6 +73,8 @@ fake = { version = "2.9.2", features = ["derive"] }
 binary_macros = "1.0.0"
 serial_test = "2.0.0"
 stringreader = "0.1.1"
+testcontainers = "0.15.0"
+testcontainers-modules = { version = "0.3.5", features = ["postgres"] }
 
 [build-dependencies]
 const-hex = "1.10.0"

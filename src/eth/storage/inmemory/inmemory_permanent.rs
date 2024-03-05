@@ -39,11 +39,11 @@ use crate::eth::storage::StorageError;
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
-    accounts: HashMap<Address, InMemoryPermanentAccount>,
-    transactions: HashMap<Hash, TransactionMined>,
-    blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
-    blocks_by_hash: IndexMap<Hash, Arc<Block>>,
-    logs: Vec<LogMined>,
+    pub accounts: HashMap<Address, InMemoryPermanentAccount>,
+    pub transactions: HashMap<Hash, TransactionMined>,
+    pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
+    pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
+    pub logs: Vec<LogMined>,
 }
 
 #[derive(Debug)]
@@ -194,13 +194,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let state = self.lock_read().await;
 
         match state.accounts.get(address) {
-            Some(account) => {
-                let account = Account {
-                    address: address.clone(),
-                    balance: account.balance.get_at_point(point_in_time).unwrap_or_default(),
-                    nonce: account.nonce.get_at_point(point_in_time).unwrap_or_default(),
-                    bytecode: account.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-                };
+            Some(inmemory_account) => {
+                let account = inmemory_account.to_account(point_in_time);
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
@@ -434,13 +429,13 @@ impl PermanentStorage for InMemoryPermanentStorage {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct InMemoryPermanentAccount {
+pub struct InMemoryPermanentAccount {
     #[allow(dead_code)]
-    address: Address,
-    balance: InMemoryHistory<Wei>,
-    nonce: InMemoryHistory<Nonce>,
-    bytecode: InMemoryHistory<Option<Bytes>>,
-    slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
+    pub address: Address,
+    pub balance: InMemoryHistory<Wei>,
+    pub nonce: InMemoryHistory<Nonce>,
+    pub bytecode: InMemoryHistory<Option<Bytes>>,
+    pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
 impl InMemoryPermanentAccount {
@@ -477,7 +472,18 @@ impl InMemoryPermanentAccount {
         self.slots = new_slots;
     }
 
-    fn is_contract(&self) -> bool {
+    /// Checks current account is a contract.
+    pub fn is_contract(&self) -> bool {
         self.bytecode.get_current().is_some()
+    }
+
+    /// Converts itself to an account at a point-in-time.
+    pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
+        Account {
+            address: self.address.clone(),
+            balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
+            nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
+            bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
+        }
     }
 }
