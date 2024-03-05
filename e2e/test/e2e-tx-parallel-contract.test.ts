@@ -71,23 +71,28 @@ describe("Transaction: parallel TestContractBalances", async () => {
     it("Sends parallel transactions that should have one success and one fail due to lack of balance", async () => {
         expect(await _contract.get(BOB.address)).eq(625);
 
+        const senders = randomAccounts(20);
         const signedTxsSub = [];
-
-        for (let i = 0; i < 2; i++) {
-            const nonce = await sendGetNonce(ALICE.address);
-            const tx = await _contract.connect(ALICE.signer()).sub.populateTransaction(BOB.address, 600, {
+        for (let accountIndex = 0; accountIndex < senders.length; accountIndex++) {
+            const sender = senders[accountIndex];
+            let nonce = await sendGetNonce(sender.address);
+            const tx = await _contract.connect(sender.signer()).sub.populateTransaction(BOB.address, 60, {
                 nonce: nonce,
                 ...TX_PARAMS,
             });
 
-            signedTxsSub.push(await ALICE.signer().signTransaction(tx));
+            nonce++;
+
+            signedTxsSub.push(await sender.signer().signTransaction(tx));
         }
 
-        const result = await sendRawTransactions(signedTxsSub);
+        let result = await sendRawTransactions(signedTxsSub);
 
-        // only one transaction should be successful
         expect(await _contract.get(BOB.address)).eq(25);
-        expect(result[1]).eq(undefined);
+        const undefinedCount = result.reduce((count, element) => {
+            return element === undefined ? count + 1 : count;
+        }, 0);
+        expect(undefinedCount).eq(10);
     });
 });
 
