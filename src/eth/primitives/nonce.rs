@@ -74,13 +74,7 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Nonce {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Nonce {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
-            Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode nonce");
-                IsNull::Yes
-            }
-        }
+        BigDecimal::from(self.0).encode(buf)
     }
 }
 

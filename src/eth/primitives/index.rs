@@ -15,6 +15,7 @@ use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
+use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
@@ -58,28 +59,19 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
 
 impl sqlx::Type<sqlx::Postgres> for Index {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        // HACK: Actually SERIAL, sqlx was panicking
         sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Index {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        let integer = match i64::try_from(self.0) {
-            Ok(val) => val,
-            Err(err) => {
-                tracing::error!(reason = ?err, "failed to convert Index to i64");
-                return IsNull::Yes;
-            }
-        };
-
-        <i64 as sqlx::Encode<sqlx::Postgres>>::encode(integer, buf)
+        BigDecimal::from(self.0).encode(buf)
     }
 }
 
 impl PgHasArrayType for Index {
     fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <i64 as PgHasArrayType>::array_type_info()
+        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }
 

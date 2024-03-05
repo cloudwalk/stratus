@@ -24,6 +24,7 @@ use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
+use sqlx::types::BigDecimal;
 
 use crate::eth::primitives::Hash;
 use crate::gen_newtype_from;
@@ -176,18 +177,12 @@ impl sqlx::Type<sqlx::Postgres> for BlockNumber {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for BlockNumber {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match i64::try_from(*self) {
-            Ok(res) => <i64 as sqlx::Encode<sqlx::Postgres>>::encode(res, buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode BlockNumber");
-                IsNull::Yes
-            }
-        }
+        BigDecimal::from(u64::from(*self)).encode(buf)
     }
 }
 
 impl PgHasArrayType for BlockNumber {
     fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <i64 as PgHasArrayType>::array_type_info()
+        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }
