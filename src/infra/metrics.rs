@@ -124,7 +124,7 @@ metrics! {
     histogram_counter executor_import_offline_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 150., 200.],
 
     "Number of slots read in a single EVM execution."
-    histogram_counter executor_import_offline_slot_reads{} [0., 25., 50., 75., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000.],
+    histogram_counter executor_import_offline_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000., 6000., 7000., 8000., 9000., 10000.],
 
     "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
     histogram_duration executor_import_offline_transaction{} [],
@@ -152,7 +152,7 @@ metrics! {
     histogram_counter evm_execution_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10.],
 
     "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{} [0., 5., 10., 15., 20., 25., 30., 35., 40., 45., 50., 55., 60., 65., 70., 75., 80., 85., 90., 95., 100.]
+    histogram_counter evm_execution_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000.]
 }
 
 // -----------------------------------------------------------------------------
@@ -228,6 +228,12 @@ macro_rules! metrics {
     ) => {
         // Generate function to get metric definition.
         paste! {
+            // Generate constant to access by name.
+            $(
+                pub const [<METRIC_ $name:upper>]: &str = stringify!([<stratus_ $name>]);
+            )+
+
+            // Generate function that return metric definition.
             fn [<metrics_for_ $group>]() -> Vec<Metric> {
                 vec![
                     $(
