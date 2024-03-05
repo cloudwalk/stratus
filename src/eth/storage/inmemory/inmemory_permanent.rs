@@ -37,8 +37,8 @@ use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
-#[derive(Debug, Default)]
-struct InMemoryPermanentStorageState {
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct InMemoryPermanentStorageState {
     accounts: HashMap<Address, InMemoryPermanentAccount>,
     transactions: HashMap<Hash, TransactionMined>,
     blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
@@ -53,6 +53,10 @@ pub struct InMemoryPermanentStorage {
 }
 
 impl InMemoryPermanentStorage {
+    // -------------------------------------------------------------------------
+    // Lock methods
+    // -------------------------------------------------------------------------
+
     /// Locks inner state for reading.
     async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
         self.state.read().await
@@ -63,6 +67,44 @@ impl InMemoryPermanentStorage {
         self.state.write().await
     }
 
+    // -------------------------------------------------------------------------
+    // Snapshot methods
+    // -------------------------------------------------------------------------
+
+    /// Dump a snapshot of an execution previous state that can be used in tests.
+    pub async fn dump_snapshot(changes: Vec<ExecutionAccountChanges>) -> InMemoryPermanentStorageState {
+        let mut state = InMemoryPermanentStorageState::default();
+        for change in changes {
+            // save account
+            let mut account = InMemoryPermanentAccount::new_empty(change.address.clone());
+            account.balance = InMemoryHistory::new_at_zero(change.balance.take_original().unwrap_or_default());
+            account.nonce = InMemoryHistory::new_at_zero(change.nonce.take_original().unwrap_or_default());
+            account.bytecode = InMemoryHistory::new_at_zero(change.bytecode.take_original().unwrap_or_default());
+
+            // save slots
+            for (index, slot) in change.slots {
+                let slot = slot.take_original().unwrap_or_default();
+                let slot_history = InMemoryHistory::new_at_zero(slot);
+                account.slots.insert(index, slot_history);
+            }
+
+            state.accounts.insert(change.address, account);
+        }
+        state
+    }
+
+    /// Creates a new InMemoryPermanentStorage from a snapshot dump.
+    pub fn from_snapshot(state: InMemoryPermanentStorageState) -> Self {
+        Self {
+            state: RwLock::new(state),
+            block_number: AtomicU64::new(0),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // State methods
+    // -------------------------------------------------------------------------
+
     /// Clears in-memory state.
     pub async fn clear(&self) {
         let mut state = self.lock_write().await;
@@ -71,42 +113,6 @@ impl InMemoryPermanentStorage {
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
         state.logs.clear();
-    }
-
-    async fn save_account_changes(state: &mut InMemoryPermanentStorageState, number: BlockNumber, account_changes: Vec<ExecutionAccountChanges>) {
-        for changes in account_changes {
-            let account = state
-                .accounts
-                .entry(changes.address.clone())
-                .or_insert_with(|| InMemoryPermanentAccount::new_empty(changes.address));
-
-            // account basic info
-            if let Some(nonce) = changes.nonce.take_modified() {
-                account.nonce.push(number, nonce);
-            }
-            if let Some(balance) = changes.balance.take_modified() {
-                account.balance.push(number, balance);
-            }
-
-            // bytecode
-            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                account.bytecode.push(number, Some(bytecode));
-            }
-
-            // slots
-            for (_, slot) in changes.slots {
-                if let Some(slot) = slot.take_modified() {
-                    match account.slots.get_mut(&slot.index) {
-                        Some(slot_history) => {
-                            slot_history.push(number, slot);
-                        }
-                        None => {
-                            account.slots.insert(slot.index.clone(), InMemoryHistory::new(number, slot));
-                        }
-                    }
-                }
-            }
-        }
     }
 
     async fn check_conflicts(state: &InMemoryPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
@@ -297,7 +303,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         // save block
         tracing::debug!(number = %block.number(), "saving block");
         let block = Arc::new(block);
-        state.blocks_by_number.insert(*block.number(), Arc::clone(&block));
+        let number = block.number();
+        state.blocks_by_number.insert(*number, Arc::clone(&block));
         state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
 
         // save transactions
@@ -311,8 +318,40 @@ impl PermanentStorage for InMemoryPermanentStorage {
             }
         }
 
-        // save block execution changes
-        Self::save_account_changes(&mut state, *block.number(), account_changes).await;
+        // save block account changes
+        for changes in account_changes {
+            let account = state
+                .accounts
+                .entry(changes.address.clone())
+                .or_insert_with(|| InMemoryPermanentAccount::new_empty(changes.address));
+
+            // account basic info
+            if let Some(nonce) = changes.nonce.take_modified() {
+                account.nonce.push(*number, nonce);
+            }
+            if let Some(balance) = changes.balance.take_modified() {
+                account.balance.push(*number, balance);
+            }
+
+            // bytecode
+            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
+                account.bytecode.push(*number, Some(bytecode));
+            }
+
+            // slots
+            for (_, slot) in changes.slots {
+                if let Some(slot) = slot.take_modified() {
+                    match account.slots.get_mut(&slot.index) {
+                        Some(slot_history) => {
+                            slot_history.push(*number, slot);
+                        }
+                        None => {
+                            account.slots.insert(slot.index.clone(), InMemoryHistory::new(*number, slot));
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
@@ -394,7 +433,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct InMemoryPermanentAccount {
     #[allow(dead_code)]
     address: Address,
