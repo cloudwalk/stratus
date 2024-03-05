@@ -1,6 +1,7 @@
 import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables (automatically set in all actions).
+export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,importer-download=info,importer-importer=info")
 
 # Default URLs that can be passed as argument.

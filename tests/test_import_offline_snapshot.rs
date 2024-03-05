@@ -20,6 +20,10 @@ use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
 use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
+use testcontainers::clients;
+use testcontainers::Container;
+use testcontainers::RunnableImage;
+use testcontainers_modules::postgres::Postgres as PostgresImage;
 
 const TRACKED_METRICS: [&str; 8] = [
     METRIC_EVM_EXECUTION,
@@ -34,6 +38,7 @@ const TRACKED_METRICS: [&str; 8] = [
 
 #[tokio::test]
 async fn test_import_offline_snapshot() {
+    let docker = clients::Cli::default();
     let config = init_global_services::<CommonConfig>();
 
     // init block
@@ -53,8 +58,7 @@ async fn test_import_offline_snapshot() {
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
 
     // init postgres from snapshot
-    let pg = Postgres::new("postgres://postgres:123@localhost:5432/stratus").await.unwrap();
-    populate_postgres(&pg, snapshot).await;
+    let (_pg_container, pg) = populate_postgres(&docker, snapshot).await;
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
 
     // init executor and execute
@@ -73,15 +77,17 @@ async fn test_import_offline_snapshot() {
     }
 }
 
-async fn populate_postgres(pg: &Postgres, state: InMemoryPermanentStorageState) {
-    // reset database
-    let pool = &pg.connection_pool;
-    sqlx::query("truncate accounts cascade").execute(pool).await.unwrap();
-    sqlx::query("truncate account_slots cascade").execute(pool).await.unwrap();
-    sqlx::query("truncate transactions cascade").execute(pool).await.unwrap();
-    sqlx::query("truncate topics cascade").execute(pool).await.unwrap();
-    sqlx::query("truncate logs cascade").execute(pool).await.unwrap();
-    sqlx::query("delete from blocks where number > 0").execute(pool).await.unwrap();
+async fn populate_postgres(docker: &clients::Cli, state: InMemoryPermanentStorageState) -> (Container<'_, PostgresImage>, Postgres) {
+    // init docker container (this should be extract to a reusable module if going to be used in other tests)
+    let pg_image = RunnableImage::from(PostgresImage::default().with_user("postgres").with_password("123").with_db_name("stratus"))
+        .with_mapped_port((5432, 5432))
+        .with_volume(("./static/schema/001-init.sql", "/docker-entrypoint-initdb.d/001-schema.sql"))
+        .with_volume(("./static/schema/002-schema-external-rpc.sql", "/docker-entrypoint-initdb.d/002-schema.sql"))
+        .with_tag("16.1");
+    let pg_container = docker.run(pg_image);
+
+    // init postgres client
+    let pg = Postgres::new("postgres://postgres:123@localhost:5432/stratus").await.unwrap();
 
     // save accounts
     let accounts = state.accounts.values().map(|a| a.to_account(&StoragePointInTime::Present)).collect_vec();
@@ -103,4 +109,6 @@ async fn populate_postgres(pg: &Postgres, state: InMemoryPermanentStorageState) 
         }
     }
     tx.commit().await.unwrap();
+
+    (pg_container, pg)
 }
