@@ -41,7 +41,7 @@ pub fn init_metrics() {
     // init exporter
     let mut builder = PrometheusBuilder::new();
 
-    // init buckets (comment it to use summary)
+    // init buckets (comment to use summary)
     builder = builder.set_buckets(&BUCKET_FOR_DURATION).unwrap();
     for metric in &metrics {
         if metric.has_custom_buckets() {
