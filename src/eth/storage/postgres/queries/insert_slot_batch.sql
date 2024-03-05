@@ -1,6 +1,6 @@
 WITH slot_updates
 AS (SELECT *
-    FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::int8[], $5::bytea[])
+    FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::numeric[], $5::bytea[])
     AS t(idx, value, account_address, creation_block, original_value)
 )
 INSERT INTO account_slots (idx, value, account_address, creation_block)

@@ -46,12 +46,12 @@
       {
         "ordinal": 8,
         "name": "idx_in_block: _",
-        "type_info": "Int4"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 9,
         "name": "block_number: _",
-        "type_info": "Int8"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 10,
@@ -91,7 +91,7 @@
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Numeric"
       ]
     },
     "nullable": [
