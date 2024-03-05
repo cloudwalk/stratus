@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 
 CREATE TABLE IF NOT EXISTS accounts (
     address BYTEA NOT NULL CHECK (LENGTH(address) = 20),
-    bytecode BYTEA CHECK (LENGTH(bytecode) <= 24000),
+    bytecode BYTEA,
     latest_balance NUMERIC NOT NULL CHECK (latest_balance >= 0),
     latest_nonce NUMERIC NOT NULL CHECK (latest_nonce >= 0),
     creation_block  BIGSERIAL NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     nonce NUMERIC NOT NULL CHECK (nonce >= 0),
     address_from BYTEA NOT NULL CHECK (LENGTH(address_from) = 20),
     address_to BYTEA CHECK  (LENGTH(address_to) = 20),
-    input BYTEA NOT NULL CHECK (LENGTH(input) <= 24000)
+    input BYTEA NOT NULL
     ,output BYTEA NOT NULL
     ,gas NUMERIC NOT NULL CHECK (gas >= 0)
     ,gas_price NUMERIC NOT NULL CHECK (gas_price >= 0)
