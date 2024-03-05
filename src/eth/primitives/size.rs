@@ -15,7 +15,7 @@ use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct Size(U256);
+pub struct Size(u64);
 
 impl Display for Size {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -39,7 +39,7 @@ impl TryFrom<BigDecimal> for Size {
 
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
         let value_str = value.to_string();
-        Ok(Size(U256::from_dec_str(&value_str)?))
+        Ok(Size(u64::from_str(&value_str)?))
     }
 }
 
@@ -82,20 +82,18 @@ impl PgHasArrayType for Size {
 // ----------------------------------------------------------------------------
 impl From<Size> for U256 {
     fn from(value: Size) -> Self {
-        value.0
+        value.0.into()
     }
 }
 
 impl From<Size> for u64 {
     fn from(value: Size) -> Self {
-        value.0.low_u64()
+        value.0
     }
 }
 
-impl TryFrom<Size> for BigDecimal {
-    type Error = anyhow::Error;
-    fn try_from(value: Size) -> Result<Self, Self::Error> {
-        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
+impl From<Size> for BigDecimal {
+    fn from(value: Size) -> Self {
+        BigDecimal::from(value.0)
     }
 }
