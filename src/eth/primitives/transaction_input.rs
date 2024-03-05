@@ -106,7 +106,7 @@ impl TryFrom<EthersTransaction> for TransactionInput {
             None => {
                 let transaction_value = value.clone();
                 tracing::warn!(reason = %"transaction without chain id", ?transaction_value);
-                2009.into() //XXX this might have unexpected consequences, we need to review this down the road
+                2009u64.into() //XXX this might have unexpected consequences, we need to review this down the road
             }
         };
 

@@ -13,6 +13,7 @@ use fake::Dummy;
 use fake::Faker;
 
 use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(u64);
@@ -39,19 +40,8 @@ impl Default for ChainId {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64);
+gen_newtype_try_from!(self = ChainId, other = i32, U256);
 
-impl TryFrom<U256> for ChainId {
-    type Error = anyhow::Error;
-    fn try_from(value: U256) -> Result<Self, Self::Error> {
-        value.try_into()
-    }
-}
-
-impl From<i32> for ChainId {
-    fn from(value: i32) -> Self {
-        ChainId(value as u64)
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

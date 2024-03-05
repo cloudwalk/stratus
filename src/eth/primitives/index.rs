@@ -17,6 +17,7 @@ use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 /// Represents a transaction index or log index.
 ///
@@ -37,24 +38,14 @@ impl Index {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Index, other = u64);
-
-impl From<i64> for Index {
-    fn from(value: i64) -> Self {
-        Index::new(value as u64)
-    }
-}
+gen_newtype_try_from!(self = Index, other = U256, i64);
 
 impl From<U64> for Index {
     fn from(value: U64) -> Self {
-        Index::new(value.low_u64() as u64) // TODO: this will break things if the value is bigger than u16
+        Index(value.as_u64())
     }
 }
 
-impl From<U256> for Index {
-    fn from(value: U256) -> Self {
-        Index::new(value.low_u64() as u64) // TODO: this will break things if the value is bigger than u16
-    }
-}
 
 // -----------------------------------------------------------------------------
 // sqlx traits
@@ -62,7 +53,7 @@ impl From<U256> for Index {
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
         let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
+        Ok(value.try_into()?)
     }
 }
 
