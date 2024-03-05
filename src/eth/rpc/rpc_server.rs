@@ -269,7 +269,7 @@ async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::R
         // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_estimateGas");
-            Err(e.into())
+            Err(error_with_source(e, "failed to execute eth_estimateGas"))
         }
     }
 }
@@ -286,7 +286,7 @@ async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<St
         // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_call");
-            Err(e.context("failed to execute eth_call").into())
+            Err(error_with_source(e, "failed to execute eth_call"))
         }
     }
 }
@@ -306,7 +306,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
-            Err(e.context("failed to execute eth_sendRawTransaction").into())
+            Err(error_with_source(e, "failed to execute eth_sendRawTransaction"))
         }
     }
 }
@@ -398,6 +398,12 @@ fn hex_num(value: impl Into<U256>) -> String {
 fn hex_num_zero_padded(value: impl Into<U256>) -> String {
     let width = 64 + 2; //the prefix is included in the total width
     format!("{:#0width$x}", value.into(), width = width)
+}
+
+#[inline(always)]
+fn error_with_source(e: anyhow::Error, context: &str) -> RpcError {
+    let error_source = format!("{:?}", e.source());
+    e.context(format!("{} {}", context, error_source)).into()
 }
 
 fn hex_zero() -> String {
