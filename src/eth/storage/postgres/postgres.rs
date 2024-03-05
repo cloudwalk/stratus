@@ -553,7 +553,7 @@ impl PermanentStorage for Postgres {
             block.header.gas_limit as _,
             block.header.gas_used as _,
             block.header.bloom.as_ref(),
-            i64::try_from(block.header.timestamp).map(BigDecimal::from).context("failed to convert block timestamp")?,
+            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")? as _,
             block.header.parent_hash.as_ref(),
             block.header.author as _,
             block.header.extra_data as _,
