@@ -81,7 +81,7 @@ impl PermanentStorage for Postgres {
                     Account,
                     "src/eth/storage/postgres/queries/select_account_at_block.sql",
                     address.as_ref(),
-                    block_number,
+                    block_number as _,
                 )
                 .fetch_optional(&self.connection_pool)
                 .await?
@@ -118,7 +118,7 @@ impl PermanentStorage for Postgres {
                     "src/eth/storage/postgres/queries/select_slot_at_block.sql",
                     address.as_ref(),
                     slot_index.as_ref(),
-                    block_number,
+                    block_number as _,
                 )
                 .fetch_optional(&self.connection_pool)
                 .await?
@@ -154,17 +154,17 @@ impl PermanentStorage for Postgres {
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
                     "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
-                    block_number
+                    block_number as _
                 )
                 .fetch_all(&self.connection_pool);
 
-                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
+                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number as _)
                     .fetch_all(&self.connection_pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
                     "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
-                    block_number
+                    block_number as _
                 )
                 .fetch_all(&self.connection_pool);
 
@@ -256,17 +256,17 @@ impl PermanentStorage for Postgres {
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
                     "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
-                    block_number
+                    block_number as _
                 )
                 .fetch_all(&self.connection_pool);
 
-                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
+                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number as _)
                     .fetch_all(&self.connection_pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
                     "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
-                    block_number
+                    block_number as _
                 )
                 .fetch_all(&self.connection_pool);
 
@@ -309,17 +309,17 @@ impl PermanentStorage for Postgres {
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
                     "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
-                    block_number
+                    block_number as _
                 )
                 .fetch_all(&self.connection_pool);
 
-                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number)
+                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number as _)
                     .fetch_all(&self.connection_pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
                     "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
-                    block_number
+                    block_number as _
                 )
                 .fetch_all(&self.connection_pool);
 
@@ -424,7 +424,7 @@ impl PermanentStorage for Postgres {
                 PostgresTopic,
                 "src/eth/storage/postgres/queries/select_topics_by_block_hash_log_idx.sql",
                 block_hash,
-                log_idx
+                log_idx as _
             )
             .fetch_all(&self.connection_pool)
             .await?;
@@ -671,7 +671,7 @@ impl PermanentStorage for Postgres {
                 nonce,
                 balance,
                 bytecode,
-                block_number,
+                block_number as _,
                 BigDecimal::from(0),
                 BigDecimal::from(0)
             )
@@ -683,7 +683,7 @@ impl PermanentStorage for Postgres {
                 "src/eth/storage/postgres/queries/insert_historical_balance.sql",
                 acc.address.as_ref(),
                 balance,
-                block_number
+                block_number as _
             )
             .execute(&mut *tx)
             .await
@@ -693,7 +693,7 @@ impl PermanentStorage for Postgres {
                 "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
                 acc.address.as_ref(),
                 nonce,
-                block_number
+                block_number as _
             )
             .execute(&mut *tx)
             .await
