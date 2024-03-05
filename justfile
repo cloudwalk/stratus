@@ -1,5 +1,9 @@
 import '.justfile_helpers' # _lint, _outdated
 
+# Environment variables (automatically set in all actions).
+export RUST_LOG := env("RUST_LOG", "stratus=info,importer-download=info,importer-importer=info")
+
+# Default URLs that can be passed as argument.
 postgres_url := env("POSTGRES_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 testnet_url  := "https://rpc.testnet.cloudwalk.io/"
 
@@ -28,12 +32,12 @@ setup:
 # Stratus: Run main service with debug options
 run *args="":
     #!/bin/bash
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
+    cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
     exit 0
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
+    cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
 
 run-substrate-mock:
     npm init -y
@@ -85,11 +89,11 @@ update:
 # ------------------------------------------------------------------------------
 # Importer: Download external RPC blocks to temporary storage
 importer-download *args="":
-    RUST_LOG={{env("RUST_LOG", "importer-download=info,stratus=info")}} cargo run --bin importer-download --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
+    cargo run --bin importer-download --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
 importer-import *args="":
-    RUST_LOG={{env("RUST_LOG", "importer-import=info,stratus=info")}} cargo run --bin importer-import   --features dev --release -- --postgres {{postgres_url}} {{args}}
+    cargo run --bin importer-import   --features dev --release -- --postgres {{postgres_url}} {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
