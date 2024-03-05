@@ -22,6 +22,7 @@ use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 // XXX: should we use U256 or U64?
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -48,7 +49,8 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32, [u8; 32]);
+gen_newtype_from!(self = Gas, other = u8, u16, u32, u64);
+gen_newtype_try_from!(self = Gas, other = i32, U256);
 
 impl TryFrom<BigDecimal> for Gas {
     type Error = anyhow::Error;

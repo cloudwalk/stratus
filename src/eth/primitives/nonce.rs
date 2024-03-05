@@ -9,7 +9,6 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use anyhow::anyhow;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
@@ -22,6 +21,7 @@ use sqlx::types::BigDecimal;
 use sqlx::Decode;
 
 use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(u64);
@@ -50,7 +50,9 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, usize, i32);
+gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64);
+gen_newtype_try_from!(self = Nonce, other = i32, U256);
+
 
 impl TryFrom<BigDecimal> for Nonce {
     type Error = anyhow::Error;
@@ -61,12 +63,7 @@ impl TryFrom<BigDecimal> for Nonce {
     }
 }
 
-impl TryFrom<U256> for Nonce {
-    type Error = anyhow::Error;
-    fn try_from(value: U256) -> Result<Self, Self::Error> {
-        Ok(Nonce(value.try_into().map_err(|err: &str| anyhow!(err))?))
-    }
-}
+
 
 // -----------------------------------------------------------------------------
 // sqlx traits

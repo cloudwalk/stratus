@@ -38,7 +38,20 @@ impl Default for ChainId {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64);
+
+impl TryFrom<U256> for ChainId {
+    type Error = anyhow::Error;
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        value.try_into()
+    }
+}
+
+impl From<i32> for ChainId {
+    fn from(value: i32) -> Self {
+        ChainId(value as u64)
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

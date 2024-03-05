@@ -50,7 +50,7 @@ impl Block {
             transactions.push(TransactionMined::from_external(execution)?);
         }
         Ok(Self {
-            header: block.into(),
+            header: block.try_into()?,
             transactions,
         })
     }
