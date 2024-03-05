@@ -15,7 +15,7 @@ use fake::Faker;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ChainId(U256);
+pub struct ChainId(u64);
 
 impl Display for ChainId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,7 +31,7 @@ impl Dummy<Faker> for ChainId {
 
 impl Default for ChainId {
     fn default() -> Self {
-        ChainId(2008.into())
+        ChainId(2008)
     }
 }
 
@@ -45,6 +45,6 @@ gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64, u128, U256, usize, 
 // -----------------------------------------------------------------------------
 impl From<ChainId> for U256 {
     fn from(value: ChainId) -> Self {
-        value.0
+        value.0.into()
     }
 }
