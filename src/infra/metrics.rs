@@ -38,13 +38,17 @@ pub fn init_metrics() {
     metrics.extend(metrics_for_storage_read());
     metrics.extend(metrics_for_storage_write());
 
-    // init provider and buckets
-    let mut builder = PrometheusBuilder::new().set_buckets(&BUCKET_FOR_DURATION).unwrap();
+    // init exporter
+    let mut builder = PrometheusBuilder::new();
+
+    // init buckets (comment it to use summary)
+    builder = builder.set_buckets(&BUCKET_FOR_DURATION).unwrap();
     for metric in &metrics {
         if metric.has_custom_buckets() {
             builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
         }
     }
+
     builder.install().expect("failed to start metrics");
 
     // init metric description (always after provider started)
