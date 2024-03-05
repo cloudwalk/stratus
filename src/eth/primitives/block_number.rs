@@ -170,7 +170,7 @@ impl sqlx::Type<sqlx::Postgres> for BlockNumber {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         // HACK: Actually BIGSERIAL, in theory
         // they are equal
-        sqlx::postgres::PgTypeInfo::with_name("INT8")
+        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
 

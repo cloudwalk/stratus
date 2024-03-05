@@ -95,7 +95,7 @@ impl sqlx::Type<sqlx::Postgres> for UnixTime {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
         // HACK: should be "INTEGER" in theory
         // they are equal
-        sqlx::postgres::PgTypeInfo::with_name("INT8")
+        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
 
