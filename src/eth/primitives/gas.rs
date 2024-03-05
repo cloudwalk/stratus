@@ -26,11 +26,11 @@ use crate::gen_newtype_from;
 // XXX: should we use U256 or U64?
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct Gas(U256);
+pub struct Gas(u64);
 
 impl Gas {
-    pub const ZERO: Gas = Gas(U256::zero());
-    pub const MAX: Gas = Gas(U256::MAX);
+    pub const ZERO: Gas = Gas(0);
+    pub const MAX: Gas = Gas(u64::max_value());
 }
 
 impl Display for Gas {
@@ -55,7 +55,7 @@ impl TryFrom<BigDecimal> for Gas {
 
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
         let value_str = value.to_string();
-        Ok(Gas(U256::from_dec_str(&value_str)?))
+        Ok(Gas(u64::from_str(&value_str)?))
     }
 }
 
@@ -98,20 +98,18 @@ impl PgHasArrayType for Gas {
 // ----------------------------------------------------------------------------
 impl From<Gas> for U256 {
     fn from(value: Gas) -> Self {
-        value.0
+        value.0.into()
     }
 }
 
 impl From<Gas> for u64 {
     fn from(value: Gas) -> Self {
-        value.0.low_u64()
+        value.0
     }
 }
 
-impl TryFrom<Gas> for BigDecimal {
-    type Error = anyhow::Error;
-    fn try_from(value: Gas) -> Result<Self, Self::Error> {
-        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
+impl From<Gas> for BigDecimal {
+    fn from(value: Gas) -> BigDecimal {
+        BigDecimal::from(value.0)
     }
 }
