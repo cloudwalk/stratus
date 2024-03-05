@@ -46,7 +46,6 @@ impl From<U64> for Index {
     }
 }
 
-
 // -----------------------------------------------------------------------------
 // sqlx traits
 // -----------------------------------------------------------------------------
@@ -70,7 +69,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Index {
             Ok(val) => val,
             Err(err) => {
                 tracing::error!(reason = ?err, "failed to convert Index to i64");
-                return IsNull::Yes
+                return IsNull::Yes;
             }
         };
 

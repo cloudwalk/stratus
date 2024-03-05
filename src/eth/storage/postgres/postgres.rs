@@ -148,8 +148,12 @@ impl PermanentStorage for Postgres {
 
                 let block_number = i64::try_from(current)?;
 
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number as _)
-                    .fetch_optional(&self.connection_pool);
+                let header_query = sqlx::query_file_as!(
+                    BlockHeader,
+                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
+                    block_number as _
+                )
+                .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -158,8 +162,12 @@ impl PermanentStorage for Postgres {
                 )
                 .fetch_all(&self.connection_pool);
 
-                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number as _)
-                    .fetch_all(&self.connection_pool);
+                let logs_query = sqlx::query_file_as!(
+                    PostgresLog,
+                    "src/eth/storage/postgres/queries/select_logs_by_block_number.sql",
+                    block_number as _
+                )
+                .fetch_all(&self.connection_pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
@@ -250,8 +258,12 @@ impl PermanentStorage for Postgres {
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number)?;
 
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number as _)
-                    .fetch_optional(&self.connection_pool);
+                let header_query = sqlx::query_file_as!(
+                    BlockHeader,
+                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
+                    block_number as _
+                )
+                .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -260,8 +272,12 @@ impl PermanentStorage for Postgres {
                 )
                 .fetch_all(&self.connection_pool);
 
-                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number as _)
-                    .fetch_all(&self.connection_pool);
+                let logs_query = sqlx::query_file_as!(
+                    PostgresLog,
+                    "src/eth/storage/postgres/queries/select_logs_by_block_number.sql",
+                    block_number as _
+                )
+                .fetch_all(&self.connection_pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
@@ -303,8 +319,12 @@ impl PermanentStorage for Postgres {
             BlockSelection::Earliest => {
                 let block_number = 0i64;
 
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number as _)
-                    .fetch_optional(&self.connection_pool);
+                let header_query = sqlx::query_file_as!(
+                    BlockHeader,
+                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
+                    block_number as _
+                )
+                .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
@@ -313,8 +333,12 @@ impl PermanentStorage for Postgres {
                 )
                 .fetch_all(&self.connection_pool);
 
-                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_number.sql", block_number as _)
-                    .fetch_all(&self.connection_pool);
+                let logs_query = sqlx::query_file_as!(
+                    PostgresLog,
+                    "src/eth/storage/postgres/queries/select_logs_by_block_number.sql",
+                    block_number as _
+                )
+                .fetch_all(&self.connection_pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,

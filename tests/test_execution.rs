@@ -22,9 +22,9 @@ mod tests {
         let storage = storage.init().await.unwrap();
         let mut rng = thread_rng();
         let mut fake_transaction_input = TransactionInput::dummy_with_rng(&Faker, &mut rng);
-        fake_transaction_input.nonce = 0.try_into().unwrap();
-        fake_transaction_input.gas_price = 0.try_into().unwrap();
-        fake_transaction_input.gas_limit = 0.try_into().unwrap();
+        fake_transaction_input.nonce = 0u64.into();
+        fake_transaction_input.gas_price = 0u64.into();
+        fake_transaction_input.gas_limit = 0u64.into();
 
         let accounts = test_accounts();
         storage.save_accounts_to_perm(accounts.clone()).await.unwrap();

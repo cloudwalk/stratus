@@ -63,13 +63,7 @@ impl sqlx::Type<sqlx::Postgres> for Size {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Size {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
-            Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode gas");
-                IsNull::Yes
-            }
-        }
+        BigDecimal::from(self.clone()).encode(buf)
     }
 }
 

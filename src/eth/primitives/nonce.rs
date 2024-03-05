@@ -53,7 +53,6 @@ impl Dummy<Faker> for Nonce {
 gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64);
 gen_newtype_try_from!(self = Nonce, other = i32, U256);
 
-
 impl TryFrom<BigDecimal> for Nonce {
     type Error = anyhow::Error;
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {

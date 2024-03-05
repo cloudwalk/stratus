@@ -42,7 +42,6 @@ impl Default for ChainId {
 gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64);
 gen_newtype_try_from!(self = ChainId, other = i32, U256);
 
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
