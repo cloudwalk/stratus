@@ -1,12 +1,12 @@
 -- TODO: maybe call this table `block_headers`
 CREATE TABLE IF NOT EXISTS blocks (
-    number BIGSERIAL NOT NULL CHECK (number >= 0) UNIQUE,
+    number NUMERIC NOT NULL CHECK (number >= 0) UNIQUE,
     hash BYTEA NOT NULL CHECK (LENGTH(hash) = 32) UNIQUE,
     transactions_root BYTEA NOT NULL CHECK (LENGTH(transactions_root) = 32),
     gas_limit NUMERIC NOT NULL CHECK (gas_limit >= 0),
     gas_used NUMERIC NOT NULL CHECK (gas_used >= 0),
     logs_bloom BYTEA NOT NULL CHECK (LENGTH(logs_bloom) = 256),
-    timestamp_in_secs BIGINT NOT NULL CHECK (timestamp_in_secs >= 0),
+    timestamp_in_secs NUMERIC NOT NULL CHECK (timestamp_in_secs >= 0),
     parent_hash BYTEA NOT NULL CHECK (LENGTH(parent_hash) = 32) UNIQUE,
     author BYTEA NOT NULL CHECK (LENGTH(author) = 20),
     extra_data BYTEA NOT NULL CHECK (LENGTH(extra_data) <= 32),

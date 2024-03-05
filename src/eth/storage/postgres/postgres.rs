@@ -148,7 +148,7 @@ impl PermanentStorage for Postgres {
 
                 let block_number = i64::try_from(current)?;
 
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number)
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number as _)
                     .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
@@ -250,7 +250,7 @@ impl PermanentStorage for Postgres {
             BlockSelection::Number(number) => {
                 let block_number = i64::try_from(*number)?;
 
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number as _)
                     .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
@@ -303,7 +303,7 @@ impl PermanentStorage for Postgres {
             BlockSelection::Earliest => {
                 let block_number = 0i64;
 
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number,)
+                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_number.sql", block_number as _)
                     .fetch_optional(&self.connection_pool);
 
                 let transactions_query = sqlx::query_file_as!(
@@ -547,13 +547,13 @@ impl PermanentStorage for Postgres {
 
         let block_result = sqlx::query_file!(
             "src/eth/storage/postgres/queries/insert_entire_block.sql",
-            i64::try_from(block.header.number).context("failed to convert block number")?,
+            block.header.number as _,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
             block.header.gas_limit as _,
             block.header.gas_used as _,
             block.header.bloom.as_ref(),
-            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")?,
+            i64::try_from(block.header.timestamp).map(BigDecimal::from).context("failed to convert block timestamp")?,
             block.header.parent_hash.as_ref(),
             block.header.author as _,
             block.header.extra_data as _,
@@ -706,7 +706,7 @@ impl PermanentStorage for Postgres {
     }
 
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()> {
-        sqlx::query!("DELETE FROM blocks WHERE number > $1", i64::try_from(number)?)
+        sqlx::query!("DELETE FROM blocks WHERE number > $1", number as _)
             .execute(&self.connection_pool)
             .await?;
 

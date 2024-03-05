@@ -122,7 +122,7 @@ impl TryFrom<EthersTransaction> for TransactionInput {
         Ok(Self {
             chain_id,
             hash: value.hash.into(),
-            nonce: value.nonce.into(),
+            nonce: value.nonce.try_into()?,
             signer,
             from: Address::new(value.from.into()),
             to: value.to.map_into(),

@@ -9,6 +9,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
@@ -23,10 +24,10 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Nonce(U256);
+pub struct Nonce(u64);
 
 impl Nonce {
-    pub const ZERO: Nonce = Nonce(U256::zero());
+    pub const ZERO: Nonce = Nonce(0u64);
 
     /// Checks if current value is zero.
     pub fn is_zero(&self) -> bool {
@@ -49,14 +50,21 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, usize, i32);
 
 impl TryFrom<BigDecimal> for Nonce {
     type Error = anyhow::Error;
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
         let value_str = value.to_string();
 
-        Ok(Nonce(U256::from_dec_str(&value_str)?))
+        Ok(Nonce(u64::from_str(&value_str)?))
+    }
+}
+
+impl TryFrom<U256> for Nonce {
+    type Error = anyhow::Error;
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        Ok(Nonce(value.try_into().map_err(|err: &str| anyhow!(err))?))
     }
 }
 
@@ -99,13 +107,13 @@ impl sqlx::Type<sqlx::Postgres> for Nonce {
 // -----------------------------------------------------------------------------
 impl From<Nonce> for u64 {
     fn from(value: Nonce) -> Self {
-        value.0.as_u64()
+        value.0
     }
 }
 
 impl From<Nonce> for U256 {
     fn from(value: Nonce) -> Self {
-        value.0
+        U256::from(value.0)
     }
 }
 
@@ -113,7 +121,7 @@ impl TryFrom<Nonce> for BigDecimal {
     type Error = anyhow::Error;
     fn try_from(value: Nonce) -> Result<Self, Self::Error> {
         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
+        Ok(BigDecimal::from(value.0))
     }
 }
 
@@ -126,7 +134,7 @@ mod tests {
         // Test with a simple value
         let big_decimal = BigDecimal::new(1.into(), -4);
         let nonce: Nonce = big_decimal.clone().try_into().unwrap();
-        let expected = nonce.0.as_u64();
+        let expected = nonce.0;
         assert_eq!(10000, expected);
     }
 }
