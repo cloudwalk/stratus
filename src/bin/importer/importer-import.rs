@@ -1,26 +1,35 @@
-#![allow(dead_code)]
+mod _postgres;
 
+use std::cmp::min;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use _postgres::*;
+use anyhow::anyhow;
+use futures::try_join;
+use futures::StreamExt;
 use itertools::Itertools;
-use serde_json::Value as JsonValue;
-use sqlx::Row;
 use stratus::config::ImporterImportConfig;
 use stratus::eth::primitives::Account;
-use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
-use stratus::eth::primitives::ExternalBlock;
-use stratus::eth::primitives::ExternalReceipt;
-use stratus::eth::primitives::Wei;
+use stratus::eth::primitives::BlockSelection;
+use stratus::eth::storage::StratusStorage;
+use stratus::eth::EthExecutor;
+use stratus::ext::not;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
 use stratus::log_and_err;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-/// Number of tasks in backlog: (BACKLOG_SIZE * BacklogTask)
+/// Number of blocks fetched in each query.
+const BLOCKS_BY_FETCH: usize = 50_000;
+
+/// Number of tasks in the backlog.
+///
+/// Each task contains 50_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 10;
+
 type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 
 #[tokio::main(flavor = "current_thread")]
@@ -32,19 +41,35 @@ async fn main() -> anyhow::Result<()> {
     let executor = config.init_executor(Arc::clone(&storage));
 
     // init shared data between importer and postgres loader
-    let (backlog_tx, mut backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
+    let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
 
     // import genesis accounts
-    let balances = db_retrieve_balances(&pg).await?;
+    let balances = pg_retrieve_external_balances(&pg).await?;
     let accounts = balances
         .into_iter()
         .map(|row| Account::new_with_balance(row.address, row.balance))
         .collect_vec();
     storage.save_accounts_to_perm(accounts).await?;
 
-    // load blocks and receipts in background
-    tokio::spawn(keep_loading_blocks(pg, cancellation.clone(), backlog_tx.clone()));
+    // execute parallel tasks (postgres loader and block importer)
+    tokio::spawn(execute_postgres_loader(pg, storage, cancellation.clone(), config.paralellism, backlog_tx));
+    execute_block_importer(executor, cancellation, backlog_rx).await?;
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// Importer
+// -----------------------------------------------------------------------------
+async fn execute_block_importer(
+    // services
+    executor: EthExecutor,
+    cancellation: CancellationToken,
+    // data
+    mut backlog_rx: mpsc::Receiver<BacklogTask>,
+) -> anyhow::Result<()> {
+    tracing::info!("block importer starting");
 
     // import blocks and transactions in foreground
     let reason = loop {
@@ -68,56 +93,74 @@ async fn main() -> anyhow::Result<()> {
             executor.import_offline(block.payload, &receipts_by_hash).await?;
         }
     };
-    tracing::info!(%reason, "importer finished");
 
+    tracing::info!(%reason, "block importer finished");
     Ok(())
 }
 
 // -----------------------------------------------------------------------------
 // Postgres block loader
 // -----------------------------------------------------------------------------
-async fn keep_loading_blocks(
+async fn execute_postgres_loader(
     // services
     pg: Arc<Postgres>,
+    storage: Arc<StratusStorage>,
     cancellation: CancellationToken,
     // data
+    paralellism: usize,
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
-    let mut tx = db_init_blocks_cursor(&pg).await?;
+    tracing::info!("postgres loader starting");
 
-    let reason = loop {
-        if cancellation.is_cancelled() {
-            break "importer finished or failed";
-        }
-
-        // find blocks
-        tracing::info!("retrieving more blocks to process");
-        let blocks = match db_fetch_blocks(&mut tx).await {
-            Ok(blocks) =>
-                if blocks.is_empty() {
-                    cancellation.cancel();
-                    break "no more blocks to process";
-                } else {
-                    blocks
-                },
-            Err(_) => {
-                cancellation.cancel();
-                break "error loading blocks";
-            }
-        };
-
-        // find receipts
-        let block_start = blocks.first().unwrap().number;
-        let block_end = blocks.last().unwrap().number;
-        let Ok(receipts) = db_retrieve_receipts(&pg, block_start, block_end).await else {
+    // find block limits to load
+    let mut start = storage.read_current_block_number().await?;
+    if not(start.is_zero()) || storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
+        start = start.next();
+    };
+    let end = match pg_retrieve_max_external_block(&pg, BlockNumber::ZERO, BlockNumber::MAX).await {
+        Ok(Some(block)) => block,
+        Ok(None) => BlockNumber::ZERO,
+        Err(e) => {
             cancellation.cancel();
-            break "error loading receipts";
+            return Err(e);
+        }
+    };
+    tracing::info!(%start, %end, "block limits");
+
+    // prepare loads to be executed in parallel
+    let mut tasks = Vec::new();
+    while start <= end {
+        let end = min(start + (BLOCKS_BY_FETCH - 1), end);
+        tasks.push(load_blocks_and_receipts(Arc::clone(&pg), cancellation.clone(), start, end));
+        start += BLOCKS_BY_FETCH;
+    }
+
+    // execute loads in parallel
+    let mut tasks = futures::stream::iter(tasks).buffered(paralellism);
+    let reason = loop {
+        // retrieve next batch of loaded blocks
+        let Some(result) = tasks.next().await else {
+            cancellation.cancel();
+            break "no more blocks to process";
         };
+
+        // check if executed correctly
+        let Ok((blocks, receipts)) = result else {
+            cancellation.cancel();
+            break "block or receipt fetch failed";
+        };
+
+        // check blocks were really loaded
+        if blocks.is_empty() {
+            cancellation.cancel();
+            return log_and_err!("no blocks returned when they were expected");
+        }
 
         // send to backlog
         if backlog.send((blocks, receipts)).await.is_err() {
+            tracing::error!("failed to send task to importer");
             cancellation.cancel();
-            break "error sending tasks to importer";
+            return log_and_err!("failed to send blocks and receipts to importer");
         };
     };
 
@@ -125,110 +168,17 @@ async fn keep_loading_blocks(
     Ok(())
 }
 
-struct BlockRow {
-    number: i64,
-    payload: ExternalBlock,
-}
-
-struct ReceiptRow {
-    block_number: i64,
-    payload: ExternalReceipt,
-}
-
-struct BalanceRow {
-    address: Address,
-    balance: Wei,
-}
-
-async fn db_retrieve_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
-    tracing::debug!("retrieving downloaded balances");
-
-    let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_downloaded_balances.sql")
-        .fetch_all(&pg.connection_pool)
-        .await;
-    match result {
-        Ok(accounts) => Ok(accounts),
-        Err(e) => log_and_err!(reason = e, "failed to retrieve downloaded balances"),
+async fn load_blocks_and_receipts(
+    pg: Arc<Postgres>,
+    cancellation: CancellationToken,
+    start: BlockNumber,
+    end: BlockNumber,
+) -> anyhow::Result<(Vec<BlockRow>, Vec<ReceiptRow>)> {
+    tracing::info!(%start, %end, "retrieving blocks and receipts");
+    if cancellation.is_cancelled() {
+        return Err(anyhow!("cancelled"));
     }
-}
-
-async fn db_init_blocks_cursor(pg: &Postgres) -> anyhow::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
-    let start = match db_retrieve_max_imported_block(pg).await? {
-        Some(number) => number.next(),
-        None => BlockNumber::ZERO,
-    };
-    tracing::info!(%start, "initing blocks cursor");
-
-    let mut tx = pg.start_transaction().await?;
-    let result = sqlx::query_file!("src/bin/importer/sql/cursor_declare_downloaded_blocks.sql", start.as_i64())
-        .execute(&mut *tx)
-        .await;
-
-    match result {
-        Ok(_) => Ok(tx),
-        Err(e) => log_and_err!(reason = e, "failed to open postgres cursor"),
-    }
-}
-
-async fn db_fetch_blocks(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> anyhow::Result<Vec<BlockRow>> {
-    tracing::debug!("fetching more blocks");
-
-    let result = sqlx::query_file_scalar!("src/bin/importer/sql/cursor_fetch_downloaded_blocks.sql")
-        .fetch_all(&mut **tx)
-        .await;
-
-    match result {
-        Ok(rows) => {
-            let mut parsed_rows: Vec<BlockRow> = Vec::with_capacity(rows.len());
-            for row in rows {
-                let parsed = BlockRow {
-                    number: row.get_unchecked::<'_, i64, usize>(0),
-                    payload: row.get_unchecked::<'_, JsonValue, usize>(1).try_into()?,
-                };
-                parsed_rows.push(parsed);
-            }
-            Ok(parsed_rows)
-        }
-        Err(e) => log_and_err!(reason = e, "failed to fetch blocks from cursor"),
-    }
-}
-
-async fn db_retrieve_receipts(pg: &Postgres, block_start: i64, block_end: i64) -> anyhow::Result<Vec<ReceiptRow>> {
-    tracing::debug!(start = %block_start, end = %block_end, "findind receipts");
-
-    let result = sqlx::query_file!("src/bin/importer/sql/select_downloaded_receipts_in_range.sql", block_start, block_end)
-        .fetch_all(&pg.connection_pool)
-        .await;
-
-    match result {
-        Ok(rows) => {
-            let mut parsed_rows: Vec<ReceiptRow> = Vec::with_capacity(rows.len());
-            for row in rows {
-                let parsed = ReceiptRow {
-                    block_number: row.block_number,
-                    payload: row.payload.try_into()?,
-                };
-
-                parsed_rows.push(parsed);
-            }
-            Ok(parsed_rows)
-        }
-        Err(e) => log_and_err!(reason = e, "failed to retrieve receipts"),
-    }
-}
-
-async fn db_retrieve_max_imported_block(pg: &Postgres) -> anyhow::Result<Option<BlockNumber>> {
-    tracing::debug!("finding max imported block");
-
-    let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_imported_block.sql")
-        .fetch_one(&pg.connection_pool)
-        .await;
-
-    let block_number: i64 = match result {
-        Ok(Some(max)) => max,
-        Ok(None) => return Ok(None),
-        Err(e) => return log_and_err!(reason = e, "failed to retrieve max block number"),
-    };
-
-    Ok(Some(block_number.into()))
+    let blocks_task = pg_retrieve_external_blocks_in_range(&pg, start, end);
+    let receipts_task = pg_retrieve_external_receipts_in_range(&pg, start, end);
+    try_join!(blocks_task, receipts_task)
 }

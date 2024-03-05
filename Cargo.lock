@@ -3499,6 +3499,7 @@ dependencies = [
  "phf_codegen",
  "pin-project",
  "quote",
+ "rand",
  "revm",
  "rlp",
  "serde",

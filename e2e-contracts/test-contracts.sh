@@ -71,10 +71,9 @@ fi
 
 # execute
 if [ "$token" == 1 ]; then
-    test brlc-token BRLCToken.base
-    test brlc-token BRLCToken.complex
+    test brlc-token BRLCToken
+    test brlc-token base/CWToken.complex
     test brlc-token BRLCTokenBridgeable
-    test brlc-token USJimToken.complex
     test brlc-token USJimToken
 fi
 

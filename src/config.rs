@@ -15,10 +15,12 @@ use tokio::runtime::Runtime;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
+#[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+#[cfg(feature = "dev")]
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
@@ -26,6 +28,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
+#[cfg(feature = "dev")]
 use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
@@ -52,7 +55,7 @@ pub struct ImporterDownloadConfig {
     #[arg(long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
 
-    /// Number of parallel block downloads.
+    /// Number of parallel downloads.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
 
@@ -67,6 +70,10 @@ pub struct ImporterImportConfig {
     /// Postgres connection URL.
     #[arg(short = 'd', long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
+
+    /// Number of parallel database fetches.
+    #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
+    pub paralellism: usize,
 
     #[deref]
     #[clap(flatten)]
@@ -85,14 +92,38 @@ pub struct RpcPollerConfig {
     pub common: CommonConfig,
 }
 
+/// Configuration for importer-import binary.
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct StateValidatorConfig {
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+
+    /// How many slots to validate per batch. 0 means every slot.
+    #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
+    pub sample_size: u64,
+
+    /// Seed to use when sampling. 0 for random seed.
+    #[arg(long = "seed", env = "SEED", default_value_t = 0, requires = "sample_size")]
+    pub seed: u64,
+
+    /// Validate in batches of n blocks.
+    #[arg(short = 'i', long = "inverval", env = "INVERVAL", default_value_t = 1000)]
+    pub interval: u64,
+
+    /// What method to use when validating.
+    #[arg(short = 'm', long = "method", env = "METHOD")]
+    pub method: ValidatorMethodConfig,
+
+    /// How many concurrent validation tasks to run
+    #[arg(short = 'c', long = "concurrent-tasks", env = "CONCURRENT_TASKS", default_value_t = 10)]
+    pub concurrent_tasks: u16,
+}
+
 /// Common configuration that can be used by any binary.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
-    /// Environment where the application is running.
-    #[arg(value_enum, short = 'e', long = "env", env = "ENV", default_value_t = Environment::Development)]
-    pub env: Environment,
-
     /// Storage implementation.
     #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
     pub storage: StorageConfig,
@@ -114,6 +145,7 @@ pub struct CommonConfig {
     pub enable_genesis: bool,
 
     /// Enables test accounts with max wei on startup.
+    #[cfg(feature = "dev")]
     #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
     pub enable_test_accounts: bool,
 }
@@ -131,22 +163,19 @@ impl CommonConfig {
             }
         }
 
+        #[cfg(feature = "dev")]
         if self.enable_test_accounts {
-            if self.env.is_development() {
-                let mut test_accounts_to_insert = Vec::new();
-                for test_account in test_accounts() {
-                    let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
-                    if storage_account.is_empty() {
-                        test_accounts_to_insert.push(test_account);
-                    }
+            let mut test_accounts_to_insert = Vec::new();
+            for test_account in test_accounts() {
+                let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
+                if storage_account.is_empty() {
+                    test_accounts_to_insert.push(test_account);
                 }
+            }
 
-                if not(test_accounts_to_insert.is_empty()) {
-                    tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                    storage.save_accounts_to_perm(test_accounts_to_insert).await?;
-                }
-            } else {
-                tracing::warn!("cannot enable test accounts in non-development environment");
+            if not(test_accounts_to_insert.is_empty()) {
+                tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
+                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
             }
         }
 
@@ -218,6 +247,23 @@ impl FromStr for StorageConfig {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown storage: {}", s)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, strum::Display)]
+pub enum ValidatorMethodConfig {
+    Rpc { url: String },
+    CompareTables,
+}
+
+impl FromStr for ValidatorMethodConfig {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "compare_tables" => Ok(Self::CompareTables),
+            s => Ok(Self::Rpc { url: s.to_string() }),
         }
     }
 }

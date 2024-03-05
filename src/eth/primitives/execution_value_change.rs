@@ -62,14 +62,14 @@ where
         self.modified = ValueState::Set(value);
     }
 
-    /// Takes the original value as reference if it is set.
-    pub fn take_original_ref(&self) -> Option<&T> {
-        self.original.take_ref()
-    }
-
     /// Takes the original value if it is set.
     pub fn take_original(self) -> Option<T> {
         self.original.take()
+    }
+
+    /// Takes the original value as reference if it is set.
+    pub fn take_original_ref(&self) -> Option<&T> {
+        self.original.take_ref()
     }
 
     /// Takes the modified value if it is set.
@@ -82,9 +82,14 @@ where
         (self.original.take(), self.modified.take())
     }
 
-    /// Takes any value that is set giving preference to the modified value, but using the original value as fallback.
+    /// Takes any value that is set, giving preference to the modified value, but using the original value as fallback.
     pub fn take(self) -> Option<T> {
         self.modified.take().or_else(|| self.original.take())
+    }
+
+    /// Takes any value that is set as reference, giving preference to the modified value, but using the original value as fallback.
+    pub fn take_ref(&self) -> Option<&T> {
+        self.modified.take_ref().or_else(|| self.original.take_ref())
     }
 
     /// Check if the value was modified.

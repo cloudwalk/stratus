@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n    number as \"number: _\",\n    hash as \"hash: _\",\n    transactions_root as \"transactions_root: _\",\n    gas_limit as \"gas_limit: _\",\n    gas_used as \"gas_used: _\",\n    logs_bloom as \"bloom: _\",\n    timestamp_in_secs as \"timestamp: _\",\n    parent_hash as \"parent_hash: _\",\n    author as \"author: _\",\n    extra_data as \"extra_data: _\",\n    miner as \"miner: _\",\n    difficulty as \"difficulty: _\",\n    receipts_root as \"receipts_root: _\",\n    uncle_hash as \"uncle_hash: _\",\n    size as \"size: _\",\n    state_root as \"state_root: _\",\n    total_difficulty as \"total_difficulty: _\",\n    nonce as \"nonce: _\"\nFROM blocks\nWHERE hash = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "number: _",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "hash: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "transactions_root: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "gas_limit: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "gas_used: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "bloom: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "timestamp: _",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "parent_hash: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 8,
+        "name": "author: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 9,
+        "name": "extra_data: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 10,
+        "name": "miner: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 11,
+        "name": "difficulty: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 12,
+        "name": "receipts_root: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 13,
+        "name": "uncle_hash: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 14,
+        "name": "size: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 15,
+        "name": "state_root: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 16,
+        "name": "total_difficulty: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 17,
+        "name": "nonce: _",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1157509808a9e3d07211f0c19c8d6c226d659b04c774fc062444d0c4e44c1ab0"
+}

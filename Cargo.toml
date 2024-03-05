@@ -66,6 +66,7 @@ sqlx = { version = "0.7.3", features = ["runtime-tokio", "postgres", "bigdecimal
 
 # test
 fake = { version = "2.9.2", features = ["derive"] }
+rand = "0.8.5"
 
 [dev-dependencies]
 binary_macros = "1.0.0"
@@ -94,6 +95,10 @@ path = "src/bin/importer/importer-import.rs"
 name = "rpc-server-poller"
 path = "src/bin/rpc_server_poller.rs"
 
+[[bin]]
+name = "state-validator"
+path = "src/bin/state-validator.rs"
+
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------
@@ -109,7 +114,5 @@ semicolon_if_nothing_returned = "warn"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["tests"]
-tests = ["evm-set-timestamp", "evm-mine"]
-evm-set-timestamp = []
-evm-mine = []
+default = []
+dev = [] # Development features that help debugging and testing.

@@ -15,6 +15,11 @@ use itertools::Itertools;
 use revm::interpreter::analysis::to_analysed;
 use revm::interpreter::InstructionResult;
 use revm::primitives::AccountInfo as RevmAccountInfo;
+use std::time::Instant;
+
+use anyhow::anyhow;
+use anyhow::Context;
+use itertools::Itertools;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
@@ -28,10 +33,10 @@ use revm::primitives::B256;
 use revm::primitives::KECCAK_EMPTY;
 use revm::primitives::U256;
 use revm::Database;
-use revm::Inspector;
 use revm::EVM;
 use tokio::runtime::Handle;
 
+use crate::eth::evm::evm::EvmExecutionResult;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Account;
@@ -41,6 +46,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
@@ -50,6 +56,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
@@ -82,7 +89,9 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution> {
+    fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
+        let start = Instant::now();
+
         // configure session
         let evm = &mut self.evm;
         let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.clone(), Arc::clone(&self.bytecodes));
@@ -107,14 +116,14 @@ impl Evm for Revm {
         tx.value = input.value.into();
 
         // execute evm
-        #[cfg(debug_assertions)]
-        let evm_result = evm.inspect(RevmInspector {});
-
-        #[cfg(not(debug_assertions))]
         let evm_result = evm.transact();
 
-        match evm_result {
-            Ok(result) => {
+        // parse result and track metrics
+        let session = evm.take_db();
+        let metrics = session.metrics;
+        let point_in_time = session.input.point_in_time.clone();
+
+        let execution = match evm_result {
                 let session = evm.take_db();
 
                 // cache new bytecodes generated during this transaction
@@ -132,9 +141,15 @@ impl Evm for Revm {
             }
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
-                Err(anyhow!("Error executing EVM transaction. Check logs for more information."))
+                Err(e).context("Error executing EVM transaction.")
             }
-        }
+        };
+
+        metrics::inc_evm_execution(start.elapsed(), &point_in_time, execution.is_ok());
+        metrics::inc_evm_execution_account_reads(metrics.account_reads);
+        metrics::inc_evm_execution_slot_reads(metrics.slot_reads);
+
+        execution.map(|x| (x, metrics))
     }
 }
 
@@ -158,6 +173,9 @@ struct RevmDatabaseSession {
 
     /// New analysed bytecodes crated during this transaction execution.
     new_analysed_bytecodes: Vec<(BytecodeHash, RevmBytecode)>,
+  
+    /// Metrics collected during EVM execution.
+    metrics: ExecutionMetrics,
 }
 
 impl RevmDatabaseSession {
@@ -166,9 +184,10 @@ impl RevmDatabaseSession {
         Self {
             storage,
             input,
-            storage_changes: Default::default(),
+            storage_changes: Default::default()
             all_analysed_bytecodes: all_bytecodes,
             new_analysed_bytecodes: Vec::new(),
+            metrics: Default::default(),
         }
     }
 
@@ -182,6 +201,8 @@ impl Database for RevmDatabaseSession {
     type Error = anyhow::Error;
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
+        self.metrics.account_reads += 1;
+
         // retrieve account
         let address: Address = revm_address.into();
         let account = Handle::current().block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
@@ -228,10 +249,11 @@ impl Database for RevmDatabaseSession {
     }
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
+        self.metrics.slot_reads += 1;
+
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
-        //instructions?
         let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
 
         // track original value, except if ignored address
@@ -256,48 +278,22 @@ impl Database for RevmDatabaseSession {
 }
 
 // -----------------------------------------------------------------------------
-// Inspector
-// -----------------------------------------------------------------------------
-struct RevmInspector;
-
-impl Inspector<RevmDatabaseSession> for RevmInspector {
-    fn step(&mut self, _interpreter: &mut revm::interpreter::Interpreter, _: &mut revm::EVMData<'_, RevmDatabaseSession>) -> InstructionResult {
-        // let arg1 = unsafe { *interpreter.instruction_pointer.add(1) };
-        // let arg2 = unsafe { *interpreter.instruction_pointer.add(2) };
-        // println!(
-        //     "{:02x} {:<9} {:<4x} {:<4x} {:?}",
-        //     interpreter.current_opcode(),
-        //     opcode::OPCODE_JUMPMAP[interpreter.current_opcode() as usize].unwrap(),
-        //     arg1,
-        //     arg2,
-        //     interpreter.stack.data(),
-        // );
-        // use revm::interpreter::opcode;
-        // match opcode::OPCODE_JUMPMAP[_interpreter.current_opcode() as usize] {
-        //     Some(opcode) => println!("{} ", opcode),
-        //     None => println!("{:#x} ", _interpreter.current_opcode() as usize),
-        // }
-        InstructionResult::Continue
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> anyhow::Result<Execution> {
+fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Execution {
     let (result, output, logs, gas) = parse_revm_result(revm_result.result);
-    let execution_changes = parse_revm_state(revm_result.state, execution_changes)?;
+    let execution_changes = parse_revm_state(revm_result.state, execution_changes);
 
     tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
-    Ok(Execution {
+    Execution {
         result,
         output,
         logs,
         gas,
         block_timestamp: input.block_timestamp,
         changes: execution_changes.into_values().collect(),
-    })
+    }
 }
 
 fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
@@ -324,7 +320,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
     }
 }
 
-fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> anyhow::Result<ExecutionChanges> {
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> ExecutionChanges {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
         if address.is_ignored() {
@@ -360,11 +356,12 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         // status: touched (updated)
         else if account_updated {
             let Some(existing_account) = execution_changes.get_mut(&address) else {
-                tracing::error!(keys = ?execution_changes.keys(), reason = "account was updated, but it was not loaded by evm", %address);
-                return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
+                tracing::error!(keys = ?execution_changes.keys(), %address, "account updated, but not loaded by evm");
+                // TODO: panic! only when in dev-mode or try to refactor to avoid panic!
+                panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
             };
             existing_account.apply_changes(account, account_modified_slots);
         }
     }
-    Ok(execution_changes)
+    execution_changes
 }

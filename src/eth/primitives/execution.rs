@@ -75,6 +75,8 @@ impl Execution {
 
         // compare logs length
         if self.logs.len() != receipt.logs.len() {
+            tracing::trace!("execution logs: {:#?}", self.logs);
+            tracing::trace!("receipt logs: {:#?}", receipt.logs);
             return log_and_err!(format!(
                 "logs length mismatch | hash={} execution={} receipt={}",
                 receipt.hash(),
@@ -123,4 +125,38 @@ impl Execution {
         }
         Ok(())
     }
+
+    /// Apply execution costs of an external transaction.
+    ///
+    /// External transactions are re-executed locally with max gas and zero gas price,
+    /// so the paid amount is applied after execution based on the receipt.
+    pub fn apply_execution_costs(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
+        // do nothing if execution cost is zero
+        let execution_cost = receipt.execution_cost();
+        if execution_cost.is_zero() {
+            return Ok(());
+        }
+
+        // find sender changes (this can be improved if changes is HashMap)
+        let sender_address: Address = receipt.0.from.into();
+        let sender_changes = self.changes.iter_mut().find(|c| c.address == sender_address);
+        let Some(sender_changes) = sender_changes else {
+            return log_and_err!("sender changes not present in execution when applying execution costs");
+        };
+
+        // subtract execution cost from sender balance
+        let current_balance = sender_changes.balance.take_ref().expect("balance is never None").clone();
+        let new_balance = current_balance - execution_cost; // TODO: handle underflow, but it should not happen
+        sender_changes.balance.set_modified(new_balance);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ExecutionMetrics {
+    /// Number of account reads during EVM execution.
+    pub account_reads: usize,
+
+    /// Number of slot reads during EVM execution.
+    pub slot_reads: usize,
 }

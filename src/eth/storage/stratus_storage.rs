@@ -14,6 +14,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
@@ -21,9 +22,9 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::infra::metrics;
 
-static TEMP_ORIGIN: &str = "temporary";
-static PERM_ORIGIN: &str = "permanent";
-static DEFAULT_ORIGIN: &str = "default";
+const STORAGE_TEMP: &str = "temporary";
+const STORAGE_PERM: &str = "permanent";
+const DEFAULT_VALUE: &str = "default";
 
 pub struct StratusStorage {
     temp: Arc<dyn TemporaryStorage>,
@@ -74,18 +75,18 @@ impl StratusStorage {
         match self.temp.maybe_read_account(address, point_in_time).await? {
             Some(account) => {
                 tracing::debug!("account found in the temporary storage");
-                metrics::inc_storage_read_account(start.elapsed(), TEMP_ORIGIN, point_in_time, true);
+                metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
                 Ok(account)
             }
             None => match self.perm.maybe_read_account(address, point_in_time).await? {
                 Some(account) => {
                     tracing::debug!("account found in the permanent storage");
-                    metrics::inc_storage_read_account(start.elapsed(), PERM_ORIGIN, point_in_time, true);
+                    metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
                     Ok(account)
                 }
                 None => {
                     tracing::debug!("account not found, assuming default value");
-                    metrics::inc_storage_read_account(start.elapsed(), DEFAULT_ORIGIN, point_in_time, true);
+                    metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
                     Ok(Account {
                         address: address.clone(),
                         ..Account::default()
@@ -102,18 +103,18 @@ impl StratusStorage {
         match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
             Some(slot) => {
                 tracing::debug!("slot found in the temporary storage");
-                metrics::inc_storage_read_slot(start.elapsed(), TEMP_ORIGIN, point_in_time, true);
+                metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
                 Ok(slot)
             }
             None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
                 Some(slot) => {
                     tracing::debug!("slot found in the permanent storage");
-                    metrics::inc_storage_read_slot(start.elapsed(), PERM_ORIGIN, point_in_time, true);
+                    metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
                     Ok(slot)
                 }
                 None => {
                     tracing::debug!("slot not found, assuming default value");
-                    metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_ORIGIN, point_in_time, true);
+                    metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
                     Ok(Slot {
                         index: slot_index.clone(),
                         ..Default::default()
@@ -171,12 +172,15 @@ impl StratusStorage {
     pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let start = Instant::now();
 
-        // save block to permanent storage and
-        // clears temporary storage
+        // compute labels
+        let label_size_by_tx = block.label_size_by_transactions();
+        let label_size_by_gas = block.label_size_by_gas();
+
+        // save block to permanent storage and clears temporary storage
         let result = self.perm.save_block(block).await;
         self.reset_temp().await?;
 
-        metrics::inc_storage_commit(start.elapsed(), result.is_ok());
+        metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
         result
     }
 
@@ -184,7 +188,7 @@ impl StratusStorage {
     pub async fn reset_temp(&self) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.temp.reset().await;
-        metrics::inc_storage_reset(start.elapsed(), result.is_ok());
+        metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result.is_ok());
         result
     }
 
@@ -192,7 +196,7 @@ impl StratusStorage {
     pub async fn reset_perm(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let start = Instant::now();
         let result = self.perm.reset_at(block_number).await;
-        metrics::inc_storage_reset(start.elapsed(), result.is_ok());
+        metrics::inc_storage_reset(start.elapsed(), STORAGE_PERM, result.is_ok());
         result
     }
 
@@ -219,5 +223,9 @@ impl StratusStorage {
                 )),
             },
         }
+    }
+
+    pub async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        self.perm.read_slots_sample(start, end, max_samples, seed).await
     }
 }
