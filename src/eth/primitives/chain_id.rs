@@ -9,6 +9,7 @@
 use std::fmt::Display;
 
 use ethereum_types::U256;
+use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 
@@ -16,7 +17,7 @@ use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ChainId(u64);
+pub struct ChainId(U64);
 
 impl Display for ChainId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,7 +33,7 @@ impl Dummy<Faker> for ChainId {
 
 impl Default for ChainId {
     fn default() -> Self {
-        ChainId(2008)
+        ChainId(2008.into())
     }
 }
 
@@ -47,6 +48,6 @@ gen_newtype_try_from!(self = ChainId, other = i32, U256);
 // -----------------------------------------------------------------------------
 impl From<ChainId> for U256 {
     fn from(value: ChainId) -> Self {
-        value.0.into()
+        value.0.as_u64().into()
     }
 }
