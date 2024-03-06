@@ -32,8 +32,8 @@ pub struct Gas(u64);
 impl Gas {
     pub const ZERO: Gas = Gas(0);
     pub const MAX: Gas = Gas(u64::max_value());
-  
-      pub fn as_u64(&self) -> u64 {
+
+    pub fn as_u64(&self) -> u64 {
         self.0
     }
 }

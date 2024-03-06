@@ -7,6 +7,7 @@
 //! indexes, aligning with Ethereum's blockchain data structure needs.
 
 use std::num::TryFromIntError;
+use std::str::FromStr;
 
 use ethereum_types::U256;
 use ethereum_types::U64;
@@ -16,7 +17,6 @@ use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
-use std::str::FromStr;
 
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
