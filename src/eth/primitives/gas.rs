@@ -9,9 +9,10 @@
 //! execution.
 
 use std::fmt::Display;
-use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethereum_types::U256;
+use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasArguments;
@@ -27,14 +28,14 @@ use crate::gen_newtype_try_from;
 // XXX: we should use U64
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct Gas(u64);
+pub struct Gas(U64);
 
 impl Gas {
-    pub const ZERO: Gas = Gas(0);
-    pub const MAX: Gas = Gas(u64::max_value());
+    pub const ZERO: Gas = Gas(U64::zero());
+    pub const MAX: Gas = Gas(U64::MAX);
 
     pub fn as_u64(&self) -> u64 {
-        self.0
+        self.0.as_u64()
     }
 }
 
@@ -54,14 +55,22 @@ impl Dummy<Faker> for Gas {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Gas, other = u8, u16, u32, u64);
-gen_newtype_try_from!(self = Gas, other = i32, U256);
+gen_newtype_try_from!(self = Gas, other = i32);
 
 impl TryFrom<BigDecimal> for Gas {
     type Error = anyhow::Error;
 
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
         let value_str = value.to_string();
-        Ok(Gas(u64::from_str(&value_str)?))
+        Ok(Gas(U64::from_str_radix(&value_str, 10)?))
+    }
+}
+
+impl TryFrom<U256> for Gas {
+    type Error = anyhow::Error;
+
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        Ok(Gas(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
     }
 }
 
@@ -98,18 +107,18 @@ impl PgHasArrayType for Gas {
 // ----------------------------------------------------------------------------
 impl From<Gas> for U256 {
     fn from(value: Gas) -> Self {
-        value.0.into()
+        value.0.as_u64().into()
     }
 }
 
 impl From<Gas> for u64 {
     fn from(value: Gas) -> Self {
-        value.0
+        value.0.as_u64()
     }
 }
 
 impl From<Gas> for BigDecimal {
     fn from(value: Gas) -> BigDecimal {
-        BigDecimal::from(value.0)
+        BigDecimal::from(value.0.as_u64())
     }
 }
