@@ -21,17 +21,17 @@
       {
         "ordinal": 3,
         "name": "transaction_idx: _",
-        "type_info": "Int4"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 4,
         "name": "log_idx: _",
-        "type_info": "Int4"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 5,
         "name": "block_number: _",
-        "type_info": "Int8"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 6,

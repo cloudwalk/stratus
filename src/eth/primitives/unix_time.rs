@@ -17,6 +17,7 @@ use fake::Faker;
 use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
+use sqlx::types::BigDecimal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
@@ -79,23 +80,29 @@ impl From<U256> for UnixTime {
     }
 }
 
+impl TryFrom<BigDecimal> for UnixTime {
+    type Error = anyhow::Error;
+    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
+        let value_str = value.to_string();
+
+        Ok(UnixTime(u64::from_str(&value_str)?))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: sqlx -> Self
 // -----------------------------------------------------------------------------
 
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for UnixTime {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        let value: u64 = value.try_into()?;
-        Ok(value.into())
+        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.try_into()?)
     }
 }
 
 impl sqlx::Type<sqlx::Postgres> for UnixTime {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        // HACK: should be "INTEGER" in theory
-        // they are equal
-        sqlx::postgres::PgTypeInfo::with_name("INT8")
+        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
 

@@ -6,7 +6,7 @@
       {
         "ordinal": 0,
         "name": "number: _",
-        "type_info": "Int8"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 1,
@@ -36,7 +36,7 @@
       {
         "ordinal": 6,
         "name": "timestamp: _",
-        "type_info": "Int8"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 7,
@@ -91,12 +91,12 @@
       {
         "ordinal": 17,
         "name": "nonce: _",
-        "type_info": "Numeric"
+        "type_info": "Bytea"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Numeric"
       ]
     },
     "nullable": [

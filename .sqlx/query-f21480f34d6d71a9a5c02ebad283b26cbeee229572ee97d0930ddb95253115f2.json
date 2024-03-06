@@ -18,7 +18,7 @@
       "Left": [
         "Bytea",
         "Bytea",
-        "Int8"
+        "Numeric"
       ]
     },
     "nullable": [

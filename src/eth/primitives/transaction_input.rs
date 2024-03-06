@@ -102,11 +102,11 @@ impl TryFrom<EthersTransaction> for TransactionInput {
 
         // extract chain id
         let chain_id: ChainId = match value.chain_id {
-            Some(chain_id) => chain_id.into(),
+            Some(chain_id) => chain_id.try_into()?,
             None => {
                 let transaction_value = value.clone();
                 tracing::warn!(reason = %"transaction without chain id", ?transaction_value);
-                2009.into() //XXX this might have unexpected consequences, we need to review this down the road
+                2009u64.into() //XXX this might have unexpected consequences, we need to review this down the road
             }
         };
 
@@ -122,13 +122,13 @@ impl TryFrom<EthersTransaction> for TransactionInput {
         Ok(Self {
             chain_id,
             hash: value.hash.into(),
-            nonce: value.nonce.into(),
+            nonce: value.nonce.try_into()?,
             signer,
             from: Address::new(value.from.into()),
             to: value.to.map_into(),
             value: value.value.into(),
             input: value.input.clone().into(),
-            gas_limit: value.gas.into(),
+            gas_limit: value.gas.try_into()?,
             gas_price,
             v: value.v,
             r: value.r,

@@ -72,7 +72,7 @@ impl BlockMiner {
         // mine transactions and logs
         let mut log_index = Index::ZERO;
         for (tx_idx, (input, execution)) in transactions.into_iter().enumerate() {
-            let transaction_index = Index::new(tx_idx as u16);
+            let transaction_index = Index::new(tx_idx as u64);
             // mine logs
             let mut mined_logs: Vec<LogMined> = Vec::with_capacity(execution.logs.len());
             for mined_log in execution.logs.clone() {
