@@ -26,11 +26,28 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionMined>,
 }
+
+// Custom Debug implementation for Block, for performance reasons we keep it short
+impl std::fmt::Debug for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let transaction_summary = format!(
+            "{} transaction(s), including hash summaries",
+            self.transactions.len()
+        );
+
+        f.debug_struct("Block")
+            .field("number", &self.header.number)
+            .field("hash", &format_args!("{:?}", self.header.hash))
+            .field("transactions", &transaction_summary)
+            .finish()
+    }
+}
+
 
 impl Block {
     /// Creates a new block with the given number and transactions capacity.
