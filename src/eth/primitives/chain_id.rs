@@ -8,6 +8,7 @@
 
 use std::fmt::Display;
 
+use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use fake::Dummy;
@@ -41,7 +42,15 @@ impl Default for ChainId {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64);
-gen_newtype_try_from!(self = ChainId, other = i32, U256);
+gen_newtype_try_from!(self = ChainId, other = i32);
+
+impl TryFrom<U256> for ChainId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        Ok(ChainId(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
