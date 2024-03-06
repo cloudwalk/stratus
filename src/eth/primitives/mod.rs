@@ -132,6 +132,7 @@ pub use ecdsa_rs::EcdsaRs;
 pub use ecdsa_v::EcdsaV;
 pub use execution::Execution;
 pub use execution::ExecutionChanges;
+pub use execution::ExecutionMetrics;
 pub use execution_account_changes::ExecutionAccountChanges;
 pub use execution_conflict::ExecutionConflict;
 pub use execution_conflict::ExecutionConflicts;

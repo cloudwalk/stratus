@@ -151,3 +151,12 @@ impl Execution {
         Ok(())
     }
 }
+
+#[derive(Debug, Default)]
+pub struct ExecutionMetrics {
+    /// Number of account reads during EVM execution.
+    pub account_reads: usize,
+
+    /// Number of slot reads during EVM execution.
+    pub slot_reads: usize,
+}

@@ -166,6 +166,7 @@ where
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+
 impl TryFrom<ExternalBlock> for BlockHeader {
     type Error = anyhow::Error;
     fn try_from(mut value: ExternalBlock) -> Result<Self, Self::Error> {

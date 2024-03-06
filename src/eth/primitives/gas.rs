@@ -24,7 +24,7 @@ use sqlx::types::BigDecimal;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
-// XXX: should we use U256 or U64?
+// XXX: we should use U64
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Gas(u64);
@@ -32,6 +32,10 @@ pub struct Gas(u64);
 impl Gas {
     pub const ZERO: Gas = Gas(0);
     pub const MAX: Gas = Gas(u64::max_value());
+  
+      pub fn as_u64(&self) -> u64 {
+        self.0
+    }
 }
 
 impl Display for Gas {

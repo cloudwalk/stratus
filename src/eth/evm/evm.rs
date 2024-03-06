@@ -11,6 +11,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
@@ -23,10 +24,12 @@ use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
 use crate::if_else;
 
+pub type EvmExecutionResult = (Execution, ExecutionMetrics);
+
 /// EVM operations.
 pub trait Evm: Send + Sync + 'static {
     /// Execute a transaction that deploys a contract or call a contract function.
-    fn execute(&mut self, input: EvmInput) -> anyhow::Result<Execution>;
+    fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult>;
 }
 
 /// EVM input data. Usually derived from a transaction or call.

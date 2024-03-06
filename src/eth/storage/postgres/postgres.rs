@@ -148,12 +148,14 @@ impl PermanentStorage for Postgres {
 
                 let block_number = i64::try_from(current)?;
 
+
                 let header_query = sqlx::query_file_as!(
                     BlockHeader,
                     "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
                     block_number as _
                 )
                 .fetch_optional(&self.connection_pool);
+
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,

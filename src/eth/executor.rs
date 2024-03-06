@@ -20,10 +20,12 @@ use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
 use crate::eth::evm::Evm;
+use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
@@ -40,7 +42,7 @@ use crate::infra::metrics;
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
 
-type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<Execution>>);
+type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
 
 /// The EthExecutor struct is responsible for orchestrating the execution of Ethereum transactions.
 /// It holds references to the EVM, block miner, and storage, managing the overall process of
@@ -77,12 +79,14 @@ impl EthExecutor {
     /// Imports an external block using the offline flow.
     pub async fn import_offline(&self, block: ExternalBlock, receipts: &HashMap<Hash, ExternalReceipt>) -> anyhow::Result<()> {
         let start = Instant::now();
+        let mut block_metrics = ExecutionMetrics::default();
         tracing::info!(number = %block.number(), "importing offline block");
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
             let tx_start = Instant::now();
+
             // find receipt
             let Some(receipt) = receipts.get(&tx.hash()).cloned() else {
                 tracing::error!(hash = %tx.hash, "receipt is missing");
@@ -95,7 +99,7 @@ impl EthExecutor {
 
             // handle execution result
             match execution {
-                Ok(mut execution) => {
+                Ok((mut execution, execution_metrics)) => {
                     // apply execution costs that were not consided when re-executing the transaction
                     execution.apply_execution_costs(&receipt)?;
 
@@ -111,7 +115,11 @@ impl EthExecutor {
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.clone()).await?;
                     executions.push((tx, receipt, execution));
+
+                    // track metrics
                     metrics::inc_executor_import_offline_transaction(tx_start.elapsed());
+                    block_metrics.account_reads += execution_metrics.account_reads;
+                    block_metrics.slot_reads += execution_metrics.slot_reads;
                 }
                 Err(e) => {
                     let json_tx = serde_json::to_string(&tx).unwrap();
@@ -131,7 +139,11 @@ impl EthExecutor {
             return Err(e.into());
         };
 
+        // track metrics
         metrics::inc_executor_import_offline(start.elapsed());
+        metrics::inc_executor_import_offline_account_reads(block_metrics.account_reads);
+        metrics::inc_executor_import_offline_slot_reads(block_metrics.slot_reads);
+
         Ok(())
     }
 
@@ -152,7 +164,8 @@ impl EthExecutor {
             };
 
             let evm_input = EvmInput::from_external_transaction(&external_block, external_transaction.to_owned(), external_receipt)?;
-            let execution = self.execute_in_evm(evm_input).await?;
+            let execution = self.execute_in_evm(evm_input).await?.0;
+          
             execution.compare_with_receipt(external_receipt)?;
             metrics::inc_executor_import_online_transaction(tx_start.elapsed());
 
@@ -219,7 +232,7 @@ impl EthExecutor {
         let (execution, block) = loop {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-            let execution = self.execute_in_evm(evm_input).await?;
+            let execution = self.execute_in_evm(evm_input).await?.0;
 
             // mine and commit block
             let mut miner_lock = self.miner.lock().await;
@@ -266,12 +279,12 @@ impl EthExecutor {
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
         let result = self.execute_in_evm(evm_input).await;
         metrics::inc_executor_call(start.elapsed(), result.is_ok());
-        result
+        result.map(|x| x.0)
     }
 
     /// Submits a transaction to the EVM and awaits for its execution.
-    async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<Execution> {
-        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<Execution>>();
+    async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
+        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
         self.evm_tx.send((evm_input, execution_tx))?;
         execution_rx.await?
     }
@@ -304,7 +317,8 @@ fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> crossbeam_channel::Sen
 
             // keep executing transactions until the channel is closed
             while let Ok((input, tx)) = evm_rx.recv() {
-                if let Err(e) = tx.send(evm.execute(input)) {
+                let result = evm.execute(input);
+                if let Err(e) = tx.send(result) {
                     tracing::error!(reason = ?e, "failed to send evm execution result");
                 };
             }

@@ -18,6 +18,7 @@ use crate::gen_newtype_try_from;
 #[serde(transparent)]
 pub struct Size(u64);
 
+
 impl Display for Size {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
