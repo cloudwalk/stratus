@@ -38,13 +38,17 @@ pub fn init_metrics() {
     metrics.extend(metrics_for_storage_read());
     metrics.extend(metrics_for_storage_write());
 
-    // init provider and buckets
-    let mut builder = PrometheusBuilder::new().set_buckets(&BUCKET_FOR_DURATION).unwrap();
+    // init exporter
+    let mut builder = PrometheusBuilder::new();
+
+    // init buckets (comment to use summary)
+    builder = builder.set_buckets(&BUCKET_FOR_DURATION).unwrap();
     for metric in &metrics {
         if metric.has_custom_buckets() {
             builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
         }
     }
+
     builder.install().expect("failed to start metrics");
 
     // init metric description (always after provider started)
@@ -124,7 +128,7 @@ metrics! {
     histogram_counter executor_import_offline_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 150., 200.],
 
     "Number of slots read in a single EVM execution."
-    histogram_counter executor_import_offline_slot_reads{} [0., 25., 50., 75., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000.],
+    histogram_counter executor_import_offline_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000., 6000., 7000., 8000., 9000., 10000.],
 
     "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
     histogram_duration executor_import_offline_transaction{} [],
@@ -152,7 +156,7 @@ metrics! {
     histogram_counter evm_execution_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10.],
 
     "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{} [0., 5., 10., 15., 20., 25., 30., 35., 40., 45., 50., 55., 60., 65., 70., 75., 80., 85., 90., 95., 100.]
+    histogram_counter evm_execution_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000.]
 }
 
 // -----------------------------------------------------------------------------
@@ -228,6 +232,12 @@ macro_rules! metrics {
     ) => {
         // Generate function to get metric definition.
         paste! {
+            // Generate constant to access by name.
+            $(
+                pub const [<METRIC_ $name:upper>]: &str = stringify!([<stratus_ $name>]);
+            )+
+
+            // Generate function that return metric definition.
             fn [<metrics_for_ $group>]() -> Vec<Metric> {
                 vec![
                     $(

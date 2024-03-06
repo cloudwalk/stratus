@@ -6,12 +6,12 @@ use nonempty::NonEmpty;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::StoragePointInTime;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
 where
-    T: Clone + Debug;
+    T: Clone + Debug + serde::Serialize;
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, derive_new::new)]
 pub struct InMemoryHistoryValue<T> {
     pub block_number: BlockNumber,
     pub value: T,
@@ -19,7 +19,7 @@ pub struct InMemoryHistoryValue<T> {
 
 impl<T> InMemoryHistory<T>
 where
-    T: Clone + Debug,
+    T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>,
 {
     /// Creates a new list of historical values.
     pub fn new_at_zero(value: T) -> Self {
@@ -72,7 +72,7 @@ where
     }
 }
 
-impl<T: Clone + Debug> From<InMemoryHistory<T>> for Vec<InMemoryHistoryValue<T>> {
+impl<T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>> From<InMemoryHistory<T>> for Vec<InMemoryHistoryValue<T>> {
     fn from(value: InMemoryHistory<T>) -> Self {
         value.0.into()
     }
