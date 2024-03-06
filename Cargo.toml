@@ -54,7 +54,7 @@ triehash = "0.8.4"
 
 # network
 jsonrpsee = { version = "0.21.0", features = ["server", "client"] }
-reqwest = "0.11.24"
+reqwest = { version = "0.11.24", features = ["json"] }
 tower = "0.4.13"
 
 # observability
@@ -66,6 +66,10 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 # storage
 sqlx = { version = "0.7.3", features = ["runtime-tokio", "postgres", "bigdecimal", "time"] }
 
+# containers
+testcontainers = "0.15.0"
+testcontainers-modules = { version = "0.3.5", features = ["postgres"] }
+
 # test
 fake = { version = "2.9.2", features = ["derive"] }
 
@@ -73,8 +77,6 @@ fake = { version = "2.9.2", features = ["derive"] }
 binary_macros = "1.0.0"
 serial_test = "2.0.0"
 stringreader = "0.1.1"
-testcontainers = "0.15.0"
-testcontainers-modules = { version = "0.3.5", features = ["postgres"] }
 
 [build-dependencies]
 const-hex = "1.10.0"
