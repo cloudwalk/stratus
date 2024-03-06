@@ -139,6 +139,7 @@ impl EthExecutor {
             return Err(e.into());
         };
 
+        // track metrics
         metrics::inc_executor_import_offline(start.elapsed());
         metrics::inc_executor_import_offline_account_reads(block_metrics.account_reads);
         metrics::inc_executor_import_offline_slot_reads(block_metrics.slot_reads);
