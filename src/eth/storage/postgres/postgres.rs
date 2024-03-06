@@ -48,16 +48,16 @@ impl PermanentStorage for Postgres {
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("incrementing block number");
 
-        let nextval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
+        let nextval = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
             .fetch_one(&self.connection_pool)
             .await
             .unwrap_or_else(|err| {
                 tracing::error!(?err, "failed to get block number");
-                0
+                BigDecimal::from(0)
             })
-            + 1;
+            + BigDecimal::from(1);
 
-        Ok(nextval.into())
+        nextval.try_into()
     }
 
     async fn set_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
@@ -443,7 +443,7 @@ impl PermanentStorage for Postgres {
 
         for row in query_result {
             let block_hash: &[u8] = row.get("block_hash");
-            let log_idx: i32 = row.get("log_idx");
+            let log_idx: BigDecimal = row.get("log_idx");
             let topics = sqlx::query_file_as!(
                 PostgresTopic,
                 "src/eth/storage/postgres/queries/select_topics_by_block_hash_log_idx.sql",
@@ -670,13 +670,12 @@ impl PermanentStorage for Postgres {
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading current block number");
 
-        let currval: i64 = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
+        let currval: BigDecimal = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
             .fetch_one(&self.connection_pool)
             .await
-            .unwrap_or(0);
+            .unwrap_or(BigDecimal::from(0));
 
-        let block_number = BlockNumber::from(currval);
-        Ok(block_number)
+        currval.try_into()
     }
 
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {

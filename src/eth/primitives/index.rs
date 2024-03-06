@@ -16,6 +16,7 @@ use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
+use std::str::FromStr;
 
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
@@ -47,12 +48,21 @@ impl From<U64> for Index {
     }
 }
 
+impl TryFrom<BigDecimal> for Index {
+    type Error = anyhow::Error;
+
+    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
+        let value_str = value.to_string();
+        Ok(Index(u64::from_str(&value_str)?))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <i64 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.try_into()?)
     }
 }
