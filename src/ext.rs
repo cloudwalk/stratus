@@ -18,6 +18,21 @@ macro_rules! gen_newtype_from {
     };
 }
 
+/// Generates [`TryFrom`] implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) that delegates to the inner type [`TryFrom`].
+#[macro_export]
+macro_rules! gen_newtype_try_from {
+    (self = $type:ty, other = $($source:ty),+) => {
+        $(
+            impl TryFrom<$source> for $type {
+                type Error = anyhow::Error;
+                fn try_from(value: $source) -> Result<Self, Self::Error> {
+                    Ok(Self(value.try_into().map_err(|err| anyhow::anyhow!("{:?}", err))?))
+                }
+            }
+        )+
+    };
+}
+
 /// Generates unit test that checks implementation of [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize) are compatible.
 #[macro_export]
 macro_rules! gen_test_serde {

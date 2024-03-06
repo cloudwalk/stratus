@@ -136,7 +136,7 @@ where
             nonce: Some(H64::zero()),
 
             // mining: gas
-            gas_limit: Gas::from(100_000_000).into(),
+            gas_limit: Gas::from(100_000_000u64).into(),
             gas_used: header.gas_used.into(),
             base_fee_per_gas: Some(U256::zero()),
             blob_gas_used: None,
@@ -166,28 +166,30 @@ where
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-impl From<ExternalBlock> for BlockHeader {
-    fn from(mut value: ExternalBlock) -> Self {
-        Self {
+
+impl TryFrom<ExternalBlock> for BlockHeader {
+    type Error = anyhow::Error;
+    fn try_from(mut value: ExternalBlock) -> Result<Self, Self::Error> {
+        Ok(Self {
             number: value.number(),
             hash: value.hash(),
             transactions_root: value.transactions_root.into(),
-            gas_used: value.gas_used.into(),
+            gas_used: value.gas_used.try_into()?,
             bloom: value.logs_bloom.unwrap_or_default().into(),
             timestamp: value.timestamp.into(),
             parent_hash: value.parent_hash.into(),
-            gas_limit: value.gas_limit.into(),
+            gas_limit: value.gas_limit.try_into()?,
             author: value.author(),
             extra_data: value.extra_data(),
             miner: value.author.unwrap_or_default().into(),
             difficulty: value.difficulty.into(),
             receipts_root: value.receipts_root.into(),
             uncle_hash: value.uncles_hash.into(),
-            size: value.size.unwrap_or_default().into(),
+            size: value.size.unwrap_or_default().try_into()?,
             state_root: value.state_root.into(),
             total_difficulty: value.total_difficulty.unwrap_or_default().into(),
             nonce: value.nonce.unwrap_or_default().into(),
-        }
+        })
     }
 }
 

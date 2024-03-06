@@ -1,7 +1,8 @@
 use std::fmt::Display;
-use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethereum_types::U256;
+use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasArguments;
@@ -15,7 +16,7 @@ use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct Size(U256);
+pub struct Size(U64);
 
 impl Display for Size {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,14 +33,22 @@ impl Dummy<Faker> for Size {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Size, other = u8, u16, u32, u64, u128, U256, usize, i32, [u8; 32]);
+gen_newtype_from!(self = Size, other = u8, u16, u32, u64);
 
 impl TryFrom<BigDecimal> for Size {
     type Error = anyhow::Error;
 
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
         let value_str = value.to_string();
-        Ok(Size(U256::from_dec_str(&value_str)?))
+        Ok(Size(U64::from_str_radix(&value_str, 10)?))
+    }
+}
+
+impl TryFrom<U256> for Size {
+    type Error = anyhow::Error;
+
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        Ok(Size(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
     }
 }
 
@@ -61,13 +70,7 @@ impl sqlx::Type<sqlx::Postgres> for Size {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Size {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
-            Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode gas");
-                IsNull::Yes
-            }
-        }
+        BigDecimal::from(self.clone()).encode(buf)
     }
 }
 
@@ -82,20 +85,18 @@ impl PgHasArrayType for Size {
 // ----------------------------------------------------------------------------
 impl From<Size> for U256 {
     fn from(value: Size) -> Self {
-        value.0
+        value.0.as_u64().into()
     }
 }
 
 impl From<Size> for u64 {
     fn from(value: Size) -> Self {
-        value.0.low_u64()
+        value.0.as_u64()
     }
 }
 
-impl TryFrom<Size> for BigDecimal {
-    type Error = anyhow::Error;
-    fn try_from(value: Size) -> Result<Self, Self::Error> {
-        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
+impl From<Size> for BigDecimal {
+    fn from(value: Size) -> Self {
+        BigDecimal::from(value.0.as_u64())
     }
 }

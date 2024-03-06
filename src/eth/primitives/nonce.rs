@@ -7,9 +7,10 @@
 //! the integrity and uniqueness of transactions in the network.
 
 use std::fmt::Display;
-use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethereum_types::U256;
+use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasArguments;
@@ -21,12 +22,13 @@ use sqlx::types::BigDecimal;
 use sqlx::Decode;
 
 use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Nonce(U256);
+pub struct Nonce(U64);
 
 impl Nonce {
-    pub const ZERO: Nonce = Nonce(U256::zero());
+    pub const ZERO: Nonce = Nonce(U64::zero());
 
     /// Checks if current value is zero.
     pub fn is_zero(&self) -> bool {
@@ -49,14 +51,23 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64);
+gen_newtype_try_from!(self = Nonce, other = i32);
 
 impl TryFrom<BigDecimal> for Nonce {
     type Error = anyhow::Error;
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
         let value_str = value.to_string();
 
-        Ok(Nonce(U256::from_dec_str(&value_str)?))
+        Ok(Nonce(U64::from_str_radix(&value_str, 10)?))
+    }
+}
+
+impl TryFrom<U256> for Nonce {
+    type Error = anyhow::Error;
+
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        Ok(Nonce(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
     }
 }
 
@@ -72,13 +83,7 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Nonce {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Nonce {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
-            Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode nonce");
-                IsNull::Yes
-            }
-        }
+        BigDecimal::from(self.0.as_u64()).encode(buf)
     }
 }
 
@@ -105,7 +110,7 @@ impl From<Nonce> for u64 {
 
 impl From<Nonce> for U256 {
     fn from(value: Nonce) -> Self {
-        value.0
+        U256::from(value.0.as_u64())
     }
 }
 
@@ -113,7 +118,7 @@ impl TryFrom<Nonce> for BigDecimal {
     type Error = anyhow::Error;
     fn try_from(value: Nonce) -> Result<Self, Self::Error> {
         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
+        Ok(BigDecimal::from(value.0.as_u64()))
     }
 }
 

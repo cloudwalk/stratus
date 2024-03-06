@@ -1,5 +1,10 @@
 import '.justfile_helpers' # _lint, _outdated
 
+# Environment variables (automatically set in all actions).
+export RUST_BACKTRACE := "1"
+export RUST_LOG := env("RUST_LOG", "stratus=info,importer-download=info,importer-importer=info")
+
+# Default URLs that can be passed as argument.
 postgres_url := env("POSTGRES_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 testnet_url  := "https://rpc.testnet.cloudwalk.io/"
 
@@ -28,12 +33,12 @@ setup:
 # Stratus: Run main service with debug options
 run *args="":
     #!/bin/bash
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
+    cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
     exit 0
 
 # Stratus: Run main service with release options
 run-release *args="":
-    RUST_LOG={{env("RUST_LOG", "stratus=info")}} cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
+    cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
 
 run-substrate-mock:
     npm init -y
@@ -85,11 +90,11 @@ update:
 # ------------------------------------------------------------------------------
 # Importer: Download external RPC blocks to temporary storage
 importer-download *args="":
-    RUST_LOG={{env("RUST_LOG", "importer-download=info,stratus=info")}} cargo run --bin importer-download --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
+    cargo run --bin importer-download --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
 # Importer: Import downloaded external RPC blocks to Stratus storage
 importer-import *args="":
-    RUST_LOG={{env("RUST_LOG", "importer-import=info,stratus=info")}} cargo run --bin importer-import   --features dev --release -- --postgres {{postgres_url}} {{args}}
+    cargo run --bin importer-import   --features dev --release -- --postgres {{postgres_url}} {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -237,13 +242,13 @@ e2e-lint:
 e2e-flamegraph:
     # Start PostgreSQL with Docker Compose
     echo "Starting PostgreSQL with Docker Compose..."
-    docker-compose down
+    docker-compose down -v
     docker-compose up -d --force-recreate
-    psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
 
     # Wait for PostgreSQL to be ready
     echo "Waiting for PostgreSQL to be ready..."
     wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+    sleep 1 # for some reason on some OS postgres becomes available on the port, although it's not ready yet
     psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
     echo "PostgreSQL is ready."
 
@@ -257,7 +262,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph..."
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller --deterministic -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
 
 
 # ------------------------------------------------------------------------------

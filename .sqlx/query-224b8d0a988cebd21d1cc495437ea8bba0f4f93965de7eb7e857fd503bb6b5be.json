@@ -7,7 +7,7 @@
       "Left": [
         "Bytea",
         "Numeric",
-        "Int8"
+        "Numeric"
       ]
     },
     "nullable": []

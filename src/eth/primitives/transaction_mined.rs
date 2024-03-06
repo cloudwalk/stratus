@@ -55,7 +55,7 @@ impl TransactionMined {
             block_number: receipt.block_number(),
             block_hash: receipt.block_hash(),
             transaction_index: receipt.transaction_index.into(),
-            logs: receipt.0.logs.into_iter().map_into().collect(),
+            logs: receipt.0.logs.into_iter().map(LogMined::try_from).collect::<Result<Vec<LogMined>, _>>()?,
         })
     }
 
