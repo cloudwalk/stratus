@@ -204,6 +204,9 @@ export async function sendGetBlockNumber(): Promise<number> {
     return parseInt(result, 16);
 }
 
+/// Start a subscription and returns its id
+/// Waits at the most for the specified time
+/// An error or timeout will result in undefined
 export async function subscribeAndGetId(subscription: string, waitTimeInMilliseconds: number): Promise<string | undefined> {
     const socket = new WebSocket(providerUrl.replace("http", "ws"));
     let subsId = undefined;
