@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Slot;
+
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::log_and_err;
@@ -44,24 +44,24 @@ impl Postgres {
             })?;
 
         let postgres = Self {
-            connection_pool,
-            sload_cache: Arc::new(RwLock::new(HashMap::new())),
+            connection_pool: connection_pool.clone(),
+            sload_cache: Arc::new(RwLock::new(Self::new_sload_cache(connection_pool).await?))
         };
 
         Ok(postgres)
     }
 
-    async fn new_sload_cache(connection_pool: PgPool) -> HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)> {
+    async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
         let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres/queries/select_slot_cache.sql", BigDecimal::from(0))
             .fetch_optional(&connection_pool)
-            .await.unwrap();
+            .await?;
         let mut sload_cache = HashMap::new();
 
-        for s in raw_sload {
+        raw_sload.into_iter().for_each(|s| {
             sload_cache.insert((s.address, s.index), (s.value, s.block));
-        }
+        });
 
-        sload_cache
+        Ok(sload_cache)
     }
 
     /// Starts a new database transaction.
@@ -82,7 +82,6 @@ impl Postgres {
         }
     }
 }
-
 
 struct SlotCache {
     pub index: SlotIndex,
