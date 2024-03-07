@@ -12,7 +12,6 @@ use tokio::sync::RwLock;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::log_and_err;
