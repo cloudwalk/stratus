@@ -4,6 +4,7 @@ import { JsonRpcProvider, keccak256 } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 import { Numbers } from "web3-types";
+import { WebSocket, WebSocketServer } from "ws";
 
 import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
@@ -201,4 +202,27 @@ export async function sendGetNonce(address: string | Account): Promise<number> {
 export async function sendGetBlockNumber(): Promise<number> {
     const result = await send("eth_blockNumber");
     return parseInt(result, 16);
+}
+
+export async function subscribeAndGetId(subscription: string, waitTimeInMilliseconds: number): Promise<string | undefined> {
+    const socket = new WebSocket(providerUrl.replace("http", "ws"));
+    let subsId = undefined;
+    
+    socket.addEventListener("open", function () {
+        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription] }));
+    });
+
+    socket.addEventListener('message', function (event: { data: string }) {
+        //console.log('Message from server ', event.data);
+        if (event.data.includes("id")) {
+            subsId = JSON.parse(event.data).result;
+        }
+        socket.close();
+    });
+
+    // Wait for the specified time, if necessary
+    if (subsId === undefined && waitTimeInMilliseconds > 0)
+        await new Promise(resolve => setTimeout(resolve, waitTimeInMilliseconds));
+
+    return subsId;
 }
