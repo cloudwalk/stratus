@@ -90,20 +90,20 @@ phf_codegen = "0.11.2"
 # ------------------------------------------------------------------------------
 
 [[bin]]
-name = "importer-download"
-path = "src/bin/importer/importer-download.rs"
+name = "rpc-downloader"
+path = "src/bin/rpc_downloader.rs"
 
 [[bin]]
-name = "importer-import"
-path = "src/bin/importer/importer-import.rs"
+name = "importer-offline"
+path = "src/bin/importer_offline.rs"
 
 [[bin]]
-name = "rpc-server-poller"
-path = "src/bin/rpc_server_poller.rs"
+name = "importer-online"
+path = "src/bin/importer_online.rs"
 
 [[bin]]
 name = "state-validator"
-path = "src/bin/state-validator.rs"
+path = "src/bin/state_validator.rs"
 
 # ------------------------------------------------------------------------------
 # Lints
