@@ -1,9 +1,10 @@
 //! Shared infrastructure.
 
 pub mod blockchain_client;
+pub mod docker;
 pub mod metrics;
 pub mod postgres;
-pub mod tracing; // TODO: expose only struct, not module
+pub mod tracing;
 
 pub use blockchain_client::BlockchainClient;
 pub use metrics::init_metrics;

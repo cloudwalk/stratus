@@ -11,6 +11,7 @@ use metrics_exporter_prometheus::Matcher;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use paste::paste;
 
+use crate::config::MetricsHistogramKind;
 use crate::ext::not;
 use crate::metrics;
 use crate::metrics_impl_fn_inc;
@@ -27,7 +28,7 @@ const BUCKET_FOR_DURATION: [f64; 37] = [
 /// Init application global metrics.
 ///
 /// Default configuration runs metrics exporter on port 9000.
-pub fn init_metrics() {
+pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
     tracing::info!("starting metrics");
 
     // get metric definitions
@@ -42,10 +43,12 @@ pub fn init_metrics() {
     let mut builder = PrometheusBuilder::new();
 
     // init buckets (comment to use summary)
-    builder = builder.set_buckets(&BUCKET_FOR_DURATION).unwrap();
-    for metric in &metrics {
-        if metric.has_custom_buckets() {
-            builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
+    if histogram_kind == MetricsHistogramKind::Histogram {
+        builder = builder.set_buckets(&BUCKET_FOR_DURATION).unwrap();
+        for metric in &metrics {
+            if metric.has_custom_buckets() {
+                builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
+            }
         }
     }
 
@@ -76,7 +79,7 @@ metrics! {
     histogram_duration storage_read_current_block_number{success} [],
 
     "Time to execute storage read_account operation."
-    histogram_duration storage_read_account{kind, point_in_time, success} [],
+    histogram_duration storage_read_account{found_at, point_in_time, success} [],
 
     "Time to execute storage read_block operation."
     histogram_duration storage_read_block{success} [],
@@ -85,7 +88,7 @@ metrics! {
     histogram_duration storage_read_logs{success} [],
 
     "Time to execute storage read_slot operation."
-    histogram_duration storage_read_slot{kind, point_in_time, success} [],
+    histogram_duration storage_read_slot{found_at, point_in_time, success} [],
 
     "Time to execute storage read_mined_transaction operation."
     histogram_duration storage_read_mined_transaction{success} []
