@@ -242,13 +242,13 @@ e2e-lint:
 e2e-flamegraph:
     # Start PostgreSQL with Docker Compose
     echo "Starting PostgreSQL with Docker Compose..."
-    docker-compose down
+    docker-compose down -v
     docker-compose up -d --force-recreate
-    psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
 
     # Wait for PostgreSQL to be ready
     echo "Waiting for PostgreSQL to be ready..."
     wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+    sleep 1 # for some reason on some OS postgres becomes available on the port, although it's not ready yet
     psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
     echo "PostgreSQL is ready."
 
@@ -262,7 +262,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph..."
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller --deterministic -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
 
 
 # ------------------------------------------------------------------------------

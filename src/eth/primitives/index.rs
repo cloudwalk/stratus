@@ -6,6 +6,9 @@
 //! module includes functionality to handle conversions and representations of
 //! indexes, aligning with Ethereum's blockchain data structure needs.
 
+use std::num::TryFromIntError;
+use std::str::FromStr;
+
 use ethereum_types::U256;
 use ethereum_types::U64;
 use sqlx::database::HasArguments;
@@ -13,20 +16,22 @@ use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
+use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 /// Represents a transaction index or log index.
 ///
 /// TODO: representing it as u16 is probably wrong because external libs uses u64.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]
-pub struct Index(u16);
+pub struct Index(u64);
 
 impl Index {
-    pub const ZERO: Index = Index(0u16);
-    pub const ONE: Index = Index(1u16);
+    pub const ZERO: Index = Index(0u64);
+    pub const ONE: Index = Index(1u64);
 
-    pub fn new(inner: u16) -> Self {
+    pub fn new(inner: u64) -> Self {
         Index(inner)
     }
 }
@@ -34,23 +39,21 @@ impl Index {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Index, other = u16);
-
-impl From<i32> for Index {
-    fn from(value: i32) -> Self {
-        Index::new(value as u16)
-    }
-}
+gen_newtype_from!(self = Index, other = u64);
+gen_newtype_try_from!(self = Index, other = U256, i64);
 
 impl From<U64> for Index {
     fn from(value: U64) -> Self {
-        Index::new(value.low_u64() as u16) // TODO: this will break things if the value is bigger than u16
+        Index(value.as_u64())
     }
 }
 
-impl From<U256> for Index {
-    fn from(value: U256) -> Self {
-        Index::new(value.low_u64() as u16) // TODO: this will break things if the value is bigger than u16
+impl TryFrom<BigDecimal> for Index {
+    type Error = anyhow::Error;
+
+    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
+        let value_str = value.to_string();
+        Ok(Index(u64::from_str(&value_str)?))
     }
 }
 
@@ -59,27 +62,26 @@ impl From<U256> for Index {
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
     fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <i32 as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
+        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.try_into()?)
     }
 }
 
 impl sqlx::Type<sqlx::Postgres> for Index {
     fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        // HACK: Actually SERIAL, sqlx was panicking
-        sqlx::postgres::PgTypeInfo::with_name("INT4")
+        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Index {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        <i32 as sqlx::Encode<sqlx::Postgres>>::encode(i32::from(self.0), buf)
+        BigDecimal::from(self.0).encode(buf)
     }
 }
 
 impl PgHasArrayType for Index {
     fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <i32 as PgHasArrayType>::array_type_info()
+        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }
 
@@ -98,8 +100,10 @@ impl From<Index> for U256 {
     }
 }
 
-impl From<Index> for i32 {
-    fn from(value: Index) -> Self {
-        value.0.into()
+impl TryFrom<Index> for i32 {
+    type Error = TryFromIntError;
+
+    fn try_from(value: Index) -> Result<Self, Self::Error> {
+        value.0.try_into()
     }
 }

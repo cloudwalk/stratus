@@ -61,16 +61,17 @@ impl LogMined {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-impl From<EthersLog> for LogMined {
-    fn from(value: EthersLog) -> Self {
-        Self {
+impl TryFrom<EthersLog> for LogMined {
+    type Error = anyhow::Error;
+    fn try_from(value: EthersLog) -> Result<Self, Self::Error> {
+        Ok(Self {
             transaction_hash: value.transaction_hash.expect("log must have transaction_hash").into(),
             transaction_index: value.transaction_index.expect("log must have transaction_index").into(),
-            log_index: value.log_index.expect("log must have log_index").into(),
+            log_index: value.log_index.expect("log must have log_index").try_into()?,
             block_number: value.block_number.expect("log must have block_number").into(),
             block_hash: value.block_hash.expect("log must have block_hash").into(),
             log: value.into(),
-        }
+        })
     }
 }
 

@@ -21,14 +21,14 @@
       {
         "ordinal": 3,
         "name": "block_number!: _",
-        "type_info": "Int8"
+        "type_info": "Numeric"
       }
     ],
     "parameters": {
       "Left": [
         "Float8",
-        "Int8",
-        "Int8",
+        "Numeric",
+        "Numeric",
         "Int8"
       ]
     },

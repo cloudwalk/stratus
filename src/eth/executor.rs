@@ -94,7 +94,7 @@ impl EthExecutor {
             };
 
             // re-execute transaction
-            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt);
+            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
             let execution = self.execute_in_evm(evm_input).await;
 
             // handle execution result
@@ -163,8 +163,9 @@ impl EthExecutor {
                 Err(e) => return Err(anyhow!("failed to convert external transaction into TransactionInput: {:?}", e)),
             };
 
-            let evm_input = EvmInput::from_external_transaction(&external_block, external_transaction.to_owned(), external_receipt);
+            let evm_input = EvmInput::from_external_transaction(&external_block, external_transaction.to_owned(), external_receipt)?;
             let execution = self.execute_in_evm(evm_input).await?.0;
+
             execution.compare_with_receipt(external_receipt)?;
             metrics::inc_executor_import_online_transaction(tx_start.elapsed());
 

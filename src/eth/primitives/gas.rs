@@ -9,9 +9,10 @@
 //! execution.
 
 use std::fmt::Display;
-use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethereum_types::U256;
+use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::database::HasArguments;
@@ -22,18 +23,19 @@ use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 // XXX: we should use U64
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct Gas(U256);
+pub struct Gas(U64);
 
 impl Gas {
-    pub const ZERO: Gas = Gas(U256::zero());
-    pub const MAX: Gas = Gas(U256::MAX);
+    pub const ZERO: Gas = Gas(U64::zero());
+    pub const MAX: Gas = Gas(U64::MAX);
 
     pub fn as_u64(&self) -> u64 {
-        self.0.low_u64()
+        self.0.as_u64()
     }
 }
 
@@ -52,14 +54,23 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Gas, other = u8, u16, u32, u64, u128, U256, usize, i32, [u8; 32]);
+gen_newtype_from!(self = Gas, other = u8, u16, u32, u64);
+gen_newtype_try_from!(self = Gas, other = i32);
 
 impl TryFrom<BigDecimal> for Gas {
     type Error = anyhow::Error;
 
     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
         let value_str = value.to_string();
-        Ok(Gas(U256::from_dec_str(&value_str)?))
+        Ok(Gas(U64::from_str_radix(&value_str, 10)?))
+    }
+}
+
+impl TryFrom<U256> for Gas {
+    type Error = anyhow::Error;
+
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        Ok(Gas(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
     }
 }
 
@@ -81,13 +92,7 @@ impl sqlx::Type<sqlx::Postgres> for Gas {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Gas {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
-            Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode gas");
-                IsNull::Yes
-            }
-        }
+        BigDecimal::from(self.clone()).encode(buf)
     }
 }
 
@@ -102,20 +107,18 @@ impl PgHasArrayType for Gas {
 // ----------------------------------------------------------------------------
 impl From<Gas> for U256 {
     fn from(value: Gas) -> Self {
-        value.0
+        value.0.as_u64().into()
     }
 }
 
 impl From<Gas> for u64 {
     fn from(value: Gas) -> Self {
-        value.0.low_u64()
+        value.0.as_u64()
     }
 }
 
-impl TryFrom<Gas> for BigDecimal {
-    type Error = anyhow::Error;
-    fn try_from(value: Gas) -> Result<Self, Self::Error> {
-        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
+impl From<Gas> for BigDecimal {
+    fn from(value: Gas) -> BigDecimal {
+        BigDecimal::from(value.0.as_u64())
     }
 }
