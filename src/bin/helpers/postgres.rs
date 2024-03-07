@@ -20,7 +20,7 @@ use stratus::log_and_err;
 pub async fn pg_retrieve_max_external_block(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
     tracing::debug!(%start, %end, "retrieving max external block");
 
-    let result = sqlx::query_file_scalar!("src/bin/importer/sql/select_max_external_block_in_range.sql", start.as_i64(), end.as_i64())
+    let result = sqlx::query_file_scalar!("src/bin/helpers/sql/select_max_external_block_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_one(&pg.connection_pool)
         .await;
 
@@ -33,7 +33,7 @@ pub async fn pg_retrieve_max_external_block(pg: &Postgres, start: BlockNumber, e
 
 pub async fn pg_retrieve_external_blocks_in_range(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<BlockRow>> {
     tracing::debug!(%start, %end, "retrieving external blocks in range");
-    let result = sqlx::query_file!("src/bin/importer/sql/select_external_blocks_in_range.sql", start.as_i64(), end.as_i64())
+    let result = sqlx::query_file!("src/bin/helpers/sql/select_external_blocks_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_all(&pg.connection_pool)
         .await;
 
@@ -58,7 +58,7 @@ pub async fn pg_retrieve_external_blocks_in_range(pg: &Postgres, start: BlockNum
 pub async fn pg_retrieve_external_receipts_in_range(pg: &Postgres, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ReceiptRow>> {
     tracing::debug!(%start, %end, "retrieving external receipts in range");
 
-    let result = sqlx::query_file!("src/bin/importer/sql/select_external_receipts_in_range.sql", start.as_i64(), end.as_i64())
+    let result = sqlx::query_file!("src/bin/helpers/sql/select_external_receipts_in_range.sql", start.as_i64(), end.as_i64())
         .fetch_all(&pg.connection_pool)
         .await;
 
@@ -83,7 +83,7 @@ pub async fn pg_retrieve_external_receipts_in_range(pg: &Postgres, start: BlockN
 pub async fn pg_retrieve_external_balances(pg: &Postgres) -> anyhow::Result<Vec<BalanceRow>> {
     tracing::debug!("retrieving external balances");
 
-    let result = sqlx::query_file_as!(BalanceRow, "src/bin/importer/sql/select_external_balances.sql")
+    let result = sqlx::query_file_as!(BalanceRow, "src/bin/helpers/sql/select_external_balances.sql")
         .fetch_all(&pg.connection_pool)
         .await;
 
@@ -100,7 +100,7 @@ pub async fn pg_insert_external_balance(pg: &Postgres, address: Address, balance
     tracing::debug!(%address, %balance, "saving external balance");
 
     let result = sqlx::query_file!(
-        "src/bin/importer/sql/insert_external_balance.sql",
+        "src/bin/helpers/sql/insert_external_balance.sql",
         address.as_ref(),
         TryInto::<BigDecimal>::try_into(balance)?
     )
@@ -124,7 +124,7 @@ pub async fn pg_insert_external_block_and_receipts(
     let mut tx = pg.start_transaction().await?;
 
     // insert block
-    let result = sqlx::query_file!("src/bin/importer/sql/insert_external_block.sql", number.as_i64(), block)
+    let result = sqlx::query_file!("src/bin/helpers/sql/insert_external_block.sql", number.as_i64(), block)
         .execute(&mut *tx)
         .await;
 
@@ -138,7 +138,7 @@ pub async fn pg_insert_external_block_and_receipts(
 
     // insert receipts
     for (hash, receipt) in receipts {
-        let result = sqlx::query_file!("src/bin/importer/sql/insert_external_receipt.sql", hash.as_ref(), number.as_i64(), receipt)
+        let result = sqlx::query_file!("src/bin/helpers/sql/insert_external_receipt.sql", hash.as_ref(), number.as_i64(), receipt)
             .execute(&mut *tx)
             .await;
 
