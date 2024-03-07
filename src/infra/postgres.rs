@@ -1,7 +1,8 @@
 //! PostgreSQL client.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -9,7 +10,10 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 
-use crate::eth::primitives::{Address, BlockNumber, SlotIndex, SlotValue};
+use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotValue;
 use crate::log_and_err;
 
 #[derive(Debug, Clone)]
@@ -33,7 +37,10 @@ impl Postgres {
                 anyhow!("failed to start postgres client")
             })?;
 
-        let postgres = Self { connection_pool, sload_cache: Arc::new(RwLock::new(HashMap::new())) };
+        let postgres = Self {
+            connection_pool,
+            sload_cache: Arc::new(RwLock::new(HashMap::new())),
+        };
 
         Ok(postgres)
     }
