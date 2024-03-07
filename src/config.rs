@@ -202,6 +202,9 @@ pub struct CommonConfig {
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "1")]
     pub num_blocking_threads: usize,
 
+    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
+    pub metrics_histogram_kind: MetricsHistogramKind,
+
     /// Generates genesis block on startup when it does not exist.
     #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
     pub enable_genesis: bool,
@@ -210,9 +213,6 @@ pub struct CommonConfig {
     #[cfg(feature = "dev")]
     #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
     pub enable_test_accounts: bool,
-
-    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
-    pub metrics_histogram_kind: MetricsHistogramKind,
 
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]

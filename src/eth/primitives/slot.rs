@@ -36,6 +36,11 @@ impl Slot {
             value: value.into(),
         }
     }
+
+    /// Checks if the value is zero.
+    pub fn is_zero(&self) -> bool {
+        self.value.is_zero()
+    }
 }
 
 impl Display for Slot {
@@ -131,6 +136,12 @@ impl From<SlotIndex> for [u8; 32] {
 pub struct SlotValue(U256);
 
 impl SlotValue {
+    /// Checks if the value is zero.
+    pub fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+
+    /// Converts itself to [`U256`].
     pub fn as_u256(&self) -> U256 {
         self.0
     }

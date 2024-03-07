@@ -15,6 +15,7 @@ anyhow = "1.0.79"
 async-trait = "0.1.77"
 chrono = "0.4.31"
 clap = { version = "4.4.18", features = ["derive", "env"] }
+const_format = "0.2.32"
 const-hex = "1.10.0"
 derive_more = "0.99.17"
 derive-new = "0.6.0"
