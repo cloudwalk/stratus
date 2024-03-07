@@ -15,10 +15,15 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::log_and_err;
 
+type SloadKey = (Address, SlotIndex);
+type SloadValue = (SlotValue, BlockNumber);
+type SloadCacheMap = HashMap<SloadKey, SloadValue>;
+type SloadCache = Arc<RwLock<SloadCacheMap>>;
+
 #[derive(Debug, Clone)]
 pub struct Postgres {
     pub connection_pool: PgPool,
-    pub sload_cache: Arc<RwLock<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>>>,
+    pub sload_cache: SloadCache,
 }
 
 impl Postgres {
