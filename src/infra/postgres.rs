@@ -6,11 +6,13 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::types::BigDecimal;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::log_and_err;
@@ -49,6 +51,19 @@ impl Postgres {
         Ok(postgres)
     }
 
+    async fn new_sload_cache(connection_pool: PgPool) -> HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)> {
+        let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres/queries/select_slot_cache.sql", BigDecimal::from(0))
+            .fetch_optional(&connection_pool)
+            .await.unwrap();
+        let mut sload_cache = HashMap::new();
+
+        for s in raw_sload {
+            sload_cache.insert((s.address, s.index), (s.value, s.block));
+        }
+
+        sload_cache
+    }
+
     /// Starts a new database transaction.
     pub async fn start_transaction(&self) -> anyhow::Result<sqlx::Transaction<'_, sqlx::Postgres>> {
         tracing::debug!("starting postgres transaction");
@@ -66,4 +81,12 @@ impl Postgres {
             Err(e) => log_and_err!(reason = e, "failed to commit postgres transaction"),
         }
     }
+}
+
+
+struct SlotCache {
+    pub index: SlotIndex,
+    pub value: SlotValue,
+    pub address: Address,
+    pub block: BlockNumber,
 }
