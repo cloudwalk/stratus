@@ -22,7 +22,7 @@ use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
 
-const TRACKED_METRICS: [&str; 8] = [
+const METRIC_QUERIES: [&str; 8] = [
     METRIC_EVM_EXECUTION,
     METRIC_EVM_EXECUTION_SLOT_READS,
     METRIC_EVM_EXECUTION_ACCOUNT_READS,
@@ -67,7 +67,7 @@ async fn test_import_offline_snapshot() {
 
     // get metrics from prometheus
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    for metric in TRACKED_METRICS {
+    for metric in METRIC_QUERIES {
         let url = format!("{}?query={}_sum", docker.prometheus_api_url(), metric);
         let response = reqwest::get(url).await.unwrap().json::<serde_json::Value>().await.unwrap();
         println!("\n{}\n{}", metric, response.get("data").unwrap().get("result").unwrap());

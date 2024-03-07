@@ -32,6 +32,14 @@ use crate::eth::EthExecutor;
 use crate::ext::not;
 use crate::infra::postgres::Postgres;
 
+pub trait WithCommonConfig {
+    fn common(&self) -> &CommonConfig;
+}
+
+// -----------------------------------------------------------------------------
+// Config: Stratus
+// -----------------------------------------------------------------------------
+
 /// Configuration for main Stratus service.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct StratusConfig {
@@ -44,8 +52,18 @@ pub struct StratusConfig {
     pub common: CommonConfig,
 }
 
+impl WithCommonConfig for StratusConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: ImporterDownload
+// -----------------------------------------------------------------------------
+
 /// Configuration for importer-download binary.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, derive_more::Deref)]
 pub struct ImporterDownloadConfig {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
@@ -62,7 +80,21 @@ pub struct ImporterDownloadConfig {
     /// Accounts to retrieve initial balance information.
     #[arg(long = "initial-accounts", env = "INITIAL_ACCOUNTS", value_delimiter = ',')]
     pub initial_accounts: Vec<Address>,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
 }
+
+impl WithCommonConfig for ImporterDownloadConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: ImporterImport
+// -----------------------------------------------------------------------------
 
 /// Configuration for importer-import binary.
 #[derive(Parser, Debug, derive_more::Deref)]
@@ -80,6 +112,16 @@ pub struct ImporterImportConfig {
     pub common: CommonConfig,
 }
 
+impl WithCommonConfig for ImporterImportConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: RpcPoller
+// -----------------------------------------------------------------------------
+
 /// Configuration for rpc-poller binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct RpcPollerConfig {
@@ -91,6 +133,16 @@ pub struct RpcPollerConfig {
     #[clap(flatten)]
     pub common: CommonConfig,
 }
+
+impl WithCommonConfig for RpcPollerConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: StateValidator
+// -----------------------------------------------------------------------------
 
 /// Configuration for importer-import binary.
 #[derive(Parser, Debug, derive_more::Deref)]
@@ -119,6 +171,16 @@ pub struct StateValidatorConfig {
     #[arg(short = 'c', long = "concurrent-tasks", env = "CONCURRENT_TASKS", default_value_t = 10)]
     pub concurrent_tasks: u16,
 }
+
+impl WithCommonConfig for StateValidatorConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: Common
+// -----------------------------------------------------------------------------
 
 /// Common configuration that can be used by any binary.
 #[derive(Parser, Debug)]
@@ -149,9 +211,18 @@ pub struct CommonConfig {
     #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
     pub enable_test_accounts: bool,
 
+    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
+    pub metrics_histogram_kind: MetricsHistogramKind,
+
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,
+}
+
+impl WithCommonConfig for CommonConfig {
+    fn common(&self) -> &CommonConfig {
+        self
+    }
 }
 
 impl CommonConfig {
@@ -220,6 +291,10 @@ impl CommonConfig {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Enum: StorageConfig
+// -----------------------------------------------------------------------------
+
 /// Storage configuration.
 #[derive(Clone, Debug, strum::Display)]
 pub enum StorageConfig {
@@ -255,6 +330,40 @@ impl FromStr for StorageConfig {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Enum: MetricsHistogramKind
+// -----------------------------------------------------------------------------
+
+/// See: https://prometheus.io/docs/practices/histograms/
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MetricsHistogramKind {
+    /// Quantiles are calculated on client-side based on recent data kept in-memory.
+    ///
+    /// Client defines the quantiles to calculate.
+    Summary,
+
+    /// Quantiles are calculated on server-side based on bucket counts.
+    ///
+    /// Cient defines buckets to group observations.
+    Histogram,
+}
+
+impl FromStr for MetricsHistogramKind {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s.to_lowercase().trim() {
+            "summary" => Ok(Self::Summary),
+            "histogram" => Ok(Self::Histogram),
+            s => Err(anyhow!("unknown metrics histogram kind: {}", s)),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Enum: ValidatorMethodConfig
+// -----------------------------------------------------------------------------
+
 #[derive(Clone, Debug, strum::Display)]
 pub enum ValidatorMethodConfig {
     Rpc { url: String },
@@ -268,38 +377,6 @@ impl FromStr for ValidatorMethodConfig {
         match s {
             "compare_tables" => Ok(Self::CompareTables),
             s => Ok(Self::Rpc { url: s.to_string() }),
-        }
-    }
-}
-
-/// Enviroment where the application is running.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum Environment {
-    Development,
-    Production,
-}
-
-impl Environment {
-    /// Checks if the current environment is production.
-    pub fn is_production(&self) -> bool {
-        matches!(self, Self::Production)
-    }
-
-    /// Checks if the current environment is development.
-    pub fn is_development(&self) -> bool {
-        matches!(self, Self::Development)
-    }
-}
-
-impl FromStr for Environment {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim().to_lowercase();
-        match s.as_str() {
-            "dev" | "development" => Ok(Self::Development),
-            "prod" | "production" => Ok(Self::Production),
-            s => Err(anyhow!("unknown environment: {}", s)),
         }
     }
 }

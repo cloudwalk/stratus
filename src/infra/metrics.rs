@@ -11,6 +11,7 @@ use metrics_exporter_prometheus::Matcher;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use paste::paste;
 
+use crate::config::MetricsHistogramKind;
 use crate::ext::not;
 use crate::metrics;
 use crate::metrics_impl_fn_inc;
@@ -27,7 +28,7 @@ const BUCKET_FOR_DURATION: [f64; 37] = [
 /// Init application global metrics.
 ///
 /// Default configuration runs metrics exporter on port 9000.
-pub fn init_metrics() {
+pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
     tracing::info!("starting metrics");
 
     // get metric definitions
@@ -42,10 +43,12 @@ pub fn init_metrics() {
     let mut builder = PrometheusBuilder::new();
 
     // init buckets (comment to use summary)
-    builder = builder.set_buckets(&BUCKET_FOR_DURATION).unwrap();
-    for metric in &metrics {
-        if metric.has_custom_buckets() {
-            builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
+    if histogram_kind == MetricsHistogramKind::Histogram {
+        builder = builder.set_buckets(&BUCKET_FOR_DURATION).unwrap();
+        for metric in &metrics {
+            if metric.has_custom_buckets() {
+                builder = builder.set_buckets_for_metric(Matcher::Full(metric.name.to_string()), &metric.buckets).unwrap();
+            }
         }
     }
 
