@@ -115,7 +115,9 @@ impl PermanentStorage for Postgres {
                         value: value.clone(),
                     })
                 } else {
-                    None
+                    sqlx::query_file_as!(Slot, "src/eth/storage/postgres/queries/select_slot.sql", address.as_ref(), slot_index_u8.as_ref())
+                        .fetch_optional(&self.connection_pool)
+                        .await?
                 }
             }
             StoragePointInTime::Past(number) => {
