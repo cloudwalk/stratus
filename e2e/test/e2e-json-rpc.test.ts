@@ -3,7 +3,7 @@ import { Block } from "web3-types";
 
 import { ALICE, BOB } from "./helpers/account";
 import { isStratus } from "./helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, TEST_BALANCE, ZERO, send, sendExpect, sendRawTransaction } from "./helpers/rpc";
+import { CHAIN_ID, CHAIN_ID_DEC, TEST_BALANCE, ZERO, send, sendAndGetError, sendExpect, sendRawTransaction } from "./helpers/rpc";
 
 describe("JSON-RPC", () => {
     describe("State", () => {
@@ -123,6 +123,13 @@ describe("JSON-RPC", () => {
                 await send("evm_setNextBlockTimestamp", [0]);
             })
         });
+    });
 
+    describe("Subscription", () => {
+        it("eth_subscribe over http fails with code 32603", async () => {
+             const error = await sendAndGetError("eth_subscribe", ["newHeads"]);
+             expect(error).to.not.be.null;
+             expect(error.code).eq(-32603); // Internal error
+        });
     });
 });

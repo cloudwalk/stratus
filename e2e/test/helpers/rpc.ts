@@ -64,9 +64,9 @@ if (process.env.RPC_LOG) {
 // Helper functions
 // -----------------------------------------------------------------------------
 
-// Sends a RPC request to the blockchain.
+// Sends a RPC request to the blockchain, returning full response.
 var requestId = 0;
-export async function send(method: string, params: any[] = []): Promise<any> {
+export async function sendAndGetFullResponse(method: string, params: any[] = []): Promise<any> {
     for (const i in params) {
         const param = params[i];
         if (param instanceof Account) {
@@ -91,7 +91,20 @@ export async function send(method: string, params: any[] = []): Promise<any> {
         console.log("RESP <-", JSON.stringify(response.data));
     }
 
+    return response;
+}
+
+// Sends a RPC request to the blockchain, returning its result field.
+export async function send(method: string, params: any[] = []): Promise<any> {
+    const response = await sendAndGetFullResponse(method, params);
     return response.data.result;
+}
+
+// Sends a RPC request to the blockchain, returning its error field.
+// Use it when you expect the RPC call to fail.
+export async function sendAndGetError(method: string, params: any[] = []): Promise<any> {
+    const response = await sendAndGetFullResponse(method, params);
+    return response.data.error;
 }
 
 // Sends a RPC request to the blockchain and applies the expect function to the result.
