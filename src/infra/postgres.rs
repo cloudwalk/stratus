@@ -44,7 +44,7 @@ impl Postgres {
 
         let postgres = Self {
             connection_pool: connection_pool.clone(),
-            sload_cache: Arc::new(RwLock::new(Self::new_sload_cache(connection_pool).await?))
+            sload_cache: Arc::new(RwLock::new(Self::new_sload_cache(connection_pool).await?)),
         };
 
         Ok(postgres)
