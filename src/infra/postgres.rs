@@ -1,16 +1,29 @@
 //! PostgreSQL client.
 
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use tokio::sync::RwLock;
 
+use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotValue;
 use crate::log_and_err;
+
+type SloadKey = (Address, SlotIndex);
+type SloadValue = (SlotValue, BlockNumber);
+type SloadCacheMap = HashMap<SloadKey, SloadValue>;
+type SloadCache = Arc<RwLock<SloadCacheMap>>;
 
 #[derive(Debug, Clone)]
 pub struct Postgres {
     pub connection_pool: PgPool,
+    pub sload_cache: SloadCache,
 }
 
 impl Postgres {
@@ -28,7 +41,10 @@ impl Postgres {
                 anyhow!("failed to start postgres client")
             })?;
 
-        let postgres = Self { connection_pool };
+        let postgres = Self {
+            connection_pool,
+            sload_cache: Arc::new(RwLock::new(HashMap::new())),
+        };
 
         Ok(postgres)
     }
