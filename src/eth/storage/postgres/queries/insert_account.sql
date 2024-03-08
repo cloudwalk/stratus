@@ -1,6 +1,4 @@
-INSERT INTO accounts (
-    address, bytecode, latest_balance, latest_nonce, creation_block, previous_balance, previous_nonce
-)
+INSERT INTO accounts (address, latest_nonce, latest_balance, bytecode, creation_block, previous_balance, previous_nonce)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (address) DO
 UPDATE
