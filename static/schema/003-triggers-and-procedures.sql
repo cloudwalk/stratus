@@ -5,10 +5,10 @@ BEGIN
     PERFORM pg_notify(
         'sload_cache_channel',
         json_build_object(
-            'index', NEW.idx,
-            'value', NEW.value,
-            'address', NEW.account_address,
-            'block', NEW.creation_block,
+            'index', encode(NEW.idx, 'hex'),
+            'value', encode(NEW.value, 'hex'),
+            'address', encode(NEW.account_address, 'hex'),
+            'block', NEW.creation_block
         )::text
     );
     RETURN NEW;
