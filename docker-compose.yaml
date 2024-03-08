@@ -13,7 +13,14 @@ services:
       - "./static/schema/001-init.sql:/docker-entrypoint-initdb.d/001-schema.sql"
       - "./static/schema/002-schema-external-rpc.sql:/docker-entrypoint-initdb.d/002-schema.sql"
       - "./static/schema/003-triggers-and-procedures.sql:/docker-entrypoint-initdb.d/003-triggers-and-procedures.sql"
+
+  postgres-persistent:
+    extends:
+      service: postgres
+    volumes:
       - "postgres-data:/var/lib/postgresql/data"
+    profiles:
+      - manual
 
   prometheus:
     image: prom/prometheus

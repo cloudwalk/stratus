@@ -5,8 +5,8 @@ export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
 # Default URLs that can be passed as argument.
-postgres_url := env("POSTGRES_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
-testnet_url  := "https://rpc.testnet.cloudwalk.io/"
+external_rpc_url  := env("EXTERNAL_RPC_URL", "http://spec.testnet.cloudwalk.network:9934/")
+postgres_url      := env("POSTGRES_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 
 # Project: Show available tasks
 default:
@@ -39,11 +39,6 @@ run *args="":
 # Stratus: Run main service with release options
 run-release *args="":
     cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
-
-run-substrate-mock:
-    npm init -y
-    npm install csv-parse pg express
-    node ./e2e/substrate-sync-mock-server/index.js
 
 # Stratus: Compile with debug options
 build:
@@ -86,23 +81,28 @@ update:
     cargo update stratus
 
 # ------------------------------------------------------------------------------
-# Jobs
+# Additional binaries
 # ------------------------------------------------------------------------------
-# Job: Download external RPC blocks and receipts to temporary storage
-rpc-downloader *args="":
-    cargo run --bin rpc-downloader   --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
-# Job: Import external RPC blocks from temporary storage to Stratus storage
-importer-offline *args="":
+# Bin: Download external RPC blocks and receipts to temporary storage
+bin-rpc-downloader *args="":
+    cargo run --bin rpc-downloader   --features dev --release -- --postgres {{postgres_url}} --external-rpc {{external_rpc_url}} {{args}}
+alias rpc-downloader := bin-rpc-downloader
+
+# Bin: Import external RPC blocks from temporary storage to Stratus storage
+bin-importer-offline *args="":
     cargo run --bin importer-offline --features dev --release -- --postgres {{postgres_url}} {{args}}
+alias importer-offline := bin-importer-offline
 
-# Job: Import external RPC blocks from external RPC endpoint to Stratus storage
-importer-online *args="":
-    cargo run --bin importer-online  --features dev --release -- --external-rpc {{testnet_url}} {{args}}
+# Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
+bin-importer-online *args="":
+    cargo run --bin importer-online  --features dev --release -- --external-rpc {{external_rpc_url}} {{args}}
+alias importer-online := bin-importer-online
 
-# Job: Validate Stratus storage slots matches reference slots
-state-validator *args="":
-    cargo run --bin state-validator  --features dev --release -- --method {{testnet_url}} {{args}}
+# Bin: Validate Stratus storage slots matches reference slots
+bin-state-validator *args="":
+    cargo run --bin state-validator  --features dev --release -- --method {{external_rpc_url}} {{args}}
+alias state-validator := bin-state-validator
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -248,30 +248,37 @@ e2e-lint:
 
 # E2E: profiles rpc sync and generates a flamegraph
 e2e-flamegraph:
-    # Start PostgreSQL with Docker Compose
-    echo "Starting PostgreSQL with Docker Compose..."
+    #!/bin/bash
+
+    # Start PostgreSQL
+    echo "Starting PostgreSQL"
     docker-compose down -v
     docker-compose up -d --force-recreate
 
-    # Wait for PostgreSQL to be ready
-    echo "Waiting for PostgreSQL to be ready..."
+    # Wait for PostgreSQL
+    echo "Waiting for PostgreSQL to be ready"
     wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
-    sleep 1 # for some reason on some OS postgres becomes available on the port, although it's not ready yet
-    psql postgres://postgres:123@0.0.0.0:5432/stratus -c "TRUNCATE TABLE blocks CASCADE;"
-    echo "PostgreSQL is ready."
+    sleep 1
 
-    # Start the substrate mock server in the background
-    echo "Starting substrate mock server..."
+    # Start RPC mock server
+    echo "Starting RPC mock server"
     killport 3003
-    just run-substrate-mock &
-    echo "Waiting for the substrate mock server to be ready..." &
+
+    cd e2e/rpc-mock-server
+    if [ ! -d node_modules ]; then
+        npm install
+    fi
+    cd ../..
+    node ./e2e/rpc-mock-server/index.js &
+    sleep 1
+
+    # Wait for RPC mock server
+    echo "Waiting for RPC mock server to be ready..."
     wait-service --tcp 0.0.0.0:3003 -t 300 -- echo
-    echo "Substrate mock server is ready."
 
     # Run cargo flamegraph with necessary environment variables
-    echo "Running cargo flamegraph..."
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
-
+    echo "Running cargo flamegraph"
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
 
 # ------------------------------------------------------------------------------
 # Contracts tasks

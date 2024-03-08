@@ -1,8 +1,8 @@
 mod helpers;
 
 use std::cmp::min;
-use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::anyhow;
 use futures::try_join;
@@ -13,9 +13,11 @@ use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Account;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::BlockSelection;
+use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
+use stratus::infra::metrics;
 use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -79,18 +81,16 @@ async fn execute_block_importer(
             break "block loader finished or failed";
         };
 
-        // index receipts
-        let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
-        for receipt in receipts {
-            receipts_by_hash.insert(receipt.payload.0.transaction_hash.into(), receipt.payload);
-        }
-
         // imports transactions
         let block_start = blocks.first().unwrap().number;
         let block_end = blocks.last().unwrap().number;
-        tracing::info!(%block_start, %block_end, receipts = %receipts_by_hash.len(), "importing blocks");
+        let mut receipts: ExternalReceipts = receipts.into_iter().map(|r| r.payload).collect_vec().into();
+
+        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for block in blocks {
-            executor.import_offline(block.payload, &receipts_by_hash).await?;
+            let start = Instant::now();
+            executor.import_external(block.payload, &mut receipts).await?;
+            metrics::inc_import_offline(start.elapsed());
         }
     };
 

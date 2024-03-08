@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use rand::Rng;
 use stratus::config::StateValidatorConfig;
@@ -9,8 +8,6 @@ use stratus::eth::storage::StratusStorage;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use tokio::task::JoinSet;
-
-const RPC_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -54,7 +51,7 @@ async fn validate_state(
 ) -> anyhow::Result<()> {
     match method {
         ValidatorMethodConfig::Rpc { url } => {
-            let chain = BlockchainClient::new(&url, RPC_TIMEOUT)?;
+            let chain = BlockchainClient::new(&url).await?;
             validate_state_rpc(&chain, storage, start, end, max_sample_size, seed).await
         }
         _ => todo!(),
