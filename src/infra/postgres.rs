@@ -49,6 +49,8 @@ impl Postgres {
             sload_cache: Arc::new(RwLock::new(Self::new_sload_cache(connection_pool).await?)),
         };
 
+        postgres.start_listening().await;
+
         Ok(postgres)
     }
 
