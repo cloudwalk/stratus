@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use stratus::config::RpcPollerConfig;
+use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
 use stratus::infra::BlockchainClient;
@@ -13,7 +13,7 @@ const POLL_LATENCY: Duration = Duration::from_secs(1);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    let config: RpcPollerConfig = init_global_services();
+    let config: ImporterOnlineConfig = init_global_services();
 
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc, Duration::from_secs(1))?);
 

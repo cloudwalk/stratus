@@ -59,12 +59,12 @@ impl WithCommonConfig for StratusConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Config: ImporterDownload
+// Config: RpcDownloader
 // -----------------------------------------------------------------------------
 
-/// Configuration for importer-download binary.
+/// Configuration for `rpc-downlaoder` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
-pub struct ImporterDownloadConfig {
+pub struct RpcDownloaderConfig {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
@@ -86,7 +86,7 @@ pub struct ImporterDownloadConfig {
     pub common: CommonConfig,
 }
 
-impl WithCommonConfig for ImporterDownloadConfig {
+impl WithCommonConfig for RpcDownloaderConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
@@ -96,9 +96,9 @@ impl WithCommonConfig for ImporterDownloadConfig {
 // Config: ImporterImport
 // -----------------------------------------------------------------------------
 
-/// Configuration for importer-import binary.
+/// Configuration for `importer-offline` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
-pub struct ImporterImportConfig {
+pub struct ImporterOfflineConfig {
     /// Postgres connection URL.
     #[arg(short = 'd', long = "postgres", env = "POSTGRES_URL")]
     pub postgres_url: String,
@@ -112,19 +112,19 @@ pub struct ImporterImportConfig {
     pub common: CommonConfig,
 }
 
-impl WithCommonConfig for ImporterImportConfig {
+impl WithCommonConfig for ImporterOfflineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
 }
 
 // -----------------------------------------------------------------------------
-// Config: RpcPoller
+// Config: ImporterOnline
 // -----------------------------------------------------------------------------
 
-/// Configuration for rpc-poller binary.
+/// Configuration for `importer-online` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
-pub struct RpcPollerConfig {
+pub struct ImporterOnlineConfig {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
@@ -134,7 +134,7 @@ pub struct RpcPollerConfig {
     pub common: CommonConfig,
 }
 
-impl WithCommonConfig for RpcPollerConfig {
+impl WithCommonConfig for ImporterOnlineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
@@ -144,7 +144,7 @@ impl WithCommonConfig for RpcPollerConfig {
 // Config: StateValidator
 // -----------------------------------------------------------------------------
 
-/// Configuration for importer-import binary.
+/// Configuration for `state-validator` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct StateValidatorConfig {
     #[deref]
