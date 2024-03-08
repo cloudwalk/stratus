@@ -748,6 +748,9 @@ impl PermanentStorage for Postgres {
             .execute(&self.connection_pool)
             .await?;
 
+        let mut cache = self.sload_cache.write().await;
+        cache.clear();
+
         Ok(())
     }
 
