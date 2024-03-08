@@ -20,6 +20,10 @@ impl Docker {
             .with_mapped_port((5432, 5432))
             .with_volume(("./static/schema/001-init.sql", "/docker-entrypoint-initdb.d/001-schema.sql"))
             .with_volume(("./static/schema/002-schema-external-rpc.sql", "/docker-entrypoint-initdb.d/002-schema.sql"))
+            .with_volume((
+                "./static/schema/003-triggers-and-procedures.sql",
+                "/docker-entrypoint-initdb.d/003-triggers-and-procedures.sql",
+            ))
             .with_tag("16.2");
 
         self.cli.run(image)

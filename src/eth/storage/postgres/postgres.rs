@@ -104,20 +104,27 @@ impl PermanentStorage for Postgres {
         tracing::debug!(%address, %slot_index, "reading slot");
 
         // TODO: improve this conversion
-        let slot_index: [u8; 32] = slot_index.clone().into();
+        let slot_index_u8: [u8; 32] = slot_index.clone().into();
 
         let slot = match point_in_time {
-            StoragePointInTime::Present =>
-                sqlx::query_file_as!(Slot, "src/eth/storage/postgres/queries/select_slot.sql", address.as_ref(), slot_index.as_ref())
-                    .fetch_optional(&self.connection_pool)
-                    .await?,
+            StoragePointInTime::Present => {
+                let sload_cache = self.sload_cache.read().await;
+                if let Some((value, _)) = sload_cache.get(&(address.clone(), slot_index.clone())) {
+                    Some(Slot {
+                        index: slot_index.clone(),
+                        value: value.clone(),
+                    })
+                } else {
+                    None
+                }
+            }
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_as!(
                     Slot,
                     "src/eth/storage/postgres/queries/select_slot_at_block.sql",
                     address.as_ref(),
-                    slot_index.as_ref(),
+                    slot_index_u8.as_ref(),
                     block_number as _,
                 )
                 .fetch_optional(&self.connection_pool)
@@ -516,6 +523,7 @@ impl PermanentStorage for Postgres {
             }
         }
 
+        let mut sload_batch = vec![];
         for change in account_changes {
             // for change in transaction.execution.changes {
             let (original_nonce, new_nonce) = change.nonce.take_both();
@@ -560,7 +568,9 @@ impl PermanentStorage for Postgres {
                 let original_value = original_value.unwrap_or_default().value;
 
                 slot_batch.push(change.address.clone(), slot_idx.clone(), new_value.clone(), block.header.number, original_value);
-                historical_slot_batch.push(change.address.clone(), slot_idx, new_value, block.header.number);
+                historical_slot_batch.push(change.address.clone(), slot_idx.clone(), new_value.clone(), block.header.number);
+
+                sload_batch.push((change.address.clone(), slot_idx.clone(), new_value.clone(), block.header.number));
             }
         }
 
@@ -664,6 +674,13 @@ impl PermanentStorage for Postgres {
 
         tx.commit().await.context("failed to commit transaction")?;
 
+        {
+            let mut sload_cache = self.sload_cache.write().await;
+            for sload_tuple in sload_batch {
+                sload_cache.insert((sload_tuple.0, sload_tuple.1), (sload_tuple.2, sload_tuple.3));
+            }
+        }
+
         Ok(())
     }
 
@@ -747,6 +764,9 @@ impl PermanentStorage for Postgres {
         sqlx::query_file!("src/eth/storage/postgres/queries/update_account_slots_reset_value.sql")
             .execute(&self.connection_pool)
             .await?;
+
+        let mut cache = self.sload_cache.write().await;
+        cache.clear();
 
         Ok(())
     }

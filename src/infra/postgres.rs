@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
+use serde_json::Value;
+use sqlx::postgres::PgListener;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
@@ -47,7 +49,31 @@ impl Postgres {
             sload_cache: Arc::new(RwLock::new(Self::new_sload_cache(connection_pool).await?)),
         };
 
+        postgres.start_listening().await;
+
         Ok(postgres)
+    }
+
+    pub async fn start_listening(&self) {
+        let pool = self.connection_pool.clone();
+        let sload_cache = Arc::clone(&self.sload_cache);
+
+        tokio::spawn(async move {
+            let mut listener = PgListener::connect_with(&pool).await.expect("Failed to connect listener");
+            listener.listen("sload_cache_channel").await.expect("Failed to listen on channel");
+
+            loop {
+                match listener.recv().await {
+                    Ok(notification) => {
+                        let _ = Self::handle_notification(&notification, &sload_cache).await;
+                    }
+                    Err(e) => {
+                        tracing::error!("Listener error: {:?}", e);
+                        //XXX Optionally implement a reconnect or retry logic
+                    }
+                }
+            }
+        });
     }
 
     async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
@@ -79,6 +105,27 @@ impl Postgres {
             Ok(_) => Ok(()),
             Err(e) => log_and_err!(reason = e, "failed to commit postgres transaction"),
         }
+    }
+
+    async fn handle_notification(notification: &sqlx::postgres::PgNotification, sload_cache: &SloadCache) -> anyhow::Result<()> {
+        let payload: Value = serde_json::from_str(notification.payload())?;
+
+        let address_str = payload.get("address").and_then(Value::as_str).ok_or_else(|| anyhow!("missing address"))?;
+        let address: Address = address_str.parse()?;
+
+        let index_str = payload.get("index").and_then(Value::as_str).ok_or_else(|| anyhow!("missing index"))?;
+        let index: SlotIndex = index_str.parse()?;
+
+        let value_str = payload.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("missing value"))?;
+        let value: SlotValue = value_str.parse()?;
+
+        let block_u64 = payload.get("block").and_then(Value::as_u64).ok_or_else(|| anyhow!("missing block"))?;
+        let block = BlockNumber::from(block_u64);
+
+        let mut cache = sload_cache.write().await;
+        cache.insert((address, index), (value, block));
+
+        Ok(())
     }
 }
 
