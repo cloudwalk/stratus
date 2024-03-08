@@ -1,12 +1,10 @@
 //! PostgreSQL client.
 
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use ethereum_types::H160;
 use serde_json::Value;
 use sqlx::postgres::PgListener;
 use sqlx::postgres::PgPoolOptions;
@@ -108,7 +106,7 @@ impl Postgres {
     }
 
     async fn handle_notification(notification: &sqlx::postgres::PgNotification, sload_cache: &SloadCache) -> anyhow::Result<()> {
-        let payload: Value = serde_json::from_str(&notification.payload())?;
+        let payload: Value = serde_json::from_str(notification.payload())?;
 
         let address_str = payload.get("address").and_then(Value::as_str).ok_or_else(|| anyhow!("missing address"))?;
         let address: Address = address_str.parse()?;

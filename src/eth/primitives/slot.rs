@@ -7,7 +7,6 @@
 //! the context of Ethereum smart contracts.
 
 use std::fmt::Display;
-use std::num::ParseIntError;
 use std::str::FromStr;
 
 use ethereum_types::U256;
