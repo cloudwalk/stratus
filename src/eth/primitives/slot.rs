@@ -7,6 +7,7 @@
 //! the context of Ethereum smart contracts.
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use ethereum_types::U256;
 use fake::Dummy;
@@ -55,6 +56,16 @@ impl Display for Slot {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
+
+impl FromStr for SlotIndex {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        // This assumes that U256 has a from_str method that returns Result<U256, ParseIntError>
+        let inner = U256::from_str(s)?;
+        Ok(SlotIndex(inner))
+    }
+}
 
 impl Dummy<Faker> for SlotIndex {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
@@ -144,6 +155,15 @@ impl SlotValue {
     /// Converts itself to [`U256`].
     pub fn as_u256(&self) -> U256 {
         self.0
+    }
+}
+
+impl FromStr for SlotValue {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let inner = U256::from_str(s)?;
+        Ok(SlotValue(inner))
     }
 }
 
