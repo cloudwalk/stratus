@@ -1,16 +1,16 @@
-mod _postgres;
+mod helpers;
 
 use std::cmp::min;
 use std::sync::Arc;
 use std::time::Duration;
 
-use _postgres::*;
 use anyhow::anyhow;
 use anyhow::Context;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use helpers::*;
 use itertools::Itertools;
-use stratus::config::ImporterDownloadConfig;
+use stratus::config::RpcDownloaderConfig;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
@@ -29,7 +29,7 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(2);
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     // init services
-    let config: ImporterDownloadConfig = init_global_services();
+    let config: RpcDownloaderConfig = init_global_services();
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc, NETWORK_TIMEOUT)?);
 
