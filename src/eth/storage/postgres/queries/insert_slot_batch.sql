@@ -1,16 +1,26 @@
-WITH slot_updates
-AS (SELECT *
-    FROM UNNEST($1::bytea[], $2::bytea[], $3::bytea[], $4::numeric[], $5::bytea[])
-    AS t(idx, value, account_address, creation_block, original_value)
+WITH slot_updates AS (
+    SELECT *
+    FROM
+        unnest(
+            $57::bytea [],
+            $58::bytea [],
+            $59::bytea [],
+            $60::numeric [],
+            $61::bytea []
+        )
+        AS t (idx, value, account_address, creation_block, original_value)
 )
-INSERT INTO account_slots (idx, value, account_address, creation_block)
-SELECT idx, value, account_address, creation_block
+
+INSERT INTO account_slots (idx, value, previous_value, account_address, creation_block)
+SELECT
+    idx,
+    value,
+    original_value,
+    account_address,
+    creation_block
 FROM slot_updates
 ON CONFLICT (idx, account_address) DO
 UPDATE
-SET value = EXCLUDED.value
-WHERE account_slots.value = (
-    SELECT original_value
-    FROM slot_updates
-    WHERE slot_updates.idx = EXCLUDED.idx
-        AND slot_updates.account_address = EXCLUDED.account_address)
+SET value = excluded.value,
+    previous_value = excluded.previous_value
+WHERE account_slots.value = excluded.previous_value

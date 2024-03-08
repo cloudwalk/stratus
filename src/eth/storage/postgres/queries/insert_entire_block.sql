@@ -135,37 +135,31 @@ account_insert AS (
                 new_balance,
                 new_nonce,
                 creation_block,
-                original_balance,
-                original_nonce
+                previous_balance,
+                previous_nonce
             )
     )
 
     INSERT INTO accounts (
-        address, bytecode, latest_balance, latest_nonce, creation_block
+        address, bytecode, latest_balance, latest_nonce, creation_block, previous_balance, previous_nonce
     )
     SELECT
         address,
         bytecode,
         new_balance,
         new_nonce,
-        creation_block
+        creation_block,
+        previous_balance,
+        previous_nonce
     FROM account_updates
     ON CONFLICT (address) DO
     UPDATE
     SET latest_nonce = excluded.latest_nonce,
-    latest_balance = excluded.latest_balance
-    WHERE accounts.latest_nonce
-    = (
-        SELECT original_nonce
-        FROM account_updates
-        WHERE account_updates.address = excluded.address
-    )
-    AND accounts.latest_balance
-    = (
-        SELECT original_balance
-        FROM account_updates
-        WHERE account_updates.address = excluded.address
-    )
+        latest_balance = excluded.latest_balance,
+        previous_balance = excluded.previous_balance,
+        previous_nonce = excluded.previous_nonce
+    WHERE accounts.latest_nonce = excluded.previous_nonce
+    AND accounts.latest_balance = excluded.previous_balance
     RETURNING 1 as res
 ),
 
@@ -183,23 +177,19 @@ slot_insert AS (
             AS t (idx, value, account_address, creation_block, original_value)
     )
 
-    INSERT INTO account_slots (idx, value, account_address, creation_block)
+    INSERT INTO account_slots (idx, value, previous_value, account_address, creation_block)
     SELECT
         idx,
         value,
+        original_value,
         account_address,
         creation_block
     FROM slot_updates
     ON CONFLICT (idx, account_address) DO
     UPDATE
-    SET value = excluded.value
-    WHERE account_slots.value = (
-        SELECT original_value
-        FROM slot_updates
-        WHERE
-            slot_updates.idx = excluded.idx
-            AND slot_updates.account_address = excluded.account_address
-    )
+    SET value = excluded.value,
+        previous_value = excluded.previous_value
+    WHERE account_slots.value = excluded.previous_value
     RETURNING 1 as res
 ),
 
