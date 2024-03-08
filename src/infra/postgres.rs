@@ -54,7 +54,7 @@ impl Postgres {
 
     pub async fn start_listening(&self) {
         let pool = self.connection_pool.clone();
-        let sload_cache = self.sload_cache.clone();
+        let sload_cache = Arc::clone(&self.sload_cache);
 
         tokio::spawn(async move {
             let mut listener = PgListener::connect_with(&pool).await.expect("Failed to connect listener");
@@ -63,7 +63,7 @@ impl Postgres {
             loop {
                 match listener.recv().await {
                     Ok(notification) => {
-                        let _ = Self::handle_notification(&notification, &sload_cache.clone()).await;
+                        let _ = Self::handle_notification(&notification, &sload_cache).await;
                     }
                     Err(e) => {
                         tracing::error!("Listener error: {:?}", e);
