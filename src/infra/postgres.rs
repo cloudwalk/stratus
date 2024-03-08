@@ -1,9 +1,9 @@
 //! PostgreSQL client.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::str::FromStr;
 
 use anyhow::anyhow;
 use ethereum_types::H160;
@@ -59,18 +59,14 @@ impl Postgres {
         let sload_cache = self.sload_cache.clone();
 
         tokio::spawn(async move {
-            let mut listener = PgListener::connect_with(&pool)
-                .await
-                .expect("Failed to connect listener");
-            listener.listen("sload_cache_channel")
-                .await
-                .expect("Failed to listen on channel");
+            let mut listener = PgListener::connect_with(&pool).await.expect("Failed to connect listener");
+            listener.listen("sload_cache_channel").await.expect("Failed to listen on channel");
 
             loop {
                 match listener.recv().await {
                     Ok(notification) => {
                         let _ = Self::handle_notification(&notification, &sload_cache.clone()).await;
-                    },
+                    }
                     Err(e) => {
                         tracing::error!("Listener error: {:?}", e);
                         //XXX Optionally implement a reconnect or retry logic
@@ -139,4 +135,3 @@ struct SlotCache {
     pub address: Address,
     pub block: BlockNumber,
 }
-
