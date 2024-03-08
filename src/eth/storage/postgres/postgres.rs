@@ -109,7 +109,7 @@ impl PermanentStorage for Postgres {
         let slot = match point_in_time {
             StoragePointInTime::Present => {
                 let sload_cache = self.sload_cache.read().await;
-                if  let Some((value, _)) = sload_cache.get(&(address.clone(), slot_index.clone())) {
+                if let Some((value, _)) = sload_cache.get(&(address.clone(), slot_index.clone())) {
                     Some(Slot {
                         index: slot_index.clone(),
                         value: value.clone(),
