@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS account_slots (
     idx BYTEA NOT NULL CHECK (LENGTH(idx) = 32),
     value BYTEA NOT NULL CHECK (LENGTH(value) = 32),
     account_address BYTEA NOT NULL REFERENCES accounts (address) ON DELETE CASCADE,
-    creation_block  NUMERIC NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
+    previous_value BYTEA CHECK (LENGTH(value) = 32),
+    creation_block NUMERIC NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
     PRIMARY KEY (idx, account_address)
 );
 

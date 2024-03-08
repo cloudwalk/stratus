@@ -180,26 +180,22 @@ slot_insert AS (
                 $60::numeric [],
                 $61::bytea []
             )
-            AS t (idx, value, account_address, creation_block, original_value)
+            AS t (idx, value, account_address, block_number, original_value)
     )
 
-    INSERT INTO account_slots (idx, value, account_address, creation_block)
+    INSERT INTO account_slots (idx, value, previous_value, account_address, creation_block)
     SELECT
         idx,
         value,
+        original_value,
         account_address,
-        creation_block
+        block_number
     FROM slot_updates
     ON CONFLICT (idx, account_address) DO
     UPDATE
-    SET value = excluded.value
-    WHERE account_slots.value = (
-        SELECT original_value
-        FROM slot_updates
-        WHERE
-            slot_updates.idx = excluded.idx
-            AND slot_updates.account_address = excluded.account_address
-    )
+    SET value = excluded.value,
+        previous_value = excluded.previous_value
+    WHERE account_slots.value = excluded.previous_value
     RETURNING 1 as res
 ),
 
