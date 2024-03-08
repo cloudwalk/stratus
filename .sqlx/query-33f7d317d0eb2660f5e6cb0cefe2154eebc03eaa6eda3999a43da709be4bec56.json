@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO accounts (address, latest_nonce, latest_balance, bytecode, creation_block, previous_balance, previous_nonce)\nVALUES ($1, $2, $3, $4, $5, $6, $7)\nON CONFLICT (address) DO\nUPDATE\nSET latest_nonce = EXCLUDED.latest_nonce,\n    latest_balance = EXCLUDED.latest_balance\nWHERE accounts.latest_nonce = excluded.previous_balance AND accounts.latest_balance = excluded.previous_balance\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Numeric",
+        "Numeric",
+        "Bytea",
+        "Numeric",
+        "Numeric",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "33f7d317d0eb2660f5e6cb0cefe2154eebc03eaa6eda3999a43da709be4bec56"
+}
