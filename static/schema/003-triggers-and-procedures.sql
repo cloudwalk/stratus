@@ -16,7 +16,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER sload_cache
-	AFTER INSERT OR UPDATE OF cache
-	ON sload
+	AFTER INSERT OR UPDATE
+	ON account_slots
 	FOR EACH ROW
 EXECUTE PROCEDURE sload_cache_notify();
