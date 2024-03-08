@@ -121,4 +121,5 @@ semicolon_if_nothing_returned = "warn"
 
 [features]
 default = []
-dev = [] # Development features that help debugging and testing.
+dev  = []  # Application is running in develoment mode.
+perf = []  # Application is running in performance test mode.

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -72,11 +71,11 @@ async fn test_import_offline_snapshot() {
 
     // init receipts data
     let receipts_json = include_str!("fixtures/block-292973/receipts.json");
-    let mut receipts = HashMap::new();
-    for receipt_json in receipts_json.lines() {
-        let receipt: ExternalReceipt = serde_json::from_str(receipt_json).unwrap();
-        receipts.insert(receipt.hash(), receipt);
-    }
+    let mut receipts = receipts_json
+        .lines()
+        .map(|json| serde_json::from_str::<ExternalReceipt>(json).unwrap())
+        .collect_vec()
+        .into();
 
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
@@ -87,7 +86,7 @@ async fn test_import_offline_snapshot() {
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
     let executor = config.init_executor(storage);
-    executor.import_offline(block, &receipts).await.unwrap();
+    executor.import_external(block, &mut receipts).await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collect metrics)
     tokio::time::sleep(Duration::from_secs(2)).await;

@@ -10,7 +10,7 @@ data/*.db
 e2e/artifacts
 e2e/typechain-types
 e2e/node_modules
-e2e/substrate-sync-mock-server/node_modules
+e2e/rpc-mock-server/node_modules
 e2e/cache
 flamegraph.svg
 

@@ -2,7 +2,6 @@ mod helpers;
 
 use std::cmp::min;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -23,15 +22,12 @@ use stratus::log_and_err;
 /// Number of blocks each parallel download will process.
 const BLOCKS_BY_TASK: usize = 1_000;
 
-/// Timeout for network operations.
-const NETWORK_TIMEOUT: Duration = Duration::from_secs(2);
-
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: RpcDownloaderConfig = init_global_services();
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
-    let chain = Arc::new(BlockchainClient::new(&config.external_rpc, NETWORK_TIMEOUT)?);
+    let chain = Arc::new(BlockchainClient::new(&config.external_rpc).await?);
 
     // download balances and blocks
     download_balances(&pg, &chain, config.initial_accounts).await?;

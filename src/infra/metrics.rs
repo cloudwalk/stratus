@@ -33,6 +33,8 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
 
     // get metric definitions
     let mut metrics = Vec::new();
+    metrics.extend(metrics_for_importer_offline());
+    metrics.extend(metrics_for_importer_online());
     metrics.extend(metrics_for_json_rpc());
     metrics.extend(metrics_for_executor());
     metrics.extend(metrics_for_evm());
@@ -120,27 +122,37 @@ metrics! {
     histogram_duration storage_commit{size_by_tx, size_by_gas, success} []
 }
 
+// Importer offline metrics.
+metrics! {
+    group: importer_offline,
+
+    "Time to execute import_offline operation."
+    histogram_duration import_offline{} []
+}
+
+// Importer online metrics.
+metrics! {
+    group: importer_online,
+
+    "Time to execute import_online operation."
+    histogram_duration import_online{} []
+}
+
 // Execution metrics.
 metrics! {
     group: executor,
 
-    "Time to execute import_offline operation."
-    histogram_duration executor_import_offline{} [],
-
-    "Number of accounts read in a single EVM execution."
-    histogram_counter executor_import_offline_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 150., 200.],
-
-    "Number of slots read in a single EVM execution."
-    histogram_counter executor_import_offline_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000., 6000., 7000., 8000., 9000., 10000.],
+    "Time to execute and persist an external block with all transactions."
+    histogram_duration executor_external_block{} [],
 
     "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
-    histogram_duration executor_import_offline_transaction{} [],
+    histogram_duration executor_external_transaction{} [],
 
-    "Time to execute import_online operation."
-    histogram_duration executor_import_online{} [],
+    "Number of account reads when importing an external block."
+    histogram_counter executor_external_block_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 150., 200.],
 
-    "Time to execute and persist a single transaction inside import_online operation."
-    histogram_duration executor_import_online_transaction{} [],
+    "Number of slot reads when importing an external block."
+    histogram_counter executor_external_block_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000., 6000., 7000., 8000., 9000., 10000.],
 
     "Time to execute a transaction received with eth_sendRawTransaction."
     histogram_duration executor_transact{success} [],

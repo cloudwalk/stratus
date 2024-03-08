@@ -14,18 +14,37 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 use crate::log_and_err;
 
+/// Default timeout for blockchain operations.
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
+
 pub struct BlockchainClient {
     http: HttpClient,
 }
 
 impl BlockchainClient {
     /// Creates a new RPC client.
-    pub fn new(url: &str, timeout: Duration) -> anyhow::Result<Self> {
+    pub async fn new(url: &str) -> anyhow::Result<Self> {
         tracing::info!(%url, "starting blockchain client");
 
-        match HttpClientBuilder::default().request_timeout(timeout).build(url) {
-            Ok(http) => Ok(Self { http }),
-            Err(e) => log_and_err!(reason = e, "failed to create blockchain http client"),
+        // build provider
+        let http = match HttpClientBuilder::default().request_timeout(DEFAULT_TIMEOUT).build(url) {
+            Ok(http) => http,
+            Err(e) => return log_and_err!(reason = e, "failed to create blockchain http client"),
+        };
+        let client = Self { http };
+
+        // check health before assuming it is ok
+        client.check_health().await?;
+
+        Ok(client)
+    }
+
+    /// Checks if the blockchain is listening.
+    pub async fn check_health(&self) -> anyhow::Result<()> {
+        tracing::debug!("checking blockchain health");
+        match self.http.request::<bool, Vec<()>>("net_listening", vec![]).await {
+            Ok(_) => Ok(()),
+            Err(e) => log_and_err!(reason = e, "failed to check blockchain health"),
         }
     }
 
