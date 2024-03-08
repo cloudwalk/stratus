@@ -2,7 +2,7 @@ import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables (automatically set in all actions).
 export RUST_BACKTRACE := "1"
-export RUST_LOG := env("RUST_LOG", "stratus=info,importer-download=info,importer-importer=info")
+export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
 # Default URLs that can be passed as argument.
 postgres_url := env("POSTGRES_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
@@ -86,15 +86,23 @@ update:
     cargo update stratus
 
 # ------------------------------------------------------------------------------
-# Importer tasks
+# Jobs
 # ------------------------------------------------------------------------------
-# Importer: Download external RPC blocks to temporary storage
-importer-download *args="":
-    cargo run --bin importer-download --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
+# Job: Download external RPC blocks and receipts to temporary storage
+rpc-downloader *args="":
+    cargo run --bin rpc-downloader   --features dev --release -- --postgres {{postgres_url}} --external-rpc {{testnet_url}} {{args}}
 
-# Importer: Import downloaded external RPC blocks to Stratus storage
-importer-import *args="":
-    cargo run --bin importer-import   --features dev --release -- --postgres {{postgres_url}} {{args}}
+# Job: Import external RPC blocks from temporary storage to Stratus storage
+importer-offline *args="":
+    cargo run --bin importer-offline --features dev --release -- --postgres {{postgres_url}} {{args}}
+
+# Job: Import external RPC blocks from external RPC endpoint to Stratus storage
+importer-online *args="":
+    cargo run --bin importer-online  --features dev --release -- --external-rpc {{testnet_url}} {{args}}
+
+# Job: Validate Stratus storage slots matches reference slots
+state-validator *args="":
+    cargo run --bin state-validator  --features dev --release -- --method {{testnet_url}} {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -262,7 +270,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph..."
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin rpc-server-poller --deterministic -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic -- --external-rpc=http://localhost:3003/rpc --storage={{postgres_url}}
 
 
 # ------------------------------------------------------------------------------

@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     bytecode BYTEA,
     latest_balance NUMERIC NOT NULL CHECK (latest_balance >= 0),
     latest_nonce NUMERIC NOT NULL CHECK (latest_nonce >= 0),
+    previous_balance NUMERIC CHECK (latest_balance >= 0),
+    previous_nonce NUMERIC CHECK (latest_balance >= 0),
     creation_block  NUMERIC NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
     PRIMARY KEY (address)
 );
@@ -49,7 +51,8 @@ CREATE TABLE IF NOT EXISTS account_slots (
     idx BYTEA NOT NULL CHECK (LENGTH(idx) = 32),
     value BYTEA NOT NULL CHECK (LENGTH(value) = 32),
     account_address BYTEA NOT NULL REFERENCES accounts (address) ON DELETE CASCADE,
-    creation_block  NUMERIC NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
+    previous_value BYTEA CHECK (LENGTH(value) = 32),
+    creation_block NUMERIC NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
     PRIMARY KEY (idx, account_address)
 );
 

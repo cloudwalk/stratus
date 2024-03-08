@@ -1,15 +1,15 @@
-mod _postgres;
+mod helpers;
 
 use std::cmp::min;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use _postgres::*;
 use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
+use helpers::*;
 use itertools::Itertools;
-use stratus::config::ImporterImportConfig;
+use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Account;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::BlockSelection;
@@ -35,7 +35,7 @@ type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     // init services
-    let config: ImporterImportConfig = init_global_services();
+    let config: ImporterOfflineConfig = init_global_services();
     let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
     let storage = config.init_storage().await?;
     let executor = config.init_executor(Arc::clone(&storage));
