@@ -174,7 +174,7 @@ slot_insert AS (
                 $60::numeric [],
                 $61::bytea []
             )
-            AS t (idx, value, account_address, block_number, original_value)
+            AS t (idx, value, account_address, creation_block, original_value)
     )
 
     INSERT INTO account_slots (idx, value, previous_value, account_address, creation_block)
@@ -183,7 +183,7 @@ slot_insert AS (
         value,
         original_value,
         account_address,
-        block_number
+        creation_block
     FROM slot_updates
     ON CONFLICT (idx, account_address) DO
     UPDATE
