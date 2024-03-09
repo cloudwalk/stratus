@@ -78,11 +78,12 @@ impl Postgres {
 
     async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
         let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres/queries/select_slot_cache.sql", BigDecimal::from(0))
-            .fetch_optional(&connection_pool)
+            .fetch_all(&connection_pool)
             .await?;
         let mut sload_cache = HashMap::new();
 
         raw_sload.into_iter().for_each(|s| {
+            dbg!(s.address.clone());
             sload_cache.insert((s.address, s.index), (s.value, s.block));
         });
 
