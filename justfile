@@ -292,6 +292,10 @@ contracts-clone:
 contracts-compile:
     cd e2e-contracts && ./compile-contracts.sh
 
+# Contracts: Flatten solidity contracts for integration test
+contracts-flatten:
+    cd e2e-contracts && ./flatten-contracts.sh
+
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test:
     cd e2e-contracts && ./test-contracts.sh
