@@ -17,7 +17,7 @@ flatten() {
     # Enter the repository folder
     cd repos/$repo
 
-    # flatten
+    # Flatten
     npx hardhat flatten contracts/$contract.sol > ../../integration/contracts/$contract.flattened.sol
 
     # Leave the repository folder
