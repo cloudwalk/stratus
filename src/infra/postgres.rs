@@ -83,7 +83,6 @@ impl Postgres {
         let mut sload_cache = HashMap::new();
 
         raw_sload.into_iter().for_each(|s| {
-            dbg!(s.address.clone());
             sload_cache.insert((s.address, s.index), (s.value, s.block));
         });
 

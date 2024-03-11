@@ -213,6 +213,6 @@ historical_slots_insert AS (
 )
 
 SELECT modified_accounts, modified_slots FROM
-(SELECT count(*) AS modified_accounts FROM account_insert)
+(SELECT count(*) AS modified_accounts FROM account_insert) as account_results
 CROSS JOIN
-(SELECT count(*) AS modified_slots FROM slot_insert);
+(SELECT count(*) AS modified_slots FROM slot_insert) as slot_results;
