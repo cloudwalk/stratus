@@ -5,11 +5,13 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use ethers_core::utils::keccak256;
 use indexmap::IndexMap;
 use metrics::atomics::AtomicU64;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
+use revm::primitives::KECCAK_EMPTY;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
@@ -479,11 +481,18 @@ impl InMemoryPermanentAccount {
 
     /// Converts itself to an account at a point-in-time.
     pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
+        let code_hash = if let Some(bytecode) = self.bytecode.get_at_point(point_in_time).unwrap_or_default() {
+            keccak256(bytecode)
+        } else {
+            KECCAK_EMPTY.0
+        };
+
         Account {
             address: self.address.clone(),
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
+            code_hash: code_hash.into()
         }
     }
 }

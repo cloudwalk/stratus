@@ -52,6 +52,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                     balance: info.balance,
                     nonce: info.nonce,
                     bytecode: info.bytecode,
+                    code_hash: info.code_hash,
                 };
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))

@@ -28,7 +28,8 @@ SELECT
     accounts.address as "address: _",
     closest_nonce.nonce as "nonce: _",
     closest_balance.balance as "balance: _",
-    bytecode as "bytecode: _"
+    bytecode as "bytecode: _",
+    code_hash as "code_hash: _"
 FROM accounts
 JOIN closest_nonce ON true
 JOIN closest_balance ON true

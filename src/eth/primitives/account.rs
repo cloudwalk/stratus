@@ -8,14 +8,17 @@
 //! tracking account states and differentiating between standard accounts and
 //! contract accounts.
 
+use ethers_core::utils::keccak256;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
+use revm::primitives::FixedBytes;
 use revm::primitives::KECCAK_EMPTY;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
+use crate::eth::primitives::Hash;
 use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
@@ -32,6 +35,8 @@ pub struct Account {
 
     /// Contract bytecode. Present only if the account is a contract.
     pub bytecode: Option<Bytes>,
+
+    pub code_hash: Hash
 }
 
 impl Account {
@@ -47,6 +52,7 @@ impl Account {
             nonce: Nonce::ZERO,
             balance,
             bytecode: None,
+            code_hash: KECCAK_EMPTY.0.into(),
         }
     }
 
@@ -76,6 +82,7 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             nonce: value.1.nonce.into(),
             balance: value.1.balance.into(),
             bytecode: value.1.code.map_into(),
+            code_hash: value.1.code_hash.0.into()
         }
     }
 }
@@ -83,12 +90,19 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+
 impl From<Account> for RevmAccountInfo {
     fn from(value: Account) -> Self {
+        let code_hash = if let Some(bytecode) = value.bytecode {
+            FixedBytes::new(keccak256(bytecode))
+        } else {
+            KECCAK_EMPTY
+        };
+
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash: KECCAK_EMPTY,
+            code_hash,
             code: value.bytecode.map_into(),
         }
     }
