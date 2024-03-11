@@ -16,6 +16,7 @@ flamegraph.svg
 
 # E2E (Solidity contracts)
 e2e-contracts/repos
+e2e-contracts/integration/contracts/*.flattened.sol
 
 # E2E (NodeJS)
 node_modules/
