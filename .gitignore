@@ -23,8 +23,9 @@ e2e-contracts/integration/artifacts
 
 # E2E (NodeJS)
 node_modules/
-package.json
-package-lock.json
+e2e/package.json
+e2e/package-lock.json
+
 
 # Build
 /target
