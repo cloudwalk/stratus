@@ -16,12 +16,11 @@ use revm::primitives::KECCAK_EMPTY;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CodeHash;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::eth::primitives::Hash;
 use crate::ext::OptionExt;
-
-use crate::eth::primitives::CodeHash;
 
 /// Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Default)]
@@ -80,15 +79,9 @@ impl Account {
 // -----------------------------------------------------------------------------
 impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
-        // let code_hash = if value.1.code_hash == KECCAK_EMPTY {
-        //     None
-        // } else {
-        //     Some(CodeHash(value.1.code_hash.0))
-        // };
-
         let maybe_bytecode = value.1.code.map_into();
         let code_hash = CodeHash::from_bytecode(maybe_bytecode.clone());
-        
+
         Self {
             address: value.0.into(),
             nonce: value.1.nonce.into(),

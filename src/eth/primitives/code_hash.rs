@@ -1,6 +1,11 @@
-use revm::primitives::{FixedBytes, B256, KECCAK_EMPTY};
-use sqlx::{database::HasValueRef, error::BoxDynError};
-use crate::{eth::primitives::Bytes, gen_newtype_from};
+use revm::primitives::FixedBytes;
+use revm::primitives::B256;
+use revm::primitives::KECCAK_EMPTY;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
+
+use crate::eth::primitives::Bytes;
+use crate::gen_newtype_from;
 
 /// Representation of the bytecode of a contract account.
 /// In the case of an externally-owned account (EOA), bytecode is null
@@ -11,10 +16,8 @@ pub struct CodeHash(B256);
 impl CodeHash {
     pub fn from_bytecode(maybe_bytecode: Option<Bytes>) -> Self {
         match maybe_bytecode {
-            Some(bytecode) => {
-                CodeHash(B256::from_slice(bytecode.as_ref()))
-            },
-            None => CodeHash::default()
+            Some(bytecode) => CodeHash(B256::from_slice(bytecode.as_ref())),
+            None => CodeHash::default(),
         }
     }
 }
