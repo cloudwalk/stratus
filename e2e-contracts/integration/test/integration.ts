@@ -13,7 +13,7 @@ async function deployBRLC() {
   brlCoin = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
   await brlCoin.waitForDeployment();
   let brlCoinSigned = brlCoin.connect(deployer);
-  brlCoinSigned.updateMasterMinter(await deployer.getAddress());
+  brlCoinSigned.updateMainMinter(await deployer.getAddress());
   brlCoinSigned.configureMinter(await deployer.getAddress(), 1000000000);
 }
 
