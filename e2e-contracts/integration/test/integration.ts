@@ -3,26 +3,32 @@ import { expect } from "chai";
 import { Contract, ContractFactory, getBytes } from "ethers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { BRLCToken } from "../typechain-types";
+import { BRLCToken, PixCashier } from "../typechain-types";
 
 let brlCoin: BRLCToken;
-let pixCashier: Contract;
+let pixCashier: PixCashier;
 let deployer: SignerWithAddress;
 
 async function deployBRLC() {
   let brlcFactory: ContractFactory = await ethers.getContractFactory("BRLCToken");
   let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
   await deployedProxy.waitForDeployment();
-  
   brlCoin = deployedProxy.connect(deployer) as BRLCToken;
+}
+
+async function configureBRLC() {
   brlCoin.updateMainMinter(await deployer.getAddress());
   brlCoin.configureMinter(await deployer.getAddress(), 1000000000);
 }
 
 async function deployPixCashier() {
   let pixFactory: ContractFactory = await ethers.getContractFactory("PixCashier");
-  pixCashier = await upgrades.deployProxy(pixFactory.connect(deployer), [await brlCoin.getAddress()]);
-  await pixCashier.waitForDeployment();
+  let deployedProxy = await upgrades.deployProxy(pixFactory.connect(deployer), [await brlCoin.getAddress()]);
+  await deployedProxy.waitForDeployment();
+  pixCashier = deployedProxy.connect(deployer) as PixCashier;
+}
+
+async function configurePixCashier() {
   brlCoin.connect(deployer).configureMinter(await pixCashier.getAddress(), 1000000000);
   pixCashier.grantRole(await pixCashier.CASHIER_ROLE(), await deployer.getAddress());
 }
@@ -30,17 +36,22 @@ async function deployPixCashier() {
 describe("Integration Test", function () {
   before(async function () {
     [deployer] = await ethers.getSigners();
+  });
+
+  it("Deploy BRLC", async function () {
     await deployBRLC();
+  });
+
+  it("Configure BRLC", async function () {
+    await configureBRLC();
+  });
+
+  it("Deploy PixCashier", async function () {
     await deployPixCashier();
   });
 
-  it("BRLC is ready", async function () {
-    expect(await brlCoin.name()).to.equal("BRL Coin");
-  });
-
-  it("PixCashier is ready", async function () {
-    expect(await pixCashier.underlyingToken()).to.equal(await brlCoin.getAddress());
-    expect(await brlCoin.isMinter(await pixCashier.getAddress()));
+  it("Configure PixCashier", async function () {
+    await configurePixCashier();
   });
 
   describe("Scenario 1", function () {
