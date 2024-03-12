@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use const_format::formatcp;
 use itertools::Itertools;
@@ -34,7 +33,7 @@ const METRIC_QUERIES: [&str; 30] = [
     formatcp!("sum({}_sum)", METRIC_STORAGE_READ_ACCOUNT),
     formatcp!("{}_sum{{found_at='temporary'}}", METRIC_STORAGE_READ_ACCOUNT),
     formatcp!("{}_sum{{found_at='permanent'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}_sum{{kifound_atnd='default'}}", METRIC_STORAGE_READ_ACCOUNT),
+    formatcp!("{}_sum{{found_at='default'}}", METRIC_STORAGE_READ_ACCOUNT),
     formatcp!("{}{{found_at='temporary', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
     formatcp!("{}{{found_at='permanent', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
     formatcp!("{}{{found_at='default', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
@@ -88,8 +87,7 @@ async fn test_import_offline_snapshot() {
     let executor = config.init_executor(storage);
     executor.import_external(block, &mut receipts).await.unwrap();
 
-    // get metrics from prometheus (sleep to ensure prometheus collect metrics)
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // get metrics from prometheus
     for query in METRIC_QUERIES {
         // formatting between query groups
         if query.is_empty() {
@@ -97,12 +95,21 @@ async fn test_import_offline_snapshot() {
             continue;
         }
 
-        // get metrics and print
+        // get metrics and print them
+        // iterate until prometheus returns something
         let url = format!("{}?query={}", docker.prometheus_api_url(), query);
-        let response = reqwest::get(url).await.unwrap().json::<serde_json::Value>().await.unwrap();
-        for result in response.get("data").unwrap().get("result").unwrap().as_array().unwrap() {
-            let value = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
-            println!("{:<64} = {}", query, value);
+        loop {
+            let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
+            let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
+            if results.is_empty() {
+                continue;
+            }
+
+            for result in results {
+                let value = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
+                println!("{:<64} = {}", query, value);
+            }
+            break;
         }
     }
 }
