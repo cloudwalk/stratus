@@ -8,11 +8,11 @@
 //! tracking account states and differentiating between standard accounts and
 //! contract accounts.
 
-use ethers_core::utils::keccak256;
+
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
-use revm::primitives::FixedBytes;
-use revm::primitives::KECCAK_EMPTY;
+
+
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -97,16 +97,12 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 
 impl From<Account> for RevmAccountInfo {
     fn from(value: Account) -> Self {
-        let code_hash = if let Some(ref bytecode) = value.bytecode {
-            FixedBytes::new(keccak256(bytecode))
-        } else {
-            KECCAK_EMPTY
-        };
+        let code_hash = CodeHash::from_bytecode(value.bytecode.clone());
 
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash,
+            code_hash: code_hash.inner(),
             code: value.bytecode.map_into(),
         }
     }

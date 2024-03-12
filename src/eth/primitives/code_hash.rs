@@ -1,3 +1,4 @@
+use ethers_core::utils::keccak256;
 use revm::primitives::B256;
 use revm::primitives::KECCAK_EMPTY;
 use sqlx::database::HasValueRef;
@@ -6,7 +7,7 @@ use sqlx::error::BoxDynError;
 use crate::eth::primitives::Bytes;
 use crate::gen_newtype_from;
 
-/// Representation of the bytecode of a contract account.
+/// Digest of the bytecode of a contract.
 /// In the case of an externally-owned account (EOA), bytecode is null
 /// and the code hash is fixed as the keccak256 hash of an empty string
 #[derive(Debug, Clone)]
@@ -15,9 +16,13 @@ pub struct CodeHash(B256);
 impl CodeHash {
     pub fn from_bytecode(maybe_bytecode: Option<Bytes>) -> Self {
         match maybe_bytecode {
-            Some(bytecode) => CodeHash(B256::from_slice(bytecode.as_ref())),
+            Some(bytecode) => CodeHash(B256::from_slice(&keccak256(bytecode.as_ref()))),
             None => CodeHash::default(),
         }
+    }
+
+    pub fn inner(&self) -> B256 {
+        self.0
     }
 }
 
