@@ -1,6 +1,8 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use const_format::formatcp;
+use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::config::CommonConfig;
 use stratus::eth::primitives::ExternalBlock;
@@ -106,8 +108,15 @@ async fn test_import_offline_snapshot() {
             }
 
             for result in results {
-                let value = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
-                println!("{:<64} = {}", query, value);
+                let value: &str = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
+                let value: f64 = value.parse().unwrap();
+
+                if query.contains("_count") {
+                    println!("{:<64} = {}", query, value);
+                } else {
+                    let secs = Duration::from_secs_f64(value);
+                    println!("{:<64} = {}", query, secs.fancy_duration().truncate(1));
+                }
             }
             break;
         }
