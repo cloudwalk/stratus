@@ -43,7 +43,7 @@ describe("Integration Test", function () {
 
   describe("Scenario 1", function () {
 
-    let alice = ethers.Wallet.createRandom();
+    let alice = ethers.Wallet.createRandom().connect(ethers.provider);
     let bob = ethers.Wallet.createRandom();
 
     it("Mint 900 BRLC to Alice", async function () {
@@ -54,6 +54,12 @@ describe("Integration Test", function () {
     it("Pix cash in adds to Alice balance", async function () {
       await pixCashier.connect(deployer).cashIn(alice.address, 100, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
       expect(await brlCoin.balanceOf(alice.address)).to.equal(1000);
+    });
+
+    it("Alice transfers 50 BRLC to Bob", async function () {
+      await brlCoin.connect(alice).transfer(bob.address, 50, { gasPrice: 0 });
+      expect(await brlCoin.balanceOf(alice.address)).to.equal(950);
+      expect(await brlCoin.balanceOf(bob.address)).to.equal(50);
     });
   });
 });
