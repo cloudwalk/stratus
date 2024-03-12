@@ -1,7 +1,6 @@
-import { ethers, network, upgrades } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { expect } from "chai";
-import { Contract, ContractFactory, getBytes } from "ethers";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { BRLCToken, PixCashier } from "../typechain-types";
 
