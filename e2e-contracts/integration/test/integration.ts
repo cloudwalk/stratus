@@ -3,18 +3,20 @@ import { expect } from "chai";
 import { Contract, ContractFactory, getBytes } from "ethers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { BRLCToken } from "../typechain-types";
 
-let brlCoin: Contract;
+let brlCoin: BRLCToken;
 let pixCashier: Contract;
 let deployer: SignerWithAddress;
 
 async function deployBRLC() {
   let brlcFactory: ContractFactory = await ethers.getContractFactory("BRLCToken");
-  brlCoin = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
-  await brlCoin.waitForDeployment();
-  let brlCoinSigned = brlCoin.connect(deployer);
-  brlCoinSigned.updateMainMinter(await deployer.getAddress());
-  brlCoinSigned.configureMinter(await deployer.getAddress(), 1000000000);
+  let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
+  await deployedProxy.waitForDeployment();
+  
+  brlCoin = deployedProxy.connect(deployer) as BRLCToken;
+  brlCoin.updateMainMinter(await deployer.getAddress());
+  brlCoin.configureMinter(await deployer.getAddress(), 1000000000);
 }
 
 async function deployPixCashier() {
