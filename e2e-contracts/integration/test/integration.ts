@@ -85,6 +85,7 @@ describe("Integration Test", function () {
 
     it("Final state is correct", async function () {
       expect(await brlCoin.balanceOf(alice.address)).to.equal(925);
+      expect(await brlCoin.allowance(alice.address, await pixCashier.getAddress())).to.equal(0xfffffffffffff - 25);
       expect(await brlCoin.balanceOf(bob.address)).to.equal(50);
       expect(await brlCoin.balanceOf(await pixCashier.getAddress())).to.equal(0);
     });
