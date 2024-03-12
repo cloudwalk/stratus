@@ -12,20 +12,20 @@ const config: HardhatUserConfig = {
       },
     },
   },
-    networks: {
-      hardhat: {
-        chainId: 2008,
-        gasPrice: 0,
-        initialBaseFeePerGas: 0,
-        mining: {
-          auto: true,
-        },
-        accounts: {
-          mnemonic: "test test test test test test test test test test test junk",
-          accountsBalance: "18446744073709551615", // u64::max
-        },
+  networks: {
+    hardhat: {
+      chainId: 2008,
+      gasPrice: 0,
+      initialBaseFeePerGas: 0,
+      mining: {
+        auto: true,
+      },
+      accounts: {
+        mnemonic: "test test test test test test test test test test test junk",
+        accountsBalance: "18446744073709551615", // u64::max
       },
     },
-  };
+  },
+};
 
-  export default config;
+export default config;
