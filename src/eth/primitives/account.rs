@@ -8,11 +8,8 @@
 //! tracking account states and differentiating between standard accounts and
 //! contract accounts.
 
-
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
-
-
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
