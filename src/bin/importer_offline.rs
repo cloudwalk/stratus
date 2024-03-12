@@ -25,12 +25,12 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 /// Number of blocks fetched in each query.
-const BLOCKS_BY_FETCH: usize = 50_000;
+const BLOCKS_BY_FETCH: usize = 10_000;
 
 /// Number of tasks in the backlog.
 ///
-/// Each task contains 50_000 blocks and all receipts for them.
-const BACKLOG_SIZE: usize = 10;
+/// Each task contains 10_000 blocks and all receipts for them.
+const BACKLOG_SIZE: usize = 50;
 
 type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 
