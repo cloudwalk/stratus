@@ -71,6 +71,11 @@ describe("Integration Test", function () {
       await pixCashier.connect(deployer).requestCashOutFrom(alice.address, 25, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
       expect(await brlCoin.balanceOf(alice.address)).to.equal(925);
     });
+
+    it("Confirm cashout does not affect Alice's balance", async function () {
+      await pixCashier.connect(deployer).confirmCashOut("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+      expect(await brlCoin.balanceOf(alice.address)).to.equal(925);
+    });
   });
 });
 
