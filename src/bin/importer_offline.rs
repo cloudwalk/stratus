@@ -38,7 +38,7 @@ type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
-    let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
+    let pg = Arc::new(Postgres::new(&config.postgres_url, 400usize, 20usize).await?);
     let storage = config.init_storage().await?;
     let executor = config.init_executor(Arc::clone(&storage));
 

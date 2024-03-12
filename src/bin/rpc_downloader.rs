@@ -26,7 +26,7 @@ const BLOCKS_BY_TASK: usize = 1_000;
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: RpcDownloaderConfig = init_global_services();
-    let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
+    let pg = Arc::new(Postgres::new(&config.postgres_url, 400usize, 20usize).await?);
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc).await?);
 
     // download balances and blocks
