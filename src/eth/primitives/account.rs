@@ -17,7 +17,6 @@ use revm::primitives::KECCAK_EMPTY;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
-use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;

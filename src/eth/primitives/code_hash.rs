@@ -1,4 +1,3 @@
-use revm::primitives::FixedBytes;
 use revm::primitives::B256;
 use revm::primitives::KECCAK_EMPTY;
 use sqlx::database::HasValueRef;
