@@ -30,13 +30,13 @@ pub struct Postgres {
 }
 
 impl Postgres {
-    pub async fn new(url: &str) -> anyhow::Result<Self> {
+    pub async fn new(url: &str, max_connections: usize, acquire_timeout: usize) -> anyhow::Result<Self> {
         tracing::info!(%url, "starting postgres client");
 
         let connection_pool = PgPoolOptions::new()
             .min_connections(1)
-            .max_connections(100)
-            .acquire_timeout(Duration::from_secs(2))
+            .max_connections(max_connections.try_into().unwrap_or(100))
+            .acquire_timeout(Duration::from_secs(acquire_timeout.try_into().unwrap_or(2)))
             .connect(url)
             .await
             .map_err(|e| {
