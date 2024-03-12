@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 CREATE TABLE IF NOT EXISTS accounts (
     address BYTEA NOT NULL CHECK (LENGTH(address) = 20),
     bytecode BYTEA,
+    code_hash BYTEA NOT NULL CHECK (LENGTH(code_hash) = 32), -- if bytecode is null code_hash is hash of empty string
     latest_balance NUMERIC NOT NULL CHECK (latest_balance >= 0),
     latest_nonce NUMERIC NOT NULL CHECK (latest_nonce >= 0),
     previous_balance NUMERIC CHECK (latest_balance >= 0),
@@ -155,11 +156,12 @@ VALUES (
     current_timestamp -- created_at
 );
 
-INSERT INTO accounts (address, bytecode, latest_balance, latest_nonce, creation_block)
+INSERT INTO accounts (address, bytecode, code_hash, latest_balance, latest_nonce, creation_block)
 VALUES (
     decode('F56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6', 'hex'),
     NULL,
-    POWER(2, 256) - 1,
+    decode('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470', 'hex'), -- keccak256 of empty string
+    POWER(2, 256) - 1, -- U256 max balance
     0,
     0
 );

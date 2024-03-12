@@ -704,6 +704,7 @@ impl PermanentStorage for Postgres {
             let balance = BigDecimal::try_from(acc.balance)?;
             let nonce = BigDecimal::try_from(acc.nonce)?;
             let bytecode = acc.bytecode.as_deref();
+            let code_hash: &[u8] = acc.code_hash.as_ref();
 
             sqlx::query_file!(
                 "src/eth/storage/postgres/queries/insert_account.sql",
@@ -711,6 +712,7 @@ impl PermanentStorage for Postgres {
                 nonce,
                 balance,
                 bytecode,
+                code_hash,
                 block_number as _,
                 BigDecimal::from(0),
                 BigDecimal::from(0)

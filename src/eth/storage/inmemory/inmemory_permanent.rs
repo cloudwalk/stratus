@@ -22,6 +22,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
@@ -481,18 +482,15 @@ impl InMemoryPermanentAccount {
 
     /// Converts itself to an account at a point-in-time.
     pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
-        let code_hash = if let Some(bytecode) = self.bytecode.get_at_point(point_in_time).unwrap_or_default() {
-            keccak256(bytecode)
-        } else {
-            KECCAK_EMPTY.0
-        };
+        let bytecode = self.bytecode.get_at_point(point_in_time).unwrap_or_default();
+        let code_hash = CodeHash::from_bytecode(bytecode.clone());
 
         Account {
             address: self.address.clone(),
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
-            bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-            code_hash: code_hash.into()
+            bytecode,
+            code_hash
         }
     }
 }
