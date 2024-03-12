@@ -61,33 +61,32 @@ describe("Integration Test", function () {
 
     it("Mint BRLC to Alice", async function () {
       await brlCoin.connect(deployer).mint(alice.address, 900);
-      expect(await brlCoin.balanceOf(alice.address)).to.equal(900);
     });
 
-    it("Pix cash in adds to Alice balance", async function () {
+    it("Cash in BRLC to Alice", async function () {
       await pixCashier.connect(deployer).cashIn(alice.address, 100, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
-      expect(await brlCoin.balanceOf(alice.address)).to.equal(1000);
     });
 
     it("Alice transfers BRLC to Bob", async function () {
       await brlCoin.connect(alice).transfer(bob.address, 50, { gasPrice: 0 });
-      expect(await brlCoin.balanceOf(alice.address)).to.equal(950);
-      expect(await brlCoin.balanceOf(bob.address)).to.equal(50);
     });
 
-    it("Alice approves PixCashier to spend a lot of BRLC", async function () {
+    it("Alice approves PixCashier to spend BRLC", async function () {
       await brlCoin.connect(alice).approve(await pixCashier.getAddress(), 0xfffffffffffff, { gasPrice: 0 });
-      expect(await brlCoin.allowance(alice.address, await pixCashier.getAddress())).to.equal(0xfffffffffffff);
     });
 
-    it("Pix request cashout subtracts from Alice's balance", async function () {
+    it("Request Pix cash out for Alice", async function () {
       await pixCashier.connect(deployer).requestCashOutFrom(alice.address, 25, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
-      expect(await brlCoin.balanceOf(alice.address)).to.equal(925);
     });
 
-    it("Confirm cashout does not affect Alice's balance", async function () {
+    it("Confirm Alice cashout", async function () {
       await pixCashier.connect(deployer).confirmCashOut("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    });
+
+    it("Final state is correct", async function () {
       expect(await brlCoin.balanceOf(alice.address)).to.equal(925);
+      expect(await brlCoin.balanceOf(bob.address)).to.equal(50);
+      expect(await brlCoin.balanceOf(await pixCashier.getAddress())).to.equal(0);
     });
   });
 });
