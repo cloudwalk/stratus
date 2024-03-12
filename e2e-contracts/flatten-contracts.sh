@@ -19,9 +19,13 @@ flatten() {
 
     # Flatten
     npx hardhat flatten contracts/$contract.sol > ../../integration/contracts/$contract.flattened.sol
-
+    
     # Leave the repository folder
     cd ../../
+    
+    # Lint the flattened contract
+    log "Linting the flattened $contract ($repo)"
+    npx ts-node integration/lintFlattened.ts integration/contracts/$contract.flattened.sol
 }
 
 # ------------------------------------------------------------------------------
