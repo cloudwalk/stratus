@@ -37,8 +37,8 @@ asdf local solidity 0.8.16
 
 # execute
 flatten brlc-token          BRLCToken
-flatten brlc-periphery      CardPaymentProcessor
-flatten brlc-periphery      CashbackDistributor
+#flatten brlc-periphery      CardPaymentProcessor
+#flatten brlc-periphery      CashbackDistributor
 flatten brlc-pix-cashier    PixCashier
-flatten brlc-multisig       MultiSigWallet
-flatten compound-periphery  CompoundAgent
+#flatten brlc-multisig       MultiSigWallet
+#flatten compound-periphery  CompoundAgent
