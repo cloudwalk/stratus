@@ -82,7 +82,7 @@ async fn test_import_offline_snapshot() {
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
-    let pg = Postgres::new(docker.postgres_connection_url(), 100usize, 2usize).await.unwrap();
+    let pg = Postgres::new(docker.postgres_connection_url(), 10usize, 2usize).await.unwrap();
     populate_postgres(&pg, snapshot).await;
 
     // init executor and execute
