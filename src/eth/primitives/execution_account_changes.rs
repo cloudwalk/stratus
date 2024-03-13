@@ -10,11 +10,14 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 
+use super::CodeHash;
+
 /// Changes that happened to an account during a transaction.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
     new_account: bool,
     pub address: Address,
+    pub code_hash: CodeHash,
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
     pub bytecode: ExecutionValueChange<Option<Bytes>>,
@@ -24,7 +27,7 @@ pub struct ExecutionAccountChanges {
 impl ExecutionAccountChanges {
     /// Creates a new [`ExecutionAccountChanges`] that represents an existing account.
     pub fn from_existing_account(account: impl Into<Account>) -> Self {
-        let account = account.into();
+        let account: Account = account.into();
         Self {
             new_account: false,
             address: account.address,
@@ -32,12 +35,13 @@ impl ExecutionAccountChanges {
             balance: ExecutionValueChange::from_original(account.balance),
             bytecode: ExecutionValueChange::from_original(account.bytecode),
             slots: HashMap::new(),
+            code_hash: account.code_hash
         }
     }
 
     /// Creates a new [`ExecutionAccountChanges`] that represents an account being created by this transaction.
     pub fn from_new_account(account: impl Into<Account>, modified_slots: Vec<Slot>) -> Self {
-        let account = account.into();
+        let account: Account = account.into();
         let mut changes = Self {
             new_account: true,
             address: account.address,
@@ -45,6 +49,7 @@ impl ExecutionAccountChanges {
             balance: ExecutionValueChange::from_modified(account.balance),
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
             slots: HashMap::new(),
+            code_hash: account.code_hash
         };
 
         for slot in modified_slots {

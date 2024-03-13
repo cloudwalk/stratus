@@ -8,7 +8,8 @@ WITH account_updates AS (
             $53::numeric [],
             $54::numeric [],
             $55::numeric [],
-            $56::numeric []
+            $56::numeric [],
+            $51::bytea []
         )
         AS t (
             address,
@@ -17,12 +18,13 @@ WITH account_updates AS (
             new_nonce,
             creation_block,
             previous_balance,
-            previous_nonce
+            previous_nonce,
+            code_hash
         )
 )
 
 INSERT INTO accounts (
-    address, bytecode, latest_balance, latest_nonce, creation_block, previous_balance, previous_nonce
+    address, bytecode, latest_balance, latest_nonce, creation_block, previous_balance, previous_nonce, code_hash
 )
 SELECT
     address,
@@ -31,7 +33,8 @@ SELECT
     new_nonce,
     creation_block,
     previous_balance,
-    previous_nonce
+    previous_nonce,
+    code_hash
 FROM account_updates
 ON CONFLICT (address) DO
 UPDATE

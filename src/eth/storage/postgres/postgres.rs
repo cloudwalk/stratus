@@ -545,6 +545,7 @@ impl PermanentStorage for Postgres {
                 block.header.number,
                 original_nonce,
                 original_balance,
+                change.code_hash
             );
 
             if let Some(balance) = new_balance {
@@ -637,6 +638,7 @@ impl PermanentStorage for Postgres {
             account_batch.block_number as _,
             account_batch.original_balance as _,
             account_batch.original_nonce as _,
+            account_batch.code_hash as _,
             slot_batch.index as _,
             slot_batch.value as _,
             slot_batch.address as _,
@@ -715,7 +717,7 @@ impl PermanentStorage for Postgres {
                 code_hash,
                 block_number as _,
                 BigDecimal::from(0),
-                BigDecimal::from(0)
+                BigDecimal::from(0),
             )
             .execute(&mut *tx)
             .await
