@@ -76,6 +76,7 @@ fake = { version = "2.9.2", features = ["derive"] }
 
 [dev-dependencies]
 binary_macros = "1.0.0"
+fancy-duration = "0.9.2"
 serial_test = "2.0.0"
 stringreader = "0.1.1"
 
