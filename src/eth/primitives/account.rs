@@ -80,7 +80,6 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             nonce: value.1.nonce.into(),
             balance: value.1.balance.into(),
             bytecode: value.1.code.map_into(),
-            // code_hash: CodeHash::new(value.1.code_hash),
             code_hash: value.1.code_hash.into(),
         }
     }
