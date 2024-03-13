@@ -750,6 +750,38 @@ impl PermanentStorage for Postgres {
             .execute(&self.connection_pool)
             .await?;
 
+        sqlx::query!("DELETE FROM account_slots WHERE creation_block > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM accounts WHERE creation_block > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM historical_balances WHERE block_number > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM historical_nonces WHERE block_number > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM historical_slots WHERE block_number > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM logs WHERE block_number > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM topics WHERE block_number > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM transactions WHERE block_number > $1", number as _)
+            .execute(&self.connection_pool)
+            .await?;
+
         // Rollback the values of account.latest_balance, account.latest_nonce and
         // account_slots.value.
 

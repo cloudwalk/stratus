@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM topics WHERE block_number > $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ebf326f5bc823153fd73198ad8ee4147143054f7f0ee711c9a57b5ec4abe85f6"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM historical_nonces WHERE block_number > $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9ed0536a68fdc04d925e2f42120e290e285762ebe4749c4e26d717117d58bc91"
+}

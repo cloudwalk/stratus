@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM transactions WHERE block_number > $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9101331c004ddaa0249d05f20a0b0dcd96fab05b370063c33fbaf523929b62c5"
+}
