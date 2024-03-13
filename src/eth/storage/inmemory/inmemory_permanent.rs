@@ -487,7 +487,7 @@ impl InMemoryPermanentAccount {
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-            code_hash: self.code_hash.clone()
+            code_hash: self.code_hash.clone(),
         }
     }
 }
