@@ -19,7 +19,7 @@ use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 use sqlx::types::BigDecimal;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
 
 impl UnixTime {

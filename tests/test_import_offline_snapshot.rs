@@ -100,9 +100,10 @@ async fn test_import_offline_snapshot() {
 
         // get metrics and print them
         // iterate until prometheus returns something
-        let start = Instant::now();
         let url = format!("{}?query={}", docker.prometheus_api_url(), query);
-        while Instant::now() <= (start + Duration::from_secs(10)) {
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() <= deadline {
             let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
             let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
             if results.is_empty() {

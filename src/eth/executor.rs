@@ -6,17 +6,13 @@
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
 use std::sync::Arc;
-use std::thread;
 use std::time::Instant;
 
 use anyhow::anyhow;
-use nonempty::NonEmpty;
-use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
-use crate::eth::evm::Evm;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -37,7 +33,7 @@ use crate::infra::metrics;
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
 
-type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
+pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
 
 /// The EthExecutor struct is responsible for orchestrating the execution of Ethereum transactions.
 /// It holds references to the EVM, block miner, and storage, managing the overall process of
@@ -59,9 +55,7 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evms: NonEmpty<Box<dyn Evm>>, storage: Arc<StratusStorage>) -> Self {
-        let evm_tx = spawn_background_evms(evms);
-
+    pub fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>) -> Self {
         Self {
             evm_tx,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
@@ -257,33 +251,4 @@ impl EthExecutor {
         self.evm_tx.send((evm_input, execution_tx))?;
         execution_rx.await?
     }
-}
-
-// for each evm, spawn a new thread that runs in an infinite loop executing transactions.
-fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> crossbeam_channel::Sender<EvmTask> {
-    let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
-
-    for mut evm in evms {
-        // clone shared resources for thread
-        let evm_rx = evm_rx.clone();
-        let tokio = Handle::current();
-
-        // prepare thread
-        let t = thread::Builder::new().name("evm".into());
-        t.spawn(move || {
-            // make tokio runtime available to this thread
-            let _tokio_guard = tokio.enter();
-
-            // keep executing transactions until the channel is closed
-            while let Ok((input, tx)) = evm_rx.recv() {
-                let result = evm.execute(input);
-                if let Err(e) = tx.send(result) {
-                    tracing::error!(reason = ?e, "failed to send evm execution result");
-                };
-            }
-            tracing::warn!("stopping evm thread because task channel was closed");
-        })
-        .expect("spawning evm threads should not fail");
-    }
-    evm_tx
 }
