@@ -545,7 +545,7 @@ impl PermanentStorage for Postgres {
                 block.header.number,
                 original_nonce,
                 original_balance,
-                change.code_hash
+                change.code_hash,
             );
 
             if let Some(balance) = new_balance {

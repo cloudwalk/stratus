@@ -247,7 +247,7 @@ pub struct AccountBatch {
     pub block_number: Vec<BlockNumber>,
     pub original_nonce: Vec<Nonce>,
     pub original_balance: Vec<Wei>,
-    pub code_hash: Vec<CodeHash>
+    pub code_hash: Vec<CodeHash>,
 }
 
 impl AccountBatch {
@@ -261,7 +261,7 @@ impl AccountBatch {
         block_number: BlockNumber,
         original_nonce: Nonce,
         original_balance: Wei,
-        code_hash: CodeHash
+        code_hash: CodeHash,
     ) {
         self.address.push(address);
         self.new_nonce.push(new_nonce);

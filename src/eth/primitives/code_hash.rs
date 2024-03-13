@@ -1,13 +1,9 @@
-
-
 use ethereum_types::H256;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::FixedBytes;
 use revm::primitives::KECCAK_EMPTY;
-
-
 use sqlx::database::HasValueRef;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
@@ -98,7 +94,6 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for CodeHash {
         <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
     }
 }
-
 
 impl PgHasArrayType for CodeHash {
     fn array_type_info() -> sqlx::postgres::PgTypeInfo {

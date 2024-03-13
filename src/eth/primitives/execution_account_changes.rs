@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::CodeHash;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -9,8 +10,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
-
-use super::CodeHash;
 
 /// Changes that happened to an account during a transaction.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -35,7 +34,7 @@ impl ExecutionAccountChanges {
             balance: ExecutionValueChange::from_original(account.balance),
             bytecode: ExecutionValueChange::from_original(account.bytecode),
             slots: HashMap::new(),
-            code_hash: account.code_hash
+            code_hash: account.code_hash,
         }
     }
 
@@ -49,7 +48,7 @@ impl ExecutionAccountChanges {
             balance: ExecutionValueChange::from_modified(account.balance),
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
             slots: HashMap::new(),
-            code_hash: account.code_hash
+            code_hash: account.code_hash,
         };
 
         for slot in modified_slots {
