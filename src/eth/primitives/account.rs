@@ -75,15 +75,12 @@ impl Account {
 // -----------------------------------------------------------------------------
 impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
-        let maybe_bytecode = value.1.code.map_into();
-        let code_hash = CodeHash::from_bytecode(maybe_bytecode.clone());
-
         Self {
             address: value.0.into(),
             nonce: value.1.nonce.into(),
             balance: value.1.balance.into(),
-            bytecode: maybe_bytecode,
-            code_hash,
+            bytecode: value.1.code.map_into(),
+            code_hash: CodeHash::new(value.1.code_hash)
         }
     }
 }
@@ -94,12 +91,10 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 
 impl From<Account> for RevmAccountInfo {
     fn from(value: Account) -> Self {
-        let code_hash = CodeHash::from_bytecode(value.bytecode.clone());
-
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash: code_hash.inner(),
+            code_hash: value.code_hash.inner(),
             code: value.bytecode.map_into(),
         }
     }

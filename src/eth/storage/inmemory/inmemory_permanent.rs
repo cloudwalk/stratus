@@ -436,6 +436,7 @@ pub struct InMemoryPermanentAccount {
     pub balance: InMemoryHistory<Wei>,
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
+    pub code_hash: CodeHash,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
@@ -452,6 +453,7 @@ impl InMemoryPermanentAccount {
             balance: InMemoryHistory::new_at_zero(balance),
             nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
             bytecode: InMemoryHistory::new_at_zero(None),
+            code_hash: CodeHash::default(),
             slots: Default::default(),
         }
     }
@@ -480,15 +482,12 @@ impl InMemoryPermanentAccount {
 
     /// Converts itself to an account at a point-in-time.
     pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
-        let bytecode = self.bytecode.get_at_point(point_in_time).unwrap_or_default();
-        let code_hash = CodeHash::from_bytecode(bytecode.clone());
-
         Account {
             address: self.address.clone(),
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
-            bytecode,
-            code_hash,
+            bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
+            code_hash: self.code_hash.clone()
         }
     }
 }
