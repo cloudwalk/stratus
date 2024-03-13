@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
 use const_format::formatcp;
 use fancy_duration::AsFancyDuration;
@@ -99,8 +100,9 @@ async fn test_import_offline_snapshot() {
 
         // get metrics and print them
         // iterate until prometheus returns something
+        let start = Instant::now();
         let url = format!("{}?query={}", docker.prometheus_api_url(), query);
-        loop {
+        while Instant::now() <= (start + Duration::from_secs(10)) {
             let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
             let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
             if results.is_empty() {
