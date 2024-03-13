@@ -746,39 +746,7 @@ impl PermanentStorage for Postgres {
     }
 
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()> {
-        sqlx::query!("DELETE FROM blocks WHERE number > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM account_slots WHERE creation_block > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM accounts WHERE creation_block > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM historical_balances WHERE block_number > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM historical_nonces WHERE block_number > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM historical_slots WHERE block_number > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM logs WHERE block_number > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM topics WHERE block_number > $1", number as _)
-            .execute(&self.connection_pool)
-            .await?;
-
-        sqlx::query!("DELETE FROM transactions WHERE block_number > $1", number as _)
+        sqlx::query_file!("src/eth/storage/postgres/queries/delete_after_block.sql", number as _)
             .execute(&self.connection_pool)
             .await?;
 
