@@ -49,11 +49,6 @@ struct BlockTask {
     block_data: Value,
 }
 
-struct TaskResponse {
-    block_number: i64,
-    result: anyhow::Result<()>,
-}
-
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct HybridPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount>,
@@ -67,7 +62,6 @@ pub struct HybridPermanentStorageState {
 pub struct HybridPermanentStorage {
     state: RwLock<HybridPermanentStorageState>,
     block_number: AtomicU64,
-    connection_pool: PgPool,
     task_sender: mpsc::Sender<BlockTask>,
 }
 
@@ -98,7 +92,6 @@ impl HybridPermanentStorage {
         Ok(Self {
             state: RwLock::new(HybridPermanentStorageState::default()),
             block_number: Default::default(),
-            connection_pool,
             task_sender,
         })
     }
@@ -106,7 +99,7 @@ impl HybridPermanentStorage {
     async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>) {
         tracing::info!("Starting worker");
         while let Some(block_task) = receiver.recv().await {
-            let pool_clone = pool.clone();
+            let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
             // Here we attempt to insert the block data into the database.
             // Adjust the SQL query according to your table schema.
             tokio::spawn(async move {
@@ -387,7 +380,7 @@ impl PermanentStorage for HybridPermanentStorage {
         if let Some(bb) = b {
             let s = format!("{} => {}", bb.number(), bb.transactions.len());
             dbg!(s);
-            let bbb = (*bb.number());
+            let bbb = *bb.number();
 
             let block_task = BlockTask {
                 block_number: bbb,
