@@ -9,7 +9,7 @@ external_rpc_url  := env("EXTERNAL_RPC_URL", "http://spec.testnet.cloudwalk.netw
 postgres_url      := env("POSTGRES_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 
 # Other defaults
-wait_service_timeout := "400" # seconds
+wait_service_timeout := "600" # seconds
 
 # Project: Show available tasks
 default:
