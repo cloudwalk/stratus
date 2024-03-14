@@ -34,11 +34,11 @@ const BACKLOG_SIZE: usize = 50;
 
 type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
-    let pg = Arc::new(Postgres::new(&config.postgres_url).await?);
+    let pg = Arc::new(Postgres::new(&config.postgres_url, 400usize, 20usize).await?);
     let storage = config.init_storage().await?;
     let executor = config.init_executor(Arc::clone(&storage));
 

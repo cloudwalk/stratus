@@ -746,7 +746,7 @@ impl PermanentStorage for Postgres {
     }
 
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()> {
-        sqlx::query!("DELETE FROM blocks WHERE number > $1", number as _)
+        sqlx::query_file!("src/eth/storage/postgres/queries/delete_after_block.sql", number as _)
             .execute(&self.connection_pool)
             .await?;
 
