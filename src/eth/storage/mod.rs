@@ -8,7 +8,6 @@ mod storage_error;
 mod stratus_storage;
 mod temporary_storage;
 
-
 pub use hybrid::HybridPermanentStorage;
 pub use inmemory::InMemoryPermanentStorage;
 pub use inmemory::InMemoryPermanentStorageState;

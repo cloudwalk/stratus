@@ -365,7 +365,7 @@ impl FromStr for StorageConfig {
             s if s.starts_with("hybrid://") => {
                 let s = s.replace("hybrid", "postgres"); //TODO there is a better way to do this
                 Ok(Self::Hybrid { url: s.to_string() })
-            },
+            }
             s => Err(anyhow!("unknown storage: {}", s)),
         }
     }

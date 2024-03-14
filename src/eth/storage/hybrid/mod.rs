@@ -1,7 +1,5 @@
 //! In-memory storage implementations.
 
-use tokio::sync::mpsc::channel;
-use tokio::task;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -13,8 +11,11 @@ use metrics::atomics::AtomicU64;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
+use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
@@ -42,10 +43,6 @@ use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
-use serde::Serialize;
-use serde_json::Value;
-use tokio::sync::mpsc;
-
 #[derive(Debug)]
 struct BlockTask {
     block_number: BlockNumber,
@@ -56,7 +53,6 @@ struct TaskResponse {
     block_number: i64,
     result: anyhow::Result<()>,
 }
-
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct HybridPermanentStorageState {
@@ -73,7 +69,6 @@ pub struct HybridPermanentStorage {
     block_number: AtomicU64,
     connection_pool: PgPool,
     task_sender: mpsc::Sender<BlockTask>,
-
 }
 
 impl HybridPermanentStorage {
@@ -93,7 +88,7 @@ impl HybridPermanentStorage {
 
         let (task_sender, task_receiver) = channel::<BlockTask>(32);
         let pool = Arc::new(connection_pool.clone());
-        tokio::spawn( async move {
+        tokio::spawn(async move {
             // Assuming you define a 'response_sender' if you plan to handle responses
             let worker_pool = pool.clone();
             // Omitting response channel setup for simplicity
@@ -108,10 +103,7 @@ impl HybridPermanentStorage {
         })
     }
 
-    async fn worker(
-        mut receiver: tokio::sync::mpsc::Receiver<BlockTask>,
-        pool: Arc<sqlx::Pool<sqlx::Postgres>>,
-    ) {
+    async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>) {
         tracing::info!("Starting worker");
         while let Some(block_task) = receiver.recv().await {
             let pool_clone = pool.clone();
@@ -135,7 +127,6 @@ impl HybridPermanentStorage {
         }
     }
 
-
     // -------------------------------------------------------------------------
     // Lock methods
     // -------------------------------------------------------------------------
@@ -149,7 +140,6 @@ impl HybridPermanentStorage {
     async fn lock_write(&self) -> RwLockWriteGuard<'_, HybridPermanentStorageState> {
         self.state.write().await
     }
-
 
     // -------------------------------------------------------------------------
     // State methods
@@ -203,8 +193,7 @@ impl HybridPermanentStorage {
     }
 }
 
-impl HybridPermanentStorage {
-}
+impl HybridPermanentStorage {}
 
 #[async_trait]
 impl PermanentStorage for HybridPermanentStorage {
@@ -398,7 +387,7 @@ impl PermanentStorage for HybridPermanentStorage {
         if let Some(bb) = b {
             let s = format!("{} => {}", bb.number(), bb.transactions.len());
             dbg!(s);
-            let bbb = (*bb.number()).clone();
+            let bbb = (*bb.number());
 
             let block_task = BlockTask {
                 block_number: bbb,
