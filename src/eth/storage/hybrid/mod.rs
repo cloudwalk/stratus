@@ -13,7 +13,6 @@ use rand::seq::IteratorRandom;
 use rand::SeedableRng;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
@@ -84,7 +83,7 @@ impl HybridPermanentStorage {
         let pool = Arc::new(connection_pool.clone());
         tokio::spawn(async move {
             // Assuming you define a 'response_sender' if you plan to handle responses
-            let worker_pool = pool.clone();
+            let worker_pool = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
             // Omitting response channel setup for simplicity
             Self::worker(task_receiver, worker_pool).await;
         });
