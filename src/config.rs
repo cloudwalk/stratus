@@ -23,6 +23,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::storage::HybridPermanentStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
@@ -335,6 +336,9 @@ pub enum StorageConfig {
 
     #[strum(serialize = "postgres")]
     Postgres { url: String },
+
+    #[strum(serialize = "hybrid")]
+    Hybrid { url: String },
 }
 
 impl StorageConfig {
@@ -345,6 +349,7 @@ impl StorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self {
             Self::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             Self::Postgres { url } => Arc::new(Postgres::new(url, common_config.storage_max_connections, common_config.storage_acquire_timeout).await?),
+            Self::Hybrid { url } => Arc::new(HybridPermanentStorage::new(url).await?),
         };
         Ok(Arc::new(StratusStorage::new(temp, perm)))
     }
@@ -357,6 +362,10 @@ impl FromStr for StorageConfig {
         match s {
             "inmemory" => Ok(Self::InMemory),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
+            s if s.starts_with("hybrid://") => {
+                let s = s.replace("hybrid", "postgres"); //TODO there is a better way to do this
+                Ok(Self::Postgres { url: s.to_string() })
+            },
             s => Err(anyhow!("unknown storage: {}", s)),
         }
     }
