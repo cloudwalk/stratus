@@ -86,7 +86,12 @@ async function deployBalanceTracker() {
 }
 
 async function configureBalanceTracker() {
-  //TODO: Set hooks
+  const REVERT_POLICY = BigInt(1);
+  const toHookStruct = (hook : IERC20Hookable.HookStructOutput) => ({account: hook.account, policy: hook.policy});
+  const hooksOutput = await brlCoin.getAfterTokenTransferHooks();
+  const hooks: IERC20Hookable.HookStruct[] = hooksOutput.map(toHookStruct);
+  const newHook = {account: await balanceTracker.getAddress(), policy: REVERT_POLICY};
+  hooks.push(newHook);
 }
 
 async function deployYieldStreamer() {
@@ -145,6 +150,7 @@ describe("Integration Test", function () {
 
     it("Configure BalanceTracker", async function () {
       await configureBalanceTracker();
+      console.log(await brlCoin.getAfterTokenTransferHooks());
     });
 
     it("Deploy YieldStreamer", async function () {
