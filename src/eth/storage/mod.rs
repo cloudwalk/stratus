@@ -1,6 +1,7 @@
 //! Ethereum / EVM storage.
 
 mod csv;
+mod hybrid;
 mod inmemory;
 mod permanent_storage;
 mod postgres;
@@ -9,6 +10,7 @@ mod stratus_storage;
 mod temporary_storage;
 
 pub use csv::CsvExporter;
+pub use hybrid::HybridPermanentStorage;
 pub use inmemory::InMemoryPermanentStorage;
 pub use inmemory::InMemoryPermanentStorageState;
 pub use inmemory::InMemoryTemporaryStorage;
