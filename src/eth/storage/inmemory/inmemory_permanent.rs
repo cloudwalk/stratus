@@ -1,8 +1,10 @@
 //! In-memory storage implementations.
 
+use tokio::task;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
@@ -10,6 +12,8 @@ use metrics::atomics::AtomicU64;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
@@ -50,6 +54,7 @@ pub struct InMemoryPermanentStorageState {
 pub struct InMemoryPermanentStorage {
     state: RwLock<InMemoryPermanentStorageState>,
     block_number: AtomicU64,
+    connection_pool: PgPool,
 }
 
 impl InMemoryPermanentStorage {
@@ -94,11 +99,23 @@ impl InMemoryPermanentStorage {
     }
 
     /// Creates a new InMemoryPermanentStorage from a snapshot dump.
-    pub fn from_snapshot(state: InMemoryPermanentStorageState) -> Self {
-        Self {
+    pub async fn from_snapshot(state: InMemoryPermanentStorageState) -> anyhow::Result<Self> {
+        let connection_pool = PgPoolOptions::new()
+            .min_connections(1)
+            .max_connections(100)
+            .acquire_timeout(Duration::from_secs(20))
+            .connect("postgres://postgres:postgres@10.44.0.211/stratus")
+            .await
+            .map_err(|e| {
+                tracing::error!(reason = ?e, "failed to start postgres client");
+                anyhow::anyhow!("failed to start postgres client")
+            })?;
+
+        Ok(Self {
             state: RwLock::new(state),
             block_number: AtomicU64::new(0),
-        }
+            connection_pool,
+        })
     }
 
     // -------------------------------------------------------------------------
@@ -153,14 +170,26 @@ impl InMemoryPermanentStorage {
     }
 }
 
-impl Default for InMemoryPermanentStorage {
-    fn default() -> Self {
-        tracing::info!("starting inmemory storage");
+impl InMemoryPermanentStorage {
+    pub async fn new() -> anyhow::Result<Self> {
+        tracing::info!("starting hybrid storage");
 
-        Self {
+        let connection_pool = PgPoolOptions::new()
+            .min_connections(1)
+            .max_connections(100)
+            .acquire_timeout(Duration::from_secs(20))
+            .connect("postgres://postgres:postgres@10.44.0.211/stratus")
+            .await
+            .map_err(|e| {
+                tracing::error!(reason = ?e, "failed to start postgres client");
+                anyhow::anyhow!("failed to start postgres client")
+            })?;
+
+        Ok(Self {
             state: RwLock::new(InMemoryPermanentStorageState::default()),
             block_number: Default::default(),
-        }
+            connection_pool,
+        })
     }
 }
 
@@ -347,6 +376,33 @@ impl PermanentStorage for InMemoryPermanentStorage {
                 }
             }
         }
+
+        Ok(())
+    }
+
+    async fn after_commit_hook(&self) -> anyhow::Result<()> {
+        let b = self.read_block(&BlockSelection::Latest).await?;
+        let s = format!("{} => {}", b.clone().unwrap().number(), b.clone().unwrap().transactions.len());
+        dbg!(s);
+
+        let bb = b.clone().unwrap();
+
+        let bbb = (*bb.number()).clone();
+
+        let pool = self.connection_pool.clone();
+        task::spawn(async move {
+            dbg!("saving block to db {}", bbb);
+            sqlx::query!(
+                "INSERT INTO neo_blocks (block_number, block, created_at) VALUES ($1, $2, now())",
+                bbb as _,
+                serde_json::to_value(bb).unwrap()
+            )
+            .execute(&pool)
+            .await.unwrap();
+        });
+
+        dbg!("after commit hook {}", bbb);
+
 
         Ok(())
     }

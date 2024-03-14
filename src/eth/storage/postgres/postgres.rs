@@ -684,6 +684,10 @@ impl PermanentStorage for Postgres {
         Ok(())
     }
 
+    async fn after_commit_hook(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading current block number");
 

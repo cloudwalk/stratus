@@ -47,6 +47,9 @@ pub trait PermanentStorage: Send + Sync {
     /// Persists atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError>;
 
+    /// Run after commit callbacks.
+    async fn after_commit_hook(&self) -> anyhow::Result<()>;
+
     /// Persists initial accounts (test accounts or genesis accounts).
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 

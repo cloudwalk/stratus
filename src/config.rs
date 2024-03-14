@@ -319,7 +319,7 @@ impl StorageConfig {
         let temp = Arc::new(InMemoryTemporaryStorage::default());
 
         let perm: Arc<dyn PermanentStorage> = match self {
-            Self::InMemory => Arc::new(InMemoryPermanentStorage::default()),
+            Self::InMemory => Arc::new(InMemoryPermanentStorage::new().await?),
             Self::Postgres { url } => Arc::new(Postgres::new(url, common_config.storage_max_connections, common_config.storage_acquire_timeout).await?),
         };
         Ok(Arc::new(StratusStorage::new(temp, perm)))
