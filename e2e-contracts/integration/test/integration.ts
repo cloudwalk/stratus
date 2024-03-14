@@ -105,55 +105,56 @@ describe("Integration Test", function () {
     [deployer] = await ethers.getSigners();
   });
 
-  it("Deploy BRLC", async function () {
-    await deployBRLC();
-  });
+  describe("Deploy and configure contracts", function () {
+    it("Deploy BRLC", async function () {
+      await deployBRLC();
+    });
 
-  it("Configure BRLC", async function () {
-    await configureBRLC();
-  });
+    it("Configure BRLC", async function () {
+      await configureBRLC();
+    });
 
-  it("Deploy PixCashier", async function () {
-    await deployPixCashier();
-  });
+    it("Deploy PixCashier", async function () {
+      await deployPixCashier();
+    });
 
-  it("Configure PixCashier", async function () {
-    await configurePixCashier();
-  });
+    it("Configure PixCashier", async function () {
+      await configurePixCashier();
+    });
 
-  it("Deploy CashbackDistributor", async function () {
-    await deployCashbackDistributor();
-  });
+    it("Deploy CashbackDistributor", async function () {
+      await deployCashbackDistributor();
+    });
 
-  it("Configure CashbackDistributor", async function () {
-    await configureCashbackDistributor();
-  });
+    it("Configure CashbackDistributor", async function () {
+      await configureCashbackDistributor();
+    });
 
-  it("Deploy CardPaymentProcessor", async function () {
-    await deployCardPaymentProcessor();
-  });
+    it("Deploy CardPaymentProcessor", async function () {
+      await deployCardPaymentProcessor();
+    });
 
-  it("Configure CardPaymentProcessor", async function () {
-    await configureCardPaymentProcessor();
-  });
+    it("Configure CardPaymentProcessor", async function () {
+      await configureCardPaymentProcessor();
+    });
 
-  it("Deploy BalanceTracker", async function () {
-    await deployBalanceTracker();
-    expect(await balanceTracker.TOKEN()).to.equal(await brlCoin.getAddress());
-  });
+    it("Deploy BalanceTracker", async function () {
+      await deployBalanceTracker();
+      expect(await balanceTracker.TOKEN()).to.equal(await brlCoin.getAddress());
+    });
 
-  it("Configure BalanceTracker", async function () {
-    await configureBalanceTracker();
-  });
+    it("Configure BalanceTracker", async function () {
+      await configureBalanceTracker();
+    });
 
-  it("Deploy YieldStreamer", async function () {
-    await deployYieldStreamer();
-  });
+    it("Deploy YieldStreamer", async function () {
+      await deployYieldStreamer();
+    });
 
-  it("Configure YieldStreamer", async function () {
-    await configureYieldStreamer();
+    it("Configure YieldStreamer", async function () {
+      await configureYieldStreamer();
+    });
   });
-
   describe("Scenario 1", function () {
 
     let alice = ethers.Wallet.createRandom().connect(ethers.provider);
