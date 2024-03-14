@@ -1,8 +1,8 @@
 import { ethers, upgrades } from "hardhat";
 import { expect } from "chai";
-import { ContractFactory } from "ethers";
+import { ContractFactory, toBigInt } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, PixCashier } from "../typechain-types";
+import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, IERC20Hookable, PixCashier } from "../typechain-types";
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./helpers/recompile";
 
 /* Contracts instances */
@@ -84,6 +84,10 @@ async function deployBalanceTracker() {
   balanceTracker = deployedProxy.connect(deployer) as BalanceTracker;
 }
 
+async function configureBalanceTracker() {
+  //TODO: Set hooks
+}
+
 describe("Integration Test", function () {
   before(async function () {
     [deployer] = await ethers.getSigners();
@@ -124,6 +128,10 @@ describe("Integration Test", function () {
   it("Deploy BalanceTracker", async function () {
     await deployBalanceTracker();
     expect(await balanceTracker.TOKEN()).to.equal(await brlCoin.getAddress());
+  });
+
+  it("Configure BalanceTracker", async function () {
+    await configureBalanceTracker();
   });
 
   describe("Scenario 1", function () {
