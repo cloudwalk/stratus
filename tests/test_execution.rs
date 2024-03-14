@@ -3,18 +3,21 @@ use ethers_core::rand::thread_rng;
 use fake::{Dummy, Faker};
 use stratus::config::CommonConfig;
 use stratus::config::MetricsHistogramKind;
-use stratus::config::StorageConfig;
+use stratus::config::PermanentStorageConfig;
+use stratus::config::StorageKind;
 use stratus::eth::primitives::test_accounts;
 use stratus::eth::primitives::TransactionInput;
 use stratus::eth::primitives::Wei;
 
 #[tokio::test]
 async fn test_execution() {
-    let storage: StorageConfig = "inmemory".parse().unwrap(); //XXX we need to use a real storage
     let config = CommonConfig {
-        storage: storage.clone(),
-        storage_max_connections: 1usize,
-        storage_acquire_timeout: 100usize,
+        perm: PermanentStorageConfig {
+            perm_kind: StorageKind::InMemory,
+            perm_connections: 1,
+            perm_timeout_millis: 1000,
+            perm_proxy_csv: false,
+        },
         num_evms: 1usize,
         num_async_threads: 1usize,
         num_blocking_threads: 1usize,
@@ -22,7 +25,7 @@ async fn test_execution() {
         enable_genesis: false,
         nocapture: false,
     };
-    let storage = storage.init(&config).await.unwrap();
+    let storage = config.init_storage().await.unwrap();
     let mut rng = thread_rng();
     let mut fake_transaction_input = TransactionInput::dummy_with_rng(&Faker, &mut rng);
     fake_transaction_input.nonce = 0u64.into();

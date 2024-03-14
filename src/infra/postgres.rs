@@ -30,18 +30,25 @@ pub struct Postgres {
     pub sload_cache: SloadCache,
 }
 
+#[derive(Debug)]
+pub struct PostgresClientConfig {
+    pub url: String,
+    pub connections: u32,
+    pub acquire_timeout: Duration,
+}
+
 impl Postgres {
-    pub async fn new(url: &str, max_connections: usize, acquire_timeout: usize) -> anyhow::Result<Self> {
-        tracing::info!(%url, "starting postgres client");
+    pub async fn new(config: PostgresClientConfig) -> anyhow::Result<Self> {
+        tracing::info!(?config, "starting postgres client");
 
         let connection_pool = PgPoolOptions::new()
-            .min_connections(1)
-            .max_connections(max_connections.try_into().unwrap_or(100))
-            .acquire_timeout(Duration::from_secs(acquire_timeout.try_into().unwrap_or(2)))
-            .connect(url)
+            .min_connections(config.connections)
+            .max_connections(config.connections)
+            .acquire_timeout(config.acquire_timeout)
+            .connect(&config.url)
             .await
             .map_err(|e| {
-                tracing::error!(reason = ?e, %url, "failed to start postgres client");
+                tracing::error!(reason = ?e, ?config, "failed to start postgres client");
                 anyhow!("failed to start postgres client")
             })?;
 
@@ -78,7 +85,6 @@ impl Postgres {
     }
 
     async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
-        info!("loading sload cache");
         let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres/queries/select_slot_cache.sql", BigDecimal::from(0))
             .fetch_all(&connection_pool)
             .await?;
