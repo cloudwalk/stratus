@@ -22,6 +22,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::storage::EmbeddedPermanentStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
@@ -311,6 +312,9 @@ pub enum StorageConfig {
 
     #[strum(serialize = "postgres")]
     Postgres { url: String },
+
+    #[strum(serialize = "embedded")]
+    Embedded,
 }
 
 impl StorageConfig {
@@ -320,6 +324,7 @@ impl StorageConfig {
 
         let perm: Arc<dyn PermanentStorage> = match self {
             Self::InMemory => Arc::new(InMemoryPermanentStorage::default()),
+            Self::Embedded => Arc::new(EmbeddedPermanentStorage::new().await?),
             Self::Postgres { url } => Arc::new(Postgres::new(url, common_config.storage_max_connections, common_config.storage_acquire_timeout).await?),
         };
         Ok(Arc::new(StratusStorage::new(temp, perm)))
