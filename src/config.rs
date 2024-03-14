@@ -5,12 +5,13 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use clap::Parser;
-use nonempty::NonEmpty;
 use tokio::runtime::Builder;
+use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
 use crate::eth::evm::revm::Revm;
@@ -29,6 +30,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
+use crate::eth::EvmTask;
 #[cfg(feature = "dev")]
 use crate::ext::not;
 use crate::infra::postgres::Postgres;
@@ -266,17 +268,39 @@ impl CommonConfig {
         Ok(storage)
     }
 
-    /// Initializes EthExecutor.
+    /// Initializes EthExecutor. Should be called inside an async runtime.
     pub fn init_executor(&self, storage: Arc<StratusStorage>) -> EthExecutor {
         let num_evms = max(self.num_evms, 1);
-        tracing::info!(evms = %num_evms, "starting executor");
+        tracing::info!(evms = %num_evms, "starting executor and evms");
 
-        let mut evms: Vec<Box<dyn Evm>> = Vec::with_capacity(num_evms);
+        // spawn evm in background using native threads
+        let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
         for _ in 1..=num_evms {
-            evms.push(Box::new(Revm::new(Arc::clone(&storage))));
+            // create evm resources
+            let evm_storage = Arc::clone(&storage);
+            let evm_tokio = Handle::current();
+            let evm_rx = evm_rx.clone();
+
+            // spawn thread that will run evm
+            let t = thread::Builder::new().name("evm".into());
+            t.spawn(move || {
+                let _tokio_guard = evm_tokio.enter();
+                let mut evm = Revm::new(evm_storage);
+
+                // keep executing transactions until the channel is closed
+                while let Ok((input, tx)) = evm_rx.recv() {
+                    let result = evm.execute(input);
+                    if let Err(e) = tx.send(result) {
+                        tracing::error!(reason = ?e, "failed to send evm execution result");
+                    };
+                }
+                tracing::warn!("stopping evm thread because task channel was closed");
+            })
+            .expect("spawning evm threads should not fail");
         }
 
-        EthExecutor::new(NonEmpty::from_vec(evms).unwrap(), Arc::clone(&storage))
+        // creates an executor that can communicate with background evms
+        EthExecutor::new(evm_tx, Arc::clone(&storage))
     }
 
     /// Initializes Tokio runtime.

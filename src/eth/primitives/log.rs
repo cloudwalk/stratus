@@ -34,8 +34,8 @@ impl From<RevmLog> for Log {
     fn from(value: RevmLog) -> Self {
         Self {
             address: value.address.into(),
-            topics: value.topics.into_iter().map_into().collect(),
-            data: value.data.into(),
+            topics: value.topics().iter().cloned().map_into().collect(),
+            data: value.data.data.into(),
         }
     }
 }
