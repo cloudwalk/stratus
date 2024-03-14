@@ -23,6 +23,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct EmbeddedPermanentStorage {
     blocks_db: DB,
     transactions_db: DB,
