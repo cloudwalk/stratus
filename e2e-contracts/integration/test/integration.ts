@@ -2,7 +2,7 @@ import { ethers, upgrades } from "hardhat";
 import { expect } from "chai";
 import { ContractFactory, toBigInt } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, IERC20Hookable, PixCashier } from "../typechain-types";
+import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, IERC20Hookable, PixCashier, YieldStreamer } from "../typechain-types";
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./helpers/recompile";
 
 /* Contracts instances */
@@ -11,6 +11,7 @@ let pixCashier: PixCashier;
 let cashbackDistributor: CashbackDistributor;
 let cardPaymentProcessor: CardPaymentProcessor;
 let balanceTracker: BalanceTracker;
+let yieldStreamer: YieldStreamer;
 
 /* Signers and Wallets */
 let deployer: SignerWithAddress;
@@ -88,6 +89,17 @@ async function configureBalanceTracker() {
   //TODO: Set hooks
 }
 
+async function deployYieldStreamer() {
+  let yieldStreamerFactory: ContractFactory = await ethers.getContractFactory("YieldStreamer");
+  let deployedProxy = await upgrades.deployProxy(yieldStreamerFactory.connect(deployer));
+  await deployedProxy.waitForDeployment();
+  yieldStreamer = deployedProxy.connect(deployer) as YieldStreamer;
+}
+
+async function configureYieldStreamer() {
+  yieldStreamer.setBalanceTracker(await balanceTracker.getAddress());
+}
+
 describe("Integration Test", function () {
   before(async function () {
     [deployer] = await ethers.getSigners();
@@ -132,6 +144,14 @@ describe("Integration Test", function () {
 
   it("Configure BalanceTracker", async function () {
     await configureBalanceTracker();
+  });
+
+  it("Deploy YieldStreamer", async function () {
+    await deployYieldStreamer();
+  });
+
+  it("Configure YieldStreamer", async function () {
+    await configureYieldStreamer();
   });
 
   describe("Scenario 1", function () {
