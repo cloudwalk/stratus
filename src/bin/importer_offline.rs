@@ -41,7 +41,7 @@ type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
-    let mut csv = CsvExporter::default();
+    let csv = CsvExporter::default();
     let pg = Arc::new(
         Postgres::new(PostgresClientConfig {
             url: config.pg.pg_url.to_string(),
@@ -63,7 +63,8 @@ async fn main() -> anyhow::Result<()> {
         .into_iter()
         .map(|row| Account::new_with_balance(row.address, row.balance))
         .collect_vec();
-    csv.export_accounts(accounts).await?;
+    storage.save_accounts_to_perm(accounts).await?;
+    // csv.export_accounts(accounts).await?;
 
     // execute parallel tasks (postgres loader and block importer)
     tokio::spawn(execute_postgres_loader(pg, storage, cancellation.clone(), config.paralellism, backlog_tx));
@@ -78,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
 async fn execute_block_importer(
     // services
     executor: EthExecutor,
-    mut csv: CsvExporter,
+    mut _csv: CsvExporter,
     cancellation: CancellationToken,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
@@ -102,8 +103,9 @@ async fn execute_block_importer(
         for block in blocks {
             let start = Instant::now();
 
-            let block = executor.import_external(block.payload, &mut receipts).await?;
-            csv.export_block(block).await?;
+            executor.import_external_and_commit(block.payload, &mut receipts).await?;
+            // let block = executor.import_external_and_commit(block.payload, &mut receipts).await?;
+            // csv.export_block(block).await?;
 
             metrics::inc_import_offline(start.elapsed());
         }
