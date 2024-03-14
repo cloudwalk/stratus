@@ -1,5 +1,6 @@
 //! In-memory storage implementations.
 
+use tokio::sync::mpsc::channel;
 use tokio::task;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -41,6 +42,22 @@ use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
+use serde::Serialize;
+use serde_json::Value;
+use tokio::sync::mpsc;
+
+#[derive(Debug)]
+struct BlockTask {
+    block_number: BlockNumber,
+    block_data: Value,
+}
+
+struct TaskResponse {
+    block_number: i64,
+    result: anyhow::Result<()>,
+}
+
+
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount>,
@@ -55,6 +72,8 @@ pub struct InMemoryPermanentStorage {
     state: RwLock<InMemoryPermanentStorageState>,
     block_number: AtomicU64,
     connection_pool: PgPool,
+    task_sender: mpsc::Sender<BlockTask>,
+
 }
 
 impl InMemoryPermanentStorage {
@@ -111,12 +130,15 @@ impl InMemoryPermanentStorage {
                 anyhow::anyhow!("failed to start postgres client")
             })?;
 
+        let (task_sender, _task_receiver) = channel::<BlockTask>(64);
         Ok(Self {
             state: RwLock::new(state),
             block_number: AtomicU64::new(0),
             connection_pool,
+            task_sender,
         })
     }
+
 
     // -------------------------------------------------------------------------
     // State methods
@@ -175,8 +197,8 @@ impl InMemoryPermanentStorage {
         tracing::info!("starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()
-            .min_connections(1)
-            .max_connections(100)
+            .min_connections(300)
+            .max_connections(400)
             .acquire_timeout(Duration::from_secs(20))
             .connect("postgres://postgres:postgres@10.44.0.211/stratus")
             .await
@@ -185,12 +207,49 @@ impl InMemoryPermanentStorage {
                 anyhow::anyhow!("failed to start postgres client")
             })?;
 
+        let (task_sender, task_receiver) = channel::<BlockTask>(32);
+        let pool = Arc::new(connection_pool.clone());
+        tokio::spawn( async move {
+            // Assuming you define a 'response_sender' if you plan to handle responses
+            let worker_pool = pool.clone();
+            // Omitting response channel setup for simplicity
+            Self::worker(task_receiver, worker_pool).await;
+        });
+
         Ok(Self {
             state: RwLock::new(InMemoryPermanentStorageState::default()),
             block_number: Default::default(),
             connection_pool,
+            task_sender,
         })
     }
+
+    async fn worker(
+        mut receiver: tokio::sync::mpsc::Receiver<BlockTask>,
+        pool: Arc<sqlx::Pool<sqlx::Postgres>>,
+    ) {
+        while let Some(block_task) = receiver.recv().await {
+            let pool_clone = pool.clone();
+            // Here we attempt to insert the block data into the database.
+            // Adjust the SQL query according to your table schema.
+            tokio::spawn(async move {
+                let result = sqlx::query!(
+                    "INSERT INTO neo_blocks (block_number, block, created_at) VALUES ($1, $2, NOW())",
+                    block_task.block_number as _,
+                    block_task.block_data
+                )
+                .execute(&*pool_clone)
+                .await;
+
+                // Handle the result of the insert operation.
+                match result {
+                    Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
+                    Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
+                }
+            });
+        }
+    }
+
 }
 
 #[async_trait]
@@ -382,27 +441,20 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
     async fn after_commit_hook(&self) -> anyhow::Result<()> {
         let b = self.read_block(&BlockSelection::Latest).await?;
-        let s = format!("{} => {}", b.clone().unwrap().number(), b.clone().unwrap().transactions.len());
-        dbg!(s);
+        if let Some(bb) = b {
+            let s = format!("{} => {}", bb.number(), bb.transactions.len());
+            dbg!(s);
+            let bbb = (*bb.number()).clone();
 
-        let bb = b.clone().unwrap();
+            let block_task = BlockTask {
+                block_number: bbb,
+                block_data: serde_json::to_value(bb).unwrap(),
+            };
 
-        let bbb = (*bb.number()).clone();
-
-        let pool = self.connection_pool.clone();
-        task::spawn(async move {
-            dbg!("saving block to db {}", bbb);
-            sqlx::query!(
-                "INSERT INTO neo_blocks (block_number, block, created_at) VALUES ($1, $2, now())",
-                bbb as _,
-                serde_json::to_value(bb).unwrap()
-            )
-            .execute(&pool)
-            .await.unwrap();
-        });
-
-        dbg!("after commit hook {}", bbb);
-
+            // Send the task to be processed by a worker
+            dbg!("sending block task");
+            self.task_sender.send(block_task).await.expect("Failed to send block task");
+        }
 
         Ok(())
     }
