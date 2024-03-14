@@ -2,10 +2,14 @@ import { ethers, upgrades } from "hardhat";
 import { expect } from "chai";
 import { ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { BRLCToken, PixCashier } from "../typechain-types";
+import { BRLCToken, CashbackDistributor, PixCashier } from "../typechain-types";
 
+/* Contracts instances */
 let brlCoin: BRLCToken;
 let pixCashier: PixCashier;
+let cashbackDistributor: CashbackDistributor;
+
+/* Signers and Wallets */
 let deployer: SignerWithAddress;
 
 async function deployBRLC() {
@@ -32,6 +36,18 @@ async function configurePixCashier() {
   pixCashier.grantRole(await pixCashier.CASHIER_ROLE(), await deployer.getAddress());
 }
 
+async function deployCashbackDistributor() {
+  let cashbackFactory: ContractFactory = await ethers.getContractFactory("CashbackDistributor");
+  let deployedProxy = await upgrades.deployProxy(cashbackFactory.connect(deployer));
+  await deployedProxy.waitForDeployment();
+  cashbackDistributor = deployedProxy.connect(deployer) as CashbackDistributor;
+}
+
+async function configureCashbackDistributor() {
+  cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await deployer.getAddress());
+  cashbackDistributor.enable();
+}
+
 describe("Integration Test", function () {
   before(async function () {
     [deployer] = await ethers.getSigners();
@@ -51,6 +67,14 @@ describe("Integration Test", function () {
 
   it("Configure PixCashier", async function () {
     await configurePixCashier();
+  });
+
+  it("Deploy CashbackDistributor", async function () {
+    await deployCashbackDistributor();
+  });
+
+  it("Configure CashbackDistributor", async function () {
+    await configureCashbackDistributor();
   });
 
   describe("Scenario 1", function () {
