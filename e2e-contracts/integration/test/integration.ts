@@ -2,12 +2,13 @@ import { ethers, upgrades } from "hardhat";
 import { expect } from "chai";
 import { ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { BRLCToken, CashbackDistributor, PixCashier } from "../typechain-types";
+import { BRLCToken, CardPaymentProcessor, CashbackDistributor, PixCashier } from "../typechain-types";
 
 /* Contracts instances */
 let brlCoin: BRLCToken;
 let pixCashier: PixCashier;
 let cashbackDistributor: CashbackDistributor;
+let cardPaymentProcessor: CardPaymentProcessor;
 
 /* Signers and Wallets */
 let deployer: SignerWithAddress;
@@ -48,6 +49,26 @@ async function configureCashbackDistributor() {
   cashbackDistributor.enable();
 }
 
+async function deployCardPaymentProcessor() {
+  let cardPaymentProcessorFactory: ContractFactory = await ethers.getContractFactory("CardPaymentProcessor");
+  let deployedProxy = await upgrades.deployProxy(cardPaymentProcessorFactory.connect(deployer), [await brlCoin.getAddress()]);
+  await deployedProxy.waitForDeployment();
+  cardPaymentProcessor = deployedProxy.connect(deployer) as CardPaymentProcessor;
+}
+
+async function configureCardPaymentProcessor() {
+  const rateFactor = 10;
+  cardPaymentProcessor.grantRole(await cardPaymentProcessor.EXECUTOR_ROLE(), await deployer.getAddress());
+  cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress());
+  cardPaymentProcessor.setRevocationLimit(255);
+  cardPaymentProcessor.setCashbackRate(1.5 * rateFactor);
+  cardPaymentProcessor.setCashOutAccount(await deployer.getAddress());
+  brlCoin.approve(await cardPaymentProcessor.getAddress(), 0xfffffffffffff);
+  cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await cardPaymentProcessor.getAddress());
+  cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress());
+  cardPaymentProcessor.enableCashback();
+}
+
 describe("Integration Test", function () {
   before(async function () {
     [deployer] = await ethers.getSigners();
@@ -75,6 +96,14 @@ describe("Integration Test", function () {
 
   it("Configure CashbackDistributor", async function () {
     await configureCashbackDistributor();
+  });
+
+  it("Deploy CardPaymentProcessor", async function () {
+    await deployCardPaymentProcessor();
+  });
+
+  it("Configure CardPaymentProcessor", async function () {
+    await configureCardPaymentProcessor();
   });
 
   describe("Scenario 1", function () {
