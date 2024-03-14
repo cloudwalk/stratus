@@ -11,6 +11,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
+use tracing::info;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -77,15 +78,17 @@ impl Postgres {
     }
 
     async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
-        let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres/queries/select_slot_cache.sql", BigDecimal::from(0))
-            .fetch_all(&connection_pool)
-            .await?;
+        info!("loading sload cache");
+        //let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres/queries/select_slot_cache.sql", BigDecimal::from(0))
+        //    .fetch_all(&connection_pool)
+        //    .await?;
         let mut sload_cache = HashMap::new();
 
-        raw_sload.into_iter().for_each(|s| {
-            sload_cache.insert((s.address, s.index), (s.value, s.block));
-        });
+        // raw_sload.into_iter().for_each(|s| {
+        //     sload_cache.insert((s.address, s.index), (s.value, s.block));
+        // });
 
+        info!("finished loading sload cache");
         Ok(sload_cache)
     }
 

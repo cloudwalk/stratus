@@ -112,6 +112,7 @@ impl HybridPermanentStorage {
         mut receiver: tokio::sync::mpsc::Receiver<BlockTask>,
         pool: Arc<sqlx::Pool<sqlx::Postgres>>,
     ) {
+        tracing::info!("Starting worker");
         while let Some(block_task) = receiver.recv().await {
             let pool_clone = pool.clone();
             // Here we attempt to insert the block data into the database.
