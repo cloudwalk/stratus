@@ -178,6 +178,7 @@ impl StratusStorage {
 
         // save block to permanent storage and clears temporary storage
         let result = self.perm.save_block(block).await;
+        self.perm.after_commit_hook().await?;
         self.reset_temp().await?;
 
         metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());

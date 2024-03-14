@@ -20,6 +20,6 @@ FROM
     FROM historical_slots
     WHERE block_number >= $2 AND block_number < $3
     OFFSET 1
-    )
+    ) as random_slot_sample
 ORDER BY random()
 LIMIT $4;
