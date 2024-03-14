@@ -721,6 +721,12 @@ CREATE INDEX index_topics_on_block_hash_and_log_idx_and_topic_idx ON public.topi
 
 CREATE UNIQUE INDEX index_transactions_on_hash ON public.transactions USING btree (hash);
 
+--- XXX temporary
+CREATE TABLE public.neo_blocks (
+    block_number numeric PRIMARY KEY,
+    block JSONB NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
+);
 
 --
 -- PostgreSQL database dump complete

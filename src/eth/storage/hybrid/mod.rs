@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
@@ -10,6 +11,10 @@ use metrics::atomics::AtomicU64;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
+use serde_json::Value;
+use sqlx::postgres::PgPoolOptions;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
@@ -37,8 +42,14 @@ use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
+#[derive(Debug)]
+struct BlockTask {
+    block_number: BlockNumber,
+    block_data: Value,
+}
+
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct InMemoryPermanentStorageState {
+pub struct HybridPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount>,
     pub transactions: HashMap<Hash, TransactionMined>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
@@ -47,58 +58,79 @@ pub struct InMemoryPermanentStorageState {
 }
 
 #[derive(Debug)]
-pub struct InMemoryPermanentStorage {
-    state: RwLock<InMemoryPermanentStorageState>,
+pub struct HybridPermanentStorage {
+    state: RwLock<HybridPermanentStorageState>,
     block_number: AtomicU64,
+    task_sender: mpsc::Sender<BlockTask>,
 }
 
-impl InMemoryPermanentStorage {
+impl HybridPermanentStorage {
+    pub async fn new(url: &str) -> anyhow::Result<Self> {
+        tracing::info!("starting hybrid storage");
+
+        let connection_pool = PgPoolOptions::new()
+            .min_connections(300)
+            .max_connections(400)
+            .acquire_timeout(Duration::from_secs(20))
+            .connect(url)
+            .await
+            .map_err(|e| {
+                tracing::error!(reason = ?e, "failed to start postgres client");
+                anyhow::anyhow!("failed to start postgres client")
+            })?;
+
+        let (task_sender, task_receiver) = channel::<BlockTask>(32);
+        let pool = Arc::new(connection_pool.clone());
+        tokio::spawn(async move {
+            // Assuming you define a 'response_sender' if you plan to handle responses
+            let worker_pool = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
+            // Omitting response channel setup for simplicity
+            Self::worker(task_receiver, worker_pool).await;
+        });
+
+        Ok(Self {
+            state: RwLock::new(HybridPermanentStorageState::default()),
+            block_number: Default::default(),
+            task_sender,
+        })
+    }
+
+    async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>) {
+        tracing::info!("Starting worker");
+        while let Some(block_task) = receiver.recv().await {
+            let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
+            // Here we attempt to insert the block data into the database.
+            // Adjust the SQL query according to your table schema.
+            tokio::spawn(async move {
+                let result = sqlx::query!(
+                    "INSERT INTO neo_blocks (block_number, block, created_at) VALUES ($1, $2, NOW())",
+                    block_task.block_number as _,
+                    block_task.block_data
+                )
+                .execute(&*pool_clone)
+                .await;
+
+                // Handle the result of the insert operation.
+                match result {
+                    Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
+                    Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
+                }
+            });
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Lock methods
     // -------------------------------------------------------------------------
 
     /// Locks inner state for reading.
-    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
+    async fn lock_read(&self) -> RwLockReadGuard<'_, HybridPermanentStorageState> {
         self.state.read().await
     }
 
     /// Locks inner state for writing.
-    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
+    async fn lock_write(&self) -> RwLockWriteGuard<'_, HybridPermanentStorageState> {
         self.state.write().await
-    }
-
-    // -------------------------------------------------------------------------
-    // Snapshot methods
-    // -------------------------------------------------------------------------
-
-    /// Dump a snapshot of an execution previous state that can be used in tests.
-    pub async fn dump_snapshot(changes: Vec<ExecutionAccountChanges>) -> InMemoryPermanentStorageState {
-        let mut state = InMemoryPermanentStorageState::default();
-        for change in changes {
-            // save account
-            let mut account = InMemoryPermanentAccount::new_empty(change.address.clone());
-            account.balance = InMemoryHistory::new_at_zero(change.balance.take_original().unwrap_or_default());
-            account.nonce = InMemoryHistory::new_at_zero(change.nonce.take_original().unwrap_or_default());
-            account.bytecode = InMemoryHistory::new_at_zero(change.bytecode.take_original().unwrap_or_default());
-
-            // save slots
-            for (index, slot) in change.slots {
-                let slot = slot.take_original().unwrap_or_default();
-                let slot_history = InMemoryHistory::new_at_zero(slot);
-                account.slots.insert(index, slot_history);
-            }
-
-            state.accounts.insert(change.address, account);
-        }
-        state
-    }
-
-    /// Creates a new InMemoryPermanentStorage from a snapshot dump.
-    pub fn from_snapshot(state: InMemoryPermanentStorageState) -> Self {
-        Self {
-            state: RwLock::new(state),
-            block_number: AtomicU64::new(0),
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -115,7 +147,7 @@ impl InMemoryPermanentStorage {
         state.logs.clear();
     }
 
-    async fn check_conflicts(state: &InMemoryPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
+    async fn check_conflicts(state: &HybridPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for change in account_changes {
@@ -153,19 +185,10 @@ impl InMemoryPermanentStorage {
     }
 }
 
-impl Default for InMemoryPermanentStorage {
-    fn default() -> Self {
-        tracing::info!("starting inmemory storage");
-
-        Self {
-            state: RwLock::new(InMemoryPermanentStorageState::default()),
-            block_number: Default::default(),
-        }
-    }
-}
+impl HybridPermanentStorage {}
 
 #[async_trait]
-impl PermanentStorage for InMemoryPermanentStorage {
+impl PermanentStorage for HybridPermanentStorage {
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -352,6 +375,22 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     async fn after_commit_hook(&self) -> anyhow::Result<()> {
+        let b = self.read_block(&BlockSelection::Latest).await?;
+        if let Some(bb) = b {
+            let s = format!("{} => {}", bb.number(), bb.transactions.len());
+            dbg!(s);
+            let bbb = *bb.number();
+
+            let block_task = BlockTask {
+                block_number: bbb,
+                block_data: serde_json::to_value(bb).unwrap(),
+            };
+
+            // Send the task to be processed by a worker
+            dbg!("sending block task");
+            self.task_sender.send(block_task).await.expect("Failed to send block task");
+        }
+
         Ok(())
     }
 
