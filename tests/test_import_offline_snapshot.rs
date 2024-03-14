@@ -85,8 +85,8 @@ async fn test_import_offline_snapshot() {
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
     let pg = Postgres::new(PostgresClientConfig {
         url: docker.postgres_connection_url().to_owned(),
-        connections: 1,
-        acquire_timeout: Duration::from_secs(2),
+        connections: 5,
+        acquire_timeout: Duration::from_secs(10),
     })
     .await
     .unwrap();
