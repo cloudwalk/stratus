@@ -34,7 +34,7 @@ const BACKLOG_SIZE: usize = 50;
 
 type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
