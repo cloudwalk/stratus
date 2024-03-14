@@ -19,6 +19,7 @@ use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
 use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
 use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
 use stratus::infra::postgres::Postgres;
+use stratus::infra::postgres::PostgresClientConfig;
 use stratus::init_global_services;
 
 const METRIC_QUERIES: [&str; 30] = [
@@ -82,7 +83,13 @@ async fn test_import_offline_snapshot() {
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
-    let pg = Postgres::new(docker.postgres_connection_url(), 10usize, 2usize).await.unwrap();
+    let pg = Postgres::new(PostgresClientConfig {
+        url: docker.postgres_connection_url().to_owned(),
+        connections: 1,
+        acquire_timeout: Duration::from_secs(2),
+    })
+    .await
+    .unwrap();
     populate_postgres(&pg, snapshot).await;
 
     // init executor and execute

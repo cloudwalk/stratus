@@ -33,6 +33,7 @@ use crate::eth::EvmTask;
 #[cfg(feature = "dev")]
 use crate::ext::not;
 use crate::infra::postgres::Postgres;
+use crate::infra::postgres::PostgresClientConfig;
 
 pub trait WithCommonConfig {
     fn common(&self) -> &CommonConfig;
@@ -67,13 +68,12 @@ impl WithCommonConfig for StratusConfig {
 /// Configuration for `rpc-downlaoder` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct RpcDownloaderConfig {
+    #[clap(flatten)]
+    pub pg: PostgresConfig,
+
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
-
-    /// Postgres connection URL.
-    #[arg(long = "postgres", env = "POSTGRES_URL")]
-    pub postgres_url: String,
 
     /// Number of parallel downloads.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
@@ -95,15 +95,14 @@ impl WithCommonConfig for RpcDownloaderConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Config: ImporterImport
+// Config: ImporterOffline
 // -----------------------------------------------------------------------------
 
 /// Configuration for `importer-offline` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct ImporterOfflineConfig {
-    /// Postgres connection URL.
-    #[arg(short = 'd', long = "postgres", env = "POSTGRES_URL")]
-    pub postgres_url: String,
+    #[clap(flatten)]
+    pub pg: PostgresConfig,
 
     /// Number of parallel database fetches.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
@@ -188,17 +187,8 @@ impl WithCommonConfig for StateValidatorConfig {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
-    /// Storage implementation.
-    #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageConfig::InMemory)]
-    pub storage: StorageConfig,
-
-    /// Number of parallel connections to the storage.
-    #[arg(long = "storage_max_connections", env = "STORAGE_MAX_CONNECTIONS", default_value = "100")]
-    pub storage_max_connections: usize,
-
-    /// How many seconds spent waiting for connection to be acquired.
-    #[arg(long = "storage_acquire_timeout", env = "STORAGE_ACQUIRE_TIMEOUT", default_value = "2")]
-    pub storage_acquire_timeout: usize,
+    #[clap(flatten)]
+    pub perm: PermanentStorageConfig,
 
     /// Number of EVM instances to run.
     #[arg(long = "evms", env = "EVMS", default_value = "1")]
@@ -238,7 +228,7 @@ impl WithCommonConfig for CommonConfig {
 impl CommonConfig {
     /// Initializes storage.
     pub async fn init_storage(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let storage = self.storage.init(self).await?;
+        let storage = self.perm.init().await?;
 
         if self.enable_genesis {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
@@ -324,12 +314,50 @@ impl CommonConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Enum: StorageConfig
+// Enum: PostgresConfig
 // -----------------------------------------------------------------------------
+
+#[derive(Parser, Debug)]
+pub struct PostgresConfig {
+    #[arg(long = "postgres", env = "POSTGRES_URL")]
+    /// Postgres connection URL.
+    pub pg_url: String,
+
+    /// Postgres number of open pool connections.
+    #[arg(long = "postgres-connections", env = "POSTGRES_CONNECTIONS", default_value = "5")]
+    pub pg_connections: u32,
+
+    /// Postgres timeout when opening a connection (in millis).
+    #[arg(long = "postgres-timeout", env = "POSTGRES_TIMEOUT", default_value = "2000")]
+    pub pg_timeout_millis: u64,
+}
+
+// -----------------------------------------------------------------------------
+// Enum: PermanentStorageConfig
+// -----------------------------------------------------------------------------
+
+#[derive(Parser, Debug)]
+pub struct PermanentStorageConfig {
+    /// Permamenent storage implementation.
+    #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageKind::InMemory)]
+    pub perm_kind: StorageKind,
+
+    /// Permamenent storage number of open pool connections.
+    #[arg(long = "storage-connections", env = "STORAGE_CONNECTIONS", default_value = "5")]
+    pub perm_connections: u32,
+
+    /// Permamenent storage timeout when opening a connection (in millis).
+    #[arg(long = "storage-timeout", env = "STORAGE_TIMEOUT", default_value = "2000")]
+    pub perm_timeout_millis: u64,
+
+    /// Permanent storage writes are performed to a CSV file.
+    #[arg(long = "storage-proxy-csv", env = "STORAGE_PROXY_CSV", default_value = "false")]
+    pub perm_proxy_csv: bool,
+}
 
 /// Storage configuration.
 #[derive(Clone, Debug, strum::Display)]
-pub enum StorageConfig {
+pub enum StorageKind {
     #[strum(serialize = "inmemory")]
     InMemory,
 
@@ -337,20 +365,27 @@ pub enum StorageConfig {
     Postgres { url: String },
 }
 
-impl StorageConfig {
+impl PermanentStorageConfig {
     /// Initializes the storage implementation.
-    pub async fn init(&self, common_config: &CommonConfig) -> anyhow::Result<Arc<StratusStorage>> {
+    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let temp = Arc::new(InMemoryTemporaryStorage::default());
-
-        let perm: Arc<dyn PermanentStorage> = match self {
-            Self::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-            Self::Postgres { url } => Arc::new(Postgres::new(url, common_config.storage_max_connections, common_config.storage_acquire_timeout).await?),
+        let perm: Arc<dyn PermanentStorage> = match self.perm_kind {
+            StorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
+            StorageKind::Postgres { ref url } => {
+                let config = PostgresClientConfig {
+                    url: url.to_owned(),
+                    connections: self.perm_connections,
+                    acquire_timeout: Duration::from_millis(self.perm_timeout_millis),
+                };
+                Arc::new(Postgres::new(config).await?)
+            }
         };
+
         Ok(Arc::new(StratusStorage::new(temp, perm)))
     }
 }
 
-impl FromStr for StorageConfig {
+impl FromStr for StorageKind {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {

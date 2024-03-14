@@ -2,6 +2,7 @@ mod helpers;
 
 use std::cmp::min;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -15,6 +16,7 @@ use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
 use stratus::ext::not;
 use stratus::infra::postgres::Postgres;
+use stratus::infra::postgres::PostgresClientConfig;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -26,7 +28,14 @@ const BLOCKS_BY_TASK: usize = 1_000;
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: RpcDownloaderConfig = init_global_services();
-    let pg = Arc::new(Postgres::new(&config.postgres_url, 400usize, 20usize).await?);
+    let pg = Arc::new(
+        Postgres::new(PostgresClientConfig {
+            url: config.pg.pg_url.to_string(),
+            connections: config.pg.pg_connections,
+            acquire_timeout: Duration::from_millis(config.pg.pg_timeout_millis),
+        })
+        .await?,
+    );
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc).await?);
 
     // download balances and blocks
