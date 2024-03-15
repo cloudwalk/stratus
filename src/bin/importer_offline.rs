@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.init_stratus_storage().await?;
     let executor = config.init_executor(Arc::clone(&stratus_storage));
-    let mut csv = if_else!(config.export_csv, Some(CsvExporter::default()), None);
+    let mut csv = if_else!(config.export_csv, Some(CsvExporter::new()?), None);
 
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     // import genesis accounts
     let accounts = rpc_storage.read_initial_accounts().await?;
     if let Some(ref mut csv) = csv {
-        csv.export_accounts(accounts.clone()).await?;
+        csv.export_initial_accounts(accounts.clone())?;
     }
     stratus_storage.save_accounts_to_perm(accounts).await?;
 
@@ -97,7 +97,7 @@ async fn execute_block_importer(
             let start = Instant::now();
             let block = executor.import_external_and_commit(block, &mut receipts).await?;
             if let Some(ref mut csv) = csv {
-                csv.export_block(block).await?;
+                csv.export_block(block)?;
             }
             metrics::inc_import_offline(start.elapsed());
         }

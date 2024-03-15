@@ -6,6 +6,7 @@
 //! module includes functionality to handle conversions and representations of
 //! indexes, aligning with Ethereum's blockchain data structure needs.
 
+use std::fmt::Display;
 use std::num::TryFromIntError;
 use std::str::FromStr;
 
@@ -33,6 +34,12 @@ impl Index {
 
     pub fn new(inner: u64) -> Self {
         Index(inner)
+    }
+}
+
+impl Display for Index {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
