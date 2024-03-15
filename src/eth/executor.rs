@@ -10,6 +10,7 @@ use std::thread;
 use std::time::Instant;
 
 use anyhow::anyhow;
+use ethereum_types::U64;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
@@ -20,6 +21,7 @@ use crate::eth::evm::Evm;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionMetrics;
@@ -29,6 +31,7 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -104,6 +107,11 @@ impl EthExecutor {
                         let json_execution_logs = serde_json::to_string(&execution.logs).unwrap();
                         tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
                         return Err(e);
+                    };
+
+                    if block.number() == 292973.into() {
+                        InMemoryPermanentStorage::dump_snapshot(execution.changes.clone()).await;
+                        ()
                     };
 
                     // temporarily save state to next transactions from the same block
