@@ -20,6 +20,13 @@ pub struct PostgresExternalRpcStorage {
     pool: PgPool,
 }
 
+#[derive(Debug)]
+pub struct PostgresExternalRpcStorageConfig {
+    pub url: String,
+    pub connections: u32,
+    pub acquire_timeout: Duration,
+}
+
 impl PostgresExternalRpcStorage {
     /// Creates a new [`PostgresExternalRpcStorage`].
     pub async fn new(config: PostgresExternalRpcStorageConfig) -> anyhow::Result<Self> {
@@ -41,20 +48,13 @@ impl PostgresExternalRpcStorage {
     }
 }
 
-#[derive(Debug)]
-pub struct PostgresExternalRpcStorageConfig {
-    pub url: String,
-    pub connections: u32,
-    pub acquire_timeout: Duration,
-}
-
 #[async_trait]
 impl ExternalRpcStorage for PostgresExternalRpcStorage {
     async fn read_max_block_number_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
         tracing::debug!(%start, %end, "retrieving max external block");
 
         let result = sqlx::query_file_scalar!(
-            "src/eth/storage/postgres_external_rpc_storage/sql/select_max_external_block_in_range.sql",
+            "src/eth/storage/postgres_external_rpc/sql/select_max_external_block_in_range.sql",
             start.as_i64(),
             end.as_i64()
         )
@@ -71,7 +71,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
     async fn read_blocks_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlock>> {
         tracing::debug!(%start, %end, "retrieving external blocks in range");
         let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc_storage/sql/select_external_blocks_in_range.sql",
+            "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_in_range.sql",
             start.as_i64(),
             end.as_i64()
         )
@@ -94,7 +94,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
         tracing::debug!(%start, %end, "retrieving external receipts in range");
 
         let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc_storage/sql/select_external_receipts_in_range.sql",
+            "src/eth/storage/postgres_external_rpc/sql/select_external_receipts_in_range.sql",
             start.as_i64(),
             end.as_i64()
         )
@@ -116,7 +116,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
     async fn read_initial_accounts(&self) -> anyhow::Result<Vec<Account>> {
         tracing::debug!("retrieving external balances");
 
-        let result = sqlx::query_file!("src/eth/storage/postgres_external_rpc_storage/sql/select_external_balances.sql")
+        let result = sqlx::query_file!("src/eth/storage/postgres_external_rpc/sql/select_external_balances.sql")
             .fetch_all(&self.pool)
             .await;
 
@@ -137,7 +137,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
         tracing::debug!(%address, %balance, "saving external balance");
 
         let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc_storage/sql/insert_external_balance.sql",
+            "src/eth/storage/postgres_external_rpc/sql/insert_external_balance.sql",
             address.as_ref(),
             TryInto::<BigDecimal>::try_into(balance)?
         )
@@ -159,13 +159,9 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
         };
 
         // insert block
-        let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc_storage/sql/insert_external_block.sql",
-            number.as_i64(),
-            block
-        )
-        .execute(&mut *tx)
-        .await;
+        let result = sqlx::query_file!("src/eth/storage/postgres_external_rpc/sql/insert_external_block.sql", number.as_i64(), block)
+            .execute(&mut *tx)
+            .await;
 
         match result {
             Ok(_) => {}
@@ -178,7 +174,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
         // insert receipts
         for (hash, receipt) in receipts {
             let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc_storage/sql/insert_external_receipt.sql",
+                "src/eth/storage/postgres_external_rpc/sql/insert_external_receipt.sql",
                 hash.as_ref(),
                 number.as_i64(),
                 receipt

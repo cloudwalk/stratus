@@ -30,6 +30,8 @@ use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
+use crate::eth::storage::PostgresPermanentStorage;
+use crate::eth::storage::PostgresPermanentStorageConfig;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
@@ -37,7 +39,6 @@ use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
 #[cfg(feature = "dev")]
 use crate::ext::not;
-use crate::infra::postgres::Postgres;
 use crate::infra::postgres::PostgresClientConfig;
 
 pub trait WithCommonConfig {
@@ -446,12 +447,12 @@ impl PermanentStorageConfig {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
 
             PermanentStorageKind::Postgres { ref url } => {
-                let config = PostgresClientConfig {
+                let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
                     connections: self.perm_storage_connections,
                     acquire_timeout: Duration::from_millis(self.perm_storage_timeout_millis),
                 };
-                Arc::new(Postgres::new(config).await?)
+                Arc::new(PostgresPermanentStorage::new(config).await?)
             }
 
             PermanentStorageKind::Hybrid { ref url } => {

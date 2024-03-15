@@ -85,7 +85,7 @@ impl Postgres {
     }
 
     async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
-        let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres/queries/select_slot_cache.sql", BigDecimal::from(0))
+        let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres_permanent/sql/select_slot_cache.sql", BigDecimal::from(0))
             .fetch_all(&connection_pool)
             .await?;
         let mut sload_cache = HashMap::new();
