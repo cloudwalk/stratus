@@ -6,8 +6,6 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::TransactionMined;
 
-const NULL: &str = "NULL";
-
 const ACCOUNTS_HEADERS: [&str; 10] = [
     "id",
     "address",
@@ -108,8 +106,8 @@ impl CsvExporter {
                 tx.input.s.to_string(),                                 // s
                 tx.input.value.to_string(),                             // value
                 tx.execution.result.to_string(),                        // result
-                NULL.to_owned(),                                        // created_at
-                NULL.to_owned(),                                        // updated_at
+                now(),                                                  // created_at
+                now(),                                                  // updated_at
             ];
             self.transactions.write_record(row).context("failed to write csv transaction")?;
         }
@@ -128,11 +126,16 @@ impl CsvExporter {
                 "0".to_owned(),                                              // creation_block
                 "0".to_owned(),                                              // previous_balance
                 "0".to_owned(),                                              // previous_nonce
-                NULL.to_owned(),                                             // created_at
-                NULL.to_owned(),                                             // updated_at
+                now(),                                                       // created_at
+                now(),                                                       // updated_at
             ];
             self.accounts.write_record(row).context("failed to write csv transaction")?;
         }
         Ok(())
     }
+}
+
+fn now() -> String {
+    let now = chrono::Utc::now();
+    now.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
 }
