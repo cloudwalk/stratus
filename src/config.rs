@@ -415,6 +415,7 @@ impl FromStr for TemporaryStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            "sled" => Ok(Self::Sled),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
     }
