@@ -17,7 +17,7 @@ impl SledTemporary {
     pub fn new() -> anyhow::Result<Self> {
         tracing::info!("starting sled temporary storage");
 
-        let db = match sled::open("data/sled-temp.db") {
+        let db = match sled::open("data/sled-temp") {
             Ok(db) => db,
             Err(e) => return log_and_err!(reason = e, "failed to open sled database"),
         };
