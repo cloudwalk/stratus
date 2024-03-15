@@ -8,7 +8,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -72,7 +72,7 @@ impl StratusStorage {
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         let start = Instant::now();
 
-        match self.temp.maybe_read_account(address, point_in_time).await? {
+        match self.temp.maybe_read_account(address).await? {
             Some(account) => {
                 tracing::debug!("account found in the temporary storage");
                 metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
@@ -100,7 +100,7 @@ impl StratusStorage {
     pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         let start = Instant::now();
 
-        match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
+        match self.temp.maybe_read_slot(address, slot_index).await? {
             Some(slot) => {
                 tracing::debug!("slot found in the temporary storage");
                 metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
@@ -161,9 +161,9 @@ impl StratusStorage {
     }
 
     /// Temporarily saves account's changes generated during block production.
-    pub async fn save_account_changes_to_temp(&self, execution: Execution) -> anyhow::Result<()> {
+    pub async fn save_account_changes_to_temp(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.temp.save_account_changes(execution).await;
+        let result = self.temp.save_account_changes(changes).await;
         metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
         result
     }

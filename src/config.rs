@@ -33,6 +33,7 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
@@ -395,6 +396,7 @@ pub struct TemporaryStorageConfig {
 #[derive(Clone, Debug)]
 pub enum TemporaryStorageKind {
     InMemory,
+    Sled,
 }
 
 impl TemporaryStorageConfig {
@@ -402,6 +404,7 @@ impl TemporaryStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
+            TemporaryStorageKind::Sled => Ok(Arc::new(SledTemporary::new()?)),
         }
     }
 }
