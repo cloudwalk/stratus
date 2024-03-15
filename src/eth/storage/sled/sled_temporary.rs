@@ -41,10 +41,10 @@ impl TemporaryStorage for SledTemporary {
 
     async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         // try temporary data
-        let number = self.temp.read_active_block_number().await?;
-        if let Some(number) = number {
-            return Ok(Some(number));
-        }
+        // let number = self.temp.read_active_block_number().await?;
+        // if let Some(number) = number {
+        //     return Ok(Some(number));
+        // }
 
         // try durable data
         match self.db.get(block_number_key()) {
