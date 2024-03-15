@@ -136,6 +136,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     async fn reset(&self) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
         state.accounts.clear();
+        state.active_block_number = None;
         Ok(())
     }
 }
