@@ -136,7 +136,7 @@ async fn execute_external_rpc_storage_loader(
     let active = stratus_storage.read_active_block_number().await?;
     let mined = stratus_storage.read_mined_block_number().await?;
 
-    let mut start = active.unwrap_or(mined);
+    let mut start = active.and_then(|b| b.prev()).unwrap_or(mined);
     if not(start.is_zero()) || stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
         start = start.next();
     };
