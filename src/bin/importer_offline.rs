@@ -61,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
         config.paralellism,
         backlog_tx,
     ));
-    execute_block_importer(executor, stratus_storage, csv, cancellation, backlog_rx).await?;
+    execute_block_importer(executor, Arc::clone(&stratus_storage), csv, cancellation, backlog_rx).await?;
 
     Ok(())
 }
@@ -97,12 +97,12 @@ async fn execute_block_importer(
         for block in blocks {
             let start = Instant::now();
 
-            stratus_storage.set_active_block_number(block.number()).await?;
             match csv {
                 // when exporting to csv, only persist temporary changes because permanent will be bulk loaded at the end
                 Some(ref mut csv) => {
                     let block = executor.import_external_to_temp(block, &mut receipts).await?;
                     csv.export_block(block)?;
+                    stratus_storage.flush_account_changes_to_temp().await?;
                 }
                 // when not exporting to csv, persist the entire block to permanent immediatly
                 None => {

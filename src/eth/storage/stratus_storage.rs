@@ -184,6 +184,13 @@ impl StratusStorage {
         result
     }
 
+    pub async fn flush_account_changes_to_temp(&self) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.temp.flush_account_changes().await;
+        metrics::inc_storage_flush_account_changes(start.elapsed(), result.is_ok());
+        result
+    }
+
     /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
     pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let start = Instant::now();

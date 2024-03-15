@@ -22,8 +22,11 @@ pub trait TemporaryStorage: Send + Sync {
     /// Retrieves an slot from the storage. Returns Option when not found.
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
 
-    /// Temporarily stores account changes during block production
+    /// Temporarily stores account changes during block production.
     async fn save_account_changes(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()>;
+
+    /// If necessary, flushes account changes to durable storage. Usually called after all transactions from a block were processed.
+    async fn flush_account_changes(&self) -> anyhow::Result<()>;
 
     /// Resets all state
     async fn reset(&self) -> anyhow::Result<()>;

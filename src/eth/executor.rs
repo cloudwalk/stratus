@@ -91,6 +91,9 @@ impl EthExecutor {
         let mut block_metrics = ExecutionMetrics::default();
         tracing::info!(number = %block.number(), "importing external block");
 
+        // track active block number
+        self.storage.set_active_block_number(block.number()).await?;
+
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {

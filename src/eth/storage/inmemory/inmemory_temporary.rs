@@ -133,6 +133,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
+    async fn flush_account_changes(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     async fn reset(&self) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
         state.accounts.clear();
