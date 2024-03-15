@@ -26,7 +26,7 @@ pub trait PermanentStorage: Send + Sync {
 
     /// Atomically increments the block number, returning the new value.
     ///
-    /// TODO: this will probably be removed because set_ and read_ may be enough.
+    /// TODO: this can probably be removed because set_mined_block_number and set_active_block_number may be enough.
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
