@@ -1,4 +1,3 @@
-
 SELECT
     address as "address: _",
     latest_nonce as "nonce: _",
