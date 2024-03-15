@@ -331,7 +331,7 @@ impl CommonConfig {
 #[derive(Parser, Debug)]
 pub struct ExternalRpcStorageConfig {
     /// External RPC storage implementation.
-    #[arg(long = "external-rpc-storage-kind", env = "EXTERNAL_RPC_STORAGE")]
+    #[arg(long = "external-rpc-storage", env = "EXTERNAL_RPC_STORAGE")]
     pub external_rpc_storage_kind: ExternalRpcStorageKind,
 
     /// External RPC storage number of parallel open connections.
