@@ -6,7 +6,7 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::TransactionMined;
 
-const ACCOUNTS_HEADERS: [&str; 8] = [
+const ACCOUNTS_HEADERS: [&str; 10] = [
     "id",
     "address",
     "bytecode",
@@ -15,9 +15,11 @@ const ACCOUNTS_HEADERS: [&str; 8] = [
     "creation_block",
     "previous_balance",
     "previous_nonce",
+    "created_at",
+    "updated_at",
 ];
 
-const TRANSACTION_HEADERS: [&str; 18] = [
+const TRANSACTION_HEADERS: [&str; 20] = [
     "id",
     "hash",
     "signer_address",
@@ -36,6 +38,8 @@ const TRANSACTION_HEADERS: [&str; 18] = [
     "s",
     "value",
     "result",
+    "created_at",
+    "updated_at",
 ];
 
 /// Export primitives to CSV files.
@@ -102,6 +106,8 @@ impl CsvExporter {
                 tx.input.s.to_string(),                                 // s
                 tx.input.value.to_string(),                             // value
                 tx.execution.result.to_string(),                        // result
+                "".to_owned(),                                          // created_at
+                "".to_owned(),                                          // updated_at
             ];
             self.transactions.write_record(row).context("failed to write csv transaction")?;
         }
@@ -120,6 +126,8 @@ impl CsvExporter {
                 "0".to_owned(),                                              // creation_block
                 "0".to_owned(),                                              // previous_balance
                 "0".to_owned(),                                              // previous_nonce
+                "".to_owned(),                                               // created_at
+                "".to_owned(),                                               // updated_at
             ];
             self.accounts.write_record(row).context("failed to write csv transaction")?;
         }
