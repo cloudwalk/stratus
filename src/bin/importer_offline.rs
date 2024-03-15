@@ -101,8 +101,11 @@ async fn execute_block_importer(
                 // when exporting to csv, only persist temporary changes because permanent will be bulk loaded at the end
                 Some(ref mut csv) => {
                     let block = executor.import_external_to_temp(block, &mut receipts).await?;
+                    let number = *block.number();
                     csv.export_block(block)?;
-                    stratus_storage.flush_account_changes_to_temp().await?;
+                    if number.as_u64() % 500 == 0 {
+                        stratus_storage.flush_account_changes_to_temp().await?;
+                    }
                 }
                 // when not exporting to csv, persist the entire block to permanent immediatly
                 None => {
