@@ -16,6 +16,7 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
+use stratus::if_else;
 use stratus::infra::metrics;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -36,10 +37,10 @@ type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
-    let csv = CsvExporter::default();
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.init_stratus_storage().await?;
     let executor = config.init_executor(Arc::clone(&stratus_storage));
+    let mut csv = if_else!(config.export_csv, Some(CsvExporter::default()), None);
 
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
@@ -47,8 +48,10 @@ async fn main() -> anyhow::Result<()> {
 
     // import genesis accounts
     let accounts = rpc_storage.read_initial_accounts().await?;
+    if let Some(ref mut csv) = csv {
+        csv.export_accounts(accounts.clone()).await?;
+    }
     stratus_storage.save_accounts_to_perm(accounts).await?;
-    // csv.export_accounts(accounts).await?;
 
     // execute parallel tasks (external rpc storage loader and block importer)
     tokio::spawn(execute_external_rpc_storage_loader(
@@ -69,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
 async fn execute_block_importer(
     // services
     executor: EthExecutor,
-    mut _csv: CsvExporter,
+    mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
@@ -92,11 +95,10 @@ async fn execute_block_importer(
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for block in blocks {
             let start = Instant::now();
-
-            executor.import_external_and_commit(block, &mut receipts).await?;
-            // let block = executor.import_external_and_commit(block.payload, &mut receipts).await?;
-            // csv.export_block(block).await?;
-
+            let block = executor.import_external_and_commit(block, &mut receipts).await?;
+            if let Some(ref mut csv) = csv {
+                csv.export_block(block).await?;
+            }
             metrics::inc_import_offline(start.elapsed());
         }
     };

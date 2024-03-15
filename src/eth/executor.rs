@@ -70,19 +70,11 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Imports an external block by re-executing all transactions.
-    pub async fn import_external_and_commit(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<()> {
+    pub async fn import_external_and_commit(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         // import block
         let block = self.import_external(block, receipts).await?;
 
-        // commit block
-        self.storage.set_block_number(*block.number()).await?;
-        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
-            let json_block = serde_json::to_string(&block).unwrap();
-            tracing::error!(reason = ?e, %json_block);
-            return Err(e.into());
-        };
-
-        Ok(())
+        Ok(block)
     }
 
     /// Imports an external block by re-executing all transactions.
@@ -133,7 +125,17 @@ impl EthExecutor {
                 }
             }
         }
+
+        // convert block
         let block = Block::from_external(block, executions)?;
+
+        // commit block
+        self.storage.set_block_number(*block.number()).await?;
+        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
+            let json_block = serde_json::to_string(&block).unwrap();
+            tracing::error!(reason = ?e, %json_block);
+            return Err(e.into());
+        };
 
         // track metrics
         metrics::inc_executor_external_block(start.elapsed());
