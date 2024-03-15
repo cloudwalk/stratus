@@ -6,7 +6,8 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::TransactionMined;
 
-const ACCOUNTS_HEADERS: [&str; 7] = [
+const ACCOUNTS_HEADERS: [&str; 8] = [
+    "id",
     "address",
     "bytecode",
     "latest_balance",
@@ -16,7 +17,8 @@ const ACCOUNTS_HEADERS: [&str; 7] = [
     "previous_nonce",
 ];
 
-const TRANSACTION_HEADERS: [&str; 17] = [
+const TRANSACTION_HEADERS: [&str; 18] = [
+    "id",
     "hash",
     "signer_address",
     "nonce",
@@ -39,7 +41,10 @@ const TRANSACTION_HEADERS: [&str; 17] = [
 /// Export primitives to CSV files.
 pub struct CsvExporter {
     accounts: csv::Writer<File>,
+    accounts_id: usize,
+
     transactions: csv::Writer<File>,
+    transactions_id: usize,
 }
 
 impl CsvExporter {
@@ -47,8 +52,10 @@ impl CsvExporter {
     pub fn new() -> anyhow::Result<Self> {
         let exporter = Self {
             accounts: csv_writer("data/accounts.csv", &ACCOUNTS_HEADERS)?,
+            accounts_id: 0,
 
             transactions: csv_writer("data/transactions.csv", &TRANSACTION_HEADERS)?,
+            transactions_id: 0,
         };
         Ok(exporter)
     }
@@ -69,13 +76,43 @@ fn csv_writer(path: &'static str, headers: &[&'static str]) -> anyhow::Result<cs
 
 impl CsvExporter {
     pub fn export_block(&mut self, block: Block) -> anyhow::Result<()> {
-        export_transactions(&mut self.transactions, block.transactions)?;
+        self.export_transactions(block.transactions)?;
+        Ok(())
+    }
+
+    fn export_transactions(&mut self, transactions: Vec<TransactionMined>) -> anyhow::Result<()> {
+        for tx in transactions {
+            self.transactions_id += 1;
+            let row = [
+                self.transactions_id.to_string(),                       // id
+                tx.input.hash.to_string(),                              // hash
+                tx.input.from.to_string(),                              // signer_address
+                tx.input.nonce.to_string(),                             // nonce
+                tx.input.from.to_string(),                              // address_from
+                tx.input.to.map(|x| x.to_string()).unwrap_or_default(), // address_to
+                tx.input.input.to_string(),                             // input
+                tx.execution.output.to_string(),                        // output
+                tx.input.gas_limit.to_string(),                         // gas
+                tx.input.gas_price.to_string(),                         // gas_price
+                tx.transaction_index.to_string(),                       // idx_in_block
+                tx.block_number.to_string(),                            // block_number
+                tx.block_hash.to_string(),                              // block_hash
+                tx.input.v.to_string(),                                 // v
+                tx.input.r.to_string(),                                 // r
+                tx.input.s.to_string(),                                 // s
+                tx.input.value.to_string(),                             // value
+                tx.execution.result.to_string(),                        // result
+            ];
+            self.transactions.write_record(row).context("failed to write csv transaction")?;
+        }
         Ok(())
     }
 
     pub fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
         for account in accounts {
+            self.accounts_id += 1;
             let row = [
+                self.accounts_id.to_string(),                                // id
                 account.address.to_string(),                                 // address
                 account.bytecode.map(|x| x.to_string()).unwrap_or_default(), // bytecode
                 account.balance.to_string(),                                 // latest_balance
@@ -88,31 +125,4 @@ impl CsvExporter {
         }
         Ok(())
     }
-}
-
-fn export_transactions(writer: &mut csv::Writer<File>, transactions: Vec<TransactionMined>) -> anyhow::Result<()> {
-    for tx in transactions {
-        let row = [
-            tx.input.hash.to_string(),                              // hash
-            tx.input.from.to_string(),                              // signer_address
-            tx.input.nonce.to_string(),                             // nonce
-            tx.input.from.to_string(),                              // address_from
-            tx.input.to.map(|x| x.to_string()).unwrap_or_default(), // address_to
-            tx.input.input.to_string(),                             // input
-            tx.execution.output.to_string(),                        // output
-            tx.input.gas_limit.to_string(),                         // gas
-            tx.input.gas_price.to_string(),                         // gas_price
-            tx.transaction_index.to_string(),                       // idx_in_block
-            tx.block_number.to_string(),                            // block_number
-            tx.block_hash.to_string(),                              // block_hash
-            tx.input.v.to_string(),                                 // v
-            tx.input.r.to_string(),                                 // r
-            tx.input.s.to_string(),                                 // s
-            tx.input.value.to_string(),                             // value
-            tx.execution.result.to_string(),                        // result
-        ];
-
-        writer.write_record(row).context("failed to write csv transaction")?;
-    }
-    Ok(())
 }
