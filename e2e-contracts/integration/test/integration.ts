@@ -1,6 +1,6 @@
 import { ethers, upgrades } from "hardhat";
 import { expect } from "chai";
-import { ContractFactory, toBigInt } from "ethers";
+import { ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, IERC20Hookable, PixCashier, YieldStreamer } from "../typechain-types";
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./helpers/recompile";
@@ -87,10 +87,10 @@ async function deployBalanceTracker() {
 
 async function configureBalanceTracker() {
   const REVERT_POLICY = BigInt(1);
-  const toHookStruct = (hook : IERC20Hookable.HookStructOutput) => ({account: hook.account, policy: hook.policy});
+  const toHookStruct = (hook: IERC20Hookable.HookStructOutput) => ({ account: hook.account, policy: hook.policy });
   const hooksOutput = await brlcToken.getAfterTokenTransferHooks();
   const hooks: IERC20Hookable.HookStruct[] = hooksOutput.map(toHookStruct);
-  const newHook = {account: await balanceTracker.getAddress(), policy: REVERT_POLICY};
+  const newHook = { account: await balanceTracker.getAddress(), policy: REVERT_POLICY };
   hooks.push(newHook);
 }
 
