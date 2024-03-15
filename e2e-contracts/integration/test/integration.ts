@@ -6,7 +6,7 @@ import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, I
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./helpers/recompile";
 
 /* Contracts instances */
-let brlCoin: BRLCToken;
+let brlcToken: BRLCToken;
 let pixCashier: PixCashier;
 let cashbackDistributor: CashbackDistributor;
 let cardPaymentProcessor: CardPaymentProcessor;
@@ -20,23 +20,23 @@ async function deployBRLC() {
   let brlcFactory: ContractFactory = await ethers.getContractFactory("BRLCToken");
   let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
   await deployedProxy.waitForDeployment();
-  brlCoin = deployedProxy.connect(deployer) as BRLCToken;
+  brlcToken = deployedProxy.connect(deployer) as BRLCToken;
 }
 
 async function configureBRLC() {
-  brlCoin.updateMainMinter(await deployer.getAddress());
-  brlCoin.configureMinter(await deployer.getAddress(), 1000000000);
+  brlcToken.updateMainMinter(await deployer.getAddress());
+  brlcToken.configureMinter(await deployer.getAddress(), 1000000000);
 }
 
 async function deployPixCashier() {
   let pixFactory: ContractFactory = await ethers.getContractFactory("PixCashier");
-  let deployedProxy = await upgrades.deployProxy(pixFactory.connect(deployer), [await brlCoin.getAddress()]);
+  let deployedProxy = await upgrades.deployProxy(pixFactory.connect(deployer), [await brlcToken.getAddress()]);
   await deployedProxy.waitForDeployment();
   pixCashier = deployedProxy.connect(deployer) as PixCashier;
 }
 
 async function configurePixCashier() {
-  brlCoin.connect(deployer).configureMinter(await pixCashier.getAddress(), 1000000000);
+  brlcToken.connect(deployer).configureMinter(await pixCashier.getAddress(), 1000000000);
   pixCashier.grantRole(await pixCashier.CASHIER_ROLE(), await deployer.getAddress());
 }
 
@@ -54,7 +54,7 @@ async function configureCashbackDistributor() {
 
 async function deployCardPaymentProcessor() {
   let cardPaymentProcessorFactory: ContractFactory = await ethers.getContractFactory("CardPaymentProcessor");
-  let deployedProxy = await upgrades.deployProxy(cardPaymentProcessorFactory.connect(deployer), [await brlCoin.getAddress()]);
+  let deployedProxy = await upgrades.deployProxy(cardPaymentProcessorFactory.connect(deployer), [await brlcToken.getAddress()]);
   await deployedProxy.waitForDeployment();
   cardPaymentProcessor = deployedProxy.connect(deployer) as CardPaymentProcessor;
 }
@@ -66,7 +66,7 @@ async function configureCardPaymentProcessor() {
   cardPaymentProcessor.setRevocationLimit(255);
   cardPaymentProcessor.setCashbackRate(1.5 * rateFactor);
   cardPaymentProcessor.setCashOutAccount(await deployer.getAddress());
-  brlCoin.approve(await cardPaymentProcessor.getAddress(), 0xfffffffffffff);
+  brlcToken.approve(await cardPaymentProcessor.getAddress(), 0xfffffffffffff);
   cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await cardPaymentProcessor.getAddress());
   cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress());
   cardPaymentProcessor.enableCashback();
@@ -74,8 +74,8 @@ async function configureCardPaymentProcessor() {
 
 async function deployBalanceTracker() {
   const tokenAddressInSource = readTokenAddressFromSource();
-  if (tokenAddressInSource !== await brlCoin.getAddress()) {
-    replaceTokenAddress(tokenAddressInSource, await brlCoin.getAddress());
+  if (tokenAddressInSource !== await brlcToken.getAddress()) {
+    replaceTokenAddress(tokenAddressInSource, await brlcToken.getAddress());
     recompile();
   }
 
@@ -88,7 +88,7 @@ async function deployBalanceTracker() {
 async function configureBalanceTracker() {
   const REVERT_POLICY = BigInt(1);
   const toHookStruct = (hook : IERC20Hookable.HookStructOutput) => ({account: hook.account, policy: hook.policy});
-  const hooksOutput = await brlCoin.getAfterTokenTransferHooks();
+  const hooksOutput = await brlcToken.getAfterTokenTransferHooks();
   const hooks: IERC20Hookable.HookStruct[] = hooksOutput.map(toHookStruct);
   const newHook = {account: await balanceTracker.getAddress(), policy: REVERT_POLICY};
   hooks.push(newHook);
@@ -145,12 +145,12 @@ describe("Integration Test", function () {
 
     it("Deploy BalanceTracker", async function () {
       await deployBalanceTracker();
-      expect(await balanceTracker.TOKEN()).to.equal(await brlCoin.getAddress());
+      expect(await balanceTracker.TOKEN()).to.equal(await brlcToken.getAddress());
     });
 
     it("Configure BalanceTracker", async function () {
       await configureBalanceTracker();
-      console.log(await brlCoin.getAfterTokenTransferHooks());
+      console.log(await brlcToken.getAfterTokenTransferHooks());
     });
 
     it("Deploy YieldStreamer", async function () {
@@ -167,7 +167,7 @@ describe("Integration Test", function () {
     let bob = ethers.Wallet.createRandom();
 
     it("Mint BRLC to Alice", async function () {
-      await brlCoin.connect(deployer).mint(alice.address, 900);
+      await brlcToken.connect(deployer).mint(alice.address, 900);
     });
 
     it("Cash in BRLC to Alice", async function () {
@@ -175,11 +175,11 @@ describe("Integration Test", function () {
     });
 
     it("Alice transfers BRLC to Bob", async function () {
-      await brlCoin.connect(alice).transfer(bob.address, 50, { gasPrice: 0 });
+      await brlcToken.connect(alice).transfer(bob.address, 50, { gasPrice: 0 });
     });
 
     it("Alice approves PixCashier to spend BRLC", async function () {
-      await brlCoin.connect(alice).approve(await pixCashier.getAddress(), 0xfffffffffffff, { gasPrice: 0 });
+      await brlcToken.connect(alice).approve(await pixCashier.getAddress(), 0xfffffffffffff, { gasPrice: 0 });
     });
 
     it("Request Pix cash out for Alice", async function () {
@@ -191,10 +191,10 @@ describe("Integration Test", function () {
     });
 
     it("Final state is correct", async function () {
-      expect(await brlCoin.balanceOf(alice.address)).to.equal(925);
-      expect(await brlCoin.allowance(alice.address, await pixCashier.getAddress())).to.equal(0xfffffffffffff - 25);
-      expect(await brlCoin.balanceOf(bob.address)).to.equal(50);
-      expect(await brlCoin.balanceOf(await pixCashier.getAddress())).to.equal(0);
+      expect(await brlcToken.balanceOf(alice.address)).to.equal(925);
+      expect(await brlcToken.allowance(alice.address, await pixCashier.getAddress())).to.equal(0xfffffffffffff - 25);
+      expect(await brlcToken.balanceOf(bob.address)).to.equal(50);
+      expect(await brlcToken.balanceOf(await pixCashier.getAddress())).to.equal(0);
     });
   });
 });
