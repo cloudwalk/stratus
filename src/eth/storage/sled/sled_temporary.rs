@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use sled::Db;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -7,22 +6,28 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
 pub struct SledTemporary {
-    db: Db,
+    temp: InMemoryTemporaryStorage,
+    db: sled::Db,
 }
 
 impl SledTemporary {
     pub fn new() -> anyhow::Result<Self> {
         tracing::info!("starting sled temporary storage");
 
-        let db = match sled::open("data/sled-temp.db") {
+        let options = sled::Config::new().mode(sled::Mode::HighThroughput).path("data/sled-temp.db");
+        let db = match options.open() {
             Ok(db) => db,
             Err(e) => return log_and_err!(reason = e, "failed to open sled database"),
         };
-        Ok(Self { db })
+        Ok(Self {
+            temp: InMemoryTemporaryStorage::default(),
+            db,
+        })
     }
 }
 
@@ -47,6 +52,13 @@ impl TemporaryStorage for SledTemporary {
     async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
+        // try temporary data
+        let account = self.temp.maybe_read_account(address).await?;
+        if let Some(account) = account {
+            return Ok(Some(account));
+        }
+
+        // try durable data
         match self.db.get(account_key(address)) {
             Ok(Some(account)) => {
                 let account = serde_json::from_slice(&account).unwrap();
@@ -60,6 +72,13 @@ impl TemporaryStorage for SledTemporary {
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, "reading slot");
 
+        // try temporary data
+        let slot = self.temp.maybe_read_slot(address, slot_index).await?;
+        if let Some(slot) = slot {
+            return Ok(Some(slot));
+        }
+
+        // try durable data
         match self.db.get(slot_key(address, slot_index)) {
             Ok(Some(slot)) => {
                 let slot = serde_json::from_slice(&slot).unwrap();
@@ -71,48 +90,39 @@ impl TemporaryStorage for SledTemporary {
     }
 
     async fn save_account_changes(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
-        let mut batch = sled::Batch::default();
-        for change in changes {
-            let mut account = self
-                .maybe_read_account(&change.address)
-                .await?
-                .unwrap_or_else(|| Account::new_empty(change.address.clone()));
-
-            // account basic info
-            if let Some(nonce) = change.nonce.take() {
-                account.nonce = nonce;
-            }
-            if let Some(balance) = change.balance.take() {
-                account.balance = balance;
-            }
-            if let Some(Some(bytecode)) = change.bytecode.take() {
-                account.bytecode = Some(bytecode);
-            }
-            let account_key = account_key(&change.address).as_bytes().to_vec();
-            let account_value = serde_json::to_string(&account).unwrap().as_bytes().to_vec();
-            batch.insert(account_key, account_value);
-
-            // slots
-            for (_, slot) in change.slots {
-                if let Some(slot) = slot.take() {
-                    let slot_key = slot_key(&change.address, &slot.index).as_bytes().to_vec();
-                    let slot_value = serde_json::to_string(&slot).unwrap().as_bytes().to_vec();
-                    batch.insert(slot_key, slot_value);
-                }
-            }
-        }
-
-        // execute batch
-        if let Err(e) = self.db.apply_batch(batch) {
-            return log_and_err!(reason = e, "failed to apply sled batch");
-        }
+        self.temp.save_account_changes(changes).await?;
         Ok(())
     }
 
     async fn flush_account_changes(&self) -> anyhow::Result<()> {
+        let mut temp = self.temp.lock_write().await;
+
+        let mut batch = sled::Batch::default();
+        for account in temp.accounts.values() {
+            // write account
+            let account_key = account_key(&account.info.address).as_bytes().to_vec();
+            let account_value = serde_json::to_string(&account.info).unwrap().as_bytes().to_vec();
+            batch.insert(account_key, account_value);
+
+            // write slots
+            for slot in account.slots.values() {
+                let slot_key = slot_key(&account.info.address, &slot.index).as_bytes().to_vec();
+                let slot_value = serde_json::to_string(&slot).unwrap().as_bytes().to_vec();
+                batch.insert(slot_key, slot_value);
+            }
+        }
+
+        // execute batch and flush
+        if let Err(e) = self.db.apply_batch(batch) {
+            return log_and_err!(reason = e, "failed to apply sled batch");
+        }
         if let Err(e) = self.db.flush() {
             return log_and_err!(reason = e, "failed to flush sled data");
         }
+
+        // reset temporary storage state
+        temp.reset();
+
         Ok(())
     }
 
@@ -121,6 +131,10 @@ impl TemporaryStorage for SledTemporary {
         Ok(())
     }
 }
+
+// -----------------------------------------------------------------------------
+// Keys
+// -----------------------------------------------------------------------------
 
 fn account_key(address: &Address) -> String {
     format!("address::{}", address)
