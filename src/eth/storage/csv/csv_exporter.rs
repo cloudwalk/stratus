@@ -5,7 +5,6 @@ use anyhow::Context;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
-use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
 
@@ -52,22 +51,6 @@ const BLOCKS_HEADERS: [&str; 19] = [
     "total_difficulty",
     "nonce",
     "created_at",
-];
-
-const EXTERNAL_BALANCES_HEADERS: [&str; 2] = [
-    "address",
-    "balance",
-];
-
-const EXTERNAL_BLOCKS_HEADERS: [&str; 2] = [
-    "number",
-    "payload",
-];
-
-const EXTERNAL_RECEPITS_HEADERS: [&str; 3] = [
-    "hash",
-    "block_number",
-    "payload",
 ];
 
 const HISTORICAL_BALANCES_HEADERS: [&str; 3] = [
@@ -143,15 +126,6 @@ pub struct CsvExporter {
     blocks: csv::Writer<File>,
     blocks_id: usize,
 
-    external_balances: csv::Writer<File>,
-    external_balances_id: usize,
-
-    external_blocks: csv::Writer<File>,
-    external_blocks_id: usize,
-
-    external_receipts: csv::Writer<File>,
-    external_receipts_id: usize,
-
     historical_balances: csv::Writer<File>,
     historical_balances_id: usize,
 
@@ -183,15 +157,6 @@ impl CsvExporter {
 
             blocks: csv_writer("data/blocks.csv", &BLOCKS_HEADERS)?,
             blocks_id: 0,
-
-            external_balances: csv_writer("data/external_balances.csv", &EXTERNAL_BALANCES_HEADERS)?,
-            external_balances_id: 0,
-
-            external_blocks: csv_writer("data/external_blocks.csv", &EXTERNAL_BLOCKS_HEADERS)?,
-            external_blocks_id: 0,
-
-            external_receipts: csv_writer("data/external_receipts.csv", &EXTERNAL_RECEPITS_HEADERS)?,
-            external_receipts_id: 0,
 
             historical_balances: csv_writer("data/historical_balances.csv", &HISTORICAL_BALANCES_HEADERS)?,
             historical_balances_id: 0,
@@ -326,43 +291,6 @@ impl CsvExporter {
                 now(),                              // created_at
             ];
             self.blocks.write_record(row).context("failed to write csv blocks")?;
-        }
-        Ok(())
-    }
-
-    pub fn export_external_balances(&mut self, balances: Vec<(String, String)>) -> anyhow::Result<()> {
-        self.external_balances_id += 1;
-        for (address, balance) in balances {
-            let row = [
-                address, // address
-                balance, // balance
-            ];
-            self.external_balances.write_record(row).context("failed to write csv external balances")?;
-        }
-        Ok(())
-    }
-
-    pub fn export_external_blocks(&mut self, external_blocks: Vec<(String, String)>) -> anyhow::Result<()> {
-        self.external_blocks_id += 1;
-        for (number, payload) in external_blocks {
-            let row = [
-                number,       // number 
-                payload,      // payload
-            ];
-            self.external_blocks.write_record(row).context("failed to write csv external blocks")?;
-        }
-        Ok(())
-    }
-
-    pub fn export_external_receipts(&mut self, receipts: Vec<ExternalReceipt>) -> anyhow::Result<()> {
-        self.external_receipts_id += 1;
-        for receipt in receipts {
-            let row = [
-                receipt.hash().to_string(),         // hash
-                receipt.block_number().to_string(), // block_number
-                receipt.block_hash().to_string(),   // payload
-            ];
-            self.external_receipts.write_record(row).context("failed to write csv external receipts")?;
         }
         Ok(())
     }
