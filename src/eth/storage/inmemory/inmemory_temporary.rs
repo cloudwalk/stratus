@@ -14,7 +14,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::TemporaryStorage;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
     state: RwLock<InMemoryTemporaryStorageState>,
 }
@@ -22,6 +22,13 @@ pub struct InMemoryTemporaryStorage {
 #[derive(Debug, Default)]
 struct InMemoryTemporaryStorageState {
     accounts: HashMap<Address, InMemoryTemporaryAccount>,
+}
+
+impl Default for InMemoryTemporaryStorage {
+    fn default() -> Self {
+        tracing::info!("starting inmemory temporary storage");
+        Self { state: Default::default() }
+    }
 }
 
 impl InMemoryTemporaryStorage {

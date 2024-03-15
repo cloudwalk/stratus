@@ -155,8 +155,7 @@ impl InMemoryPermanentStorage {
 
 impl Default for InMemoryPermanentStorage {
     fn default() -> Self {
-        tracing::info!("starting inmemory storage");
-
+        tracing::info!("starting inmemory permanent storage");
         Self {
             state: RwLock::new(InMemoryPermanentStorageState::default()),
             block_number: Default::default(),
