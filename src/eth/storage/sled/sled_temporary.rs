@@ -18,7 +18,7 @@ impl SledTemporary {
     pub fn new() -> anyhow::Result<Self> {
         tracing::info!("starting sled temporary storage");
 
-        let db = match sled::open("data/sled-temp") {
+        let db = match sled::open("data/sled-temp.db") {
             Ok(db) => db,
             Err(e) => return log_and_err!(reason = e, "failed to open sled database"),
         };
@@ -33,13 +33,13 @@ impl TemporaryStorage for SledTemporary {
         Ok(())
     }
 
-    async fn read_active_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         match self.db.get(block_number_key()) {
             Ok(Some(number)) => {
                 let number = u64::from_be_bytes(number.as_ref().try_into().unwrap());
-                Ok(number.into())
+                Ok(Some(number.into()))
             }
-            Ok(None) => Ok(BlockNumber::ZERO),
+            Ok(None) => Ok(None),
             Err(e) => log_and_err!(reason = e, "failed to read block number from sled"),
         }
     }

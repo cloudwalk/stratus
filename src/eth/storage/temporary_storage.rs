@@ -14,7 +14,7 @@ pub trait TemporaryStorage: Send + Sync {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
     // Retrieves the block number being mined.
-    async fn read_active_block_number(&self) -> anyhow::Result<BlockNumber>;
+    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;

@@ -40,11 +40,19 @@ impl StratusStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
+    // Retrieves the active block number.
+    pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+        let start = Instant::now();
+        let result = self.temp.read_active_block_number().await;
+        metrics::inc_storage_read_active_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
     // Retrieves the last mined block number.
-    pub async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    pub async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         let start = Instant::now();
         let result = self.perm.read_mined_block_number().await;
-        metrics::inc_storage_read_current_block_number(start.elapsed(), result.is_ok());
+        metrics::inc_storage_read_mined_block_number(start.elapsed(), result.is_ok());
         result
     }
 

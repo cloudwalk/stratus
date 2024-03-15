@@ -3,8 +3,9 @@
 .tool-versions
 
 # Data
-data/*.json
+data/*.csv
 data/*.db
+data/*.json
 
 # E2E (Stratus)
 e2e/artifacts
@@ -26,4 +27,3 @@ package-lock.json
 /target
 vendor
 stratus.log
-

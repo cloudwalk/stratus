@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let executor = config.init_executor(Arc::clone(&storage));
 
     // start from last imported block
-    let mut number = storage.read_current_block_number().await?;
+    let mut number = storage.read_mined_block_number().await?;
 
     // keep importing forever
     loop {

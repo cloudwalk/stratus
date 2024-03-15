@@ -77,8 +77,11 @@ metrics! {
 metrics! {
     group: storage_read,
 
-    "Time to execute storage read_current_block_number operation."
-    histogram_duration storage_read_current_block_number{success} [],
+    "Time to execute storage read_active_block_number operation."
+    histogram_duration storage_read_active_block_number{success} [],
+
+    "Time to execute storage read_mined_block_number operation."
+    histogram_duration storage_read_mined_block_number{success} [],
 
     "Time to execute storage read_account operation."
     histogram_duration storage_read_account{found_at, point_in_time, success} [],

@@ -56,12 +56,12 @@ async fn main() -> anyhow::Result<()> {
     // execute parallel tasks (external rpc storage loader and block importer)
     tokio::spawn(execute_external_rpc_storage_loader(
         rpc_storage,
-        stratus_storage,
+        Arc::clone(&stratus_storage),
         cancellation.clone(),
         config.paralellism,
         backlog_tx,
     ));
-    execute_block_importer(executor, csv, cancellation, backlog_rx).await?;
+    execute_block_importer(executor, stratus_storage, csv, cancellation, backlog_rx).await?;
 
     Ok(())
 }
@@ -72,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
 async fn execute_block_importer(
     // services
     executor: EthExecutor,
+    stratus_storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
     // data
@@ -95,6 +96,8 @@ async fn execute_block_importer(
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for block in blocks {
             let start = Instant::now();
+
+            stratus_storage.set_active_block_number(block.number()).await?;
             match csv {
                 // when exporting to csv, only persist temporary changes because permanent will be bulk loaded at the end
                 Some(ref mut csv) => {
@@ -130,7 +133,10 @@ async fn execute_external_rpc_storage_loader(
     tracing::info!("external rpc storage loader starting");
 
     // find block limits to load
-    let mut start = stratus_storage.read_current_block_number().await?;
+    let active = stratus_storage.read_active_block_number().await?;
+    let mined = stratus_storage.read_mined_block_number().await?;
+
+    let mut start = active.unwrap_or(mined);
     if not(start.is_zero()) || stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
         start = start.next();
     };

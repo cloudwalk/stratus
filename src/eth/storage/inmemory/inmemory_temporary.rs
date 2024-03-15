@@ -23,7 +23,7 @@ pub struct InMemoryTemporaryStorage {
 #[derive(Debug, Default)]
 struct InMemoryTemporaryStorageState {
     accounts: HashMap<Address, InMemoryTemporaryAccount>,
-    active_block_number: BlockNumber,
+    active_block_number: Option<BlockNumber>,
 }
 
 impl Default for InMemoryTemporaryStorage {
@@ -49,11 +49,11 @@ impl InMemoryTemporaryStorage {
 impl TemporaryStorage for InMemoryTemporaryStorage {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
-        state.active_block_number = number;
+        state.active_block_number = Some(number);
         Ok(())
     }
 
-    async fn read_active_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         let state = self.lock_read().await;
         Ok(state.active_block_number)
     }
