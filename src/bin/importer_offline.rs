@@ -212,7 +212,8 @@ async fn block_number_to_resume(stratus_storage: &StratusStorage) -> anyhow::Res
     // if mined is zero, we need to check if we have the zero block or not to decide if we start from zero or the next.
     // if mined is not zero, then can assume it is the next number after it.
     let mut mined_number = stratus_storage.read_mined_block_number().await?;
-    if not(mined_number.is_zero()) || stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
+    let zero_block = stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+    if not(mined_number.is_zero()) || zero_block.is_some() {
         mined_number = mined_number.next();
     }
     Ok(mined_number)
