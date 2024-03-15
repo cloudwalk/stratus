@@ -36,7 +36,7 @@ impl SledTemporary {
 #[async_trait]
 impl TemporaryStorage for SledTemporary {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        self.db.insert(block_number_key(), number.as_u64().to_be_bytes().to_vec())?;
+        self.db.insert(block_number_key(), serialize_number(number))?;
         Ok(())
     }
 
@@ -99,6 +99,10 @@ impl TemporaryStorage for SledTemporary {
     async fn flush_account_changes(&self) -> anyhow::Result<()> {
         let mut temp = self.temp.lock_write().await;
 
+        let Some(number) = self.read_active_block_number().await? else {
+            return log_and_err!("no active block number when flushing sled data");
+        };
+
         let tx_result = self.db.transaction::<_, (), anyhow::Error>(|tx| {
             for account in temp.accounts.values() {
                 // write account
@@ -113,6 +117,9 @@ impl TemporaryStorage for SledTemporary {
                     tx.insert(slot_key, slot_value)?;
                 }
             }
+            // increment block
+            tx.insert(block_number_key_vec(), serialize_number(number.next()))?;
+
             Ok(())
         });
         if let Err(e) = tx_result {
@@ -160,6 +167,14 @@ fn slot_key(address: &Address, slot_index: &SlotIndex) -> String {
     format!("slot::{}::{}", address, slot_index)
 }
 
+fn block_number_key_vec() -> Vec<u8> {
+    block_number_key().into_bytes().to_vec()
+}
+
 fn block_number_key() -> String {
     "block".to_owned()
+}
+
+fn serialize_number(number: BlockNumber) -> Vec<u8> {
+    number.as_u64().to_be_bytes().to_vec()
 }
