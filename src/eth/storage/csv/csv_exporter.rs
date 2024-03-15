@@ -69,7 +69,7 @@ fn csv_writer(path: &'static str, headers: &[&'static str]) -> anyhow::Result<cs
     let mut writer = csv::WriterBuilder::new()
         .has_headers(true)
         .delimiter(b'\t')
-        .quote_style(csv::QuoteStyle::NonNumeric)
+        .quote_style(csv::QuoteStyle::Always)
         .from_path(path)
         .context("failed to create csv writer")?;
 
