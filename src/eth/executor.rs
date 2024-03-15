@@ -69,10 +69,10 @@ impl EthExecutor {
     // Transaction execution
     // -------------------------------------------------------------------------
 
-    /// Imports an external block by re-executing all transactions.
-    pub async fn import_external_and_commit(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+    /// Re-executes an external block and imports it to the storage.
+    pub async fn import_external(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-        let block = self.import_external(block, receipts).await?;
+        let block = self.reexecute_external(block, receipts).await?;
 
         // commit block
         self.storage.set_block_number(*block.number()).await?;
@@ -85,8 +85,8 @@ impl EthExecutor {
         Ok(block)
     }
 
-    /// Imports an external block by re-executing all transactions.
-    pub async fn import_external(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+    /// Re-executes an external block locally.
+    pub async fn reexecute_external(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         let start = Instant::now();
         let mut block_metrics = ExecutionMetrics::default();
         tracing::info!(number = %block.number(), "importing external block");
