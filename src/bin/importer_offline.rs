@@ -1,27 +1,22 @@
-mod helpers;
-
 use std::cmp::min;
 use std::sync::Arc;
-use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
-use helpers::*;
-use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
-use stratus::eth::primitives::Account;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::BlockSelection;
+use stratus::eth::primitives::ExternalBlock;
+use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::storage::CsvExporter;
+use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
 use stratus::infra::metrics;
-use stratus::infra::postgres::Postgres;
-use stratus::infra::postgres::PostgresClientConfig;
 use stratus::init_global_services;
 use stratus::log_and_err;
 use tokio::sync::mpsc;
@@ -35,39 +30,34 @@ const BLOCKS_BY_FETCH: usize = 10_000;
 /// Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 
-type BacklogTask = (Vec<BlockRow>, Vec<ReceiptRow>);
+type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
     let csv = CsvExporter::default();
-    let pg = Arc::new(
-        Postgres::new(PostgresClientConfig {
-            url: config.pg.pg_url.to_string(),
-            connections: config.pg.pg_connections,
-            acquire_timeout: Duration::from_millis(config.pg.pg_timeout_millis),
-        })
-        .await?,
-    );
-    let storage = config.init_storage().await?;
-    let executor = config.init_executor(Arc::clone(&storage));
+    let rpc_storage = config.rpc_storage.init().await?;
+    let stratus_storage = config.init_stratus_storage().await?;
+    let executor = config.init_executor(Arc::clone(&stratus_storage));
 
-    // init shared data between importer and postgres loader
+    // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
 
     // import genesis accounts
-    let balances = pg_retrieve_external_balances(&pg).await?;
-    let accounts = balances
-        .into_iter()
-        .map(|row| Account::new_with_balance(row.address, row.balance))
-        .collect_vec();
-    storage.save_accounts_to_perm(accounts).await?;
+    let accounts = rpc_storage.read_initial_accounts().await?;
+    stratus_storage.save_accounts_to_perm(accounts).await?;
     // csv.export_accounts(accounts).await?;
 
-    // execute parallel tasks (postgres loader and block importer)
-    tokio::spawn(execute_postgres_loader(pg, storage, cancellation.clone(), config.paralellism, backlog_tx));
+    // execute parallel tasks (external rpc storage loader and block importer)
+    tokio::spawn(execute_external_rpc_storage_loader(
+        rpc_storage,
+        stratus_storage,
+        cancellation.clone(),
+        config.paralellism,
+        backlog_tx,
+    ));
     execute_block_importer(executor, csv, cancellation, backlog_rx).await?;
 
     Ok(())
@@ -95,15 +85,15 @@ async fn execute_block_importer(
         };
 
         // imports transactions
-        let block_start = blocks.first().unwrap().number;
-        let block_end = blocks.last().unwrap().number;
-        let mut receipts: ExternalReceipts = receipts.into_iter().map(|r| r.payload).collect_vec().into();
+        let block_start = blocks.first().unwrap().number();
+        let block_end = blocks.last().unwrap().number();
+        let mut receipts = ExternalReceipts::from(receipts);
 
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for block in blocks {
             let start = Instant::now();
 
-            executor.import_external_and_commit(block.payload, &mut receipts).await?;
+            executor.import_external_and_commit(block, &mut receipts).await?;
             // let block = executor.import_external_and_commit(block.payload, &mut receipts).await?;
             // csv.export_block(block).await?;
 
@@ -116,26 +106,26 @@ async fn execute_block_importer(
 }
 
 // -----------------------------------------------------------------------------
-// Postgres block loader
+// External RPC storage loader
 // -----------------------------------------------------------------------------
-async fn execute_postgres_loader(
+async fn execute_external_rpc_storage_loader(
     // services
-    pg: Arc<Postgres>,
-    storage: Arc<StratusStorage>,
+    rpc_storage: Arc<dyn ExternalRpcStorage>,
+    stratus_storage: Arc<StratusStorage>,
     cancellation: CancellationToken,
     // data
     paralellism: usize,
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
-    tracing::info!("postgres loader starting");
+    tracing::info!("external rpc storage loader starting");
 
     // find block limits to load
-    let mut start = storage.read_current_block_number().await?;
-    if not(start.is_zero()) || storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
+    let mut start = stratus_storage.read_current_block_number().await?;
+    if not(start.is_zero()) || stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
         start = start.next();
     };
-    let end = match pg_retrieve_max_external_block(&pg, BlockNumber::ZERO, BlockNumber::MAX).await {
-        Ok(Some(block)) => block,
+    let end = match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
+        Ok(Some(number)) => number,
         Ok(None) => BlockNumber::ZERO,
         Err(e) => {
             cancellation.cancel();
@@ -148,7 +138,7 @@ async fn execute_postgres_loader(
     let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (BLOCKS_BY_FETCH - 1), end);
-        tasks.push(load_blocks_and_receipts(Arc::clone(&pg), cancellation.clone(), start, end));
+        tasks.push(load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end));
         start += BLOCKS_BY_FETCH;
     }
 
@@ -181,21 +171,21 @@ async fn execute_postgres_loader(
         };
     };
 
-    tracing::info!(%reason, "postgres loader finished");
+    tracing::info!(%reason, "external rpc storage loader finished");
     Ok(())
 }
 
 async fn load_blocks_and_receipts(
-    pg: Arc<Postgres>,
+    rpc_storage: Arc<dyn ExternalRpcStorage>,
     cancellation: CancellationToken,
     start: BlockNumber,
     end: BlockNumber,
-) -> anyhow::Result<(Vec<BlockRow>, Vec<ReceiptRow>)> {
+) -> anyhow::Result<BacklogTask> {
     tracing::info!(%start, %end, "retrieving blocks and receipts");
     if cancellation.is_cancelled() {
         return Err(anyhow!("cancelled"));
     }
-    let blocks_task = pg_retrieve_external_blocks_in_range(&pg, start, end);
-    let receipts_task = pg_retrieve_external_receipts_in_range(&pg, start, end);
+    let blocks_task = rpc_storage.read_blocks_in_range(start, end);
+    let receipts_task = rpc_storage.read_receipts_in_range(start, end);
     try_join!(blocks_task, receipts_task)
 }

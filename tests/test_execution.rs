@@ -14,13 +14,13 @@ use stratus::eth::primitives::Wei;
 #[tokio::test]
 async fn test_execution() {
     let config = CommonConfig {
-        perm: PermanentStorageConfig {
-            perm_kind: PermanentStorageKind::InMemory,
-            perm_connections: 1,
-            perm_timeout_millis: 1000,
+        perm_storage: PermanentStorageConfig {
+            perm_storage_kind: PermanentStorageKind::InMemory,
+            perm_storage_connections: 1,
+            perm_storage_timeout_millis: 1000,
         },
-        temp: TemporaryStorageConfig {
-            temp_kind: TemporaryStorageKind::InMemory,
+        temp_storage: TemporaryStorageConfig {
+            temp_storage_kind: TemporaryStorageKind::InMemory,
         },
         num_evms: 1usize,
         num_async_threads: 1usize,
@@ -29,7 +29,7 @@ async fn test_execution() {
         enable_genesis: false,
         nocapture: false,
     };
-    let storage = config.init_storage().await.unwrap();
+    let storage = config.init_stratus_storage().await.unwrap();
     let mut rng = thread_rng();
     let mut fake_transaction_input = TransactionInput::dummy_with_rng(&Faker, &mut rng);
     fake_transaction_input.nonce = 0u64.into();

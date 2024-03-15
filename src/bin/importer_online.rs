@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOnlineConfig = init_global_services();
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let storage = Arc::new(config.init_storage().await?);
+    let storage = Arc::new(config.init_stratus_storage().await?);
     let executor = config.init_executor(Arc::clone(&storage));
 
     // start from last imported block

@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select\n    address as \"address: _\",\n    balance as \"balance: _\"\nfrom external_balances;\n",
+  "query": "select\n    address,\n    balance\nfrom external_balances;\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "address: _",
+        "name": "address",
         "type_info": "Bytea"
       },
       {
         "ordinal": 1,
-        "name": "balance: _",
+        "name": "balance",
         "type_info": "Numeric"
       }
     ],
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "72e4de916f5f44a9b4cd0015e258ec8fd32b2e0160e27f54abda698a811c5bd3"
+  "hash": "2e17a43c9bf435ddf5f9bff47e6ba85062723bdb224310a2cafd553bfb008c14"
 }
