@@ -24,13 +24,20 @@ impl SledTemporary {
         };
         Ok(Self { db })
     }
+
+    pub fn flush(&self) -> anyhow::Result<()> {
+        if let Err(e) = self.db.flush() {
+            return log_and_err!(reason = e, "failed to persist sled data");
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl TemporaryStorage for SledTemporary {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.db.insert(block_number_key(), number.as_u64().to_be_bytes().to_vec())?;
-        Ok(())
+        self.flush()
     }
 
     async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
@@ -106,16 +113,12 @@ impl TemporaryStorage for SledTemporary {
         if let Err(e) = self.db.apply_batch(batch) {
             return log_and_err!(reason = e, "failed to apply sled batch");
         }
-        if let Err(e) = self.db.flush() {
-            return log_and_err!(reason = e, "failed to persist sled data");
-        }
-
-        Ok(())
+        self.flush()
     }
 
     async fn reset(&self) -> anyhow::Result<()> {
         self.db.clear()?;
-        Ok(())
+        self.flush()
     }
 }
 
