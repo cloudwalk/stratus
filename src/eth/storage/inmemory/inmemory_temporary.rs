@@ -9,6 +9,7 @@ use tokio::sync::RwLockWriteGuard;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -22,6 +23,7 @@ pub struct InMemoryTemporaryStorage {
 #[derive(Debug, Default)]
 struct InMemoryTemporaryStorageState {
     accounts: HashMap<Address, InMemoryTemporaryAccount>,
+    active_block_number: BlockNumber,
 }
 
 impl Default for InMemoryTemporaryStorage {
@@ -45,6 +47,17 @@ impl InMemoryTemporaryStorage {
 
 #[async_trait]
 impl TemporaryStorage for InMemoryTemporaryStorage {
+    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        let mut state = self.lock_write().await;
+        state.active_block_number = number;
+        Ok(())
+    }
+
+    async fn read_active_block_number(&self) -> anyhow::Result<BlockNumber> {
+        let state = self.lock_read().await;
+        Ok(state.active_block_number)
+    }
+
     async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 

@@ -75,12 +75,15 @@ impl EthExecutor {
         let block = self.import_external_to_temp(block, receipts).await?;
 
         // commit block
-        self.storage.set_block_number(*block.number()).await?;
+        self.storage.set_mined_block_number(*block.number()).await?;
+
         if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
         };
+
+        self.storage.set_active_block_number(block.number().next()).await?;
 
         Ok(block)
     }

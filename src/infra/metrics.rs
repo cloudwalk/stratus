@@ -103,8 +103,11 @@ metrics! {
     "Time to execute storage increment_block_number operation."
     histogram_duration storage_increment_block_number{success} [],
 
-    "Time to execute storage set_block_number operation."
-    histogram_duration storage_set_block_number{success} [],
+    "Time to execute storage set_active_block_number operation."
+    histogram_duration storage_set_active_block_number{success} [],
+
+    "Time to execute storage set_mined_block_number operation."
+    histogram_duration storage_set_mined_block_number{success} [],
 
     "Time to execute storage save_accounts operation."
     histogram_duration storage_save_accounts{success} [],

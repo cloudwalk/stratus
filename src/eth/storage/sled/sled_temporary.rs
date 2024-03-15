@@ -3,6 +3,7 @@ use sled::Db;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -27,6 +28,22 @@ impl SledTemporary {
 
 #[async_trait]
 impl TemporaryStorage for SledTemporary {
+    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        self.db.insert(block_number_key(), number.as_u64().to_be_bytes().to_vec())?;
+        Ok(())
+    }
+
+    async fn read_active_block_number(&self) -> anyhow::Result<BlockNumber> {
+        match self.db.get(block_number_key()) {
+            Ok(Some(number)) => {
+                let number = u64::from_be_bytes(number.as_ref().try_into().unwrap());
+                Ok(number.into())
+            }
+            Ok(None) => Ok(BlockNumber::ZERO),
+            Err(e) => log_and_err!(reason = e, "failed to read block number from sled"),
+        }
+    }
+
     async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
@@ -108,4 +125,8 @@ fn account_key(address: &Address) -> String {
 
 fn slot_key(address: &Address, slot_index: &SlotIndex) -> String {
     format!("slot::{}::{}", address, slot_index)
+}
+
+fn block_number_key() -> String {
+    "block".to_owned()
 }

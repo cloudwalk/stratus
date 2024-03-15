@@ -43,7 +43,7 @@ impl StratusStorage {
     // Retrieves the last mined block number.
     pub async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
         let start = Instant::now();
-        let result = self.perm.read_current_block_number().await;
+        let result = self.perm.read_mined_block_number().await;
         metrics::inc_storage_read_current_block_number(start.elapsed(), result.is_ok());
         result
     }
@@ -56,11 +56,19 @@ impl StratusStorage {
         result
     }
 
-    /// Sets the block number to a specific value.
-    pub async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    /// Sets the active block number to a specific value.
+    pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.perm.set_block_number(number).await;
-        metrics::inc_storage_set_block_number(start.elapsed(), result.is_ok());
+        let result = self.temp.set_active_block_number(number).await;
+        metrics::inc_storage_set_active_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
+    /// Sets the mined block number to a specific value.
+    pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.perm.set_mined_block_number(number).await;
+        metrics::inc_storage_set_mined_block_number(start.elapsed(), result.is_ok());
         result
     }
 
@@ -210,7 +218,7 @@ impl StratusStorage {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
-                let current_block = self.perm.read_current_block_number().await?;
+                let current_block = self.perm.read_mined_block_number().await?;
                 if number <= &current_block {
                     Ok(StoragePointInTime::Past(*number))
                 } else {

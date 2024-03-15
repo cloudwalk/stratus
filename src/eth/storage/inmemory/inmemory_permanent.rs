@@ -169,7 +169,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
@@ -178,7 +178,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(next.into())
     }
 
-    async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
     }
