@@ -99,27 +99,31 @@ impl TemporaryStorage for SledTemporary {
     async fn flush_account_changes(&self) -> anyhow::Result<()> {
         let mut temp = self.temp.lock_write().await;
 
-        let mut batch = sled::Batch::default();
-        for account in temp.accounts.values() {
-            // write account
-            let account_key = account_key_vec(&account.info.address);
-            let account_value = serde_json::to_string(&account.info).unwrap().as_bytes().to_vec();
-            batch.insert(account_key, account_value);
+        let tx_result = self.db.transaction::<_, (), anyhow::Error>(|tx| {
+            for account in temp.accounts.values() {
+                // write account
+                let account_key = account_key_vec(&account.info.address);
+                let account_value = serde_json::to_string(&account.info).unwrap().as_bytes().to_vec();
+                tx.insert(account_key, account_value)?;
 
-            // write slots
-            for slot in account.slots.values() {
-                let slot_key = slot_key_vec(&account.info.address, &slot.index);
-                let slot_value = serde_json::to_string(&slot).unwrap().as_bytes().to_vec();
-                batch.insert(slot_key, slot_value);
+                // write slots
+                for slot in account.slots.values() {
+                    let slot_key = slot_key_vec(&account.info.address, &slot.index);
+                    let slot_value = serde_json::to_string(&slot).unwrap().as_bytes().to_vec();
+                    tx.insert(slot_key, slot_value)?;
+                }
             }
+            Ok(())
+        });
+        if let Err(e) = tx_result {
+            tracing::error!(reason = ?e, "failed to transact sled data");
+            return match e {
+                sled::transaction::TransactionError::Abort(e) => Err(e),
+                sled::transaction::TransactionError::Storage(e) => Err(e.into()),
+            };
         }
-        // remove active block number
-        batch.remove(block_number_key_vec());
 
-        // execute batch and flush
-        if let Err(e) = self.db.apply_batch(batch) {
-            return log_and_err!(reason = e, "failed to apply sled batch");
-        }
+        // flush
         if let Err(e) = self.db.flush() {
             return log_and_err!(reason = e, "failed to flush sled data");
         }
@@ -154,10 +158,6 @@ fn slot_key_vec(address: &Address, slot_index: &SlotIndex) -> Vec<u8> {
 
 fn slot_key(address: &Address, slot_index: &SlotIndex) -> String {
     format!("slot::{}::{}", address, slot_index)
-}
-
-fn block_number_key_vec() -> Vec<u8> {
-    block_number_key().into_bytes().to_vec()
 }
 
 fn block_number_key() -> String {
