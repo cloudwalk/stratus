@@ -95,10 +95,16 @@ async fn execute_block_importer(
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for block in blocks {
             let start = Instant::now();
-            let block = executor.reexecute_external(block, &mut receipts).await?;
-            if let Some(ref mut csv) = csv {
-                csv.export_block(block)?;
+            match csv {
+                None => {
+                    executor.import_external(block, &mut receipts).await?;
+                }
+                Some(ref mut csv) => {
+                    let block = executor.reexecute_external(block, &mut receipts).await?;
+                    csv.export_block(block)?;
+                }
             }
+
             metrics::inc_import_offline(start.elapsed());
         }
     };
