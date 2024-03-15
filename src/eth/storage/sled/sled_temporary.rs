@@ -11,8 +11,6 @@ use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
 pub struct SledTemporary {
-    // keep transactional data in here until flush is called
-    // sled supports transactions, but I still have to learn how to use it because it accepts a closure instead of returning an object
     temp: InMemoryTemporaryStorage,
     db: sled::Db,
 }
