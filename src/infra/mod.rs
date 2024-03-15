@@ -3,7 +3,6 @@
 pub mod blockchain_client;
 pub mod docker;
 pub mod metrics;
-pub mod postgres;
 pub mod tracing;
 
 pub use blockchain_client::BlockchainClient;

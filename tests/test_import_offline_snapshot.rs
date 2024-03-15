@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::Instant;
 
 use const_format::formatcp;
 use fancy_duration::AsFancyDuration;
@@ -12,13 +11,14 @@ use stratus::eth::primitives::StoragePointInTime;
 use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
+use stratus::eth::storage::PostgresPermanentStorage;
+use stratus::eth::storage::PostgresPermanentStorageConfig;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::docker::Docker;
 use stratus::infra::metrics::METRIC_EVM_EXECUTION;
 use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
 use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
 use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
-use stratus::infra::postgres::Postgres;
 use stratus::init_global_services;
 
 const METRIC_QUERIES: [&str; 30] = [
@@ -82,15 +82,24 @@ async fn test_import_offline_snapshot() {
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
-    let pg = Postgres::new(docker.postgres_connection_url(), 10usize, 2usize).await.unwrap();
+    let pg = PostgresPermanentStorage::new(PostgresPermanentStorageConfig {
+        url: docker.postgres_connection_url().to_owned(),
+        connections: 5,
+        acquire_timeout: Duration::from_secs(10),
+    })
+    .await
+    .unwrap();
     populate_postgres(&pg, snapshot).await;
 
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
     let executor = config.init_executor(storage);
-    executor.import_external(block, &mut receipts).await.unwrap();
+    executor.import_external_to_perm(block, &mut receipts).await.unwrap();
 
     // get metrics from prometheus
+    // sleep to ensure prometheus collected
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
     for query in METRIC_QUERIES {
         // formatting between query groups
         if query.is_empty() {
@@ -99,40 +108,34 @@ async fn test_import_offline_snapshot() {
         }
 
         // get metrics and print them
-        // iterate until prometheus returns something
         let url = format!("{}?query={}", docker.prometheus_api_url(), query);
+        let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
+        let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
+        if results.is_empty() {
+            continue;
+        }
 
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while Instant::now() <= deadline {
-            let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
-            let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
-            if results.is_empty() {
-                continue;
+        for result in results {
+            let value: &str = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
+            let value: f64 = value.parse().unwrap();
+
+            if query.contains("_count") {
+                println!("{:<64} = {}", query, value);
+            } else {
+                let secs = Duration::from_secs_f64(value);
+                println!("{:<64} = {}", query, secs.fancy_duration().truncate(1));
             }
-
-            for result in results {
-                let value: &str = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
-                let value: f64 = value.parse().unwrap();
-
-                if query.contains("_count") {
-                    println!("{:<64} = {}", query, value);
-                } else {
-                    let secs = Duration::from_secs_f64(value);
-                    println!("{:<64} = {}", query, secs.fancy_duration().truncate(1));
-                }
-            }
-            break;
         }
     }
 }
 
-async fn populate_postgres(pg: &Postgres, state: InMemoryPermanentStorageState) {
+async fn populate_postgres(pg: &PostgresPermanentStorage, state: InMemoryPermanentStorageState) {
     // save accounts
     let accounts = state.accounts.values().map(|a| a.to_account(&StoragePointInTime::Present)).collect_vec();
     pg.save_accounts(accounts).await.unwrap();
 
     // save slots
-    let mut tx = pg.start_transaction().await.unwrap();
+    let mut tx = pg.pool.begin().await.unwrap();
     for account in state.accounts.values() {
         for slot_history in account.slots.values() {
             let slot = slot_history.get_current();

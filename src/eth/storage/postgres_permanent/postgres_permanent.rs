@@ -1,11 +1,19 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
+use anyhow::anyhow;
 use anyhow::Context;
 use async_trait::async_trait;
 use nonempty::nonempty;
+use serde_json::Value;
+use sqlx::postgres::PgListener;
+use sqlx::postgres::PgPoolOptions;
 use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
+use sqlx::PgPool;
 use sqlx::Row;
+use tokio::sync::RwLock;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -25,31 +33,140 @@ use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::postgres::types::AccountBatch;
-use crate::eth::storage::postgres::types::HistoricalBalanceBatch;
-use crate::eth::storage::postgres::types::HistoricalNonceBatch;
-use crate::eth::storage::postgres::types::HistoricalSlotBatch;
-use crate::eth::storage::postgres::types::LogBatch;
-use crate::eth::storage::postgres::types::PostgresLog;
-use crate::eth::storage::postgres::types::PostgresTopic;
-use crate::eth::storage::postgres::types::PostgresTransaction;
-use crate::eth::storage::postgres::types::SlotBatch;
-use crate::eth::storage::postgres::types::TopicBatch;
-use crate::eth::storage::postgres::types::TransactionBatch;
+use crate::eth::storage::postgres_permanent::types::AccountBatch;
+use crate::eth::storage::postgres_permanent::types::HistoricalBalanceBatch;
+use crate::eth::storage::postgres_permanent::types::HistoricalNonceBatch;
+use crate::eth::storage::postgres_permanent::types::HistoricalSlotBatch;
+use crate::eth::storage::postgres_permanent::types::LogBatch;
+use crate::eth::storage::postgres_permanent::types::PostgresLog;
+use crate::eth::storage::postgres_permanent::types::PostgresTopic;
+use crate::eth::storage::postgres_permanent::types::PostgresTransaction;
+use crate::eth::storage::postgres_permanent::types::SlotBatch;
+use crate::eth::storage::postgres_permanent::types::TopicBatch;
+use crate::eth::storage::postgres_permanent::types::TransactionBatch;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
-use crate::infra::postgres::Postgres;
 use crate::log_and_err;
 
+type SloadKey = (Address, SlotIndex);
+type SloadValue = (SlotValue, BlockNumber);
+type SloadCacheMap = HashMap<SloadKey, SloadValue>;
+type SloadCache = Arc<RwLock<SloadCacheMap>>;
+
+struct SlotCache {
+    pub index: SlotIndex,
+    pub value: SlotValue,
+    pub address: Address,
+    pub block: BlockNumber,
+}
+
+pub struct PostgresPermanentStorage {
+    pub pool: PgPool,
+    pub sload_cache: SloadCache,
+}
+
+#[derive(Debug)]
+pub struct PostgresPermanentStorageConfig {
+    pub url: String,
+    pub connections: u32,
+    pub acquire_timeout: Duration,
+}
+
+impl PostgresPermanentStorage {
+    /// Creates a new [`PostgresPermanentStorage`].
+    pub async fn new(config: PostgresPermanentStorageConfig) -> anyhow::Result<Self> {
+        tracing::info!(?config, "starting postgres permanent storage");
+
+        let result = PgPoolOptions::new()
+            .min_connections(config.connections)
+            .max_connections(config.connections)
+            .acquire_timeout(config.acquire_timeout)
+            .connect(&config.url)
+            .await;
+
+        let pool = match result {
+            Ok(pool) => pool.clone(),
+            Err(e) => return log_and_err!(reason = e, "failed to start postgres permanent storage"),
+        };
+
+        let storage = Self {
+            pool: pool.clone(),
+            sload_cache: Arc::new(RwLock::new(new_sload_cache(pool).await?)),
+        };
+
+        storage.start_listening().await;
+
+        Ok(storage)
+    }
+
+    pub async fn start_listening(&self) {
+        let pool = self.pool.clone();
+        let sload_cache = Arc::clone(&self.sload_cache);
+
+        tokio::spawn(async move {
+            let mut listener = PgListener::connect_with(&pool).await.expect("Failed to connect listener");
+            listener.listen("sload_cache_channel").await.expect("Failed to listen on channel");
+
+            loop {
+                match listener.recv().await {
+                    Ok(notification) => {
+                        let _ = handle_notification(&notification, &sload_cache).await;
+                    }
+                    Err(e) => {
+                        tracing::error!("Listener error: {:?}", e);
+                        //XXX Optionally implement a reconnect or retry logic
+                    }
+                }
+            }
+        });
+    }
+}
+
+async fn handle_notification(notification: &sqlx::postgres::PgNotification, sload_cache: &SloadCache) -> anyhow::Result<()> {
+    let payload: Value = serde_json::from_str(notification.payload())?;
+
+    let address_str = payload.get("address").and_then(Value::as_str).ok_or_else(|| anyhow!("missing address"))?;
+    let address: Address = address_str.parse()?;
+
+    let index_str = payload.get("index").and_then(Value::as_str).ok_or_else(|| anyhow!("missing index"))?;
+    let index: SlotIndex = index_str.parse()?;
+
+    let value_str = payload.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("missing value"))?;
+    let value: SlotValue = value_str.parse()?;
+
+    let block_u64 = payload.get("block").and_then(Value::as_u64).ok_or_else(|| anyhow!("missing block"))?;
+    let block = BlockNumber::from(block_u64);
+
+    let mut cache = sload_cache.write().await;
+    cache.insert((address, index), (value, block));
+
+    Ok(())
+}
+
+async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
+    let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres_permanent/sql/select_slot_cache.sql", BigDecimal::from(0))
+        .fetch_all(&connection_pool)
+        .await?;
+    let mut sload_cache = HashMap::new();
+
+    raw_sload.into_iter().for_each(|s| {
+        sload_cache.insert((s.address, s.index), (s.value, s.block));
+    });
+
+    tracing::info!("finished loading sload cache");
+    Ok(sload_cache)
+}
+
 #[async_trait]
-impl PermanentStorage for Postgres {
+impl PermanentStorage for PostgresPermanentStorage {
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("incrementing block number");
 
-        let nextval = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
-            .fetch_one(&self.connection_pool)
+        let nextval = sqlx::query_file_scalar!("src/eth/storage/postgres_permanent/sql/select_current_block_number.sql")
+            .fetch_one(&self.pool)
             .await
             .unwrap_or_else(|err| {
                 tracing::error!(?err, "failed to get block number");
@@ -60,7 +177,7 @@ impl PermanentStorage for Postgres {
         nextval.try_into()
     }
 
-    async fn set_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
+    async fn set_mined_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
         // nothing to do yet because we are not using a sequence
         Ok(())
     }
@@ -70,8 +187,8 @@ impl PermanentStorage for Postgres {
         let account = match point_in_time {
             StoragePointInTime::Present => {
                 // We have to get the account information closest to the block with the given block_number
-                sqlx::query_file_as!(Account, "src/eth/storage/postgres/queries/select_account.sql", address.as_ref())
-                    .fetch_optional(&self.connection_pool)
+                sqlx::query_file_as!(Account, "src/eth/storage/postgres_permanent/sql/select_account.sql", address.as_ref())
+                    .fetch_optional(&self.pool)
                     .await?
             }
             StoragePointInTime::Past(number) => {
@@ -79,11 +196,11 @@ impl PermanentStorage for Postgres {
                 // We have to get the account information closest to the block with the given block_number
                 sqlx::query_file_as!(
                     Account,
-                    "src/eth/storage/postgres/queries/select_account_at_block.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_account_at_block.sql",
                     address.as_ref(),
                     block_number as _,
                 )
-                .fetch_optional(&self.connection_pool)
+                .fetch_optional(&self.pool)
                 .await?
             }
         };
@@ -122,12 +239,12 @@ impl PermanentStorage for Postgres {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_as!(
                     Slot,
-                    "src/eth/storage/postgres/queries/select_slot_at_block.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_slot_at_block.sql",
                     address.as_ref(),
                     slot_index_u8.as_ref(),
                     block_number as _,
                 )
-                .fetch_optional(&self.connection_pool)
+                .fetch_optional(&self.pool)
                 .await?
             }
         };
@@ -151,37 +268,37 @@ impl PermanentStorage for Postgres {
 
         match block {
             BlockSelection::Latest => {
-                let current = self.read_current_block_number().await?;
+                let current = self.read_mined_block_number().await?;
 
                 let block_number = i64::try_from(current)?;
 
                 let header_query = sqlx::query_file_as!(
                     BlockHeader,
-                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_block_header_by_number.sql",
                     block_number as _
                 )
-                .fetch_optional(&self.connection_pool);
+                .fetch_optional(&self.pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
-                    "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_transactions_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 let logs_query = sqlx::query_file_as!(
                     PostgresLog,
-                    "src/eth/storage/postgres/queries/select_logs_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_logs_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
-                    "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
@@ -215,21 +332,33 @@ impl PermanentStorage for Postgres {
             }
 
             BlockSelection::Hash(hash) => {
-                let header_query = sqlx::query_file_as!(BlockHeader, "src/eth/storage/postgres/queries/select_block_header_by_hash.sql", hash.as_ref(),)
-                    .fetch_optional(&self.connection_pool);
+                let header_query = sqlx::query_file_as!(
+                    BlockHeader,
+                    "src/eth/storage/postgres_permanent/sql/select_block_header_by_hash.sql",
+                    hash.as_ref(),
+                )
+                .fetch_optional(&self.pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
-                    "src/eth/storage/postgres/queries/select_transactions_by_block_hash.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_transactions_by_block_hash.sql",
                     hash.as_ref()
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
-                let logs_query = sqlx::query_file_as!(PostgresLog, "src/eth/storage/postgres/queries/select_logs_by_block_hash.sql", hash.as_ref())
-                    .fetch_all(&self.connection_pool);
+                let logs_query = sqlx::query_file_as!(
+                    PostgresLog,
+                    "src/eth/storage/postgres_permanent/sql/select_logs_by_block_hash.sql",
+                    hash.as_ref()
+                )
+                .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(PostgresTopic, "src/eth/storage/postgres/queries/select_topics_by_block_hash.sql", hash.as_ref())
-                    .fetch_all(&self.connection_pool);
+                let topics_query = sqlx::query_file_as!(
+                    PostgresTopic,
+                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_hash.sql",
+                    hash.as_ref()
+                )
+                .fetch_all(&self.pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
@@ -267,31 +396,31 @@ impl PermanentStorage for Postgres {
 
                 let header_query = sqlx::query_file_as!(
                     BlockHeader,
-                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_block_header_by_number.sql",
                     block_number as _
                 )
-                .fetch_optional(&self.connection_pool);
+                .fetch_optional(&self.pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
-                    "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_transactions_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 let logs_query = sqlx::query_file_as!(
                     PostgresLog,
-                    "src/eth/storage/postgres/queries/select_logs_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_logs_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
-                    "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
@@ -328,31 +457,31 @@ impl PermanentStorage for Postgres {
 
                 let header_query = sqlx::query_file_as!(
                     BlockHeader,
-                    "src/eth/storage/postgres/queries/select_block_header_by_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_block_header_by_number.sql",
                     block_number as _
                 )
-                .fetch_optional(&self.connection_pool);
+                .fetch_optional(&self.pool);
 
                 let transactions_query = sqlx::query_file_as!(
                     PostgresTransaction,
-                    "src/eth/storage/postgres/queries/select_transactions_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_transactions_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 let logs_query = sqlx::query_file_as!(
                     PostgresLog,
-                    "src/eth/storage/postgres/queries/select_logs_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_logs_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 let topics_query = sqlx::query_file_as!(
                     PostgresTopic,
-                    "src/eth/storage/postgres/queries/select_topics_by_block_number.sql",
+                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
                     block_number as _
                 )
-                .fetch_all(&self.connection_pool);
+                .fetch_all(&self.pool);
 
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
@@ -391,10 +520,10 @@ impl PermanentStorage for Postgres {
         tracing::debug!(%hash, "reading transaction");
         let transaction_query = sqlx::query_file_as!(
             PostgresTransaction,
-            "src/eth/storage/postgres/queries/select_transaction_by_hash.sql",
+            "src/eth/storage/postgres_permanent/sql/select_transaction_by_hash.sql",
             hash.as_ref()
         )
-        .fetch_one(&self.connection_pool)
+        .fetch_one(&self.pool)
         .await;
 
         let transaction: PostgresTransaction = match transaction_query {
@@ -405,18 +534,18 @@ impl PermanentStorage for Postgres {
 
         let logs = sqlx::query_file_as!(
             PostgresLog,
-            "src/eth/storage/postgres/queries/select_logs_by_transaction_hash.sql",
+            "src/eth/storage/postgres_permanent/sql/select_logs_by_transaction_hash.sql",
             hash.as_ref()
         )
-        .fetch_all(&self.connection_pool)
+        .fetch_all(&self.pool)
         .await?;
 
         let topics = sqlx::query_file_as!(
             PostgresTopic,
-            "src/eth/storage/postgres/queries/select_topics_by_transaction_hash.sql",
+            "src/eth/storage/postgres_permanent/sql/select_topics_by_transaction_hash.sql",
             hash.as_ref()
         )
-        .fetch_all(&self.connection_pool)
+        .fetch_all(&self.pool)
         .await?;
 
         let mut topic_partitions = partition_topics(topics);
@@ -429,7 +558,7 @@ impl PermanentStorage for Postgres {
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(filter = ?filter, "Reading logs");
         let from: i64 = filter.from_block.try_into()?;
-        let query = include_str!("queries/select_logs.sql");
+        let query = include_str!("sql/select_logs.sql");
 
         let log_query_builder = &mut QueryBuilder::new(query);
         log_query_builder.push(" AND block_number >= ");
@@ -444,7 +573,7 @@ impl PermanentStorage for Postgres {
 
         let log_query = log_query_builder.build();
 
-        let query_result = log_query.fetch_all(&self.connection_pool).await?;
+        let query_result = log_query.fetch_all(&self.pool).await?;
 
         let mut result = vec![];
 
@@ -453,11 +582,11 @@ impl PermanentStorage for Postgres {
             let log_idx: BigDecimal = row.get("log_idx");
             let topics = sqlx::query_file_as!(
                 PostgresTopic,
-                "src/eth/storage/postgres/queries/select_topics_by_block_hash_log_idx.sql",
+                "src/eth/storage/postgres_permanent/sql/select_topics_by_block_hash_log_idx.sql",
                 block_hash,
                 log_idx as _
             )
-            .fetch_all(&self.connection_pool)
+            .fetch_all(&self.pool)
             .await?;
 
             let log = LogMined {
@@ -577,10 +706,10 @@ impl PermanentStorage for Postgres {
         let expected_modified_slots = slot_batch.address.len();
         let expected_modified_accounts = account_batch.address.len();
 
-        let mut tx = self.connection_pool.begin().await.context("failed to init save_block transaction")?;
+        let mut tx = self.pool.begin().await.context("failed to init save_block transaction")?;
 
         let block_result = sqlx::query_file!(
-            "src/eth/storage/postgres/queries/insert_entire_block.sql",
+            "src/eth/storage/postgres_permanent/sql/insert_entire_block.sql",
             block.header.number as _,
             block.header.hash.as_ref(),
             block.header.transactions_root.as_ref(),
@@ -688,11 +817,11 @@ impl PermanentStorage for Postgres {
         Ok(())
     }
 
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading current block number");
 
-        let currval: BigDecimal = sqlx::query_file_scalar!("src/eth/storage/postgres/queries/select_current_block_number.sql")
-            .fetch_one(&self.connection_pool)
+        let currval: BigDecimal = sqlx::query_file_scalar!("src/eth/storage/postgres_permanent/sql/select_current_block_number.sql")
+            .fetch_one(&self.pool)
             .await
             .unwrap_or(BigDecimal::from(0));
 
@@ -703,14 +832,14 @@ impl PermanentStorage for Postgres {
         tracing::debug!(?accounts, "saving initial accounts");
 
         for acc in accounts {
-            let mut tx = self.connection_pool.begin().await.context("failed to init transaction")?;
+            let mut tx = self.pool.begin().await.context("failed to init transaction")?;
             let block_number = 0;
             let balance = BigDecimal::try_from(acc.balance)?;
             let nonce = BigDecimal::try_from(acc.nonce)?;
             let bytecode = acc.bytecode.as_deref();
 
             sqlx::query_file!(
-                "src/eth/storage/postgres/queries/insert_account.sql",
+                "src/eth/storage/postgres_permanent/sql/insert_account.sql",
                 acc.address.as_ref(),
                 nonce,
                 balance,
@@ -724,7 +853,7 @@ impl PermanentStorage for Postgres {
             .context("failed to insert account")?;
 
             sqlx::query_file!(
-                "src/eth/storage/postgres/queries/insert_historical_balance.sql",
+                "src/eth/storage/postgres_permanent/sql/insert_historical_balance.sql",
                 acc.address.as_ref(),
                 balance,
                 block_number as _
@@ -734,7 +863,7 @@ impl PermanentStorage for Postgres {
             .context("failed to insert balance")?;
 
             sqlx::query_file!(
-                "src/eth/storage/postgres/queries/insert_historical_nonce.sql",
+                "src/eth/storage/postgres_permanent/sql/insert_historical_nonce.sql",
                 acc.address.as_ref(),
                 nonce,
                 block_number as _
@@ -750,23 +879,23 @@ impl PermanentStorage for Postgres {
     }
 
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()> {
-        sqlx::query_file!("src/eth/storage/postgres/queries/delete_after_block.sql", number as _)
-            .execute(&self.connection_pool)
+        sqlx::query_file!("src/eth/storage/postgres_permanent/sql/delete_after_block.sql", number as _)
+            .execute(&self.pool)
             .await?;
 
         // Rollback the values of account.latest_balance, account.latest_nonce and
         // account_slots.value.
 
-        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_reset_balance.sql")
-            .execute(&self.connection_pool)
+        sqlx::query_file!("src/eth/storage/postgres_permanent/sql/update_account_reset_balance.sql")
+            .execute(&self.pool)
             .await?;
 
-        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_reset_nonce.sql")
-            .execute(&self.connection_pool)
+        sqlx::query_file!("src/eth/storage/postgres_permanent/sql/update_account_reset_nonce.sql")
+            .execute(&self.pool)
             .await?;
 
-        sqlx::query_file!("src/eth/storage/postgres/queries/update_account_slots_reset_value.sql")
-            .execute(&self.connection_pool)
+        sqlx::query_file!("src/eth/storage/postgres_permanent/sql/update_account_slots_reset_value.sql")
+            .execute(&self.pool)
             .await?;
 
         let mut cache = self.sload_cache.write().await;
@@ -784,13 +913,13 @@ impl PermanentStorage for Postgres {
 
         let slots_sample_rows = sqlx::query_file_as!(
             SlotSample,
-            "src/eth/storage/postgres/queries/select_random_slot_sample.sql",
+            "src/eth/storage/postgres_permanent/sql/select_random_slot_sample.sql",
             seed,
             start as _,
             end as _,
             max_samples
         )
-        .fetch_all(&self.connection_pool)
+        .fetch_all(&self.pool)
         .await?;
 
         Ok(slots_sample_rows)

@@ -18,16 +18,16 @@ use crate::eth::storage::StorageError;
 /// Permanent (committed) storage operations
 #[async_trait]
 pub trait PermanentStorage: Send + Sync {
+    /// Sets the last mined block number to a specific value.
+    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+
     // Retrieves the last mined block number.
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
+    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Atomically increments the block number, returning the new value.
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
-
-    /// Sets the block number to a specific value.
     ///
-    /// Should be used only when importing external blocks. To reset the storage to the past, use `reset_at`.
-    async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+    /// TODO: this can probably be removed because set_mined_block_number and set_active_block_number may be enough.
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
@@ -56,5 +56,6 @@ pub trait PermanentStorage: Send + Sync {
     /// Resets all state to a specific block number.
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
 
+    /// TODO: document it.
     async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
 }

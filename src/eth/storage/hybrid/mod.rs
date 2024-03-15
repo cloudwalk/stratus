@@ -64,15 +64,22 @@ pub struct HybridPermanentStorage {
     task_sender: mpsc::Sender<BlockTask>,
 }
 
+#[derive(Debug)]
+pub struct HybridPermanentStorageConfig {
+    pub url: String,
+    pub connections: u32,
+    pub acquire_timeout: Duration,
+}
+
 impl HybridPermanentStorage {
-    pub async fn new(url: &str) -> anyhow::Result<Self> {
+    pub async fn new(config: HybridPermanentStorageConfig) -> anyhow::Result<Self> {
         tracing::info!("starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()
-            .min_connections(300)
-            .max_connections(400)
-            .acquire_timeout(Duration::from_secs(20))
-            .connect(url)
+            .min_connections(config.connections)
+            .max_connections(config.connections)
+            .acquire_timeout(config.acquire_timeout)
+            .connect(&config.url)
             .await
             .map_err(|e| {
                 tracing::error!(reason = ?e, "failed to start postgres client");
@@ -193,7 +200,7 @@ impl PermanentStorage for HybridPermanentStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
@@ -202,7 +209,7 @@ impl PermanentStorage for HybridPermanentStorage {
         Ok(next.into())
     }
 
-    async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
     }

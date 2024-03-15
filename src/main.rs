@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run_rpc_server(config: StratusConfig) -> anyhow::Result<()> {
-    let storage = config.init_storage().await?;
+    let storage = config.init_stratus_storage().await?;
     let executor = config.init_executor(Arc::clone(&storage));
     serve_rpc(executor, storage, config).await?;
     Ok(())
