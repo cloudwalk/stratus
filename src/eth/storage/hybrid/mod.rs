@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
@@ -40,7 +41,6 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
-use crate::infra::postgres::PostgresClientConfig;
 
 #[derive(Debug)]
 struct BlockTask {
@@ -64,8 +64,15 @@ pub struct HybridPermanentStorage {
     task_sender: mpsc::Sender<BlockTask>,
 }
 
+#[derive(Debug)]
+pub struct HybridPermanentStorageConfig {
+    pub url: String,
+    pub connections: u32,
+    pub acquire_timeout: Duration,
+}
+
 impl HybridPermanentStorage {
-    pub async fn new(config: PostgresClientConfig) -> anyhow::Result<Self> {
+    pub async fn new(config: HybridPermanentStorageConfig) -> anyhow::Result<Self> {
         tracing::info!("starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()

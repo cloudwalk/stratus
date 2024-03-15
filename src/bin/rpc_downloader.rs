@@ -1,22 +1,17 @@
-mod helpers;
-
 use std::cmp::min;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
 use futures::StreamExt;
 use futures::TryStreamExt;
-use helpers::*;
 use itertools::Itertools;
 use stratus::config::RpcDownloaderConfig;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
+use stratus::eth::storage::ExternalRpcStorage;
 use stratus::ext::not;
-use stratus::infra::postgres::Postgres;
-use stratus::infra::postgres::PostgresClientConfig;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -28,23 +23,16 @@ const BLOCKS_BY_TASK: usize = 1_000;
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: RpcDownloaderConfig = init_global_services();
-    let pg = Arc::new(
-        Postgres::new(PostgresClientConfig {
-            url: config.pg.pg_url.to_string(),
-            connections: config.pg.pg_connections,
-            acquire_timeout: Duration::from_millis(config.pg.pg_timeout_millis),
-        })
-        .await?,
-    );
+    let rpc_storage = config.rpc_storage.init().await?;
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc).await?);
 
     // download balances and blocks
-    download_balances(&pg, &chain, config.initial_accounts).await?;
-    download_blocks(pg, chain, config.paralellism).await?;
+    download_balances(Arc::clone(&rpc_storage), &chain, config.initial_accounts).await?;
+    download_blocks(rpc_storage, chain, config.paralellism).await?;
     Ok(())
 }
 
-async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
+async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
     if accounts.is_empty() {
         tracing::warn!("no initial accounts to retrieve balance");
         return Ok(());
@@ -53,25 +41,25 @@ async fn download_balances(pg: &Postgres, chain: &BlockchainClient, accounts: Ve
     }
 
     // retrieve downloaded balances
-    let downloaded_balances = pg_retrieve_external_balances(pg).await?;
-    let downloaded_balances_addresses = downloaded_balances.iter().map(|balance| &balance.address).collect_vec();
+    let downloaded_accounts = rpc_storage.read_initial_accounts().await?;
+    let downloaded_accounts_addresses = downloaded_accounts.iter().map(|a| &a.address).collect_vec();
 
     // keep only accounts that must be downloaded
     let address_to_download = accounts
         .into_iter()
-        .filter(|address| not(downloaded_balances_addresses.contains(&address)))
+        .filter(|address| not(downloaded_accounts_addresses.contains(&address)))
         .collect_vec();
 
     // download missing balances
     for address in address_to_download {
         let balance = chain.get_balance(&address, Some(BlockNumber::ZERO)).await?;
-        pg_insert_external_balance(pg, address, balance).await?;
+        rpc_storage.save_initial_account(address, balance).await?;
     }
 
     Ok(())
 }
 
-async fn download_blocks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, paralellism: usize) -> anyhow::Result<()> {
+async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<BlockchainClient>, paralellism: usize) -> anyhow::Result<()> {
     // prepare download block tasks
     let mut start = BlockNumber::ZERO;
     let end = chain.get_current_block_number().await?;
@@ -80,7 +68,7 @@ async fn download_blocks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, parale
     let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (BLOCKS_BY_TASK - 1), end);
-        tasks.push(download(Arc::clone(&pg), Arc::clone(&chain), start, end));
+        tasks.push(download(Arc::clone(&rpc_storage), Arc::clone(&chain), start, end));
         start += BLOCKS_BY_TASK;
     }
 
@@ -98,9 +86,14 @@ async fn download_blocks(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, parale
     }
 }
 
-async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
+async fn download(
+    rpc_storage: Arc<dyn ExternalRpcStorage>,
+    chain: Arc<BlockchainClient>,
+    start: BlockNumber,
+    end_inclusive: BlockNumber,
+) -> anyhow::Result<()> {
     // calculate current block
-    let mut current = match pg_retrieve_max_external_block(&pg, start, end_inclusive).await? {
+    let mut current = match rpc_storage.read_max_block_number_in_range(start, end_inclusive).await? {
         Some(number) => number.next(),
         None => start,
     };
@@ -152,7 +145,7 @@ async fn download(pg: Arc<Postgres>, chain: Arc<BlockchainClient>, start: BlockN
             }
 
             // save block and receipts
-            if let Err(e) = pg_insert_external_block_and_receipts(&pg, current, block_json, receipts_json).await {
+            if let Err(e) = rpc_storage.save_block_and_receipts(current, block_json, receipts_json).await {
                 tracing::warn!(reason = ?e, "retrying because failed to save block");
                 continue;
             }
