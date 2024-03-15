@@ -41,10 +41,10 @@ impl TemporaryStorage for SledTemporary {
 
     async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         // try temporary data
-        // let number = self.temp.read_active_block_number().await?;
-        // if let Some(number) = number {
-        //     return Ok(Some(number));
-        // }
+        let number = self.temp.read_active_block_number().await?;
+        if let Some(number) = number {
+            return Ok(Some(number));
+        }
 
         // try durable data
         match self.db.get(block_number_key()) {
@@ -103,14 +103,14 @@ impl TemporaryStorage for SledTemporary {
     }
 
     async fn flush_account_changes(&self) -> anyhow::Result<()> {
-        let mut temp = self.temp.lock_write().await;
-
+        // read before lock
         let Some(number) = self.read_active_block_number().await? else {
             return log_and_err!("no active block number when flushing sled data");
         };
 
+        let mut temp_lock = self.temp.lock_write().await;
         let tx_result = self.db.transaction::<_, (), anyhow::Error>(|tx| {
-            for account in temp.accounts.values() {
+            for account in temp_lock.accounts.values() {
                 // write account
                 let account_key = account_key_vec(&account.info.address);
                 let account_value = serde_json::to_string(&account.info).unwrap().as_bytes().to_vec();
@@ -143,7 +143,7 @@ impl TemporaryStorage for SledTemporary {
         }
 
         // reset temporary storage state
-        temp.reset();
+        temp_lock.reset();
 
         Ok(())
     }
