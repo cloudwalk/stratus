@@ -1,9 +1,11 @@
-import { ethers, upgrades } from "hardhat";
+import { config, ethers, network, upgrades } from "hardhat";
 import { expect } from "chai";
-import { ContractFactory } from "ethers";
+import { ContractFactory, JsonRpcProvider } from "ethers";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, IERC20Hookable, PixCashier, YieldStreamer } from "../typechain-types";
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./helpers/recompile";
+import { HttpNetworkConfig } from "hardhat/types";
+import { waitReceipt } from "./helpers/rpc";
 
 /* Contracts instances */
 let brlcToken: BRLCToken;
@@ -16,6 +18,10 @@ let yieldStreamer: YieldStreamer;
 /* Signers and Wallets */
 let deployer: SignerWithAddress;
 
+/* Providers */
+let providerUrl = (config.networks[network.name] as HttpNetworkConfig).url || "http://localhost:8545";
+let ETHERJS = new JsonRpcProvider(providerUrl);
+
 async function deployBRLC() {
   let brlcFactory: ContractFactory = await ethers.getContractFactory("BRLCToken");
   let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
@@ -24,8 +30,8 @@ async function deployBRLC() {
 }
 
 async function configureBRLC() {
-  brlcToken.updateMainMinter(await deployer.getAddress());
-  brlcToken.configureMinter(await deployer.getAddress(), 1000000000);
+  waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress()));
+  waitReceipt(brlcToken.configureMinter(await deployer.getAddress(), 1000000000));
 }
 
 async function deployPixCashier() {
@@ -37,7 +43,7 @@ async function deployPixCashier() {
 
 async function configurePixCashier() {
   brlcToken.connect(deployer).configureMinter(await pixCashier.getAddress(), 1000000000);
-  pixCashier.grantRole(await pixCashier.CASHIER_ROLE(), await deployer.getAddress());
+  waitReceipt(pixCashier.grantRole(await pixCashier.CASHIER_ROLE(), await deployer.getAddress()));
 }
 
 async function deployCashbackDistributor() {
@@ -48,8 +54,8 @@ async function deployCashbackDistributor() {
 }
 
 async function configureCashbackDistributor() {
-  cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await deployer.getAddress());
-  cashbackDistributor.enable();
+  waitReceipt(cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await deployer.getAddress()));
+  waitReceipt(cashbackDistributor.enable());
 }
 
 async function deployCardPaymentProcessor() {
@@ -61,15 +67,15 @@ async function deployCardPaymentProcessor() {
 
 async function configureCardPaymentProcessor() {
   const rateFactor = 10;
-  cardPaymentProcessor.grantRole(await cardPaymentProcessor.EXECUTOR_ROLE(), await deployer.getAddress());
-  cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress());
-  cardPaymentProcessor.setRevocationLimit(255);
-  cardPaymentProcessor.setCashbackRate(1.5 * rateFactor);
-  cardPaymentProcessor.setCashOutAccount(await deployer.getAddress());
-  brlcToken.approve(await cardPaymentProcessor.getAddress(), 0xfffffffffffff);
-  cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await cardPaymentProcessor.getAddress());
-  cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress());
-  cardPaymentProcessor.enableCashback();
+  waitReceipt(cardPaymentProcessor.grantRole(await cardPaymentProcessor.EXECUTOR_ROLE(), await deployer.getAddress()));
+  waitReceipt(cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress()));
+  waitReceipt(cardPaymentProcessor.setRevocationLimit(255));
+  waitReceipt(cardPaymentProcessor.setCashbackRate(1.5 * rateFactor));
+  waitReceipt(cardPaymentProcessor.setCashOutAccount(await deployer.getAddress()));
+  waitReceipt(brlcToken.approve(await cardPaymentProcessor.getAddress(), 0xfffffffffffff));
+  waitReceipt(cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await cardPaymentProcessor.getAddress()));
+  waitReceipt(cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress()));
+  waitReceipt(cardPaymentProcessor.enableCashback());
 }
 
 async function deployBalanceTracker() {
@@ -92,6 +98,7 @@ async function configureBalanceTracker() {
   const hooks: IERC20Hookable.HookStruct[] = hooksOutput.map(toHookStruct);
   const newHook = { account: await balanceTracker.getAddress(), policy: REVERT_POLICY };
   hooks.push(newHook);
+  waitReceipt(brlcToken.setAfterTokenTransferHooks(hooks));
 }
 
 async function deployYieldStreamer() {
@@ -102,7 +109,7 @@ async function deployYieldStreamer() {
 }
 
 async function configureYieldStreamer() {
-  yieldStreamer.setBalanceTracker(await balanceTracker.getAddress());
+  waitReceipt(yieldStreamer.setBalanceTracker(await balanceTracker.getAddress()));
 }
 
 describe("Integration Test", function () {
@@ -163,31 +170,31 @@ describe("Integration Test", function () {
   });
   describe("Scenario 1", function () {
 
-    let alice = ethers.Wallet.createRandom().connect(ethers.provider);
+    let alice = ethers.Wallet.createRandom().connect(ETHERJS);
     let bob = ethers.Wallet.createRandom();
 
     it("Mint BRLC to Alice", async function () {
-      await brlcToken.connect(deployer).mint(alice.address, 900);
+      waitReceipt(brlcToken.mint(alice.address, 900));
     });
 
     it("Cash in BRLC to Alice", async function () {
-      await pixCashier.connect(deployer).cashIn(alice.address, 100, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+      waitReceipt(pixCashier.cashIn(alice.address, 100, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
     });
 
     it("Alice transfers BRLC to Bob", async function () {
-      await brlcToken.connect(alice).transfer(bob.address, 50, { gasPrice: 0 });
+      waitReceipt(brlcToken.connect(alice).transfer(bob.address, 50, { gasPrice: 0 }));
     });
 
     it("Alice approves PixCashier to spend BRLC", async function () {
-      await brlcToken.connect(alice).approve(await pixCashier.getAddress(), 0xfffffffffffff, { gasPrice: 0 });
+      waitReceipt(brlcToken.connect(alice).approve(await pixCashier.getAddress(), 0xfffffffffffff, { gasPrice: 0 }));
     });
 
     it("Request Pix cash out for Alice", async function () {
-      await pixCashier.connect(deployer).requestCashOutFrom(alice.address, 25, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+      waitReceipt(pixCashier.requestCashOutFrom(alice.address, 25, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
     });
 
     it("Confirm Alice cashout", async function () {
-      await pixCashier.connect(deployer).confirmCashOut("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+      waitReceipt(pixCashier.confirmCashOut("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
     });
 
     it("Final state is correct", async function () {
