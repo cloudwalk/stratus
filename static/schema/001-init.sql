@@ -723,9 +723,47 @@ CREATE UNIQUE INDEX index_transactions_on_hash ON public.transactions USING btre
 
 --- XXX temporary
 CREATE TABLE public.neo_blocks (
-    block_number numeric PRIMARY KEY,
+    block_number BIGINT PRIMARY KEY,
+    block_hash BYTEA NOT NULL,
     block JSONB NOT NULL,
+    account_changes JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
+);
+
+CREATE TABLE neo_accounts (
+    block_number BIGINT NOT NULL,
+    address BYTEA NOT NULL,
+    bytecode BYTEA,
+    balance NUMERIC(38, 0),
+    nonce NUMERIC,
+    PRIMARY KEY (address, block_number),
+    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
+);
+
+CREATE TABLE neo_account_slots (
+    block_number BIGINT NOT NULL,
+    index INT NOT NULL,
+    account_address BYTEA NOT NULL,
+    value BYTEA,
+    PRIMARY KEY (account_address, index, block_number),
+    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
+);
+
+CREATE TABLE neo_transactions (
+    block_number BIGINT NOT NULL,
+    hash BYTEA NOT NULL,
+    transaction_data JSONB NOT NULL,
+    PRIMARY KEY (hash),
+    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
+);
+
+CREATE TABLE neo_logs (
+    block_number BIGINT NOT NULL,
+    hash BYTEA NOT NULL,
+    address BYTEA NOT NULL,
+    log_data JSONB NOT NULL,
+    PRIMARY KEY (hash, address, block_number),
+    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
 );
 
 --
