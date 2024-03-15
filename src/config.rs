@@ -115,7 +115,7 @@ pub struct ImporterOfflineConfig {
     pub paralellism: usize,
 
     /// Write data to CSV file instead of permanent storage.
-    #[arg(short = 'p', long = "CSV", env = "CSV", default_value = "false")]
+    #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
 
     #[deref]
