@@ -123,7 +123,8 @@ impl TemporaryStorage for SledTemporary {
                     tx.insert(slot_key, slot_value)?;
                 }
             }
-            // increment block
+
+            // sets the next active block number
             tx.insert(block_number_key_vec(), serialize_number(number.next()))?;
 
             Ok(())
