@@ -85,8 +85,13 @@ impl TemporaryStorage for SledTemporary {
             }
         }
 
-        // execute batch
-        self.db.apply_batch(batch)?;
+        // execute batch and flush
+        if let Err(e) = self.db.apply_batch(batch) {
+            return log_and_err!(reason = e, "failed to apply sled batch");
+        }
+        if let Err(e) = self.db.flush() {
+            return log_and_err!(reason = e, "failed to persist sled data");
+        }
 
         Ok(())
     }
