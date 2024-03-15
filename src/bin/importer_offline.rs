@@ -132,14 +132,8 @@ async fn execute_external_rpc_storage_loader(
 ) -> anyhow::Result<()> {
     tracing::info!("external rpc storage loader starting");
 
-    // find block limits to load
-    let active = stratus_storage.read_active_block_number().await?;
-    let mined = stratus_storage.read_mined_block_number().await?;
-
-    let mut start = active.and_then(|b| b.prev()).unwrap_or(mined);
-    if not(start.is_zero()) || stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
-        start = start.next();
-    };
+    // if active, resume from the previous
+    let mut start = block_number_to_resume(&stratus_storage).await?;
     let end = match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => number,
         Ok(None) => BlockNumber::ZERO,
@@ -204,4 +198,22 @@ async fn load_blocks_and_receipts(
     let blocks_task = rpc_storage.read_blocks_in_range(start, end);
     let receipts_task = rpc_storage.read_receipts_in_range(start, end);
     try_join!(blocks_task, receipts_task)
+}
+
+// Finds the block number to resume the import job.
+async fn block_number_to_resume(stratus_storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
+    // when has an active number, resume from it because it was not imported yet.
+    let active_number = stratus_storage.read_active_block_number().await?;
+    if let Some(active_number) = active_number {
+        return Ok(active_number);
+    }
+
+    // fallback to last mined block
+    // if mined is zero, we need to check if we have the zero block or not to decide if we start from zero or the next.
+    // if mined is not zero, then can assume it is the next number after it.
+    let mut mined_number = stratus_storage.read_mined_block_number().await?;
+    if not(mined_number.is_zero()) || stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
+        mined_number = mined_number.next();
+    }
+    Ok(mined_number)
 }
