@@ -25,6 +25,7 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::eth::storage::HybridPermanentStorage;
+use crate::eth::storage::HybridPermanentStorageConfig;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
@@ -39,7 +40,6 @@ use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
 #[cfg(feature = "dev")]
 use crate::ext::not;
-use crate::infra::postgres::PostgresClientConfig;
 
 pub trait WithCommonConfig {
     fn common(&self) -> &CommonConfig;
@@ -456,7 +456,7 @@ impl PermanentStorageConfig {
             }
 
             PermanentStorageKind::Hybrid { ref url } => {
-                let config = PostgresClientConfig {
+                let config = HybridPermanentStorageConfig {
                     url: url.to_owned(),
                     connections: self.perm_storage_connections,
                     acquire_timeout: Duration::from_millis(self.perm_storage_timeout_millis),

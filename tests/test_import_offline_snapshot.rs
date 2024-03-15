@@ -100,7 +100,6 @@ async fn test_import_offline_snapshot() {
     // sleep to ensure prometheus collected
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-
     for query in METRIC_QUERIES {
         // formatting between query groups
         if query.is_empty() {

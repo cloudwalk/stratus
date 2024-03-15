@@ -14,6 +14,7 @@ mod temporary_storage;
 pub use csv::CsvExporter;
 pub use external_rpc_storage::ExternalRpcStorage;
 pub use hybrid::HybridPermanentStorage;
+pub use hybrid::HybridPermanentStorageConfig;
 pub use inmemory::InMemoryPermanentStorage;
 pub use inmemory::InMemoryPermanentStorageState;
 pub use inmemory::InMemoryTemporaryStorage;
