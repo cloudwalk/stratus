@@ -102,19 +102,19 @@ impl TemporaryStorage for SledTemporary {
         let mut batch = sled::Batch::default();
         for account in temp.accounts.values() {
             // write account
-            let account_key = account_key(&account.info.address).as_bytes().to_vec();
+            let account_key = account_key_vec(&account.info.address);
             let account_value = serde_json::to_string(&account.info).unwrap().as_bytes().to_vec();
             batch.insert(account_key, account_value);
 
             // write slots
             for slot in account.slots.values() {
-                let slot_key = slot_key(&account.info.address, &slot.index).as_bytes().to_vec();
+                let slot_key = slot_key_vec(&account.info.address, &slot.index);
                 let slot_value = serde_json::to_string(&slot).unwrap().as_bytes().to_vec();
                 batch.insert(slot_key, slot_value);
             }
         }
         // remove active block number
-        batch.remove(block_number_key());
+        batch.remove(block_number_key_vec());
 
         // execute batch and flush
         if let Err(e) = self.db.apply_batch(batch) {
@@ -140,12 +140,24 @@ impl TemporaryStorage for SledTemporary {
 // Keys
 // -----------------------------------------------------------------------------
 
+fn account_key_vec(address: &Address) -> Vec<u8> {
+    account_key(address).into_bytes().to_vec()
+}
+
 fn account_key(address: &Address) -> String {
     format!("address::{}", address)
 }
 
+fn slot_key_vec(address: &Address, slot_index: &SlotIndex) -> Vec<u8> {
+    slot_key(address, slot_index).into_bytes().to_vec()
+}
+
 fn slot_key(address: &Address, slot_index: &SlotIndex) -> String {
     format!("slot::{}::{}", address, slot_index)
+}
+
+fn block_number_key_vec() -> Vec<u8> {
+    block_number_key().into_bytes().to_vec()
 }
 
 fn block_number_key() -> String {
