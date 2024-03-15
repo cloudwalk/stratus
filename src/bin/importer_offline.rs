@@ -16,6 +16,7 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
+use stratus::if_else;
 use stratus::infra::metrics;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -36,10 +37,10 @@ type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
-    let csv = CsvExporter::default();
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.init_stratus_storage().await?;
     let executor = config.init_executor(Arc::clone(&stratus_storage));
+    let mut csv = if_else!(config.export_csv, Some(CsvExporter::new()?), None);
 
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
@@ -47,18 +48,20 @@ async fn main() -> anyhow::Result<()> {
 
     // import genesis accounts
     let accounts = rpc_storage.read_initial_accounts().await?;
+    if let Some(ref mut csv) = csv {
+        csv.export_initial_accounts(accounts.clone())?;
+    }
     stratus_storage.save_accounts_to_perm(accounts).await?;
-    // csv.export_accounts(accounts).await?;
 
     // execute parallel tasks (external rpc storage loader and block importer)
     tokio::spawn(execute_external_rpc_storage_loader(
         rpc_storage,
-        stratus_storage,
+        Arc::clone(&stratus_storage),
         cancellation.clone(),
         config.paralellism,
         backlog_tx,
     ));
-    execute_block_importer(executor, csv, cancellation, backlog_rx).await?;
+    execute_block_importer(executor, Arc::clone(&stratus_storage), csv, cancellation, backlog_rx).await?;
 
     Ok(())
 }
@@ -69,7 +72,8 @@ async fn main() -> anyhow::Result<()> {
 async fn execute_block_importer(
     // services
     executor: EthExecutor,
-    mut _csv: CsvExporter,
+    stratus_storage: Arc<StratusStorage>,
+    mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
@@ -93,9 +97,18 @@ async fn execute_block_importer(
         for block in blocks {
             let start = Instant::now();
 
-            executor.import_external_and_commit(block, &mut receipts).await?;
-            // let block = executor.import_external_and_commit(block.payload, &mut receipts).await?;
-            // csv.export_block(block).await?;
+            match csv {
+                // when exporting to csv, only persist temporary changes because permanent will be bulk loaded at the end
+                Some(ref mut csv) => {
+                    let block = executor.import_external_to_temp(block, &mut receipts).await?;
+                    csv.export_block(block)?;
+                    stratus_storage.flush_account_changes_to_temp().await?;
+                }
+                // when not exporting to csv, persist the entire block to permanent immediatly
+                None => {
+                    executor.import_external_to_perm(block, &mut receipts).await?;
+                }
+            }
 
             metrics::inc_import_offline(start.elapsed());
         }
@@ -119,11 +132,8 @@ async fn execute_external_rpc_storage_loader(
 ) -> anyhow::Result<()> {
     tracing::info!("external rpc storage loader starting");
 
-    // find block limits to load
-    let mut start = stratus_storage.read_current_block_number().await?;
-    if not(start.is_zero()) || stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?.is_some() {
-        start = start.next();
-    };
+    // if active, resume from the previous
+    let mut start = block_number_to_resume(&stratus_storage).await?;
     let end = match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => number,
         Ok(None) => BlockNumber::ZERO,
@@ -188,4 +198,23 @@ async fn load_blocks_and_receipts(
     let blocks_task = rpc_storage.read_blocks_in_range(start, end);
     let receipts_task = rpc_storage.read_receipts_in_range(start, end);
     try_join!(blocks_task, receipts_task)
+}
+
+// Finds the block number to resume the import job.
+async fn block_number_to_resume(stratus_storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
+    // when has an active number, resume from it because it was not imported yet.
+    let active_number = stratus_storage.read_active_block_number().await?;
+    if let Some(active_number) = active_number {
+        return Ok(active_number);
+    }
+
+    // fallback to last mined block
+    // if mined is zero, we need to check if we have the zero block or not to decide if we start from zero or the next.
+    // if mined is not zero, then can assume it is the next number after it.
+    let mut mined_number = stratus_storage.read_mined_block_number().await?;
+    let zero_block = stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+    if not(mined_number.is_zero()) || zero_block.is_some() {
+        mined_number = mined_number.next();
+    }
+    Ok(mined_number)
 }

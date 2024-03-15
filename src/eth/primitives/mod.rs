@@ -182,6 +182,7 @@ mod tests {
     type TransactionExecutionValueChangeWei = ExecutionValueChange<Wei>;
 
     gen_test_serde!(Address);
+    gen_test_serde!(Account);
     gen_test_serde!(Block);
     gen_test_serde!(BlockHeader);
     gen_test_serde!(BlockNumber);

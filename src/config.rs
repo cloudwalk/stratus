@@ -33,6 +33,7 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
@@ -113,6 +114,10 @@ pub struct ImporterOfflineConfig {
     /// Number of parallel database fetches.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
+
+    /// Write data to CSV file instead of permanent storage.
+    #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
+    pub export_csv: bool,
 
     #[deref]
     #[clap(flatten)]
@@ -391,6 +396,7 @@ pub struct TemporaryStorageConfig {
 #[derive(Clone, Debug)]
 pub enum TemporaryStorageKind {
     InMemory,
+    Sled,
 }
 
 impl TemporaryStorageConfig {
@@ -398,6 +404,7 @@ impl TemporaryStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
+            TemporaryStorageKind::Sled => Ok(Arc::new(SledTemporary::new()?)),
         }
     }
 }
@@ -408,6 +415,7 @@ impl FromStr for TemporaryStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            "sled" => Ok(Self::Sled),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
     }

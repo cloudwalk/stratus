@@ -69,27 +69,30 @@ impl EthExecutor {
     // Transaction execution
     // -------------------------------------------------------------------------
 
-    /// Imports an external block by re-executing all transactions.
-    pub async fn import_external_and_commit(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<()> {
+    /// Re-executes an external block locally and imports it to the storage.
+    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-        let block = self.import_external(block, receipts).await?;
+        let block = self.import_external_to_temp(block, receipts).await?;
 
         // commit block
-        self.storage.set_block_number(*block.number()).await?;
+        self.storage.set_mined_block_number(*block.number()).await?;
         if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
             let json_block = serde_json::to_string(&block).unwrap();
             tracing::error!(reason = ?e, %json_block);
             return Err(e.into());
         };
 
-        Ok(())
+        Ok(block)
     }
 
-    /// Imports an external block by re-executing all transactions.
-    pub async fn import_external(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+    /// Re-executes an external block locally.
+    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         let start = Instant::now();
         let mut block_metrics = ExecutionMetrics::default();
         tracing::info!(number = %block.number(), "importing external block");
+
+        // track active block number
+        self.storage.set_active_block_number(block.number()).await?;
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
@@ -117,7 +120,7 @@ impl EthExecutor {
                     };
 
                     // temporarily save state to next transactions from the same block
-                    self.storage.save_account_changes_to_temp(execution.clone()).await?;
+                    self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
                     executions.push((tx, receipt, execution));
 
                     // track metrics
@@ -133,6 +136,8 @@ impl EthExecutor {
                 }
             }
         }
+
+        // convert block
         let block = Block::from_external(block, executions)?;
 
         // track metrics

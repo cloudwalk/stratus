@@ -18,16 +18,16 @@ use crate::eth::storage::StorageError;
 /// Permanent (committed) storage operations
 #[async_trait]
 pub trait PermanentStorage: Send + Sync {
+    /// Sets the last mined block number to a specific value.
+    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+
     // Retrieves the last mined block number.
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber>;
+    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Atomically increments the block number, returning the new value.
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
-
-    /// Sets the block number to a specific value.
     ///
-    /// Should be used only when importing external blocks. To reset the storage to the past, use `reset_at`.
-    async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+    /// TODO: this will probably be removed because set_ and read_ may be enough.
+    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;

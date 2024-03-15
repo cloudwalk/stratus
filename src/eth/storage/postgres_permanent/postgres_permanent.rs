@@ -177,7 +177,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         nextval.try_into()
     }
 
-    async fn set_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
+    async fn set_mined_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
         // nothing to do yet because we are not using a sequence
         Ok(())
     }
@@ -268,7 +268,7 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         match block {
             BlockSelection::Latest => {
-                let current = self.read_current_block_number().await?;
+                let current = self.read_mined_block_number().await?;
 
                 let block_number = i64::try_from(current)?;
 
@@ -817,7 +817,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         Ok(())
     }
 
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading current block number");
 
         let currval: BigDecimal = sqlx::query_file_scalar!("src/eth/storage/postgres_permanent/sql/select_current_block_number.sql")

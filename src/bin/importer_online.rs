@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let executor = config.init_executor(Arc::clone(&storage));
 
     // start from last imported block
-    let mut number = storage.read_current_block_number().await?;
+    let mut number = storage.read_mined_block_number().await?;
 
     // keep importing forever
     loop {
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
 
         // import block
         let mut receipts: ExternalReceipts = receipts.into();
-        executor.import_external_and_commit(block, &mut receipts).await?;
+        executor.import_external_to_perm(block, &mut receipts).await?;
         metrics::inc_import_online(start.elapsed());
     }
 }
