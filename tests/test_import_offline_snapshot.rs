@@ -94,7 +94,7 @@ async fn test_import_offline_snapshot() {
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
     let executor = config.init_executor(storage);
-    executor.reexecute_external(block, &mut receipts).await.unwrap();
+    executor.import_external_to_temp(block, &mut receipts).await.unwrap();
 
     // get metrics from prometheus
     // sleep to ensure prometheus collected

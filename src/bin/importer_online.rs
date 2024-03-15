@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
 
         // import block
         let mut receipts: ExternalReceipts = receipts.into();
-        executor.import_external(block, &mut receipts).await?;
+        executor.import_external_to_perm(block, &mut receipts).await?;
         metrics::inc_import_online(start.elapsed());
     }
 }
