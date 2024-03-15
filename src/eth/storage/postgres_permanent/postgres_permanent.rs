@@ -1,19 +1,19 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+// use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
+// use anyhow::anyhow;
 use anyhow::Context;
 use async_trait::async_trait;
 use nonempty::nonempty;
-use serde_json::Value;
-use sqlx::postgres::PgListener;
+// use serde_json::Value;
+// use sqlx::postgres::PgListener;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
 use sqlx::Row;
-use tokio::sync::RwLock;
+// use tokio::sync::RwLock;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -33,7 +33,7 @@ use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::SlotValue;
+// use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::postgres_permanent::types::AccountBatch;
@@ -51,21 +51,21 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::log_and_err;
 
-type SloadKey = (Address, SlotIndex);
-type SloadValue = (SlotValue, BlockNumber);
-type SloadCacheMap = HashMap<SloadKey, SloadValue>;
-type SloadCache = Arc<RwLock<SloadCacheMap>>;
+// type SloadKey = (Address, SlotIndex);
+// type SloadValue = (SlotValue, BlockNumber);
+// type SloadCacheMap = HashMap<SloadKey, SloadValue>;
+// type SloadCache = Arc<RwLock<SloadCacheMap>>;
 
-struct SlotCache {
-    pub index: SlotIndex,
-    pub value: SlotValue,
-    pub address: Address,
-    pub block: BlockNumber,
-}
+// struct SlotCache {
+//     pub index: SlotIndex,
+//     pub value: SlotValue,
+//     pub address: Address,
+//     pub block: BlockNumber,
+// }
 
 pub struct PostgresPermanentStorage {
     pub pool: PgPool,
-    pub sload_cache: SloadCache,
+    // pub sload_cache: SloadCache,
 }
 
 #[derive(Debug)]
@@ -94,71 +94,71 @@ impl PostgresPermanentStorage {
 
         let storage = Self {
             pool: pool.clone(),
-            sload_cache: Arc::new(RwLock::new(new_sload_cache(pool).await?)),
+            // sload_cache: Arc::new(RwLock::new(new_sload_cache(pool).await?)),
         };
 
-        storage.start_listening().await;
+        // storage.start_listening().await;
 
         Ok(storage)
     }
 
-    pub async fn start_listening(&self) {
-        let pool = self.pool.clone();
-        let sload_cache = Arc::clone(&self.sload_cache);
+    // pub async fn start_listening(&self) {
+    //     let pool = self.pool.clone();
+    //     // let sload_cache = Arc::clone(&self.sload_cache);
 
-        tokio::spawn(async move {
-            let mut listener = PgListener::connect_with(&pool).await.expect("Failed to connect listener");
-            listener.listen("sload_cache_channel").await.expect("Failed to listen on channel");
+    //     tokio::spawn(async move {
+    //         let mut listener = PgListener::connect_with(&pool).await.expect("Failed to connect listener");
+    //         // listener.listen("sload_cache_channel").await.expect("Failed to listen on channel");
 
-            loop {
-                match listener.recv().await {
-                    Ok(notification) => {
-                        let _ = handle_notification(&notification, &sload_cache).await;
-                    }
-                    Err(e) => {
-                        tracing::error!("Listener error: {:?}", e);
-                        //XXX Optionally implement a reconnect or retry logic
-                    }
-                }
-            }
-        });
-    }
+    //         loop {
+    //             match listener.recv().await {
+    //                 Ok(notification) => {
+    //                     // let _ = handle_notification(&notification, &sload_cache).await;
+    //                 }
+    //                 Err(e) => {
+    //                     tracing::error!("Listener error: {:?}", e);
+    //                     //XXX Optionally implement a reconnect or retry logic
+    //                 }
+    //             }
+    //         }
+    //     });
+    // }
 }
 
-async fn handle_notification(notification: &sqlx::postgres::PgNotification, sload_cache: &SloadCache) -> anyhow::Result<()> {
-    let payload: Value = serde_json::from_str(notification.payload())?;
+// async fn handle_notification(notification: &sqlx::postgres::PgNotification, sload_cache: &SloadCache) -> anyhow::Result<()> {
+//     let payload: Value = serde_json::from_str(notification.payload())?;
 
-    let address_str = payload.get("address").and_then(Value::as_str).ok_or_else(|| anyhow!("missing address"))?;
-    let address: Address = address_str.parse()?;
+//     let address_str = payload.get("address").and_then(Value::as_str).ok_or_else(|| anyhow!("missing address"))?;
+//     let address: Address = address_str.parse()?;
 
-    let index_str = payload.get("index").and_then(Value::as_str).ok_or_else(|| anyhow!("missing index"))?;
-    let index: SlotIndex = index_str.parse()?;
+//     let index_str = payload.get("index").and_then(Value::as_str).ok_or_else(|| anyhow!("missing index"))?;
+//     let index: SlotIndex = index_str.parse()?;
 
-    let value_str = payload.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("missing value"))?;
-    let value: SlotValue = value_str.parse()?;
+//     let value_str = payload.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("missing value"))?;
+//     let value: SlotValue = value_str.parse()?;
 
-    let block_u64 = payload.get("block").and_then(Value::as_u64).ok_or_else(|| anyhow!("missing block"))?;
-    let block = BlockNumber::from(block_u64);
+//     let block_u64 = payload.get("block").and_then(Value::as_u64).ok_or_else(|| anyhow!("missing block"))?;
+//     let block = BlockNumber::from(block_u64);
 
-    let mut cache = sload_cache.write().await;
-    cache.insert((address, index), (value, block));
+//     let mut cache = sload_cache.write().await;
+//     cache.insert((address, index), (value, block));
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
-    let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres_permanent/sql/select_slot_cache.sql", BigDecimal::from(0))
-        .fetch_all(&connection_pool)
-        .await?;
-    let mut sload_cache = HashMap::new();
+// async fn new_sload_cache(connection_pool: PgPool) -> anyhow::Result<HashMap<(Address, SlotIndex), (SlotValue, BlockNumber)>> {
+//     let raw_sload = sqlx::query_file_as!(SlotCache, "src/eth/storage/postgres_permanent/sql/select_slot_cache.sql", BigDecimal::from(0))
+//         .fetch_all(&connection_pool)
+//         .await?;
+//     let mut sload_cache = HashMap::new();
 
-    raw_sload.into_iter().for_each(|s| {
-        sload_cache.insert((s.address, s.index), (s.value, s.block));
-    });
+//     raw_sload.into_iter().for_each(|s| {
+//         sload_cache.insert((s.address, s.index), (s.value, s.block));
+//     });
 
-    tracing::info!("finished loading sload cache");
-    Ok(sload_cache)
-}
+//     tracing::info!("finished loading sload cache");
+//     Ok(sload_cache)
+// }
 
 #[async_trait]
 impl PermanentStorage for PostgresPermanentStorage {
@@ -225,15 +225,14 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let slot = match point_in_time {
             StoragePointInTime::Present => {
-                let sload_cache = self.sload_cache.read().await;
-                if let Some((value, _)) = sload_cache.get(&(address.clone(), slot_index.clone())) {
-                    Some(Slot {
-                        index: slot_index.clone(),
-                        value: value.clone(),
-                    })
-                } else {
-                    None
-                }
+                sqlx::query_file_as!(
+                    Slot, 
+                    "src/eth/storage/postgres_permanent/sql/select_slot.sql", 
+                    address.as_ref(), 
+                    slot_index_u8.as_ref(),
+                )
+                .fetch_optional(&self.pool)
+                .await?
             }
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
@@ -803,12 +802,12 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         tx.commit().await.context("failed to commit transaction")?;
 
-        {
-            let mut sload_cache = self.sload_cache.write().await;
-            for sload_tuple in sload_batch {
-                sload_cache.insert((sload_tuple.0, sload_tuple.1), (sload_tuple.2, sload_tuple.3));
-            }
-        }
+        // {
+        //     let mut sload_cache = self.sload_cache.write().await;
+        //     for sload_tuple in sload_batch {
+        //         sload_cache.insert((sload_tuple.0, sload_tuple.1), (sload_tuple.2, sload_tuple.3));
+        //     }
+        // }
 
         Ok(())
     }
@@ -898,8 +897,8 @@ impl PermanentStorage for PostgresPermanentStorage {
             .execute(&self.pool)
             .await?;
 
-        let mut cache = self.sload_cache.write().await;
-        cache.clear();
+        // let mut cache = self.sload_cache.write().await;
+        // cache.clear();
 
         Ok(())
     }
