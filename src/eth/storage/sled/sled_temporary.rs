@@ -36,11 +36,17 @@ impl SledTemporary {
 #[async_trait]
 impl TemporaryStorage for SledTemporary {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        self.db.insert(block_number_key(), serialize_number(number))?;
-        Ok(())
+        self.temp.set_active_block_number(number).await
     }
 
     async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+        // try temporary data
+        let number = self.temp.read_active_block_number().await?;
+        if let Some(number) = number {
+            return Ok(Some(number));
+        }
+
+        // try durable data
         match self.db.get(block_number_key()) {
             Ok(Some(number)) => {
                 let number = u64::from_be_bytes(number.as_ref().try_into().unwrap());
