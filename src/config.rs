@@ -28,6 +28,7 @@ use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StratusStorage;
+use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
@@ -189,6 +190,9 @@ impl WithCommonConfig for StateValidatorConfig {
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
     #[clap(flatten)]
+    pub temp: TemporaryStorageConfig,
+
+    #[clap(flatten)]
     pub perm: PermanentStorageConfig,
 
     /// Number of EVM instances to run.
@@ -229,7 +233,9 @@ impl WithCommonConfig for CommonConfig {
 impl CommonConfig {
     /// Initializes storage.
     pub async fn init_storage(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let storage = self.perm.init().await?;
+        let temp_storage = self.temp.init().await?;
+        let perm_storage = self.perm.init().await?;
+        let storage = StratusStorage::new(temp_storage, perm_storage);
 
         if self.enable_genesis {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
@@ -255,7 +261,7 @@ impl CommonConfig {
             }
         }
 
-        Ok(storage)
+        Ok(Arc::new(storage))
     }
 
     /// Initializes EthExecutor. Should be called inside an async runtime.
@@ -334,48 +340,75 @@ pub struct PostgresConfig {
 }
 
 // -----------------------------------------------------------------------------
+// Enum: TemporaryStorageConfig
+// -----------------------------------------------------------------------------
+#[derive(Parser, Debug)]
+pub struct TemporaryStorageConfig {
+    /// Temporary storage implementation.
+    #[arg(long = "temp-storage", env = "TEMP_STORAGE", default_value = "inmemory")]
+    pub temp_kind: TemporaryStorageKind,
+}
+
+/// Temporary storage configuration.
+#[derive(Clone, Debug)]
+pub enum TemporaryStorageKind {
+    InMemory,
+}
+
+impl TemporaryStorageConfig {
+    /// Initializes temporary storage implementation.
+    pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
+        match self.temp_kind {
+            TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
+        }
+    }
+}
+
+impl FromStr for TemporaryStorageKind {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "inmemory" => Ok(Self::InMemory),
+            s => Err(anyhow!("unknown temporary storage: {}", s)),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Enum: PermanentStorageConfig
 // -----------------------------------------------------------------------------
 
 #[derive(Parser, Debug)]
 pub struct PermanentStorageConfig {
     /// Permamenent storage implementation.
-    #[arg(short = 's', long = "storage", env = "STORAGE", default_value_t = StorageKind::InMemory)]
-    pub perm_kind: StorageKind,
+    #[arg(long = "perm-storage", env = "PERM_STORAGE", default_value = "inmemory")]
+    pub perm_kind: PermanentStorageKind,
 
     /// Permamenent storage number of open pool connections.
-    #[arg(long = "storage-connections", env = "STORAGE_CONNECTIONS", default_value = "5")]
+    #[arg(long = "perm-storage-connections", env = "PERM_STORAGE_CONNECTIONS", default_value = "5")]
     pub perm_connections: u32,
 
     /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "storage-timeout", env = "STORAGE_TIMEOUT", default_value = "2000")]
+    #[arg(long = "perm-storage-timeout", env = "PERM_STORAGE_TIMEOUT", default_value = "2000")]
     pub perm_timeout_millis: u64,
-
-    /// Permanent storage writes are performed to a CSV file.
-    #[arg(long = "storage-proxy-csv", env = "STORAGE_PROXY_CSV", default_value = "false")]
-    pub perm_proxy_csv: bool,
 }
 
-/// Storage configuration.
-#[derive(Clone, Debug, strum::Display)]
-pub enum StorageKind {
-    #[strum(serialize = "inmemory")]
+/// Permanent storage configuration.
+#[derive(Clone, Debug)]
+pub enum PermanentStorageKind {
     InMemory,
-
-    #[strum(serialize = "postgres")]
     Postgres { url: String },
-
-    #[strum(serialize = "hybrid")]
     Hybrid { url: String },
 }
 
 impl PermanentStorageConfig {
-    /// Initializes the storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp = Arc::new(InMemoryTemporaryStorage::default());
+    /// Initializes permanent storage implementation.
+    pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_kind {
-            StorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-            StorageKind::Postgres { ref url } => {
+            PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
+
+            PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresClientConfig {
                     url: url.to_owned(),
                     connections: self.perm_connections,
@@ -383,7 +416,8 @@ impl PermanentStorageConfig {
                 };
                 Arc::new(Postgres::new(config).await?)
             }
-            StorageKind::Hybrid { ref url } => {
+
+            PermanentStorageKind::Hybrid { ref url } => {
                 let config = PostgresClientConfig {
                     url: url.to_owned(),
                     connections: self.perm_connections,
@@ -392,12 +426,11 @@ impl PermanentStorageConfig {
                 Arc::new(HybridPermanentStorage::new(config).await?)
             }
         };
-
-        Ok(Arc::new(StratusStorage::new(temp, perm)))
+        Ok(perm)
     }
 }
 
-impl FromStr for StorageKind {
+impl FromStr for PermanentStorageKind {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
@@ -408,7 +441,7 @@ impl FromStr for StorageKind {
                 let s = s.replace("hybrid", "postgres"); //TODO there is a better way to do this
                 Ok(Self::Hybrid { url: s.to_string() })
             }
-            s => Err(anyhow!("unknown storage: {}", s)),
+            s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }
 }

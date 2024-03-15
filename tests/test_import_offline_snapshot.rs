@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::Instant;
 
 use const_format::formatcp;
 use fancy_duration::AsFancyDuration;
@@ -106,29 +105,26 @@ async fn test_import_offline_snapshot() {
         }
 
         // get metrics and print them
-        // iterate until prometheus returns something
+        // sleep until metrics are collected by prometheus
+        tokio::time::sleep(Duration::from_secs(3)).await;
+
         let url = format!("{}?query={}", docker.prometheus_api_url(), query);
+        let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
+        let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
+        if results.is_empty() {
+            continue;
+        }
 
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while Instant::now() <= deadline {
-            let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
-            let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
-            if results.is_empty() {
-                continue;
+        for result in results {
+            let value: &str = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
+            let value: f64 = value.parse().unwrap();
+
+            if query.contains("_count") {
+                println!("{:<64} = {}", query, value);
+            } else {
+                let secs = Duration::from_secs_f64(value);
+                println!("{:<64} = {}", query, secs.fancy_duration().truncate(1));
             }
-
-            for result in results {
-                let value: &str = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
-                let value: f64 = value.parse().unwrap();
-
-                if query.contains("_count") {
-                    println!("{:<64} = {}", query, value);
-                } else {
-                    let secs = Duration::from_secs_f64(value);
-                    println!("{:<64} = {}", query, secs.fancy_duration().truncate(1));
-                }
-            }
-            break;
         }
     }
 }
