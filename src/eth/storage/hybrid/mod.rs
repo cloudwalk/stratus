@@ -1,6 +1,5 @@
 //! In-memory storage implementations.
 
-use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -9,6 +8,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use metrics::atomics::AtomicU64;
+use num_traits::cast::ToPrimitive;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
@@ -96,7 +96,6 @@ impl HybridPermanentStorage {
             // Omitting response channel setup for simplicity
             Self::worker(task_receiver, worker_pool).await;
         });
-
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
         let state = RwLock::new(HybridPermanentStorageState::default());
