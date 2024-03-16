@@ -12,7 +12,6 @@ use num_traits::cast::ToPrimitive;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Pool;
 use tokio::sync::mpsc;
