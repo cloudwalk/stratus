@@ -69,7 +69,7 @@ impl EthExecutor {
     // Transaction execution
     // -------------------------------------------------------------------------
 
-    /// Re-executes an external block locally and imports it to the storage.
+    /// Re-executes an external block locally and imports it to the permanent storage.
     pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         // import block
         let block = self.import_external_to_temp(block, receipts).await?;
@@ -85,7 +85,7 @@ impl EthExecutor {
         Ok(block)
     }
 
-    /// Re-executes an external block locally.
+    /// Re-executes an external block locally and imports it to the temporary storage.
     pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         let start = Instant::now();
         let mut block_metrics = ExecutionMetrics::default();
