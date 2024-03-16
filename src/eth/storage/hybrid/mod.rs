@@ -1,6 +1,8 @@
 //! In-memory storage implementations.
 
 use num_traits::cast::ToPrimitive;
+use sqlx::Postgres;
+use sqlx::QueryBuilder;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -91,7 +93,7 @@ impl HybridPermanentStorage {
                 anyhow::anyhow!("failed to start postgres client")
             })?;
 
-        let (task_sender, task_receiver) = channel::<BlockTask>(32);
+        let (task_sender, task_receiver) = channel::<BlockTask>(64);
         let pool = Arc::new(connection_pool.clone());
         tokio::spawn(async move {
             // Assuming you define a 'response_sender' if you plan to handle responses
@@ -128,27 +130,71 @@ impl HybridPermanentStorage {
             let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
 
             let block_data = serde_json::to_value(block_task.block_data).unwrap();
-            let account_changes = serde_json::to_value(block_task.account_changes).unwrap();
+            let account_changes = serde_json::to_value(block_task.account_changes.clone()).unwrap();
 
             // Here we attempt to insert the block data into the database.
             // Adjust the SQL query according to your table schema.
-            tokio::spawn(async move {
-                let result = sqlx::query!(
-                    "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
-                    block_task.block_number as _,
-                    block_task.block_hash as _,
-                    block_data,
-                    account_changes
-                )
-                .execute(&*pool_clone)
-                .await;
+            // tokio::spawn(async move {
+                 let result = sqlx::query!(
+                     "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
+                     block_task.block_number as _,
+                     block_task.block_hash as _,
+                     block_data,
+                     account_changes
+                 )
+                 .execute(&*pool_clone)
+                 .await;
 
-                // Handle the result of the insert operation.
-                match result {
-                    Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
-                    Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
+                 // Handle the result of the insert operation.
+                 match result {
+                     Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
+                     Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
+                 }
+
+                let mut accounts_changes: (Vec<i64>, Vec<Address>, Vec<Option<Bytes>>, Vec<Wei>, Vec<Nonce>) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+
+                for changes in block_task.account_changes {
+                    let (original_nonce, new_nonce) = changes.nonce.take_both();
+                    let (original_balance, new_balance) = changes.balance.take_both();
+
+                    let original_nonce = original_nonce.unwrap_or_default();
+                    let original_balance = original_balance.unwrap_or_default();
+
+                    let nonce = new_nonce.clone().unwrap_or(original_nonce.clone());
+                    let balance = new_balance.clone().unwrap_or(original_balance.clone());
+
+                    let bytecode = changes.bytecode.take().unwrap_or_else(|| {
+                        tracing::debug!("bytecode not set, defaulting to None");
+                        None
+                    });
+
+                    accounts_changes.0.push(block_task.block_number.clone().as_i64());
+                    accounts_changes.1.push(changes.address.clone());
+                    accounts_changes.2.push(bytecode);
+                    accounts_changes.3.push(balance);
+                    accounts_changes.4.push(nonce);
                 }
-            });
+
+
+                if accounts_changes.0.len() > 0 {
+                    dbg!(&accounts_changes);
+                    let result = sqlx::query!(
+                        "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
+                        SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
+                        AS t(block_number, address, bytecode, balance, nonce);",
+                        accounts_changes.0 as _,
+                        accounts_changes.1 as _,
+                        accounts_changes.2 as _,
+                        accounts_changes.3 as _,
+                        accounts_changes.4 as _,
+                    ).execute(&*pool_clone).await;
+
+                    match result {
+                        Ok(_) => println!("Accounts inserted successfully."),
+                        Err(e) => println!("Failed to insert accounts: {}", e),
+                    }
+                }
+            // });
         }
     }
 

@@ -5,7 +5,7 @@
     "columns": [],
     "parameters": {
       "Left": [
-        "Numeric",
+        "Int8",
         "Bytea",
         "Jsonb",
         "Jsonb"

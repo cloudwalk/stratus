@@ -55,7 +55,7 @@ impl Dummy<Faker> for Wei {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i32);
+gen_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i32, i64);
 
 impl From<RevmU256> for Wei {
     fn from(value: RevmU256) -> Self {
