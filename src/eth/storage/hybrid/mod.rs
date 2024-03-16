@@ -78,9 +78,9 @@ impl HybridPermanentStorage {
         tracing::info!("starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()
-            .min_connections(2)
-            .max_connections(100)
-            .acquire_timeout(Duration::from_secs(3))
+            .min_connections(config.connections/2)
+            .max_connections(config.connections)
+            .acquire_timeout(config.acquire_timeout)
             .connect(&config.url)
             .await
             .map_err(|e| {
