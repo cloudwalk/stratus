@@ -78,7 +78,7 @@ impl HybridPermanentStorage {
         tracing::info!(?config, "starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()
-            .min_connections(config.connections/2)
+            .min_connections(config.connections / 2)
             .max_connections(config.connections)
             .acquire_timeout(config.acquire_timeout)
             .connect(&config.url)
@@ -126,7 +126,10 @@ impl HybridPermanentStorage {
                 // Handle the result of the insert operation.
                 match result {
                     Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
-                    Err(e) => {dbg!(&e); tracing::error!("Failed to insert block {}: {}", block_task.block_number, e)},
+                    Err(e) => {
+                        dbg!(&e);
+                        tracing::error!("Failed to insert block {}: {}", block_task.block_number, e)
+                    }
                 }
             });
         }
