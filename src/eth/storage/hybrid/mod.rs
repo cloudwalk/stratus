@@ -75,7 +75,7 @@ pub struct HybridPermanentStorageConfig {
 
 impl HybridPermanentStorage {
     pub async fn new(config: HybridPermanentStorageConfig) -> anyhow::Result<Self> {
-        tracing::info!("starting hybrid storage");
+        tracing::info!(?config, "starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()
             .min_connections(config.connections)
