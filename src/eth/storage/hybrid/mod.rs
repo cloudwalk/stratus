@@ -21,6 +21,7 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 use tokio::sync::Semaphore;
+use tokio::time::sleep;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -121,9 +122,9 @@ impl HybridPermanentStorage {
     }
 
     async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>, connections: u32) {
-        tracing::info!("Starting worker");
         // Define the maximum number of concurrent tasks. Adjust this number based on your requirements.
-        let max_concurrent_tasks: usize = connections.try_into().unwrap_or(10usize);
+        let max_concurrent_tasks: usize = (connections).try_into().unwrap_or(10usize);
+        tracing::info!("Starting worker with max_concurrent_tasks: {}", max_concurrent_tasks);
         let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
 
@@ -135,25 +136,46 @@ impl HybridPermanentStorage {
             // Adjust the SQL query according to your table schema.
             let block_data = serde_json::to_value(&block_task.block_data).unwrap();
             let account_changes = serde_json::to_value(&block_task.account_changes).unwrap();
+            let max_attempts = 7;
 
 
             tokio::spawn(async move {
                 let permit = semaphore_clone.acquire_owned().await.expect("Failed to acquire semaphore permit");
-                let result = sqlx::query!(
-                    "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
-                    block_task.block_number as _,
-                    block_task.block_hash as _,
-                    block_data as _,
-                    account_changes as _,
-                )
-                .execute(&*pool_clone)
-                .await;
+                let mut attempts = 0;
 
-                // Handle the result of the insert operation.
-                match result {
-                    Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
-                    Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
+                loop {
+                    let result = sqlx::query!(
+                        "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
+                        block_task.block_number as _,
+                        block_task.block_hash as _,
+                        block_data as _,
+                        account_changes as _,
+                    )
+                    .execute(&*pool_clone)
+                    .await;
+
+                    match result {
+                        Ok(_) => {
+                            tracing::info!("Block {} inserted successfully.", block_task.block_number);
+                            break;
+                        },
+                        Err(e) => {
+                            if let sqlx::Error::PoolTimedOut = e {
+                                attempts += 1;
+                                if attempts >= max_attempts { // Set a maximum number of retries
+                                    tracing::error!("Failed to insert block {} after {} attempts: {}", block_task.block_number, attempts, e);
+                                    break;
+                                }
+                                tracing::warn!("PoolTimedOut error occurred, retrying. Attempt: {}", attempts);
+                                sleep(Duration::from_secs(1)).await; // Wait before retrying
+                            } else {
+                                tracing::error!("Failed to insert block {}: {}", block_task.block_number, e);
+                                break;
+                            }
+                        }
+                    }
                 }
+
 
                 drop(permit);
             });
