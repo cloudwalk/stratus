@@ -15,15 +15,22 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::TemporaryStorage;
 
-#[derive(Debug)]
-pub struct InMemoryTemporaryStorage {
-    state: RwLock<InMemoryTemporaryStorageState>,
+#[derive(Debug, Default)]
+pub struct InMemoryTemporaryStorageState {
+    pub accounts: HashMap<Address, InMemoryTemporaryAccount>,
+    pub active_block_number: Option<BlockNumber>,
 }
 
-#[derive(Debug, Default)]
-struct InMemoryTemporaryStorageState {
-    accounts: HashMap<Address, InMemoryTemporaryAccount>,
-    active_block_number: Option<BlockNumber>,
+impl InMemoryTemporaryStorageState {
+    pub fn reset(&mut self) {
+        self.accounts.clear();
+        self.active_block_number = None;
+    }
+}
+
+#[derive(Debug)]
+pub struct InMemoryTemporaryStorage {
+    pub state: RwLock<InMemoryTemporaryStorageState>,
 }
 
 impl Default for InMemoryTemporaryStorage {
@@ -35,12 +42,12 @@ impl Default for InMemoryTemporaryStorage {
 
 impl InMemoryTemporaryStorage {
     /// Locks inner state for reading.
-    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
+    pub async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
         self.state.read().await
     }
 
     /// Locks inner state for writing.
-    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
+    pub async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
         self.state.write().await
     }
 }
@@ -139,14 +146,13 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     async fn reset(&self) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
-        state.accounts.clear();
-        state.active_block_number = None;
+        state.reset();
         Ok(())
     }
 }
 
 #[derive(Debug)]
-struct InMemoryTemporaryAccount {
+pub struct InMemoryTemporaryAccount {
     pub info: Account,
     pub slots: HashMap<SlotIndex, Slot>,
 }

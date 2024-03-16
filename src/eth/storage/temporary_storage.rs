@@ -10,10 +10,10 @@ use crate::eth::primitives::SlotIndex;
 /// Temporary storage (in-between blocks) operations
 #[async_trait]
 pub trait TemporaryStorage: Send + Sync {
-    /// Sets the block number being mined.
+    /// Sets the block number activelly being mined.
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
-    // Retrieves the block number being mined.
+    // Retrieves the block number activelly being mined.
     async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
