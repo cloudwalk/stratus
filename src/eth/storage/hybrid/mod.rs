@@ -12,7 +12,6 @@ use num_traits::cast::ToPrimitive;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Pool;
 use tokio::sync::mpsc;
@@ -47,7 +46,9 @@ use crate::eth::storage::StorageError;
 #[derive(Debug)]
 struct BlockTask {
     block_number: BlockNumber,
-    block_data: Value,
+    block_hash: Hash,
+    block_data: Block,
+    account_changes: Vec<ExecutionAccountChanges>,
 }
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -78,7 +79,7 @@ impl HybridPermanentStorage {
         tracing::info!(?config, "starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()
-            .min_connections(config.connections)
+            .min_connections(config.connections / 2)
             .max_connections(config.connections)
             .acquire_timeout(config.acquire_timeout)
             .connect(&config.url)
@@ -123,11 +124,15 @@ impl HybridPermanentStorage {
             let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
             // Here we attempt to insert the block data into the database.
             // Adjust the SQL query according to your table schema.
+            let block_data = serde_json::to_value(&block_task.block_data).unwrap();
+            let account_changes = serde_json::to_value(&block_task.account_changes).unwrap();
             tokio::spawn(async move {
                 let result = sqlx::query!(
-                    "INSERT INTO neo_blocks (block_number, block, created_at) VALUES ($1, $2, NOW())",
+                    "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
                     block_task.block_number as _,
-                    block_task.block_data
+                    block_task.block_hash as _,
+                    block_data as _,
+                    account_changes as _,
                 )
                 .execute(&*pool_clone)
                 .await;
@@ -135,7 +140,10 @@ impl HybridPermanentStorage {
                 // Handle the result of the insert operation.
                 match result {
                     Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
-                    Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
+                    Err(e) => {
+                        dbg!(&e);
+                        tracing::error!("Failed to insert block {}: {}", block_task.block_number, e);
+                    }
                 }
             });
         }
@@ -398,18 +406,15 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn after_commit_hook(&self) -> anyhow::Result<()> {
         let b = self.read_block(&BlockSelection::Latest).await?;
-        if let Some(bb) = b {
-            let s = format!("{} => {}", bb.number(), bb.transactions.len());
-            dbg!(s);
-            let bbb = *bb.number();
-
+        if let Some(block) = b {
             let block_task = BlockTask {
-                block_number: bbb,
-                block_data: serde_json::to_value(bb).unwrap(),
+                block_number: *block.number(),
+                block_hash: block.hash().clone(),
+                block_data: block.clone(),
+                account_changes: Vec::new(), //TODO make account changes work from postgres then we can load it on memory
             };
 
             // Send the task to be processed by a worker
-            dbg!("sending block task");
             self.task_sender.send(block_task).await.expect("Failed to send block task");
         }
 
