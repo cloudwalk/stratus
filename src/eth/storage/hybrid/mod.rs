@@ -1,6 +1,7 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,6 +20,7 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
+use tokio::sync::Semaphore;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -120,13 +122,23 @@ impl HybridPermanentStorage {
 
     async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>) {
         tracing::info!("Starting worker");
+        // Define the maximum number of concurrent tasks. Adjust this number based on your requirements.
+        let max_concurrent_tasks = 100;
+        let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
+
+
         while let Some(block_task) = receiver.recv().await {
-            let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
+            let pool_clone = Arc::clone(&pool);
+            let semaphore_clone = Arc::clone(&semaphore);
+
             // Here we attempt to insert the block data into the database.
             // Adjust the SQL query according to your table schema.
             let block_data = serde_json::to_value(&block_task.block_data).unwrap();
             let account_changes = serde_json::to_value(&block_task.account_changes).unwrap();
+
+
             tokio::spawn(async move {
+                let permit = semaphore_clone.acquire_owned().await.expect("Failed to acquire semaphore permit");
                 let result = sqlx::query!(
                     "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
                     block_task.block_number as _,
@@ -140,10 +152,7 @@ impl HybridPermanentStorage {
                 // Handle the result of the insert operation.
                 match result {
                     Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
-                    Err(e) => {
-                        dbg!(&e);
-                        tracing::error!("Failed to insert block {}: {}", block_task.block_number, e);
-                    }
+                    Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
                 }
             });
         }
