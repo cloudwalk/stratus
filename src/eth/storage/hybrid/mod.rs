@@ -12,7 +12,7 @@ use num_traits::cast::ToPrimitive;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-use serde_json::Value;
+
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Pool;
 use tokio::sync::mpsc;
@@ -143,7 +143,7 @@ impl HybridPermanentStorage {
                     Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
                     Err(e) => {
                         dbg!(&e);
-                        tracing::error!("Failed to insert block {}: {}", block_task.block_number, e)
+                        tracing::error!("Failed to insert block {}: {}", block_task.block_number, e);
                     }
                 }
             });
@@ -408,10 +408,8 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn after_commit_hook(&self) -> anyhow::Result<()> {
         let b = self.read_block(&BlockSelection::Latest).await?;
         if let Some(block) = b {
-            let s = format!("{} => {}", block.number(), block.transactions.len());
-
             let block_task = BlockTask {
-                block_number: block.number().clone(),
+                block_number: *block.number(),
                 block_hash: block.hash().clone(),
                 block_data: block.clone(),
                 account_changes: Vec::new(), //TODO make account changes work from postgres then we can load it on memory
