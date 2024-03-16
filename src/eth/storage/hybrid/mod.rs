@@ -97,7 +97,7 @@ impl HybridPermanentStorage {
             // Assuming you define a 'response_sender' if you plan to handle responses
             let worker_pool = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
             // Omitting response channel setup for simplicity
-            Self::worker(task_receiver, worker_pool).await;
+            Self::worker(task_receiver, worker_pool, config.connections).await;
         });
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
@@ -120,10 +120,10 @@ impl HybridPermanentStorage {
         Ok(last_block_number.into())
     }
 
-    async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>) {
+    async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>, connections: u32) {
         tracing::info!("Starting worker");
         // Define the maximum number of concurrent tasks. Adjust this number based on your requirements.
-        let max_concurrent_tasks = 100;
+        let max_concurrent_tasks: usize = connections.try_into().unwrap_or(10usize);
         let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
 
@@ -154,6 +154,8 @@ impl HybridPermanentStorage {
                     Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
                     Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
                 }
+
+                drop(permit);
             });
         }
     }
