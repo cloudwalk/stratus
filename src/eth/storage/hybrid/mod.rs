@@ -8,11 +8,13 @@ use std::time::Duration;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use metrics::atomics::AtomicU64;
+use num_traits::cast::ToPrimitive;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::Pool;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
@@ -95,11 +97,24 @@ impl HybridPermanentStorage {
             Self::worker(task_receiver, worker_pool).await;
         });
 
+        let block_number = Self::preload_block_number(connection_pool.clone()).await?;
+        let state = RwLock::new(HybridPermanentStorageState::default());
+
         Ok(Self {
-            state: RwLock::new(HybridPermanentStorageState::default()),
-            block_number: Default::default(),
+            state,
+            block_number,
             task_sender,
         })
+    }
+
+    async fn preload_block_number(pool: Pool<sqlx::Postgres>) -> anyhow::Result<AtomicU64> {
+        let blocks = sqlx::query!("SELECT block_number FROM neo_blocks ORDER BY block_number DESC LIMIT 1")
+            .fetch_all(&pool)
+            .await?;
+
+        let last_block_number = blocks.last().map(|b| b.block_number.to_u64()).unwrap_or(Some(0)).unwrap_or(0);
+
+        Ok(last_block_number.into())
     }
 
     async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>) {
