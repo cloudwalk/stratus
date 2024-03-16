@@ -730,38 +730,42 @@ CREATE TABLE public.neo_blocks (
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
 
-CREATE TABLE neo_accounts (
+CREATE TABLE public.neo_accounts (
     block_number BIGINT NOT NULL,
     address BYTEA NOT NULL,
     bytecode BYTEA,
     balance NUMERIC(38, 0),
     nonce NUMERIC,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (address, block_number),
     FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
 );
 
-CREATE TABLE neo_account_slots (
+CREATE TABLE public.neo_account_slots (
     block_number BIGINT NOT NULL,
     index INT NOT NULL,
     account_address BYTEA NOT NULL,
     value BYTEA,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (account_address, index, block_number),
     FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
 );
 
-CREATE TABLE neo_transactions (
+CREATE TABLE public.neo_transactions (
     block_number BIGINT NOT NULL,
     hash BYTEA NOT NULL,
     transaction_data JSONB NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (hash),
     FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
 );
 
-CREATE TABLE neo_logs (
+CREATE TABLE public.neo_logs (
     block_number BIGINT NOT NULL,
     hash BYTEA NOT NULL,
     address BYTEA NOT NULL,
     log_data JSONB NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (hash, address, block_number),
     FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
 );
