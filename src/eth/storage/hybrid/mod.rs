@@ -45,6 +45,14 @@ use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
+type BlockNumbers = Vec<i64>;
+type Addresses = Vec<Address>;
+type OptionalBytes = Vec<Option<Bytes>>;
+type Weis = Vec<Wei>;
+type Nonces = Vec<Nonce>;
+
+type AccountChanges = (BlockNumbers, Addresses, OptionalBytes, Weis, Nonces);
+
 #[derive(Debug)]
 struct BlockTask {
     block_number: BlockNumber,
@@ -141,8 +149,7 @@ impl HybridPermanentStorage {
                 let mut attempts = 0;
 
                 loop {
-                    let mut accounts_changes: (Vec<i64>, Vec<Address>, Vec<Option<Bytes>>, Vec<Wei>, Vec<Nonce>) =
-                        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+                    let mut accounts_changes: AccountChanges = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
 
                     for changes in block_task.account_changes.clone() {
                         let (original_nonce, new_nonce) = changes.nonce.take_both();
