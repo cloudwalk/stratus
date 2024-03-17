@@ -193,7 +193,7 @@ impl HybridPermanentStorage {
                             Err(e) => println!("Failed to insert accounts: {}", e),
                         }
                     }
-                  
+
                     let result = sqlx::query!(
                         "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
                         block_task.block_number as _,
