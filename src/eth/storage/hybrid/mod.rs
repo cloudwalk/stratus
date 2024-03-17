@@ -1,7 +1,6 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -127,7 +126,6 @@ impl HybridPermanentStorage {
         tracing::info!("Starting worker with max_concurrent_tasks: {}", max_concurrent_tasks);
         let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
-
         while let Some(block_task) = receiver.recv().await {
             let pool_clone = Arc::clone(&pool);
             let semaphore_clone = Arc::clone(&semaphore);
@@ -143,7 +141,8 @@ impl HybridPermanentStorage {
                 let mut attempts = 0;
 
                 loop {
-                    let mut accounts_changes: (Vec<i64>, Vec<Address>, Vec<Option<Bytes>>, Vec<Wei>, Vec<Nonce>) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+                    let mut accounts_changes: (Vec<i64>, Vec<Address>, Vec<Option<Bytes>>, Vec<Wei>, Vec<Nonce>) =
+                        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
 
                     for changes in block_task.account_changes.clone() {
                         let (original_nonce, new_nonce) = changes.nonce.take_both();
@@ -167,7 +166,7 @@ impl HybridPermanentStorage {
                         accounts_changes.4.push(nonce);
                     }
 
-                    if accounts_changes.0.len() > 0 {
+                    if !accounts_changes.0.is_empty() {
                         dbg!(&accounts_changes);
                         let result = sqlx::query!(
                             "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
@@ -178,7 +177,9 @@ impl HybridPermanentStorage {
                             accounts_changes.2 as _,
                             accounts_changes.3 as _,
                             accounts_changes.4 as _,
-                        ).execute(&*pool_clone).await;
+                        )
+                        .execute(&*pool_clone)
+                        .await;
 
                         match result {
                             Ok(_) => println!("Accounts inserted successfully."),
@@ -200,11 +201,12 @@ impl HybridPermanentStorage {
                         Ok(_) => {
                             tracing::info!("Block {} inserted successfully.", block_task.block_number);
                             break;
-                        },
+                        }
                         Err(e) => {
                             if let sqlx::Error::PoolTimedOut = e {
                                 attempts += 1;
-                                if attempts >= max_attempts { // Set a maximum number of retries
+                                if attempts >= max_attempts {
+                                    // Set a maximum number of retries
                                     tracing::error!("Failed to insert block {} after {} attempts: {}", block_task.block_number, attempts, e);
                                     break;
                                 }
@@ -217,7 +219,6 @@ impl HybridPermanentStorage {
                         }
                     }
                 }
-
 
                 drop(permit);
             });
