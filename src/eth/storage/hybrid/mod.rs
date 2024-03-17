@@ -45,6 +45,14 @@ use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
+type BlockNumbers = Vec<i64>;
+type Addresses = Vec<Address>;
+type OptionalBytes = Vec<Option<Bytes>>;
+type Weis = Vec<Wei>;
+type Nonces = Vec<Nonce>;
+
+type AccountChanges = (BlockNumbers, Addresses, OptionalBytes, Weis, Nonces);
+
 #[derive(Debug)]
 struct BlockTask {
     block_number: BlockNumber,
@@ -141,6 +149,51 @@ impl HybridPermanentStorage {
                 let mut attempts = 0;
 
                 loop {
+                    let mut accounts_changes: AccountChanges = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+
+                    for changes in block_task.account_changes.clone() {
+                        let (original_nonce, new_nonce) = changes.nonce.take_both();
+                        let (original_balance, new_balance) = changes.balance.take_both();
+
+                        let original_nonce = original_nonce.unwrap_or_default();
+                        let original_balance = original_balance.unwrap_or_default();
+
+                        let nonce = new_nonce.clone().unwrap_or(original_nonce.clone());
+                        let balance = new_balance.clone().unwrap_or(original_balance.clone());
+
+                        let bytecode = changes.bytecode.take().unwrap_or_else(|| {
+                            tracing::debug!("bytecode not set, defaulting to None");
+                            None
+                        });
+
+                        accounts_changes.0.push(block_task.block_number.clone().as_i64());
+                        accounts_changes.1.push(changes.address.clone());
+                        accounts_changes.2.push(bytecode);
+                        accounts_changes.3.push(balance);
+                        accounts_changes.4.push(nonce);
+                    }
+
+                    if !accounts_changes.0.is_empty() {
+                        dbg!(&accounts_changes);
+                        let result = sqlx::query!(
+                            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
+                        SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
+                        AS t(block_number, address, bytecode, balance, nonce);",
+                            accounts_changes.0 as _,
+                            accounts_changes.1 as _,
+                            accounts_changes.2 as _,
+                            accounts_changes.3 as _,
+                            accounts_changes.4 as _,
+                        )
+                        .execute(&*pool_clone)
+                        .await;
+
+                        match result {
+                            Ok(_) => println!("Accounts inserted successfully."),
+                            Err(e) => println!("Failed to insert accounts: {}", e),
+                        }
+                    }
+
                     let result = sqlx::query!(
                         "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
                         block_task.block_number as _,
@@ -397,7 +450,7 @@ impl PermanentStorage for HybridPermanentStorage {
         }
 
         // save block account changes
-        for changes in account_changes {
+        for changes in account_changes.clone() {
             let account = state
                 .accounts
                 .entry(changes.address.clone())
@@ -431,23 +484,19 @@ impl PermanentStorage for HybridPermanentStorage {
             }
         }
 
+        let block_task = BlockTask {
+            block_number: *block.number(),
+            block_hash: block.hash().clone(),
+            block_data: (*block).clone(),
+            account_changes, //TODO make account changes work from postgres then we can load it on memory
+        };
+
+        self.task_sender.send(block_task).await.expect("Failed to send block task");
+
         Ok(())
     }
 
     async fn after_commit_hook(&self) -> anyhow::Result<()> {
-        let b = self.read_block(&BlockSelection::Latest).await?;
-        if let Some(block) = b {
-            let block_task = BlockTask {
-                block_number: *block.number(),
-                block_hash: block.hash().clone(),
-                block_data: block.clone(),
-                account_changes: Vec::new(), //TODO make account changes work from postgres then we can load it on memory
-            };
-
-            // Send the task to be processed by a worker
-            self.task_sender.send(block_task).await.expect("Failed to send block task");
-        }
-
         Ok(())
     }
 
