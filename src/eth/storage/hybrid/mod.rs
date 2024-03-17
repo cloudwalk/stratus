@@ -1,7 +1,6 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -127,7 +126,6 @@ impl HybridPermanentStorage {
         tracing::info!("Starting worker with max_concurrent_tasks: {}", max_concurrent_tasks);
         let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
-
         while let Some(block_task) = receiver.recv().await {
             let pool_clone = Arc::clone(&pool);
             let semaphore_clone = Arc::clone(&semaphore);
@@ -137,7 +135,6 @@ impl HybridPermanentStorage {
             let block_data = serde_json::to_value(&block_task.block_data).unwrap();
             let account_changes = serde_json::to_value(&block_task.account_changes).unwrap();
             let max_attempts = 7;
-
 
             tokio::spawn(async move {
                 let permit = semaphore_clone.acquire_owned().await.expect("Failed to acquire semaphore permit");
@@ -158,11 +155,12 @@ impl HybridPermanentStorage {
                         Ok(_) => {
                             tracing::info!("Block {} inserted successfully.", block_task.block_number);
                             break;
-                        },
+                        }
                         Err(e) => {
                             if let sqlx::Error::PoolTimedOut = e {
                                 attempts += 1;
-                                if attempts >= max_attempts { // Set a maximum number of retries
+                                if attempts >= max_attempts {
+                                    // Set a maximum number of retries
                                     tracing::error!("Failed to insert block {} after {} attempts: {}", block_task.block_number, attempts, e);
                                     break;
                                 }
@@ -175,7 +173,6 @@ impl HybridPermanentStorage {
                         }
                     }
                 }
-
 
                 drop(permit);
             });
