@@ -25,9 +25,9 @@ pub trait TemporaryStorage: Send + Sync {
     /// Temporarily stores account changes during block production.
     async fn save_account_changes(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()>;
 
-    /// If necessary, flushes account changes to durable storage. Usually called after all transactions from a block were processed.
-    async fn flush_account_changes(&self) -> anyhow::Result<()>;
+    /// If necessary, flushes temporary state to durable storage.
+    async fn flush(&self) -> anyhow::Result<()>;
 
-    /// Resets all state
+    /// Resets to default empty state.
     async fn reset(&self) -> anyhow::Result<()>;
 }

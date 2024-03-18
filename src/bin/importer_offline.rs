@@ -40,7 +40,9 @@ async fn main() -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.init_stratus_storage().await?;
     let executor = config.init_executor(Arc::clone(&stratus_storage));
-    let mut csv = if_else!(config.export_csv, Some(CsvExporter::new()?), None);
+
+    let block_start = block_number_to_resume(&stratus_storage).await?;
+    let mut csv = if_else!(config.export_csv, Some(CsvExporter::new(block_start)?), None);
 
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
@@ -49,16 +51,19 @@ async fn main() -> anyhow::Result<()> {
     // import genesis accounts
     let accounts = rpc_storage.read_initial_accounts().await?;
     if let Some(ref mut csv) = csv {
-        csv.export_initial_accounts(accounts.clone())?;
+        for account in accounts.iter() {
+            csv.add_account(account.clone())?;
+        }
+        csv.flush()?;
     }
     stratus_storage.save_accounts_to_perm(accounts).await?;
 
     // execute parallel tasks (external rpc storage loader and block importer)
     tokio::spawn(execute_external_rpc_storage_loader(
         rpc_storage,
-        Arc::clone(&stratus_storage),
         cancellation.clone(),
         config.paralellism,
+        block_start,
         backlog_tx,
     ));
     execute_block_importer(executor, Arc::clone(&stratus_storage), csv, cancellation, backlog_rx).await?;
@@ -102,9 +107,10 @@ async fn execute_block_importer(
                 Some(ref mut csv) => {
                     let block = executor.import_external_to_temp(block, &mut receipts).await?;
                     let number = *block.number();
-                    csv.export_block(block)?;
+                    csv.add_block(block)?;
                     if number.as_u64() % 50 == 0 {
-                        stratus_storage.flush_account_changes_to_temp().await?;
+                        csv.flush()?;
+                        stratus_storage.flush_temp().await?;
                     }
                 }
                 // when not exporting to csv, persist the entire block to permanent immediately
@@ -127,16 +133,16 @@ async fn execute_block_importer(
 async fn execute_external_rpc_storage_loader(
     // services
     rpc_storage: Arc<dyn ExternalRpcStorage>,
-    stratus_storage: Arc<StratusStorage>,
     cancellation: CancellationToken,
     // data
     paralellism: usize,
+    mut start: BlockNumber,
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
     tracing::info!("external rpc storage loader starting");
 
     // if active, resume from the previous
-    let mut start = block_number_to_resume(&stratus_storage).await?;
+
     let end = match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => number,
         Ok(None) => BlockNumber::ZERO,

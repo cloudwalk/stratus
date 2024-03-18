@@ -100,7 +100,7 @@ impl TemporaryStorage for SledTemporary {
         Ok(())
     }
 
-    async fn flush_account_changes(&self) -> anyhow::Result<()> {
+    async fn flush(&self) -> anyhow::Result<()> {
         // read before lock
         let Some(number) = self.read_active_block_number().await? else {
             return log_and_err!("no active block number when flushing sled data");
