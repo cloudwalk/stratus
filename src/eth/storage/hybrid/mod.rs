@@ -132,7 +132,7 @@ impl HybridPermanentStorage {
 
             tokio::spawn(async move {
                 let permit = semaphore_clone.acquire_owned().await.expect("Failed to acquire semaphore permit");
-                query_executor::commit_eventually(pool_clone, block_task);
+                query_executor::commit_eventually(pool_clone, block_task).await;
                 drop(permit);
             });
         }
