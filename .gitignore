@@ -29,6 +29,7 @@ node_modules/
 package.json
 package-lock.json
 e2e-contracts/integration/hardhat.config.ts
+e2e-contracts/integration/tsconfig.json
 
 # Build
 /target

@@ -393,6 +393,10 @@ contracts-test-int:
         echo "Copying hardhat.config.js from e2e"
         cp ../../e2e/hardhat.config.ts .
     fi
+    if [ ! -f tsconfig.json ]; then
+        echo "Copying tsconfig.json from e2e"
+        cp ../../e2e/tsconfig.json .
+    fi
     if [ ! -d node_modules ]; then
         echo "Installing node modules"
         npm --silent install hardhat@2.21.0 ethers@6.11.1 @openzeppelin/hardhat-upgrades @openzeppelin/contracts-upgradeable @nomicfoundation/hardhat-ethers @nomicfoundation/hardhat-toolbox @nomicfoundation/hardhat-ethers
