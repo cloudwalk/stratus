@@ -9,6 +9,7 @@ use sqlx::Postgres;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -131,6 +132,40 @@ impl HybridHistory {
         }
 
         self.hybrid_accounts_slots = accounts;
+
+        Ok(())
+    }
+
+    /// Updates the in-memory state with changes from transaction execution.
+    pub async fn update_state_with_execution_changes(&mut self, changes: &Vec<ExecutionAccountChanges>) -> anyhow::Result<(), sqlx::Error> {
+        for change in changes {
+            let address = change.address.clone(); // Assuming Address is cloneable and the correct type.
+
+            let account_info_entry = self.hybrid_accounts_slots.entry(address).or_insert_with(|| AccountInfo {
+                balance: Wei::ZERO, // Initialize with default values.
+                nonce: Nonce::ZERO,
+                bytecode: None,
+                slots: HashMap::new(),
+            });
+
+            // Apply basic account info changes
+            if let Some(nonce) = change.nonce.clone().take_modified() {
+                account_info_entry.nonce = nonce;
+            }
+            if let Some(balance) = change.balance.clone().take_modified() {
+                account_info_entry.balance = balance;
+            }
+            if let Some(bytecode) = change.bytecode.clone().take_modified() {
+                account_info_entry.bytecode = bytecode;
+            }
+
+            // Apply slot changes
+            for (slot_index, slot_change) in change.slots.clone() {
+                if let Some(slot) = slot_change.take_modified() {
+                    account_info_entry.slots.insert(slot_index, SlotInfo { value: slot.value });
+                }
+            }
+        }
 
         Ok(())
     }
