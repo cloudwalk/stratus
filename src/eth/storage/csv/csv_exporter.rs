@@ -16,7 +16,7 @@ use crate::eth::primitives::TransactionMined;
 // Constants
 // -----------------------------------------------------------------------------
 
-const ACCOUNT_FILE: &str = "data/accounts";
+const ACCOUNTS_FILE: &str = "data/accounts";
 
 const ACCOUNTS_HEADERS: [&str; 10] = [
     "id",
@@ -79,8 +79,8 @@ impl CsvExporter {
             staged_blocks: Vec::new(),
             staged_accounts: Vec::new(),
 
-            accounts_csv: csv_writer(ACCOUNT_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
-            accounts_id: LastId::new_zero(ACCOUNT_FILE),
+            accounts_csv: csv_writer(ACCOUNTS_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
+            accounts_id: LastId::new_zero(ACCOUNTS_FILE),
 
             transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
             transactions_id: LastId::new(TRANSACTIONS_FILE)?,
