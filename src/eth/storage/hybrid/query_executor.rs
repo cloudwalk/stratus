@@ -39,6 +39,29 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
     let account_changes = serde_json::to_value(&block_task.account_changes).unwrap();
     let mut accounts_changes: AccountChanges = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
 
+
+    for changes in block_task.account_changes.clone() {
+        let (original_nonce, new_nonce) = changes.nonce.take_both();
+        let (original_balance, new_balance) = changes.balance.take_both();
+
+        let original_nonce = original_nonce.unwrap_or_default();
+        let original_balance = original_balance.unwrap_or_default();
+
+        let nonce = new_nonce.clone().unwrap_or(original_nonce.clone());
+        let balance = new_balance.clone().unwrap_or(original_balance.clone());
+
+        let bytecode = changes.bytecode.take().unwrap_or_else(|| {
+            tracing::debug!("bytecode not set, defaulting to None");
+            None
+        });
+
+        accounts_changes.0.push(block_task.block_number.clone().as_i64());
+        accounts_changes.1.push(changes.address.clone());
+        accounts_changes.2.push(bytecode);
+        accounts_changes.3.push(balance);
+        accounts_changes.4.push(nonce);
+    }
+
    let pool_clone = pool.clone();
     execute_with_retry(|| async {
         let mut conn = pool_clone.acquire().await?;
