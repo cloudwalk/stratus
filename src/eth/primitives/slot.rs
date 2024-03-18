@@ -84,8 +84,8 @@ gen_newtype_from!(self = SlotIndex, other = u64, U256, [u8; 32]);
 impl From<Vec<u8>> for SlotIndex {
     fn from(bytes: Vec<u8>) -> Self {
         let mut u256 = U256::zero(); // Initialize U256 to zero
-        // Assuming the byte array is in big-endian format,
-        // adjust the slice conversion if your Vec<u8> might not be exactly 32 bytes.
+                                     // Assuming the byte array is in big-endian format,
+                                     // adjust the slice conversion if your Vec<u8> might not be exactly 32 bytes.
         if bytes.len() <= 32 {
             let mut padded_bytes = [0u8; 32];
             padded_bytes[32 - bytes.len()..].copy_from_slice(&bytes);
@@ -215,8 +215,8 @@ impl From<SlotValue> for Vec<u8> {
 impl From<Vec<u8>> for SlotValue {
     fn from(bytes: Vec<u8>) -> Self {
         let mut u256 = U256::zero(); // Initialize U256 to zero
-        // Assuming the byte array is in big-endian format,
-        // adjust the slice conversion if your Vec<u8> might not be exactly 32 bytes.
+                                     // Assuming the byte array is in big-endian format,
+                                     // adjust the slice conversion if your Vec<u8> might not be exactly 32 bytes.
         if bytes.len() <= 32 {
             let mut padded_bytes = [0u8; 32];
             padded_bytes[32 - bytes.len()..].copy_from_slice(&bytes);

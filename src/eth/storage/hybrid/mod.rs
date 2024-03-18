@@ -1,5 +1,5 @@
-mod query_executor;
 mod hybrid_history;
+mod query_executor;
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;

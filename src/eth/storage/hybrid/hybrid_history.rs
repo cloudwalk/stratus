@@ -1,9 +1,19 @@
-use ethereum_types::H160;
-use sqlx::{types::BigDecimal, Pool, Postgres};
-use std::{collections::HashMap, sync::Arc};
-use sqlx::FromRow;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::eth::primitives::{Address, BlockNumber, Bytes, Nonce, SlotIndex, SlotValue, Wei};
+use ethereum_types::H160;
+use sqlx::types::BigDecimal;
+use sqlx::FromRow;
+use sqlx::Pool;
+use sqlx::Postgres;
+
+use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Nonce;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotValue;
+use crate::eth::primitives::Wei;
 
 #[derive(Debug)]
 struct SlotInfo {
