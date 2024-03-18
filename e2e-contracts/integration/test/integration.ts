@@ -22,6 +22,11 @@ let deployer: SignerWithAddress;
 let providerUrl = (config.networks[network.name] as HttpNetworkConfig).url || "http://localhost:8545";
 let ETHERJS = new JsonRpcProvider(providerUrl);
 
+/* Constants */
+const FAKE_32_BYTES = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+const FAKE_16_BYTES = "0xabcdef1234567890abcdef1234567890"
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
 async function deployBRLC() {
   let brlcFactory: ContractFactory = await ethers.getContractFactory("BRLCToken");
   let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
@@ -76,6 +81,7 @@ async function configureCardPaymentProcessor() {
   waitReceipt(cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await cardPaymentProcessor.getAddress()));
   waitReceipt(cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress()));
   waitReceipt(cardPaymentProcessor.enableCashback());
+  waitReceipt(cardPaymentProcessor.setCashOutAccount(ZERO_ADDRESS));
 }
 
 async function deployBalanceTracker() {
@@ -177,7 +183,7 @@ describe("Integration Test", function () {
     });
 
     it("Cash in BRLC to Alice", async function () {
-      waitReceipt(pixCashier.cashIn(alice.address, 100, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
+      waitReceipt(pixCashier.cashIn(alice.address, 100, FAKE_32_BYTES));
     });
 
     it("Alice transfers BRLC to Bob", async function () {
@@ -191,18 +197,28 @@ describe("Integration Test", function () {
     });
 
     it("Request Pix cash out for Alice", async function () {
-      waitReceipt(pixCashier.requestCashOutFrom(alice.address, 25, "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
+      waitReceipt(pixCashier.requestCashOutFrom(alice.address, 25, FAKE_32_BYTES));
     });
 
     it("Confirm Alice cashout", async function () {
-      waitReceipt(pixCashier.confirmCashOut("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
+      waitReceipt(pixCashier.confirmCashOut(FAKE_32_BYTES));
+    });
+
+    it("Alice approves CardPaymentProcessor to spend BRLC", async function () {
+      const x = await waitReceipt(brlcToken.connect(alice).approve(await cardPaymentProcessor.getAddress(), 0xfffffffffffff, { gasPrice: 0 }));
+      expect(x.status).to.equal(1);
+    });
+
+    it("Make card payment for alice", async function () {
+      waitReceipt(cardPaymentProcessor.makePaymentFor(alice.address, 15, 0, FAKE_16_BYTES, FAKE_16_BYTES, ZERO_ADDRESS, 0, 0));
     });
 
     it("Final state is correct", async function () {
-      expect(await brlcToken.balanceOf(alice.address)).to.equal(925);
+      expect(await brlcToken.balanceOf(alice.address)).to.equal(910);
       expect(await brlcToken.allowance(alice.address, await pixCashier.getAddress())).to.equal(0xfffffffffffff - 25);
       expect(await brlcToken.balanceOf(bob.address)).to.equal(50);
       expect(await brlcToken.balanceOf(await pixCashier.getAddress())).to.equal(0);
+      expect(await brlcToken.balanceOf(await cardPaymentProcessor.getAddress())).to.equal(15);
     });
   });
 });
