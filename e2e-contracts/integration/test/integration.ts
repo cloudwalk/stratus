@@ -157,7 +157,6 @@ describe("Integration Test", function () {
 
     it("Configure BalanceTracker", async function () {
       await configureBalanceTracker();
-      console.log(await brlcToken.getAfterTokenTransferHooks());
     });
 
     it("Deploy YieldStreamer", async function () {
@@ -170,7 +169,7 @@ describe("Integration Test", function () {
   });
   describe("Scenario 1", function () {
 
-    let alice = ethers.Wallet.createRandom().connect(ETHERJS);
+    let alice = ethers.Wallet.createRandom().connect(ethers.provider);
     let bob = ethers.Wallet.createRandom();
 
     it("Mint BRLC to Alice", async function () {
@@ -182,11 +181,13 @@ describe("Integration Test", function () {
     });
 
     it("Alice transfers BRLC to Bob", async function () {
-      waitReceipt(brlcToken.connect(alice).transfer(bob.address, 50, { gasPrice: 0 }));
+      const x = await waitReceipt(brlcToken.connect(alice).transfer(bob.address, 50, { gasPrice: 0 }));
+      expect(x.status).to.equal(1);
     });
 
     it("Alice approves PixCashier to spend BRLC", async function () {
-      waitReceipt(brlcToken.connect(alice).approve(await pixCashier.getAddress(), 0xfffffffffffff, { gasPrice: 0 }));
+      const x = await waitReceipt(brlcToken.connect(alice).approve(await pixCashier.getAddress(), 0xfffffffffffff, { gasPrice: 0 }));
+      expect(x.status).to.equal(1);
     });
 
     it("Request Pix cash out for Alice", async function () {
