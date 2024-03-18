@@ -129,17 +129,18 @@ impl CsvExporter {
     // Exporters
     // -------------------------------------------------------------------------
     pub fn flush(&mut self) -> anyhow::Result<()> {
+
         // export accounts
         let accounts = self.staged_accounts.drain(..).collect_vec();
         self.export_accounts(accounts)?;
 
-        // export block parts
+        // export blocks
         let blocks = self.staged_blocks.drain(..).collect_vec();
         for block in blocks {
             self.export_transactions(block.transactions)?;
         }
 
-        // flush
+        // flush pending data
         self.transactions_csv.flush()?;
         self.transactions_id.save()?;
 
