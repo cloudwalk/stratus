@@ -1,3 +1,4 @@
+mod hybrid_history;
 mod query_executor;
 
 use std::collections::HashMap;
@@ -65,6 +66,7 @@ pub struct HybridPermanentStorageState {
 pub struct HybridPermanentStorage {
     state: RwLock<HybridPermanentStorageState>,
     block_number: AtomicU64,
+    hybrid_state: hybrid_history::HybridHistory,
     task_sender: mpsc::Sender<BlockTask>,
 }
 
@@ -101,10 +103,13 @@ impl HybridPermanentStorage {
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
         let state = RwLock::new(HybridPermanentStorageState::default());
+        //XXX this will eventually replace state
+        let hybrid_state = hybrid_history::HybridHistory::new(connection_pool.clone().into()).await?;
 
         Ok(Self {
             state,
             block_number,
+            hybrid_state,
             task_sender,
         })
     }
@@ -230,18 +235,16 @@ impl PermanentStorage for HybridPermanentStorage {
     // ------------------------------------------------------------------------
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        tracing::debug!(%address, "reading account");
-
-        let state = self.lock_read().await;
-
-        match state.accounts.get(address) {
+        //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
+        match self.hybrid_state.hybrid_accounts_slots.get(address) {
             Some(inmemory_account) => {
-                let account = inmemory_account.to_account(point_in_time);
+                let account = inmemory_account.to_account(point_in_time, address).await;
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
 
             None => {
+                //XXX TODO start a inmemory account from the database maybe using to_account on a empty account
                 tracing::trace!(%address, "account not found");
                 Ok(None)
             }
@@ -251,24 +254,7 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
-        let state = self.lock_read().await;
-        let Some(account) = state.accounts.get(address) else {
-            tracing::trace!(%address, "account not found");
-            return Ok(Default::default());
-        };
-
-        match account.slots.get(slot_index) {
-            Some(slot_history) => {
-                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
-                Ok(Some(slot))
-            }
-
-            None => {
-                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
-                Ok(None)
-            }
-        }
+        Ok(self.hybrid_state.get_slot_at_point(address, slot_index, point_in_time).await)
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -368,6 +354,7 @@ impl PermanentStorage for HybridPermanentStorage {
                 if let Some(slot) = slot.take_modified() {
                     match account.slots.get_mut(&slot.index) {
                         Some(slot_history) => {
+                            //XXX simply maintain the latest and no history
                             slot_history.push(*number, slot);
                         }
                         None => {
@@ -518,15 +505,5 @@ impl InMemoryPermanentAccount {
     /// Checks current account is a contract.
     pub fn is_contract(&self) -> bool {
         self.bytecode.get_current().is_some()
-    }
-
-    /// Converts itself to an account at a point-in-time.
-    pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
-        Account {
-            address: self.address.clone(),
-            balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
-            nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
-            bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-        }
     }
 }
