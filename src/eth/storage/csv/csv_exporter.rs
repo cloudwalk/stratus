@@ -10,9 +10,9 @@ use itertools::Itertools;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::ExecutionAccountChanges;
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -35,14 +35,7 @@ const ACCOUNTS_HEADERS: [&str; 10] = [
 
 const HISTORICAL_BALANCES_FILE: &str = "data/historical_balances";
 
-const HISTORICAL_BALANCES_HEADERS: [&str; 6] = [
-    "id",
-    "address",
-    "balance",
-    "block_number",
-    "created_at",
-    "updated_at",
-];
+const HISTORICAL_BALANCES_HEADERS: [&str; 6] = ["id", "address", "balance", "block_number", "created_at", "updated_at"];
 
 const TRANSACTIONS_FILE: &str = "data/transactions";
 
@@ -98,7 +91,7 @@ pub struct CsvExporter {
 
     historical_balances_csv: csv::Writer<File>,
     historical_balances_id: LastId,
-    
+
     transactions_csv: csv::Writer<File>,
     transactions_id: LastId,
 
@@ -154,20 +147,14 @@ impl CsvExporter {
         // export blocks
         let blocks = self.staged_blocks.drain(..).collect_vec();
         for block in blocks {
+            self.export_account_changes(block.compact_account_changes())?;
             self.export_transactions(block.transactions)?;
         }
 
-        // i know this is not the best way to do this, but i'm not sure how to do it better
-        let blocks2 = self.staged_blocks.drain(..).collect_vec();
-        for block in blocks2 {
-            self.export_historical_balances(block.compact_account_changes(), block.number())?;
-        }
-
+        // flush pending data
         self.historical_balances_csv.flush()?;
         self.historical_balances_id.save()?;
 
-
-        // flush pending data
         self.transactions_csv.flush()?;
         self.transactions_id.save()?;
 
@@ -202,14 +189,16 @@ impl CsvExporter {
         self.historical_balances_id.value += 1;
         for account_change in account_changes {
             let row = [
-                self.historical_balances_id.value.to_string(),          // id
-                account_change.address.to_string(),                     // address
-                account_change.balance.to_string(),                     // balance
-                block_number.to_string(),                               // block_number
-                now(),                                                  // created_at
-                now(),                                                  // updated_at
+                self.historical_balances_id.value.to_string(), // id
+                account_change.address.to_string(),            // address
+                account_change.balance.to_string(),            // balance
+                block_number.to_string(),                      // block_number
+                now(),                                         // created_at
+                now(),                                         // updated_at
             ];
-            self.historical_balances_csv.write_record(row).context("failed to write csv historical balances")?;
+            self.historical_balances_csv
+                .write_record(row)
+                .context("failed to write csv historical balances")?;
         }
         Ok(())
     }
@@ -246,6 +235,21 @@ impl CsvExporter {
                 now,                                                    // updated_at
             ];
             self.transactions_csv.write_record(record).context("failed to write csv transaction")?;
+        }
+        Ok(())
+    }
+
+    fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
+        for change in changes {
+            if let Some(nonce) = change.nonce.take_modified() {
+                // todo: export historical nonce
+            }
+            if let Some(balance) = change.balance.take_modified() {
+                // todo: export historical balance
+            }
+            if let Some(bytecode) = change.bytecode.take_modified() {
+                // todo: export historical bytecode
+            }
         }
         Ok(())
     }
