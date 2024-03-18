@@ -87,7 +87,7 @@ db-compile:
     SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@localhost/stratus -- --all-targets
 alias sqlx := db-compile
 
-# Database: Load CSV data
+# Database: Load CSV data produced by importer-offline
 db-load-csv:
     echo "" > data/psql.txt
     echo "truncate transactions;" >> data/psql.txt
