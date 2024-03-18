@@ -1,3 +1,4 @@
+use std::fs;
 use std::fs::File;
 
 use anyhow::Context;
@@ -13,6 +14,8 @@ use crate::eth::primitives::TransactionMined;
 // Constants
 // -----------------------------------------------------------------------------
 
+const ACCOUNT_FILE: &str = "data/accounts";
+
 const ACCOUNTS_HEADERS: [&str; 10] = [
     "id",
     "address",
@@ -26,7 +29,9 @@ const ACCOUNTS_HEADERS: [&str; 10] = [
     "updated_at",
 ];
 
-const TRANSACTION_HEADERS: [&str; 20] = [
+const TRANSACTIONS_FILE: &str = "data/transactions";
+
+const TRANSACTIONS_HEADERS: [&str; 20] = [
     "id",
     "hash",
     "signer_address",
@@ -72,11 +77,11 @@ impl CsvExporter {
             staged_blocks: Vec::new(),
             staged_accounts: Vec::new(),
 
-            accounts: csv_writer("data/accounts", BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
+            accounts: csv_writer(ACCOUNT_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
             accounts_id: 0,
 
-            transactions: csv_writer("data/transaction", number, &TRANSACTION_HEADERS)?,
-            transactions_id: 0,
+            transactions: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
+            transactions_id: read_csv_last_id(TRANSACTIONS_FILE)?,
         })
     }
 }
@@ -162,6 +167,7 @@ impl CsvExporter {
             ];
             self.transactions.write_record(row).context("failed to write csv transaction")?;
         }
+        write_csv_last_id(TRANSACTIONS_FILE, self.transactions_id)?;
         Ok(())
     }
 }
@@ -183,6 +189,27 @@ fn csv_writer(base_path: &'static str, number: BlockNumber, headers: &[&'static 
     writer.write_record(headers).context("fai;ed to write csv header")?;
 
     Ok(writer)
+}
+
+/// Reads the last id saved to a CSV file.
+fn read_csv_last_id(base_path: &'static str) -> anyhow::Result<usize> {
+    let file = format!("{}-last-id.txt", base_path);
+
+    // when file does not exist, assume 0
+    if fs::metadata(file.clone()).is_err() {
+        return Ok(0);
+    }
+
+    // when file exists, read the last id from file
+    let content = fs::read_to_string(file).context("failed to read last_id file")?;
+    let id = content.parse().context("failed to parse last_id file content")?;
+    Ok(id)
+}
+
+fn write_csv_last_id(base_path: &'static str, id: usize) -> anyhow::Result<()> {
+    let file = format!("{}-last-id.txt", base_path);
+    fs::write(file, id.to_string()).context("failed to write last_id file")?;
+    Ok(())
 }
 
 /// Returns the current date formatted for the CSV file.
