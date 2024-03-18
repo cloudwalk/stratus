@@ -140,7 +140,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    async fn flush_account_changes(&self) -> anyhow::Result<()> {
+    async fn flush(&self) -> anyhow::Result<()> {
         Ok(())
     }
 

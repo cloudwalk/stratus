@@ -1,4 +1,5 @@
-//! In-memory storage implementations.
+mod hybrid_history;
+mod query_executor;
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -8,16 +9,18 @@ use std::time::Duration;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use metrics::atomics::AtomicU64;
+use num_traits::cast::ToPrimitive;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::Pool;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
+use tokio::sync::Semaphore;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -45,7 +48,9 @@ use crate::eth::storage::StorageError;
 #[derive(Debug)]
 struct BlockTask {
     block_number: BlockNumber,
-    block_data: Value,
+    block_hash: Hash,
+    block_data: Block,
+    account_changes: Vec<ExecutionAccountChanges>,
 }
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -61,6 +66,7 @@ pub struct HybridPermanentStorageState {
 pub struct HybridPermanentStorage {
     state: RwLock<HybridPermanentStorageState>,
     block_number: AtomicU64,
+    hybrid_state: hybrid_history::HybridHistory,
     task_sender: mpsc::Sender<BlockTask>,
 }
 
@@ -73,10 +79,10 @@ pub struct HybridPermanentStorageConfig {
 
 impl HybridPermanentStorage {
     pub async fn new(config: HybridPermanentStorageConfig) -> anyhow::Result<Self> {
-        tracing::info!("starting hybrid storage");
+        tracing::info!(?config, "starting hybrid storage");
 
         let connection_pool = PgPoolOptions::new()
-            .min_connections(config.connections)
+            .min_connections(config.connections / 2)
             .max_connections(config.connections)
             .acquire_timeout(config.acquire_timeout)
             .connect(&config.url)
@@ -92,36 +98,46 @@ impl HybridPermanentStorage {
             // Assuming you define a 'response_sender' if you plan to handle responses
             let worker_pool = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
             // Omitting response channel setup for simplicity
-            Self::worker(task_receiver, worker_pool).await;
+            Self::worker(task_receiver, worker_pool, config.connections).await;
         });
 
+        let block_number = Self::preload_block_number(connection_pool.clone()).await?;
+        let state = RwLock::new(HybridPermanentStorageState::default());
+        //XXX this will eventually replace state
+        let hybrid_state = hybrid_history::HybridHistory::new(connection_pool.clone().into()).await?;
+
         Ok(Self {
-            state: RwLock::new(HybridPermanentStorageState::default()),
-            block_number: Default::default(),
+            state,
+            block_number,
+            hybrid_state,
             task_sender,
         })
     }
 
-    async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>) {
-        tracing::info!("Starting worker");
-        while let Some(block_task) = receiver.recv().await {
-            let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
-            // Here we attempt to insert the block data into the database.
-            // Adjust the SQL query according to your table schema.
-            tokio::spawn(async move {
-                let result = sqlx::query!(
-                    "INSERT INTO neo_blocks (block_number, block, created_at) VALUES ($1, $2, NOW())",
-                    block_task.block_number as _,
-                    block_task.block_data
-                )
-                .execute(&*pool_clone)
-                .await;
+    async fn preload_block_number(pool: Pool<sqlx::Postgres>) -> anyhow::Result<AtomicU64> {
+        let blocks = sqlx::query!("SELECT block_number FROM neo_blocks ORDER BY block_number DESC LIMIT 1")
+            .fetch_all(&pool)
+            .await?;
 
-                // Handle the result of the insert operation.
-                match result {
-                    Ok(_) => tracing::info!("Block {} inserted successfully.", block_task.block_number),
-                    Err(e) => tracing::error!("Failed to insert block {}: {}", block_task.block_number, e),
-                }
+        let last_block_number = blocks.last().map(|b| b.block_number.to_u64()).unwrap_or(Some(0)).unwrap_or(0);
+
+        Ok(last_block_number.into())
+    }
+
+    async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>, connections: u32) {
+        // Define the maximum number of concurrent tasks. Adjust this number based on your requirements.
+        let max_concurrent_tasks: usize = (connections).try_into().unwrap_or(10usize);
+        tracing::info!("Starting worker with max_concurrent_tasks: {}", max_concurrent_tasks);
+        let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
+
+        while let Some(block_task) = receiver.recv().await {
+            let pool_clone = Arc::clone(&pool);
+            let semaphore_clone = Arc::clone(&semaphore);
+
+            tokio::spawn(async move {
+                let permit = semaphore_clone.acquire_owned().await.expect("Failed to acquire semaphore permit");
+                query_executor::commit_eventually(pool_clone, block_task).await;
+                drop(permit);
             });
         }
     }
@@ -219,18 +235,16 @@ impl PermanentStorage for HybridPermanentStorage {
     // ------------------------------------------------------------------------
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        tracing::debug!(%address, "reading account");
-
-        let state = self.lock_read().await;
-
-        match state.accounts.get(address) {
+        //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
+        match self.hybrid_state.hybrid_accounts_slots.get(address) {
             Some(inmemory_account) => {
-                let account = inmemory_account.to_account(point_in_time);
+                let account = inmemory_account.to_account(point_in_time, address).await;
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
 
             None => {
+                //XXX TODO start a inmemory account from the database maybe using to_account on a empty account
                 tracing::trace!(%address, "account not found");
                 Ok(None)
             }
@@ -240,24 +254,7 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
-        let state = self.lock_read().await;
-        let Some(account) = state.accounts.get(address) else {
-            tracing::trace!(%address, "account not found");
-            return Ok(Default::default());
-        };
-
-        match account.slots.get(slot_index) {
-            Some(slot_history) => {
-                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
-                Ok(Some(slot))
-            }
-
-            None => {
-                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
-                Ok(None)
-            }
-        }
+        Ok(self.hybrid_state.get_slot_at_point(address, slot_index, point_in_time).await)
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -329,22 +326,11 @@ impl PermanentStorage for HybridPermanentStorage {
         tracing::debug!(number = %block.number(), "saving block");
         let block = Arc::new(block);
         let number = block.number();
+        state.blocks_by_hash.truncate(600);
         state.blocks_by_number.insert(*number, Arc::clone(&block));
-        state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
-
-        // save transactions
-        for transaction in block.transactions.clone() {
-            tracing::debug!(hash = %transaction.input.hash, "saving transaction");
-            state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
-            if transaction.is_success() {
-                for log in transaction.logs {
-                    state.logs.push(log);
-                }
-            }
-        }
 
         // save block account changes
-        for changes in account_changes {
+        for changes in account_changes.clone() {
             let account = state
                 .accounts
                 .entry(changes.address.clone())
@@ -368,6 +354,7 @@ impl PermanentStorage for HybridPermanentStorage {
                 if let Some(slot) = slot.take_modified() {
                     match account.slots.get_mut(&slot.index) {
                         Some(slot_history) => {
+                            //XXX simply maintain the latest and no history
                             slot_history.push(*number, slot);
                         }
                         None => {
@@ -378,26 +365,19 @@ impl PermanentStorage for HybridPermanentStorage {
             }
         }
 
+        let block_task = BlockTask {
+            block_number: *block.number(),
+            block_hash: block.hash().clone(),
+            block_data: (*block).clone(),
+            account_changes, //TODO make account changes work from postgres then we can load it on memory
+        };
+
+        self.task_sender.send(block_task).await.expect("Failed to send block task");
+
         Ok(())
     }
 
     async fn after_commit_hook(&self) -> anyhow::Result<()> {
-        let b = self.read_block(&BlockSelection::Latest).await?;
-        if let Some(bb) = b {
-            let s = format!("{} => {}", bb.number(), bb.transactions.len());
-            dbg!(s);
-            let bbb = *bb.number();
-
-            let block_task = BlockTask {
-                block_number: bbb,
-                block_data: serde_json::to_value(bb).unwrap(),
-            };
-
-            // Send the task to be processed by a worker
-            dbg!("sending block task");
-            self.task_sender.send(block_task).await.expect("Failed to send block task");
-        }
-
         Ok(())
     }
 
@@ -525,15 +505,5 @@ impl InMemoryPermanentAccount {
     /// Checks current account is a contract.
     pub fn is_contract(&self) -> bool {
         self.bytecode.get_current().is_some()
-    }
-
-    /// Converts itself to an account at a point-in-time.
-    pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
-        Account {
-            address: self.address.clone(),
-            balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
-            nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
-            bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-        }
     }
 }
