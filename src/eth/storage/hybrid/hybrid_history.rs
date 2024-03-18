@@ -142,13 +142,12 @@ impl HybridHistory {
         for change in changes {
             let address = change.address.clone(); // Assuming Address is cloneable and the correct type.
 
-            let account_info_entry = self.hybrid_accounts_slots.entry(address)
-                .or_insert_with(|| AccountInfo {
-                    balance: Wei::ZERO, // Initialize with default values.
-                    nonce: Nonce::ZERO,
-                    bytecode: None,
-                    slots: HashMap::new(),
-                });
+            let account_info_entry = self.hybrid_accounts_slots.entry(address).or_insert_with(|| AccountInfo {
+                balance: Wei::ZERO, // Initialize with default values.
+                nonce: Nonce::ZERO,
+                bytecode: None,
+                slots: HashMap::new(),
+            });
 
             // Apply basic account info changes
             if let Some(nonce) = change.nonce.clone().take_modified() {
