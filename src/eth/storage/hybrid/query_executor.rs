@@ -91,7 +91,6 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
             logs_batch.2.push(log.log.address.clone());
             logs_batch.3.push(log.log_index.clone());
             logs_batch.4.push(serde_json::to_value(log).unwrap());
-
         }
         transaction_batch.0.push(transaction.block_number.clone());
         transaction_batch.1.push(transaction.input.hash.clone());
@@ -161,11 +160,11 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
                     "INSERT INTO public.neo_logs (block_number, hash, address, log_idx, log_data)
                      SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::jsonb[])
                      AS t(block_number, hash, address, log_idx, log_data);",
-                     logs_batch.0 as _,
-                     logs_batch.1 as _,
-                     logs_batch.2 as _,
-                     logs_batch.3 as _,
-                     logs_batch.4 as _,
+                    logs_batch.0 as _,
+                    logs_batch.1 as _,
+                    logs_batch.2 as _,
+                    logs_batch.3 as _,
+                    logs_batch.4 as _,
                 )
                 .execute(&mut *tx)
                 .await?;
