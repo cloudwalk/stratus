@@ -113,6 +113,20 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
                 .await?;
             }
 
+            if accounts_slots_changes.0.len() > 0 {
+                sqlx::query!(
+                    "INSERT INTO public.neo_account_slots (block_number, slot_index, account_address, value)
+                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::bytea[])
+                     AS t(block_number, slot_index, account_address, value);",
+                    accounts_slots_changes.0 as _,
+                    accounts_slots_changes.1 as _,
+                    accounts_slots_changes.2 as _,
+                    accounts_slots_changes.3 as _,
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
+
             tx.commit().await?;
             Ok(())
         },
