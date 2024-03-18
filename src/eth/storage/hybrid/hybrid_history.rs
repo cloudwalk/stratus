@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use anyhow::Context;
 use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
@@ -135,8 +136,8 @@ impl HybridHistory {
         Ok(())
     }
 
-    pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
-        match point_in_time {
+    pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        let slot = match point_in_time {
             StoragePointInTime::Present => self.hybrid_accounts_slots.get(address).map(|account_info| {
                 let value = account_info.slots.get(slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
                 Slot {
@@ -144,10 +145,30 @@ impl HybridHistory {
                     value,
                 }
             }),
-            StoragePointInTime::Past(_number) => {
-                None //XXX TODO use postgres query
-            }
-        }
+            StoragePointInTime::Past(number) => sqlx::query_as!(
+                Slot,
+                r#"
+                    SELECT
+                    slot_index as "index: _",
+                    value as "value: _"
+                    FROM neo_account_slots
+                    WHERE account_address = $1
+                    AND slot_index = $2
+                    AND block_number = (SELECT MAX(block_number)
+                                            FROM historical_slots
+                                            WHERE account_address = $1
+                                            AND idx = $2
+                                            AND block_number <= $3)
+                "#,
+                address as _,
+                slot_index as _,
+                number as _
+            )
+            .fetch_optional(&*self.pool)
+            .await
+            .context("failed to select slot")?,
+        };
+        Ok(slot)
     }
 }
 

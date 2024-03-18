@@ -253,8 +253,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
-
-        Ok(self.hybrid_state.get_slot_at_point(address, slot_index, point_in_time).await)
+        self.hybrid_state.get_slot_at_point(address, slot_index, point_in_time).await
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
