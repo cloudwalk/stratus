@@ -14,7 +14,7 @@ flatten() {
     contract=$2
 
     if [ -f integration/contracts/$contract.flattened.sol ]; then
-        log "Skipping flattening of $contract ($repo) (already exists)"
+        echo "Skipping flattening of $contract ($repo)"
         return
     fi
 

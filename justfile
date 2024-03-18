@@ -386,17 +386,9 @@ contracts-test-stratus-postgres:
 contracts-test-int:
     #!/bin/bash 
     cd e2e-contracts && ./flatten-contracts.sh
-    if [ -d integration ]; then
-        cd integration
-    fi
-    if [ ! -f hardhat.config.ts ]; then
-        echo "Copying hardhat.config.js from e2e"
-        cp ../../e2e/hardhat.config.ts .
-    fi
-    if [ ! -f tsconfig.json ]; then
-        echo "Copying tsconfig.json from e2e"
-        cp ../../e2e/tsconfig.json .
-    fi
+    [ -d integration ] && cd integration
+    [ ! -f hardhat.config.ts ] && { cp ../../e2e/hardhat.config.ts .; }
+    [ ! -f tsconfig.json ] && { cp ../../e2e/tsconfig.json .; }
     if [ ! -d node_modules ]; then
         echo "Installing node modules"
         npm --silent install hardhat@2.21.0 ethers@6.11.1 @openzeppelin/hardhat-upgrades @openzeppelin/contracts-upgradeable @nomicfoundation/hardhat-ethers @nomicfoundation/hardhat-toolbox @nomicfoundation/hardhat-ethers
