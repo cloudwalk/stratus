@@ -25,7 +25,7 @@ flatten() {
     
     # Lint the flattened contract
     log "Linting the flattened $contract ($repo)"
-    npx ts-node integration/lintFlattened.ts integration/contracts/$contract.flattened.sol
+    npx ts-node integration/test/helpers/lint-flattened.ts integration/contracts/$contract.flattened.sol
 }
 
 # ------------------------------------------------------------------------------
