@@ -20,7 +20,6 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 use tokio::sync::Semaphore;
-use tokio::time::sleep;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;

@@ -184,10 +184,11 @@ impl StratusStorage {
         result
     }
 
-    pub async fn flush_account_changes_to_temp(&self) -> anyhow::Result<()> {
+    /// If necessary, flushes temporary state to durable storage.
+    pub async fn flush_temp(&self) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.temp.flush_account_changes().await;
-        metrics::inc_storage_flush_account_changes(start.elapsed(), result.is_ok());
+        let result = self.temp.flush().await;
+        metrics::inc_storage_flush_temp(start.elapsed(), result.is_ok());
         result
     }
 

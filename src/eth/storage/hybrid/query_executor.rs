@@ -82,7 +82,7 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
         accounts_changes.4.push(nonce);
     }
 
-    let pool_clone = pool.clone();
+    let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
     execute_with_retry(
         || async {
             let mut conn = pool_clone.acquire().await?;
@@ -98,7 +98,7 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
             .execute(&mut *tx)
             .await?;
 
-            if accounts_changes.0.len() > 0 {
+            if !accounts_changes.0.is_empty() {
                 sqlx::query!(
                     "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
                 SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
@@ -113,7 +113,7 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
                 .await?;
             }
 
-            if accounts_slots_changes.0.len() > 0 {
+            if !accounts_slots_changes.0.is_empty() {
                 sqlx::query!(
                     "INSERT INTO public.neo_account_slots (block_number, slot_index, account_address, value)
                      SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::bytea[])

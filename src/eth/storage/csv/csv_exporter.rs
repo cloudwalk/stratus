@@ -1,10 +1,22 @@
+use std::fs;
 use std::fs::File;
 
 use anyhow::Context;
+use anyhow::Ok;
+use byte_unit::Byte;
+use byte_unit::Unit;
+use itertools::Itertools;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::TransactionMined;
+
+// -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+
+const ACCOUNTS_FILE: &str = "data/accounts";
 
 const ACCOUNTS_HEADERS: [&str; 10] = [
     "id",
@@ -19,7 +31,9 @@ const ACCOUNTS_HEADERS: [&str; 10] = [
     "updated_at",
 ];
 
-const TRANSACTION_HEADERS: [&str; 20] = [
+const TRANSACTIONS_FILE: &str = "data/transactions";
+
+const TRANSACTIONS_HEADERS: [&str; 20] = [
     "id",
     "hash",
     "signer_address",
@@ -42,53 +56,100 @@ const TRANSACTION_HEADERS: [&str; 20] = [
     "updated_at",
 ];
 
-/// Export primitives to CSV files.
+// -----------------------------------------------------------------------------
+// Exporter
+// -----------------------------------------------------------------------------
+
+/// Export CSV files in the same format of the PostgreSQL tables.
 pub struct CsvExporter {
-    accounts: csv::Writer<File>,
-    accounts_id: usize,
+    staged_accounts: Vec<Account>,
+    staged_blocks: Vec<Block>,
 
-    transactions: csv::Writer<File>,
-    transactions_id: usize,
+    accounts_csv: csv::Writer<File>,
+    accounts_id: LastId,
+
+    transactions_csv: csv::Writer<File>,
+    transactions_id: LastId,
 }
 
 impl CsvExporter {
-    /// Creates a new [`CsvExporter`] with all defaults CSVs in the default export path.
-    pub fn new() -> anyhow::Result<Self> {
-        let exporter = Self {
-            accounts: csv_writer("data/accounts.csv", &ACCOUNTS_HEADERS)?,
-            accounts_id: 0,
+    /// Creates a new [`CsvExporter`].
+    pub fn new(number: BlockNumber) -> anyhow::Result<Self> {
+        Ok(Self {
+            staged_blocks: Vec::new(),
+            staged_accounts: Vec::new(),
 
-            transactions: csv_writer("data/transactions.csv", &TRANSACTION_HEADERS)?,
-            transactions_id: 0,
-        };
-        Ok(exporter)
+            accounts_csv: csv_writer(ACCOUNTS_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
+            accounts_id: LastId::new_zero(ACCOUNTS_FILE),
+
+            transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
+            transactions_id: LastId::new(TRANSACTIONS_FILE)?,
+        })
     }
-}
 
-fn csv_writer(path: &'static str, headers: &[&'static str]) -> anyhow::Result<csv::Writer<File>> {
-    let mut writer = csv::WriterBuilder::new()
-        .has_headers(true)
-        .delimiter(b'\t')
-        .quote_style(csv::QuoteStyle::Always)
-        .from_path(path)
-        .context("failed to create csv writer")?;
+    // -------------------------------------------------------------------------
+    // Stagers
+    // -------------------------------------------------------------------------
 
-    writer.write_record(headers).context("fai;ed to write csv header")?;
+    /// Add an account to be exported.
+    pub fn add_account(&mut self, account: Account) -> anyhow::Result<()> {
+        self.staged_accounts.push(account);
+        Ok(())
+    }
 
-    Ok(writer)
-}
+    /// Add a block to be exported.
+    pub fn add_block(&mut self, block: Block) -> anyhow::Result<()> {
+        self.staged_blocks.push(block);
+        Ok(())
+    }
 
-impl CsvExporter {
-    pub fn export_block(&mut self, block: Block) -> anyhow::Result<()> {
-        self.export_transactions(block.transactions)?;
+    // -------------------------------------------------------------------------
+    // Exporters
+    // -------------------------------------------------------------------------
+    pub fn flush(&mut self) -> anyhow::Result<()> {
+        // export accounts
+        let accounts = self.staged_accounts.drain(..).collect_vec();
+        self.export_accounts(accounts)?;
+
+        // export block parts
+        let blocks = self.staged_blocks.drain(..).collect_vec();
+        for block in blocks {
+            self.export_transactions(block.transactions)?;
+        }
+
+        // flush
+        self.transactions_csv.flush()?;
+        self.transactions_id.save()?;
+
+        Ok(())
+    }
+
+    fn export_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        for account in accounts {
+            self.accounts_id.value += 1;
+            let row = [
+                self.accounts_id.value.to_string(),                          // id
+                account.address.to_string(),                                 // address
+                account.bytecode.map(|x| x.to_string()).unwrap_or_default(), // bytecode
+                account.balance.to_string(),                                 // latest_balance
+                account.nonce.to_string(),                                   // latest_nonce
+                "0".to_owned(),                                              // creation_block
+                "0".to_owned(),                                              // previous_balance
+                "0".to_owned(),                                              // previous_nonce
+                now(),                                                       // created_at
+                now(),                                                       // updated_at
+            ];
+            self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
+        }
+
         Ok(())
     }
 
     fn export_transactions(&mut self, transactions: Vec<TransactionMined>) -> anyhow::Result<()> {
         for tx in transactions {
-            self.transactions_id += 1;
+            self.transactions_id.value += 1;
             let row = [
-                self.transactions_id.to_string(),                       // id
+                self.transactions_id.value.to_string(),                 // id
                 tx.input.hash.to_string(),                              // hash
                 tx.input.from.to_string(),                              // signer_address
                 tx.input.nonce.to_string(),                             // nonce
@@ -109,32 +170,66 @@ impl CsvExporter {
                 now(),                                                  // created_at
                 now(),                                                  // updated_at
             ];
-            self.transactions.write_record(row).context("failed to write csv transaction")?;
-        }
-        Ok(())
-    }
-
-    pub fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        for account in accounts {
-            self.accounts_id += 1;
-            let row = [
-                self.accounts_id.to_string(),                                // id
-                account.address.to_string(),                                 // address
-                account.bytecode.map(|x| x.to_string()).unwrap_or_default(), // bytecode
-                account.balance.to_string(),                                 // latest_balance
-                account.nonce.to_string(),                                   // latest_nonce
-                "0".to_owned(),                                              // creation_block
-                "0".to_owned(),                                              // previous_balance
-                "0".to_owned(),                                              // previous_nonce
-                now(),                                                       // created_at
-                now(),                                                       // updated_at
-            ];
-            self.accounts.write_record(row).context("failed to write csv transaction")?;
+            self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }
         Ok(())
     }
 }
 
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+struct LastId {
+    file: String,
+    value: usize,
+}
+
+impl LastId {
+    /// Creates a new instance with default zero value.
+    fn new_zero(base_path: &'static str) -> Self {
+        let file = format!("{}-last-id.txt", base_path);
+        Self { file, value: 0 }
+    }
+
+    /// Creates a new instance from an existing saved file or assumes default value when file does not exist.
+    fn new(base_path: &'static str) -> anyhow::Result<Self> {
+        let mut id = Self::new_zero(base_path);
+
+        // when file exist, read value from file
+        if fs::metadata(&id.file).is_ok() {
+            let content = fs::read_to_string(&id.file).context("failed to read last_id file")?;
+            id.value = content.parse().context("failed to parse last_id file content")?;
+        }
+
+        Ok(id)
+    }
+
+    /// Saves the current value to file.
+    fn save(&self) -> anyhow::Result<()> {
+        fs::write(&self.file, self.value.to_string()).context("failed to write last_id file")?;
+        Ok(())
+    }
+}
+
+/// Creates a new CSV writer at the specified path. If the file exists, it will overwrite it.
+fn csv_writer(base_path: &'static str, number: BlockNumber, headers: &[&'static str]) -> anyhow::Result<csv::Writer<File>> {
+    let path = format!("{}-{}.csv", base_path, number);
+    let buffer_size = Byte::from_u64_with_unit(4, Unit::MiB).unwrap();
+    let mut writer = csv::WriterBuilder::new()
+        .has_headers(true)
+        .delimiter(b'\t')
+        .quote_style(csv::QuoteStyle::Always)
+        .buffer_capacity(buffer_size.as_u64() as usize)
+        .from_path(path)
+        .context("failed to create csv writer")?;
+
+    writer.write_record(headers).context("fai;ed to write csv header")?;
+
+    Ok(writer)
+}
+
+/// Returns the current date formatted for the CSV file.
 fn now() -> String {
     let now = chrono::Utc::now();
     now.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
