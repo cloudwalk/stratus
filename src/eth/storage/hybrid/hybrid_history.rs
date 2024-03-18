@@ -9,7 +9,6 @@ use sqlx::Postgres;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
@@ -20,7 +19,6 @@ use crate::eth::primitives::Wei;
 
 #[derive(Debug)]
 struct SlotInfo {
-    block_number: BlockNumber,
     value: SlotValue,
 }
 
@@ -44,7 +42,6 @@ struct AccountRow {
     nonce: Option<BigDecimal>,
     balance: Option<BigDecimal>,
     bytecode: Option<Vec<u8>>,
-    block_number: BlockNumber,
 }
 
 #[derive(FromRow)]
@@ -52,7 +49,6 @@ struct SlotRow {
     account_address: Vec<u8>,
     slot_index: SlotIndex,
     value: Option<Vec<u8>>,
-    block_number: BlockNumber,
 }
 
 impl HybridHistory {
@@ -78,14 +74,12 @@ impl HybridHistory {
                 address,
                 nonce,
                 balance,
-                bytecode,
-                block_number
+                bytecode
             FROM
                 neo_accounts
             ORDER BY
                 address,
-                block_number DESC,
-                created_at DESC
+                block_number DESC
             "
         )
         .fetch_all(&*self.pool)
@@ -113,15 +107,13 @@ impl HybridHistory {
             SELECT DISTINCT ON (account_address, slot_index)
                 account_address,
                 slot_index,
-                value,
-                block_number
+                value
             FROM
                 neo_account_slots
             ORDER BY
                 account_address,
                 slot_index,
-                block_number DESC,
-                created_at DESC
+                block_number DESC
             "
         )
         .fetch_all(&*self.pool)
@@ -133,7 +125,6 @@ impl HybridHistory {
                 account_info.slots.insert(
                     slot_row.slot_index,
                     SlotInfo {
-                        block_number: slot_row.block_number,
                         value: slot_row.value.unwrap_or_default().into(),
                     },
                 );
@@ -148,12 +139,12 @@ impl HybridHistory {
     pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
             StoragePointInTime::Present => {
-                self.hybrid_accounts_slots.get(address).and_then(|account_info| {
-                    let value = account_info.slots.get(&slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
-                    Some(Slot {
+                self.hybrid_accounts_slots.get(address).map(|account_info| {
+                    let value = account_info.slots.get(slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
+                    Slot {
                         index: slot_index.clone(),
                         value,
-                    })
+                    }
                 })
             },
             StoragePointInTime::Past(_number) => {

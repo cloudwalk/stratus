@@ -508,14 +508,4 @@ impl InMemoryPermanentAccount {
     pub fn is_contract(&self) -> bool {
         self.bytecode.get_current().is_some()
     }
-
-    /// Converts itself to an account at a point-in-time.
-    pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
-        Account {
-            address: self.address.clone(),
-            balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
-            nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
-            bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-        }
-    }
 }

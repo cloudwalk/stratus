@@ -83,18 +83,17 @@ gen_newtype_from!(self = SlotIndex, other = u64, U256, [u8; 32]);
 
 impl From<Vec<u8>> for SlotIndex {
     fn from(bytes: Vec<u8>) -> Self {
-        let mut u256 = U256::zero(); // Initialize U256 to zero
-                                     // Assuming the byte array is in big-endian format,
-                                     // adjust the slice conversion if your Vec<u8> might not be exactly 32 bytes.
-        if bytes.len() <= 32 {
+        // Initialize U256 to zero
+        // Assuming the byte array is in big-endian format,
+        let u256: U256 = if bytes.len() <= 32 {
             let mut padded_bytes = [0u8; 32];
             padded_bytes[32 - bytes.len()..].copy_from_slice(&bytes);
-            u256 = U256::from_big_endian(&padded_bytes);
+            U256::from_big_endian(&padded_bytes)
         } else {
             // Handle the error or truncate the Vec<u8> as needed
             // For simplicity, this example will only load the first 32 bytes if the Vec is too large
-            u256 = U256::from_big_endian(&bytes[0..32]);
-        }
+            U256::from_big_endian(&bytes[0..32])
+        };
         SlotIndex(u256)
     }
 }
@@ -214,18 +213,17 @@ impl From<SlotValue> for Vec<u8> {
 }
 impl From<Vec<u8>> for SlotValue {
     fn from(bytes: Vec<u8>) -> Self {
-        let mut u256 = U256::zero(); // Initialize U256 to zero
-                                     // Assuming the byte array is in big-endian format,
-                                     // adjust the slice conversion if your Vec<u8> might not be exactly 32 bytes.
-        if bytes.len() <= 32 {
+        // Initialize U256 to zero
+        // Assuming the byte array is in big-endian format,
+        let u256: U256 =if bytes.len() <= 32 {
             let mut padded_bytes = [0u8; 32];
             padded_bytes[32 - bytes.len()..].copy_from_slice(&bytes);
-            u256 = U256::from_big_endian(&padded_bytes);
+            U256::from_big_endian(&padded_bytes)
         } else {
             // Handle the error or truncate the Vec<u8> as needed
             // For simplicity, this example will only load the first 32 bytes if the Vec is too large
-            u256 = U256::from_big_endian(&bytes[0..32]);
-        }
+            U256::from_big_endian(&bytes[0..32])
+        };
         SlotValue(u256)
     }
 }
