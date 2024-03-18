@@ -82,6 +82,21 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
         accounts_changes.4.push(nonce);
     }
 
+    let mut transaction_batch = (Vec::new(), Vec::new(), Vec::new());
+    let mut logs_batch = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for transaction in block_task.block_data.transactions {
+        for log in transaction.logs.iter() {
+            logs_batch.0.push(transaction.block_number);
+            logs_batch.1.push(transaction.input.hash.clone());
+            logs_batch.2.push(log.log.address.clone());
+            logs_batch.3.push(log.log_index);
+            logs_batch.4.push(serde_json::to_value(log).unwrap());
+        }
+        transaction_batch.0.push(transaction.block_number);
+        transaction_batch.1.push(transaction.input.hash.clone());
+        transaction_batch.2.push(serde_json::to_value(transaction).unwrap());
+    }
+
     let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
     execute_with_retry(
         || async {
@@ -101,8 +116,8 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
             if !accounts_changes.0.is_empty() {
                 sqlx::query!(
                     "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
-                SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
-                AS t(block_number, address, bytecode, balance, nonce);",
+                    SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
+                    AS t(block_number, address, bytecode, balance, nonce);",
                     accounts_changes.0 as _,
                     accounts_changes.1 as _,
                     accounts_changes.2 as _,
@@ -122,6 +137,34 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
                     accounts_slots_changes.1 as _,
                     accounts_slots_changes.2 as _,
                     accounts_slots_changes.3 as _,
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
+
+            if !transaction_batch.0.is_empty() {
+                sqlx::query!(
+                    "INSERT INTO public.neo_transactions (block_number, hash, transaction_data)
+                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::jsonb[])
+                     AS t(block_number, hash, transaction_data);",
+                    transaction_batch.0 as _,
+                    transaction_batch.1 as _,
+                    transaction_batch.2 as _,
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
+
+            if !logs_batch.0.is_empty() {
+                sqlx::query!(
+                    "INSERT INTO public.neo_logs (block_number, hash, address, log_idx, log_data)
+                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::jsonb[])
+                     AS t(block_number, hash, address, log_idx, log_data);",
+                    logs_batch.0 as _,
+                    logs_batch.1 as _,
+                    logs_batch.2 as _,
+                    logs_batch.3 as _,
+                    logs_batch.4 as _,
                 )
                 .execute(&mut *tx)
                 .await?;

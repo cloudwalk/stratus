@@ -1,3 +1,4 @@
+mod hybrid_history;
 mod query_executor;
 
 use std::collections::HashMap;
@@ -40,6 +41,7 @@ use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
+use crate::eth::storage::hybrid::hybrid_history::HybridHistory;
 use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
@@ -65,6 +67,7 @@ pub struct HybridPermanentStorageState {
 pub struct HybridPermanentStorage {
     state: RwLock<HybridPermanentStorageState>,
     block_number: AtomicU64,
+    hybrid_state: RwLock<HybridHistory>,
     task_sender: mpsc::Sender<BlockTask>,
 }
 
@@ -101,10 +104,13 @@ impl HybridPermanentStorage {
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
         let state = RwLock::new(HybridPermanentStorageState::default());
+        //XXX this will eventually replace state
+        let hybrid_state = RwLock::new(HybridHistory::new(connection_pool.clone().into()).await?);
 
         Ok(Self {
             state,
             block_number,
+            hybrid_state,
             task_sender,
         })
     }
@@ -230,18 +236,17 @@ impl PermanentStorage for HybridPermanentStorage {
     // ------------------------------------------------------------------------
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        tracing::debug!(%address, "reading account");
-
-        let state = self.lock_read().await;
-
-        match state.accounts.get(address) {
+        //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
+        let hybrid_state = self.hybrid_state.write().await;
+        match hybrid_state.hybrid_accounts_slots.get(address) {
             Some(inmemory_account) => {
-                let account = inmemory_account.to_account(point_in_time);
+                let account = inmemory_account.to_account(point_in_time, address).await;
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
 
             None => {
+                //XXX TODO start a inmemory account from the database maybe using to_account on a empty account
                 tracing::trace!(%address, "account not found");
                 Ok(None)
             }
@@ -250,25 +255,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
-
-        let state = self.lock_read().await;
-        let Some(account) = state.accounts.get(address) else {
-            tracing::trace!(%address, "account not found");
-            return Ok(Default::default());
-        };
-
-        match account.slots.get(slot_index) {
-            Some(slot_history) => {
-                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
-                Ok(Some(slot))
-            }
-
-            None => {
-                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
-                Ok(None)
-            }
-        }
+        self.hybrid_state.read().await.get_slot_at_point(address, slot_index, point_in_time).await
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -329,6 +316,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write().await;
+        let mut hybrid_state = self.hybrid_state.write().await;
 
         // check conflicts before persisting any state changes
         let account_changes = block.compact_account_changes();
@@ -343,40 +331,8 @@ impl PermanentStorage for HybridPermanentStorage {
         state.blocks_by_hash.truncate(600);
         state.blocks_by_number.insert(*number, Arc::clone(&block));
 
-        // save block account changes
-        for changes in account_changes.clone() {
-            let account = state
-                .accounts
-                .entry(changes.address.clone())
-                .or_insert_with(|| InMemoryPermanentAccount::new_empty(changes.address));
-
-            // account basic info
-            if let Some(nonce) = changes.nonce.take_modified() {
-                account.nonce.push(*number, nonce);
-            }
-            if let Some(balance) = changes.balance.take_modified() {
-                account.balance.push(*number, balance);
-            }
-
-            // bytecode
-            if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                account.bytecode.push(*number, Some(bytecode));
-            }
-
-            // slots
-            for (_, slot) in changes.slots {
-                if let Some(slot) = slot.take_modified() {
-                    match account.slots.get_mut(&slot.index) {
-                        Some(slot_history) => {
-                            slot_history.push(*number, slot);
-                        }
-                        None => {
-                            account.slots.insert(slot.index.clone(), InMemoryHistory::new(*number, slot));
-                        }
-                    }
-                }
-            }
-        }
+        //XXX deal with errors later
+        let _ = hybrid_state.update_state_with_execution_changes(&account_changes).await;
 
         let block_task = BlockTask {
             block_number: *block.number(),
@@ -482,11 +438,6 @@ pub struct InMemoryPermanentAccount {
 }
 
 impl InMemoryPermanentAccount {
-    /// Creates a new empty permanent account.
-    fn new_empty(address: Address) -> Self {
-        Self::new_with_balance(address, Wei::ZERO)
-    }
-
     /// Creates a new permanent account with initial balance.
     pub fn new_with_balance(address: Address, balance: Wei) -> Self {
         Self {
@@ -518,15 +469,5 @@ impl InMemoryPermanentAccount {
     /// Checks current account is a contract.
     pub fn is_contract(&self) -> bool {
         self.bytecode.get_current().is_some()
-    }
-
-    /// Converts itself to an account at a point-in-time.
-    pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
-        Account {
-            address: self.address.clone(),
-            balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
-            nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
-            bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-        }
     }
 }

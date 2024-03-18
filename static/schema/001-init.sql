@@ -745,7 +745,7 @@ CREATE TABLE public.neo_account_slots (
     block_number BIGINT NOT NULL,
     slot_index BYTEA NOT NULL,
     account_address BYTEA NOT NULL,
-    value BYTEA,
+    value BYTEA NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (account_address, slot_index, block_number),
     FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
@@ -764,9 +764,10 @@ CREATE TABLE public.neo_logs (
     block_number BIGINT NOT NULL,
     hash BYTEA NOT NULL,
     address BYTEA NOT NULL,
+    log_idx numeric NOT NULL,
     log_data JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (hash, address, block_number),
+    PRIMARY KEY (hash, block_number, log_idx),
     FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
 );
 
