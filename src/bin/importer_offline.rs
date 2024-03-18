@@ -26,10 +26,11 @@ use tokio_util::sync::CancellationToken;
 /// Number of blocks fetched in each query.
 const BLOCKS_BY_FETCH: usize = 10_000;
 
-/// Number of tasks in the backlog.
-///
-/// Each task contains 10_000 blocks and all receipts for them.
+/// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
+
+/// Number of blocks processed in memory between data is flushed to temporary storage and CSV files.
+const FLUSH_INTERVAL_IN_BLOCKS: u64 = 100;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
@@ -99,7 +100,8 @@ async fn execute_block_importer(
         let mut receipts = ExternalReceipts::from(receipts);
 
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
-        for block in blocks {
+        let block_last_index = blocks.len() - 1;
+        for (block_index, block) in blocks.into_iter().enumerate() {
             let start = Instant::now();
 
             match csv {
@@ -108,7 +110,10 @@ async fn execute_block_importer(
                     let block = executor.import_external_to_temp(block, &mut receipts).await?;
                     let number = *block.number();
                     csv.add_block(block)?;
-                    if number.as_u64() % 50 == 0 {
+
+                    // flush when reached the specified interval or is the last block in the loop
+                    let should_flush = (number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0) || (block_index == block_last_index);
+                    if should_flush {
                         csv.flush()?;
                         stratus_storage.flush_temp().await?;
                     }
