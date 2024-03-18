@@ -1,4 +1,5 @@
 mod query_executor;
+mod hybrid_history;
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -65,6 +66,7 @@ pub struct HybridPermanentStorageState {
 pub struct HybridPermanentStorage {
     state: RwLock<HybridPermanentStorageState>,
     block_number: AtomicU64,
+    hybrid_state: hybrid_history::HybridHistory,
     task_sender: mpsc::Sender<BlockTask>,
 }
 
@@ -101,10 +103,13 @@ impl HybridPermanentStorage {
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
         let state = RwLock::new(HybridPermanentStorageState::default());
+        //XXX this will eventually replace state
+        let hybrid_state = hybrid_history::HybridHistory::new(connection_pool.clone().into()).await?;
 
         Ok(Self {
             state,
             block_number,
+            hybrid_state,
             task_sender,
         })
     }
@@ -327,6 +332,8 @@ impl PermanentStorage for HybridPermanentStorage {
         Ok(logs)
     }
 
+    //XXX criar uma hybridhistory, ela mantem ate 30GB no cache atraves de truncate
+    // se fizer uma busca na hybrid em memoria e nao tiver, vai probanco, mas sempre que achar salva no cache
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write().await;
 
@@ -368,6 +375,7 @@ impl PermanentStorage for HybridPermanentStorage {
                 if let Some(slot) = slot.take_modified() {
                     match account.slots.get_mut(&slot.index) {
                         Some(slot_history) => {
+                            //XXX simply maintain the latest and no history
                             slot_history.push(*number, slot);
                         }
                         None => {
