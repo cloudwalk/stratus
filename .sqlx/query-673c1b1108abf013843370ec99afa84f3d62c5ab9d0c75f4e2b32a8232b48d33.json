@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO public.neo_logs (block_number, hash, address, log_idx, log_data)\n                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::jsonb[])\n                     AS t(block_number, hash, address, log_idx, log_data);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "ByteaArray",
+        "ByteaArray",
+        "NumericArray",
+        "JsonbArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "673c1b1108abf013843370ec99afa84f3d62c5ab9d0c75f4e2b32a8232b48d33"
+}
