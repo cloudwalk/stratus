@@ -1,3 +1,4 @@
+//@ts-lint ignore
 {
   "compilerOptions": {
     "target": "es2020",
