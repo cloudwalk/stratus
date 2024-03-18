@@ -23,11 +23,11 @@ async function removeLinesContainingString(filePath: string, searchString: strin
 
 const filePath = process.argv[2];
 const searchStrings = [
-  'pragma solidity', 
-  'Sources flattened', 
-  'SPDX-License-Identifier', 
-  'File @openzeppelin', 
-  'Original license', 
+  'pragma solidity',
+  'Sources flattened',
+  'SPDX-License-Identifier',
+  'File @openzeppelin',
+  'Original license',
   'OpenZeppelin Contracts',
   '@custom:storage-location'
 ];
