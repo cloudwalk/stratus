@@ -9,6 +9,8 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
+
 --
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --

@@ -64,7 +64,7 @@ async fn test_import_offline_snapshot() {
 
     // init containers
     let docker = Docker::default();
-    let _pg_guard = docker.start_postgres();
+    // let _pg_guard = docker.start_postgres();
     let _prom_guard = docker.start_prometheus();
 
     // init block data
@@ -123,7 +123,7 @@ async fn test_import_offline_snapshot() {
                 println!("{:<64} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);
-                println!("{:<64} = {}", query, secs.fancy_duration().truncate(1));
+                println!("{:<64} = {}", query, secs.fancy_duration().truncate(2));
             }
         }
     }

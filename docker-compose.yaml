@@ -13,6 +13,13 @@ services:
       - "./static/schema/001-init.sql:/docker-entrypoint-initdb.d/001-schema.sql"
       - "./static/schema/002-schema-external-rpc.sql:/docker-entrypoint-initdb.d/002-schema.sql"
       - "./static/schema/003-triggers-and-procedures.sql:/docker-entrypoint-initdb.d/003-triggers-and-procedures.sql"
+    command:
+      - postgres
+      - --log_statement=all
+      - --log_min_duration_statement=0
+      - --log_statement_stats=on
+      - --shared_preload_libraries=pg_stat_statements
+      - --pg_stat_statements.track=all
 
   postgres-persistent:
     extends:
