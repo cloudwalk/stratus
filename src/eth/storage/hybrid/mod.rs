@@ -235,18 +235,16 @@ impl PermanentStorage for HybridPermanentStorage {
     // ------------------------------------------------------------------------
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        tracing::debug!(%address, "reading account");
-
-        let state = self.lock_read().await;
-
-        match state.accounts.get(address) {
+        //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
+        match self.hybrid_state.hybrid_accounts_slots.get(address) {
             Some(inmemory_account) => {
-                let account = inmemory_account.to_account(point_in_time);
+                let account = inmemory_account.to_account(point_in_time, address).await;
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
 
             None => {
+                //XXX TODO start a inmemory account from the database maybe using to_account on a empty account
                 tracing::trace!(%address, "account not found");
                 Ok(None)
             }
@@ -256,24 +254,7 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
 
-        let state = self.lock_read().await;
-        let Some(account) = state.accounts.get(address) else {
-            tracing::trace!(%address, "account not found");
-            return Ok(Default::default());
-        };
-
-        match account.slots.get(slot_index) {
-            Some(slot_history) => {
-                let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
-                Ok(Some(slot))
-            }
-
-            None => {
-                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
-                Ok(None)
-            }
-        }
+        Ok(self.hybrid_state.get_slot_at_point(address, slot_index, point_in_time).await)
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {

@@ -7,12 +7,15 @@ use sqlx::FromRow;
 use sqlx::Pool;
 use sqlx::Postgres;
 
+use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 
 #[derive(Debug)]
@@ -22,7 +25,7 @@ struct SlotInfo {
 }
 
 #[derive(Debug)]
-struct AccountInfo {
+pub struct AccountInfo {
     balance: Wei,
     nonce: Nonce,
     bytecode: Option<Bytes>,
@@ -31,7 +34,7 @@ struct AccountInfo {
 
 #[derive(Debug)]
 pub struct HybridHistory {
-    hybrid_accounts_slots: HashMap<Address, AccountInfo>,
+    pub hybrid_accounts_slots: HashMap<Address, AccountInfo>,
     pool: Arc<Pool<Postgres>>,
 }
 
@@ -140,5 +143,40 @@ impl HybridHistory {
         self.hybrid_accounts_slots = accounts;
 
         Ok(())
+    }
+
+    pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
+        match point_in_time {
+            StoragePointInTime::Present => {
+                self.hybrid_accounts_slots.get(address).and_then(|account_info| {
+                    let value = account_info.slots.get(&slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
+                    Some(Slot {
+                        index: slot_index.clone(),
+                        value,
+                    })
+                })
+            },
+            StoragePointInTime::Past(_number) => {
+                None //XXX TODO use postgres query
+            },
+        }
+    }
+}
+
+impl AccountInfo {
+    pub async fn to_account(&self, point_in_time: &StoragePointInTime, address: &Address) -> Account {
+        match point_in_time {
+            StoragePointInTime::Present => {
+                Account {
+                    address: address.clone(),
+                    nonce: self.nonce.clone(),
+                    balance: self.balance.clone(),
+                    bytecode: self.bytecode.clone(),
+                }
+            },
+            StoragePointInTime::Past(_number) =>{
+                Account::default()
+            },
+        }
     }
 }
