@@ -10,6 +10,7 @@ use itertools::Itertools;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
 
 // -----------------------------------------------------------------------------
@@ -56,6 +57,21 @@ const TRANSACTIONS_HEADERS: [&str; 20] = [
     "updated_at",
 ];
 
+const LOGS_FILE: &str = "data/logs";
+
+const LOGS_HEADERS: [&str; 10] = [
+    "id",
+    "address",
+    "data",
+    "transaction_hash",
+    "transaction_idx",
+    "log_idx",
+    "block_number",
+    "block_hash",
+    "created_at",
+    "updated_at",
+];
+
 // -----------------------------------------------------------------------------
 // Exporter
 // -----------------------------------------------------------------------------
@@ -70,6 +86,9 @@ pub struct CsvExporter {
 
     transactions_csv: csv::Writer<File>,
     transactions_id: LastId,
+
+    logs_csv: csv::Writer<File>,
+    logs_id: LastId,
 }
 
 impl CsvExporter {
@@ -84,6 +103,9 @@ impl CsvExporter {
 
             transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
             transactions_id: LastId::new(TRANSACTIONS_FILE)?,
+
+            logs_csv: csv_writer(LOGS_FILE, number, &LOGS_HEADERS)?,
+            logs_id: LastId::new(LOGS_FILE)?,
         })
     }
 
@@ -148,7 +170,13 @@ impl CsvExporter {
     fn export_transactions(&mut self, transactions: Vec<TransactionMined>) -> anyhow::Result<()> {
         for tx in transactions {
             self.transactions_id.value += 1;
-            let row = [
+
+            // export relationships
+            self.export_logs(tx.logs)?;
+
+            // export data
+            let now = now();
+            let record = [
                 self.transactions_id.value.to_string(),                 // id
                 tx.input.hash.to_string(),                              // hash
                 tx.input.from.to_string(),                              // signer_address
@@ -167,10 +195,32 @@ impl CsvExporter {
                 tx.input.s.to_string(),                                 // s
                 tx.input.value.to_string(),                             // value
                 tx.execution.result.to_string(),                        // result
-                now(),                                                  // created_at
-                now(),                                                  // updated_at
+                now.clone(),                                            // created_at
+                now,                                                    // updated_at
             ];
-            self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
+            self.transactions_csv.write_record(record).context("failed to write csv transaction")?;
+        }
+        Ok(())
+    }
+
+    fn export_logs(&mut self, logs: Vec<LogMined>) -> anyhow::Result<()> {
+        for log in logs {
+            self.logs_id.value += 1;
+
+            let now = now();
+            let record = [
+                self.logs_id.value.to_string(),    // id
+                log.address().to_string(),         // address
+                log.log.data.to_string(),          // data
+                log.transaction_hash.to_string(),  // transaction_hash
+                log.transaction_index.to_string(), // transaction_idx
+                log.log_index.to_string(),         // log_idx
+                log.block_number.to_string(),      // block_number
+                log.block_hash.to_string(),        // block_hash
+                now.clone(),                       // created_at
+                now,                               // updated_at
+            ];
+            self.logs_csv.write_record(record).context("failed to write csv transaction log")?;
         }
         Ok(())
     }
