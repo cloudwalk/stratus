@@ -147,7 +147,7 @@ impl CsvExporter {
         // export blocks
         let blocks = self.staged_blocks.drain(..).collect_vec();
         for block in blocks {
-            self.export_account_changes(block.compact_account_changes())?;
+            self.export_account_changes(block.compact_account_changes(), block.number())?;
             self.export_transactions(block.transactions)?;
         }
 
@@ -182,24 +182,6 @@ impl CsvExporter {
             self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
         }
 
-        Ok(())
-    }
-
-    fn export_historical_balances(&mut self, account_changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
-        self.historical_balances_id.value += 1;
-        for account_change in account_changes {
-            let row = [
-                self.historical_balances_id.value.to_string(), // id
-                account_change.address.to_string(),            // address
-                account_change.balance.to_string(),            // balance
-                block_number.to_string(),                      // block_number
-                now(),                                         // created_at
-                now(),                                         // updated_at
-            ];
-            self.historical_balances_csv
-                .write_record(row)
-                .context("failed to write csv historical balances")?;
-        }
         Ok(())
     }
 
@@ -239,15 +221,27 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
+    fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
         for change in changes {
-            if let Some(nonce) = change.nonce.take_modified() {
+            if let Some(_nonce) = change.nonce.take_modified() {
                 // todo: export historical nonce
             }
             if let Some(balance) = change.balance.take_modified() {
-                // todo: export historical balance
+                let now = now();
+                self.historical_balances_id.value += 1;
+                let row = [
+                    self.historical_balances_id.value.to_string(), // id
+                    change.address.to_string(),                    // address
+                    balance.to_string(),                           // balance
+                    block_number.to_string(),                      // block_number
+                    now.clone(),                                   // updated_at
+                    now,                                           // created_at
+                ];
+                self.historical_balances_csv
+                    .write_record(row)
+                    .context("failed to write csv historical balances")?;
             }
-            if let Some(bytecode) = change.bytecode.take_modified() {
+            if let Some(_bytecode) = change.bytecode.take_modified() {
                 // todo: export historical bytecode
             }
         }
