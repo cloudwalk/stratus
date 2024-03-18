@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
@@ -138,18 +137,16 @@ impl HybridHistory {
 
     pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
-            StoragePointInTime::Present => {
-                self.hybrid_accounts_slots.get(address).map(|account_info| {
-                    let value = account_info.slots.get(slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
-                    Slot {
-                        index: slot_index.clone(),
-                        value,
-                    }
-                })
-            },
+            StoragePointInTime::Present => self.hybrid_accounts_slots.get(address).map(|account_info| {
+                let value = account_info.slots.get(slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
+                Slot {
+                    index: slot_index.clone(),
+                    value,
+                }
+            }),
             StoragePointInTime::Past(_number) => {
                 None //XXX TODO use postgres query
-            },
+            }
         }
     }
 }
@@ -157,17 +154,13 @@ impl HybridHistory {
 impl AccountInfo {
     pub async fn to_account(&self, point_in_time: &StoragePointInTime, address: &Address) -> Account {
         match point_in_time {
-            StoragePointInTime::Present => {
-                Account {
-                    address: address.clone(),
-                    nonce: self.nonce.clone(),
-                    balance: self.balance.clone(),
-                    bytecode: self.bytecode.clone(),
-                }
+            StoragePointInTime::Present => Account {
+                address: address.clone(),
+                nonce: self.nonce.clone(),
+                balance: self.balance.clone(),
+                bytecode: self.bytecode.clone(),
             },
-            StoragePointInTime::Past(_number) =>{
-                Account::default()
-            },
+            StoragePointInTime::Past(_number) => Account::default(),
         }
     }
 }

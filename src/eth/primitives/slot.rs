@@ -215,7 +215,7 @@ impl From<Vec<u8>> for SlotValue {
     fn from(bytes: Vec<u8>) -> Self {
         // Initialize U256 to zero
         // Assuming the byte array is in big-endian format,
-        let u256: U256 =if bytes.len() <= 32 {
+        let u256: U256 = if bytes.len() <= 32 {
             let mut padded_bytes = [0u8; 32];
             padded_bytes[32 - bytes.len()..].copy_from_slice(&bytes);
             U256::from_big_endian(&padded_bytes)
