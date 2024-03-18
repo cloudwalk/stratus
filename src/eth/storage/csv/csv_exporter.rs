@@ -129,7 +129,6 @@ impl CsvExporter {
     // Exporters
     // -------------------------------------------------------------------------
     pub fn flush(&mut self) -> anyhow::Result<()> {
-
         // export accounts
         let accounts = self.staged_accounts.drain(..).collect_vec();
         self.export_accounts(accounts)?;
