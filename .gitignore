@@ -28,6 +28,8 @@ e2e-contracts/integration/.openzeppelin
 node_modules/
 e2e/package.json
 e2e/package-lock.json
+e2e-contracts/integration/package.json
+e2e-contracts/integration/package-lock.json
 
 
 # Build
