@@ -70,10 +70,6 @@ lint:
 lint-check nightly-version="":
     @just _lint "{{nightly-version}}" --check "-D warnings"
 
-# Stratus: Compile SQLx queries
-sqlx:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@localhost/stratus -- --all-targets
-
 # Stratus: Check for outdated crates
 outdated:
     @just _outdated
@@ -81,6 +77,24 @@ outdated:
 # Stratus: Update only the project dependencies
 update:
     cargo update stratus
+
+# ------------------------------------------------------------------------------
+# Database tasks
+# ------------------------------------------------------------------------------
+
+# Database: Compile SQLx queries
+db-compile:
+    SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@localhost/stratus -- --all-targets
+alias sqlx := db-compile
+
+# Database: Load CSV data
+db-load-csv:
+    echo "" > data/psql.txt
+    echo "truncate transactions;" >> data/psql.txt
+    echo "truncate logs;" >> data/psql.txt
+    ls -tr1 data/transactions-*.csv | xargs -I{} printf "\\\\copy transactions from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
+    ls -tr1 data/logs-*.csv         | xargs -I{} printf "\\\\copy logs         from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
+    cat data/psql.txt | pgcli -h localhost -u postgres -d stratus --less-chatty
 
 # ------------------------------------------------------------------------------
 # Additional binaries
