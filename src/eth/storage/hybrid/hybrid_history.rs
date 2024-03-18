@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use ethereum_types::H160;
+
 use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
@@ -60,12 +60,13 @@ impl HybridHistory {
             pool,
         };
 
-        // Pre-load the latest data
         history.load_latest_data().await?;
 
         Ok(history)
     }
 
+    //XXX TODO use a fixed block_number during load, in order to avoid sync problem
+    // e.g other instance moving forward and this query getting incongruous data
     async fn load_latest_data(&mut self) -> Result<(), sqlx::Error> {
         let account_rows = sqlx::query_as!(
             AccountRow,
