@@ -1,4 +1,8 @@
 /// Changes that happened to an account value during a transaction.
+
+use std::fmt::Display;
+use crate::eth::primitives::wei;
+
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionValueChange<T>
 where
@@ -13,6 +17,15 @@ where
 pub enum ValueState<T> {
     Set(T),
     NotSet,
+}
+
+impl Display for ExecutionValueChange<wei::Wei> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.modified {
+            ValueState::Set(value) => write!(f, "{}", value),
+            ValueState::NotSet => write!(f, "NotSet"),
+        }
+    }
 }
 
 impl<T> ValueState<T> {

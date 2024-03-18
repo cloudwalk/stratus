@@ -12,6 +12,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::ExecutionAccountChanges;
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -28,6 +29,17 @@ const ACCOUNTS_HEADERS: [&str; 10] = [
     "creation_block",
     "previous_balance",
     "previous_nonce",
+    "created_at",
+    "updated_at",
+];
+
+const HISTORICAL_BALANCES_FILE: &str = "data/historical_balances";
+
+const HISTORICAL_BALANCES_HEADERS: [&str; 6] = [
+    "id",
+    "address",
+    "balance",
+    "block_number",
     "created_at",
     "updated_at",
 ];
@@ -84,6 +96,9 @@ pub struct CsvExporter {
     accounts_csv: csv::Writer<File>,
     accounts_id: LastId,
 
+    historical_balances_csv: csv::Writer<File>,
+    historical_balances_id: LastId,
+    
     transactions_csv: csv::Writer<File>,
     transactions_id: LastId,
 
@@ -100,6 +115,9 @@ impl CsvExporter {
 
             accounts_csv: csv_writer(ACCOUNTS_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
             accounts_id: LastId::new_zero(ACCOUNTS_FILE),
+
+            historical_balances_csv: csv_writer(HISTORICAL_BALANCES_FILE, number, &HISTORICAL_BALANCES_HEADERS)?,
+            historical_balances_id: LastId::new(HISTORICAL_BALANCES_FILE)?,
 
             transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
             transactions_id: LastId::new(TRANSACTIONS_FILE)?,
@@ -139,6 +157,16 @@ impl CsvExporter {
             self.export_transactions(block.transactions)?;
         }
 
+        // i know this is not the best way to do this, but i'm not sure how to do it better
+        let blocks2 = self.staged_blocks.drain(..).collect_vec();
+        for block in blocks2 {
+            self.export_historical_balances(block.compact_account_changes(), block.number())?;
+        }
+
+        self.historical_balances_csv.flush()?;
+        self.historical_balances_id.save()?;
+
+
         // flush pending data
         self.transactions_csv.flush()?;
         self.transactions_id.save()?;
@@ -167,6 +195,22 @@ impl CsvExporter {
             self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
         }
 
+        Ok(())
+    }
+
+    fn export_historical_balances(&mut self, account_changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
+        self.historical_balances_id.value += 1;
+        for account_change in account_changes {
+            let row = [
+                self.historical_balances_id.value.to_string(),          // id
+                account_change.address.to_string(),                     // address
+                account_change.balance.to_string(),                     // balance
+                block_number.to_string(),                               // block_number
+                now(),                                                  // created_at
+                now(),                                                  // updated_at
+            ];
+            self.historical_balances_csv.write_record(row).context("failed to write csv historical balances")?;
+        }
         Ok(())
     }
 
