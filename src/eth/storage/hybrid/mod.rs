@@ -313,8 +313,6 @@ impl PermanentStorage for HybridPermanentStorage {
         Ok(logs)
     }
 
-    //XXX criar uma hybridhistory, ela mantem ate 30GB no cache atraves de truncate
-    // se fizer uma busca na hybrid em memoria e nao tiver, vai probanco, mas sempre que achar salva no cache
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write().await;
 
