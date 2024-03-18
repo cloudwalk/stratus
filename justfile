@@ -381,3 +381,19 @@ contracts-test-stratus-postgres:
     docker-compose down
 
     exit $result_code
+
+# Contracts: run contract integration tests
+contracts-test-int:
+    #!/bin/bash
+    if [ -d e2e-contracts ]; then
+        cd e2e-contracts
+    fi
+    ./flatten-contracts.sh
+    if [ -d integration ]; then
+        cd integration
+    fi
+    if [ ! -d node_modules ]; then
+        npm install
+    fi
+    npx hardhat test
+    exit $?
