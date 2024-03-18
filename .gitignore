@@ -28,6 +28,7 @@ e2e-contracts/integration/.openzeppelin
 node_modules/
 package.json
 package-lock.json
+e2e-contracts/integration/hardhat.config.ts
 
 # Build
 /target
