@@ -743,11 +743,11 @@ CREATE TABLE public.neo_accounts (
 
 CREATE TABLE public.neo_account_slots (
     block_number BIGINT NOT NULL,
-    index INT NOT NULL,
+    slot_index BYTEA NOT NULL,
     account_address BYTEA NOT NULL,
     value BYTEA,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (account_address, index, block_number),
+    PRIMARY KEY (account_address, slot_index, block_number),
     FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
 );
 
