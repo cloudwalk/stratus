@@ -384,23 +384,15 @@ contracts-test-stratus-postgres:
 
 # Contracts: run contract integration tests
 contracts-test-int:
-    #!/bin/bash
-    if [ -d e2e-contracts ]; then
-        cd e2e-contracts
-    fi
-    ./flatten-contracts.sh
+    #!/bin/bash 
+    cd e2e-contracts && ./flatten-contracts.sh
     if [ -d integration ]; then
         cd integration
     fi
     if [ ! -d node_modules ]; then
-        npm install hardhat@2.21.0
-        npm install ethers@6.11.1
-        npm install @openzeppelin/hardhat-upgrades
-        npm install @openzeppelin/contracts-upgradeable
-        npm install @nomicfoundation/hardhat-ethers
-        npm install @nomicfoundation/hardhat-toolbox
-        npm install @nomicfoundation/hardhat-ethers
-        command -v ts-node >/dev/null 2>&1 || { npm install -g ts-node; }
+        echo "Installing node modules"
+        npm --silent install hardhat@2.21.0 ethers@6.11.1 @openzeppelin/hardhat-upgrades @openzeppelin/contracts-upgradeable @nomicfoundation/hardhat-ethers @nomicfoundation/hardhat-toolbox @nomicfoundation/hardhat-ethers
+        command -v ts-node >/dev/null 2>&1 || { npm install --silent -g ts-node; }
     fi
     npx hardhat test
     exit $?
