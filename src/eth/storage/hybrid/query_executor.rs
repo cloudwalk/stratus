@@ -1,8 +1,16 @@
-use sqlx::{Pool, Postgres, Acquire, Transaction};
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
-use crate::eth::primitives::{Address, Bytes, Nonce, Wei};
+
+use sqlx::Acquire;
+use sqlx::Pool;
+use sqlx::Postgres;
+use tokio::time::sleep;
+use tokio::time::Duration;
+
 use super::BlockTask;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Wei;
 
 type BlockNumbers = Vec<i64>;
 type Addresses = Vec<Address>;
@@ -39,7 +47,6 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
     let account_changes = serde_json::to_value(&block_task.account_changes).unwrap();
     let mut accounts_changes: AccountChanges = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
 
-
     for changes in block_task.account_changes.clone() {
         let (original_nonce, new_nonce) = changes.nonce.take_both();
         let (original_balance, new_balance) = changes.balance.take_both();
@@ -62,37 +69,43 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
         accounts_changes.4.push(nonce);
     }
 
-   let pool_clone = pool.clone();
-    execute_with_retry(|| async {
-        let mut conn = pool_clone.acquire().await?;
-        let mut tx = conn.begin().await?;
+    let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
+    execute_with_retry(
+        || async {
+            let mut conn = pool_clone.acquire().await?;
+            let mut tx = conn.begin().await?;
 
-        sqlx::query!(
-            "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
-            block_task.block_number as _,
-            block_task.block_hash as _,
-            block_data as _,
-            account_changes as _,
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        if accounts_changes.0.len() > 0 {
             sqlx::query!(
-                "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
-                SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
-                AS t(block_number, address, bytecode, balance, nonce);",
-                accounts_changes.0 as _,
-                accounts_changes.1 as _,
-                accounts_changes.2 as _,
-                accounts_changes.3 as _,
-                accounts_changes.4 as _,
+                "INSERT INTO neo_blocks (block_number, block_hash, block, account_changes, created_at) VALUES ($1, $2, $3, $4, NOW());",
+                block_task.block_number as _,
+                block_task.block_hash as _,
+                block_data as _,
+                account_changes as _,
             )
             .execute(&mut *tx)
             .await?;
-        }
 
-        tx.commit().await?;
-        Ok(())
-    }, 3, Duration::from_millis(2)).await.expect("Failed to commit after multiple attempts.");
+            if !accounts_changes.0.is_empty() {
+                sqlx::query!(
+                    "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
+                SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
+                AS t(block_number, address, bytecode, balance, nonce);",
+                    accounts_changes.0 as _,
+                    accounts_changes.1 as _,
+                    accounts_changes.2 as _,
+                    accounts_changes.3 as _,
+                    accounts_changes.4 as _,
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
+
+            tx.commit().await?;
+            Ok(())
+        },
+        3,
+        Duration::from_millis(2),
+    )
+    .await
+    .expect("Failed to commit after multiple attempts.");
 }
