@@ -137,7 +137,6 @@ impl HybridHistory {
         Ok(())
     }
 
-
     /// Updates the in-memory state with changes from transaction execution.
     pub async fn update_state_with_execution_changes(&mut self, changes: &Vec<ExecutionAccountChanges>) -> anyhow::Result<(), sqlx::Error> {
         for change in changes {
