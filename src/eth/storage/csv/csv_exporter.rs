@@ -63,10 +63,10 @@ pub struct CsvExporter {
     staged_accounts: Vec<Account>,
     staged_blocks: Vec<Block>,
 
-    accounts: csv::Writer<File>,
+    accounts_csv: csv::Writer<File>,
     accounts_id: usize,
 
-    transactions: csv::Writer<File>,
+    transactions_csv: csv::Writer<File>,
     transactions_id: usize,
 }
 
@@ -77,10 +77,10 @@ impl CsvExporter {
             staged_blocks: Vec::new(),
             staged_accounts: Vec::new(),
 
-            accounts: csv_writer(ACCOUNT_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
+            accounts_csv: csv_writer(ACCOUNT_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
             accounts_id: 0,
 
-            transactions: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
+            transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
             transactions_id: read_csv_last_id(TRANSACTIONS_FILE)?,
         })
     }
@@ -134,7 +134,7 @@ impl CsvExporter {
                 now(),                                                       // created_at
                 now(),                                                       // updated_at
             ];
-            self.accounts.write_record(row).context("failed to write csv transaction")?;
+            self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
         }
 
         Ok(())
@@ -165,8 +165,9 @@ impl CsvExporter {
                 now(),                                                  // created_at
                 now(),                                                  // updated_at
             ];
-            self.transactions.write_record(row).context("failed to write csv transaction")?;
+            self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }
+        self.transactions_csv.flush()?;
         write_csv_last_id(TRANSACTIONS_FILE, self.transactions_id)?;
         Ok(())
     }

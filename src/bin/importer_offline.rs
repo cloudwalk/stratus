@@ -146,8 +146,7 @@ async fn execute_external_rpc_storage_loader(
 ) -> anyhow::Result<()> {
     tracing::info!("external rpc storage loader starting");
 
-    // if active, resume from the previous
-
+    // find last block number
     let end = match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => number,
         Ok(None) => BlockNumber::ZERO,
