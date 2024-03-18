@@ -308,6 +308,10 @@ contracts-clone:
 contracts-compile:
     cd e2e-contracts && ./compile-contracts.sh
 
+# Contracts: Flatten solidity contracts for integration test
+contracts-flatten:
+    cd e2e-contracts && ./flatten-contracts.sh
+
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test:
     cd e2e-contracts && ./test-contracts.sh
@@ -377,3 +381,18 @@ contracts-test-stratus-postgres:
     docker-compose down
 
     exit $result_code
+
+# Contracts: run contract integration tests
+contracts-test-int:
+    #!/bin/bash 
+    cd e2e-contracts && ./flatten-contracts.sh
+    [ -d integration ] && cd integration
+    [ ! -f hardhat.config.ts ] && { cp ../../e2e/hardhat.config.ts .; }
+    [ ! -f tsconfig.json ] && { cp ../../e2e/tsconfig.json .; }
+    if [ ! -d node_modules ]; then
+        echo "Installing node modules"
+        npm --silent install hardhat@2.21.0 ethers@6.11.1 @openzeppelin/hardhat-upgrades @openzeppelin/contracts-upgradeable @nomicfoundation/hardhat-ethers @nomicfoundation/hardhat-toolbox @nomicfoundation/hardhat-ethers
+        command -v ts-node >/dev/null 2>&1 || { npm install --silent -g ts-node; }
+    fi
+    npx hardhat test
+    exit $?
