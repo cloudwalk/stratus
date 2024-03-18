@@ -32,3 +32,7 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       test_command: 'PERM_STORAGE=hybrid://postgres:123@0.0.0.0:5432/stratus just e2e-stratus-postgres'
+    
+    concurrency:
+      group: ${{ github.workflow }}-hybrid-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
