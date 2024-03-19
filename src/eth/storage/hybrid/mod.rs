@@ -1,4 +1,4 @@
-mod hybrid_history;
+mod hybrid_state;
 mod query_executor;
 
 use std::collections::HashMap;
@@ -20,7 +20,7 @@ use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 use tokio::sync::Semaphore;
 
-use self::hybrid_history::HybridStorageState;
+use self::hybrid_state::HybridStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -37,7 +37,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::hybrid::hybrid_history::AccountInfo;
+use crate::eth::storage::hybrid::hybrid_state::AccountInfo;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
