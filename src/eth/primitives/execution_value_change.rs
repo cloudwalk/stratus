@@ -77,6 +77,11 @@ where
         self.modified.take()
     }
 
+    /// Takes the modified value as reference if it is set.
+    pub fn take_modified_ref(&self) -> Option<&T> {
+        self.modified.take_ref()
+    }
+
     /// Takes the original and the modified value if they are set.
     pub fn take_both(self) -> (Option<T>, Option<T>) {
         (self.original.take(), self.modified.take())
