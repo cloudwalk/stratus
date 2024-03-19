@@ -90,10 +90,17 @@ alias sqlx := db-compile
 # Database: Load CSV data produced by importer-offline
 db-load-csv:
     echo "" > data/psql.txt
-    echo "truncate transactions;" >> data/psql.txt
-    echo "truncate logs;" >> data/psql.txt
-    ls -tr1 data/transactions-*.csv | xargs -I{} printf "\\\\copy transactions from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/logs-*.csv         | xargs -I{} printf "\\\\copy logs         from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
+
+    echo "truncate historical_balances;" >> data/psql.txt
+    echo "truncate historical_slots;"    >> data/psql.txt
+    echo "truncate transactions;"        >> data/psql.txt
+    echo "truncate logs;"                >> data/psql.txt
+
+    ls -tr1 data/historical_balances-*.csv | xargs -I{} printf "\\\\copy historical_balances from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
+    ls -tr1 data/historical_slots-*.csv    | xargs -I{} printf "\\\\copy historical_slots    from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
+    ls -tr1 data/transactions-*.csv        | xargs -I{} printf "\\\\copy transactions        from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
+    ls -tr1 data/logs-*.csv                | xargs -I{} printf "\\\\copy logs                from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
+
     cat data/psql.txt | pgcli -h localhost -u postgres -d stratus --less-chatty
 
 # ------------------------------------------------------------------------------
@@ -384,7 +391,7 @@ contracts-test-stratus-postgres:
 
 # Contracts: run contract integration tests
 contracts-test-int:
-    #!/bin/bash 
+    #!/bin/bash
     cd e2e-contracts && ./flatten-contracts.sh
     [ -d integration ] && cd integration
     [ ! -f hardhat.config.ts ] && { cp ../../e2e/hardhat.config.ts .; }
