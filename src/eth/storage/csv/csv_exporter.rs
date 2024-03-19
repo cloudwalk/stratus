@@ -9,6 +9,7 @@ use itertools::Itertools;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::LogMined;
@@ -70,6 +71,32 @@ const TRANSACTIONS_HEADERS: [&str; 20] = [
     "updated_at",
 ];
 
+const BLOCKS_FILE: &str = "data/blocks";
+
+const BLOCKS_HEADERS: [&str; 21] = [
+    "id",
+    "number",
+    "hash",
+    "transactions_root",
+    "gas_limit",
+    "gas_used",
+    "logs_bloom",
+    "timestamp_in_secs",
+    "parent_hash",
+    "author",
+    "extra_data",
+    "miner",
+    "difficulty",
+    "receipts_root",
+    "uncle_hash",
+    "size",
+    "state_root",
+    "total_difficulty",
+    "nonce",
+    "created_at",
+    "updated_at",
+];
+
 const LOGS_FILE: &str = "data/logs";
 
 const LOGS_HEADERS: [&str; 10] = [
@@ -79,6 +106,21 @@ const LOGS_HEADERS: [&str; 10] = [
     "transaction_hash",
     "transaction_idx",
     "log_idx",
+    "block_number",
+    "block_hash",
+    "created_at",
+    "updated_at",
+];
+
+const TOPICS_FILE: &str = "data/topics";
+
+const TOPICS_HEADERS: [&str; 10] = [
+    "id",
+    "topic",
+    "transaction_hash",
+    "transaction_idx",
+    "log_idx",
+    "topic_idx",
     "block_number",
     "block_hash",
     "created_at",
@@ -109,8 +151,14 @@ pub struct CsvExporter {
     transactions_csv: csv::Writer<File>,
     transactions_id: LastId,
 
+    blocks_csv: csv::Writer<File>,
+    blocks_id: LastId,
+
     logs_csv: csv::Writer<File>,
     logs_id: LastId,
+
+    topics_csv: csv::Writer<File>,
+    topics_id: LastId,
 }
 
 impl CsvExporter {
@@ -135,8 +183,14 @@ impl CsvExporter {
             transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
             transactions_id: LastId::new(TRANSACTIONS_FILE)?,
 
+            blocks_csv: csv_writer(BLOCKS_FILE, number, &BLOCKS_HEADERS)?,
+            blocks_id: LastId::new(BLOCKS_FILE)?,
+
             logs_csv: csv_writer(LOGS_FILE, number, &LOGS_HEADERS)?,
             logs_id: LastId::new(LOGS_FILE)?,
+
+            topics_csv: csv_writer(TOPICS_FILE, number, &TOPICS_HEADERS)?,
+            topics_id: LastId::new(TOPICS_FILE)?,
         })
     }
 
@@ -169,6 +223,7 @@ impl CsvExporter {
         for block in blocks {
             self.export_account_changes(block.compact_account_changes(), block.number())?;
             self.export_transactions(block.transactions)?;
+            self.export_blocks(block.header)?;
         }
 
         // flush pending data
@@ -184,8 +239,14 @@ impl CsvExporter {
         self.transactions_csv.flush()?;
         self.transactions_id.save()?;
 
+        self.blocks_csv.flush()?;
+        self.blocks_id.save()?;
+
         self.logs_csv.flush()?;
         self.logs_id.save()?;
+
+        self.topics_csv.flush()?;
+        self.topics_id.save()?;
 
         Ok(())
     }
@@ -244,6 +305,39 @@ impl CsvExporter {
             ];
             self.transactions_csv.write_record(record).context("failed to write csv transaction")?;
         }
+        Ok(())
+    }
+
+    fn export_blocks(&mut self, block: BlockHeader) -> anyhow::Result<()> {
+        self.blocks_id.value += 1;
+
+        let now = now();
+        let record = [
+            self.blocks_id.value.to_string(),    // id
+            block.number.to_string(),            // number
+            block.hash.to_string(),              // hash
+            block.transactions_root.to_string(), // transactions_root
+            block.gas_limit.to_string(),         // gas_limit
+            block.gas_used.to_string(),          // gas_used
+            block.bloom.to_string(),             // logs_bloom
+            block.timestamp.to_string(),         // timestamp_in_secs
+            block.parent_hash.to_string(),       // parent_hash
+            block.author.to_string(),            // author
+            block.extra_data.to_string(),        // extra_data
+            block.miner.to_string(),             // miner
+            block.difficulty.to_string(),        // difficulty
+            block.receipts_root.to_string(),     // receipts_root
+            block.uncle_hash.to_string(),        // uncle_hash
+            block.size.to_string(),              // size
+            block.state_root.to_string(),        // state_root
+            block.total_difficulty.to_string(),  // total_difficulty
+            block.nonce.to_string(),             // nonce
+            now.clone(),                         // created_at
+            now,                                 // updated_at
+        ];
+
+        self.blocks_csv.write_record(record).context("failed to write csv block")?;
+
         Ok(())
     }
 
@@ -319,6 +413,31 @@ impl CsvExporter {
                 now,                               // updated_at
             ];
             self.logs_csv.write_record(record).context("failed to write csv transaction log")?;
+
+            self.export_topics(log)?;
+        }
+        Ok(())
+    }
+
+    fn export_topics(&mut self, log: LogMined) -> anyhow::Result<()> {
+        let topics = log.log.topics;
+        for (idx, topic) in topics.into_iter().enumerate() {
+            self.topics_id.value += 1;
+
+            let now = now();
+            let record = [
+                self.topics_id.value.to_string(),  // id
+                topic.to_string(),                 // topic
+                log.transaction_hash.to_string(),  // transaction_hash
+                log.transaction_index.to_string(), // transaction_idx
+                log.log_index.to_string(),         // log_idx
+                idx.to_string(),                   // topic_idx
+                log.block_number.to_string(),      // block_number
+                log.block_hash.to_string(),        // block_hash
+                now.clone(),                       // created_at
+                now,                               // updated_at
+            ];
+            self.topics_csv.write_record(record).context("failed to write csv transaction topic")?;
         }
         Ok(())
     }

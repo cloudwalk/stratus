@@ -164,9 +164,10 @@ impl HybridPermanentStorage {
         for change in account_changes {
             let address = &change.address;
 
-            if let Some(account) = state.accounts.get(address) {
+            if let Some(account) = hybrid_state.hybrid_accounts_slots.get(address) {
                 // check account info conflicts
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
+                    let account_nonce = &account.nonce;
                     let account_nonce = &account.nonce;
                     if original_nonce != account_nonce {
                         conflicts.add_nonce(address.clone(), account_nonce.clone(), original_nonce.clone());
@@ -174,12 +175,14 @@ impl HybridPermanentStorage {
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = &account.balance;
+                    let account_balance = &account.balance;
                     if original_balance != account_balance {
                         conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
                     }
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
+                    if let Some(value) = account.slots.get(slot_index) {
                     if let Some(value) = account.slots.get(slot_index) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
                             let account_slot_value = value.value.clone();
