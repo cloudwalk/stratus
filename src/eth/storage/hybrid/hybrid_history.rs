@@ -80,7 +80,7 @@ impl HybridStorageState {
                 block_number DESC
             "
         )
-        .fetch_all(&*pool)
+        .fetch_all(pool)
         .await?;
 
         let mut accounts: HashMap<Address, AccountInfo> = HashMap::new();
@@ -114,7 +114,7 @@ impl HybridStorageState {
                 block_number DESC
             "
         )
-        .fetch_all(&*pool)
+        .fetch_all(pool)
         .await?;
 
         for slot_row in slot_rows {
@@ -202,7 +202,7 @@ impl HybridStorageState {
                 slot_index as _,
                 number as _
             )
-            .fetch_optional(&*pool)
+            .fetch_optional(pool)
             .await
             .context("failed to select slot")?,
         };
