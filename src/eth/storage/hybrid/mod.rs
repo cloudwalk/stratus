@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use metrics::atomics::AtomicU64;
@@ -238,19 +239,43 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
         let hybrid_state = self.hybrid_state.write().await;
-        match hybrid_state.hybrid_accounts_slots.get(address) {
-            Some(inmemory_account) => {
-                let account = inmemory_account.to_account(point_in_time, address).await;
-                tracing::trace!(%address, ?account, "account found");
-                Ok(Some(account))
-            }
+        let account = match point_in_time {
+            StoragePointInTime::Present => {
+                match hybrid_state.hybrid_accounts_slots.get(address) {
+                    Some(inmemory_account) => {
+                        let account = inmemory_account.to_account(point_in_time, address).await;
+                        tracing::trace!(%address, ?account, "account found");
+                        Some(account)
+                    }
 
-            None => {
-                //XXX TODO start a inmemory account from the database maybe using to_account on a empty account
-                tracing::trace!(%address, "account not found");
-                Ok(None)
+                    None => {
+                        //XXX TODO start a inmemory account from the database maybe using to_account on a empty account
+                        tracing::trace!(%address, "account not found");
+                        None
+                    }
+                }
             }
-        }
+            StoragePointInTime::Past(block_number) => sqlx::query_as!(
+                Account,
+                r#"
+                SELECT address as "address: _",
+                    nonce as "nonce: _",
+                    balance as "balance: _",
+                    bytecode as "bytecode: _"
+                FROM neo_accounts
+                WHERE address = $1
+                AND block_number = (SELECT MAX(block_number)
+                                        FROM historical_slots
+                                        WHERE address = $1
+                                        AND block_number <= $2)"#,
+                address as _,
+                block_number as _
+            )
+            .fetch_optional(&*hybrid_state.pool)
+            .await
+            .context("failed to select account")?,
+        };
+        Ok(account)
     }
 
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {

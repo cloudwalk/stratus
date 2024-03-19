@@ -34,7 +34,7 @@ pub struct AccountInfo {
 #[derive(Debug)]
 pub struct HybridHistory {
     pub hybrid_accounts_slots: HashMap<Address, AccountInfo>,
-    pool: Arc<Pool<Postgres>>,
+    pub pool: Arc<Pool<Postgres>>,
 }
 
 #[derive(FromRow)]
