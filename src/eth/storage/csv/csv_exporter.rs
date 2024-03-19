@@ -135,7 +135,7 @@ const TOPICS_HEADERS: [&str; 10] = [
 
 /// Export CSV files in the same format of the PostgreSQL tables.
 pub struct CsvExporter {
-    staged_accounts: Vec<Account>,
+    staged_initial_accounts: Vec<Account>,
     staged_blocks: Vec<Block>,
 
     accounts_csv: csv::Writer<File>,
@@ -168,7 +168,7 @@ impl CsvExporter {
     pub fn new(number: BlockNumber) -> anyhow::Result<Self> {
         Ok(Self {
             staged_blocks: Vec::new(),
-            staged_accounts: Vec::new(),
+            staged_initial_accounts: Vec::new(),
 
             accounts_csv: csv_writer(ACCOUNTS_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
             accounts_id: LastId::new_zero(ACCOUNTS_FILE),
@@ -200,9 +200,9 @@ impl CsvExporter {
     // Stagers
     // -------------------------------------------------------------------------
 
-    /// Add an account to be exported.
-    pub fn add_account(&mut self, account: Account) -> anyhow::Result<()> {
-        self.staged_accounts.push(account);
+    /// Add an initial account to be exported.
+    pub fn add_initial_account(&mut self, account: Account) -> anyhow::Result<()> {
+        self.staged_initial_accounts.push(account);
         Ok(())
     }
 
@@ -217,8 +217,8 @@ impl CsvExporter {
     // -------------------------------------------------------------------------
     pub fn flush(&mut self) -> anyhow::Result<()> {
         // export accounts
-        let accounts = self.staged_accounts.drain(..).collect_vec();
-        self.export_accounts(accounts)?;
+        let initial_accounts = self.staged_initial_accounts.drain(..).collect_vec();
+        self.export_initial_accounts(initial_accounts)?;
 
         // export blocks
         let blocks = self.staged_blocks.drain(..).collect_vec();
@@ -256,7 +256,7 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
         for account in accounts {
             self.accounts_id.value += 1;
             let now = now();
