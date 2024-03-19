@@ -35,6 +35,10 @@ const ACCOUNTS_HEADERS: [&str; 10] = [
 
 const HISTORICAL_BALANCES_FILE: &str = "data/historical_balances";
 
+const HISTORICAL_SLOTS_FILE: &str = "data/historical_slots";
+
+const HISTORICAL_SLOTS_HEADERS: [&str; 7] = ["id", "idx", "value", "block_number", "account_address", "created_at", "updated_at"];
+
 const HISTORICAL_BALANCES_HEADERS: [&str; 6] = ["id", "address", "balance", "block_number", "created_at", "updated_at"];
 
 const HISTORICAL_NONCES_FILE: &str = "data/historical_nonces";
@@ -93,6 +97,9 @@ pub struct CsvExporter {
     accounts_csv: csv::Writer<File>,
     accounts_id: LastId,
 
+    historical_slots_csv: csv::Writer<File>,
+    historical_slots_id: LastId,
+
     historical_balances_csv: csv::Writer<File>,
     historical_balances_id: LastId,
 
@@ -115,6 +122,9 @@ impl CsvExporter {
 
             accounts_csv: csv_writer(ACCOUNTS_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
             accounts_id: LastId::new_zero(ACCOUNTS_FILE),
+
+            historical_slots_csv: csv_writer(HISTORICAL_SLOTS_FILE, number, &HISTORICAL_SLOTS_HEADERS)?,
+            historical_slots_id: LastId::new(HISTORICAL_SLOTS_FILE)?,
 
             historical_balances_csv: csv_writer(HISTORICAL_BALANCES_FILE, number, &HISTORICAL_BALANCES_HEADERS)?,
             historical_balances_id: LastId::new(HISTORICAL_BALANCES_FILE)?,
@@ -162,6 +172,9 @@ impl CsvExporter {
         }
 
         // flush pending data
+        self.historical_slots_csv.flush()?;
+        self.historical_slots_id.save()?;
+
         self.historical_balances_csv.flush()?;
         self.historical_balances_id.save()?;
 
@@ -233,7 +246,7 @@ impl CsvExporter {
 
     fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
         for change in changes {
-            // If nonce is changed, save it in historical_nonces table
+            // historical_nonces
             if let Some(nonce) = change.nonce.take_modified() {
                 let now = now();
                 self.historical_nonces_id.value += 1;
@@ -249,7 +262,7 @@ impl CsvExporter {
                     .write_record(row)
                     .context("failed to write csv historical balances")?;
             }
-            // If balance is changed, save it in historical_balances table
+            // historical_balances
             if let Some(balance) = change.balance.take_modified() {
                 let now = now();
                 self.historical_balances_id.value += 1;
@@ -265,8 +278,23 @@ impl CsvExporter {
                     .write_record(row)
                     .context("failed to write csv historical balances")?;
             }
-            if let Some(_bytecode) = change.bytecode.take_modified() {
-                // todo: export historical bytecode
+
+            // historical_slots
+            for slot in change.slots.into_values() {
+                if let Some(slot) = slot.take_modified() {
+                    let now = now();
+                    self.historical_slots_id.value += 1;
+                    let row = [
+                        self.historical_slots_id.value.to_string(), // id
+                        slot.index.to_string(),                     // idx
+                        slot.value.to_string(),                     // value
+                        block_number.to_string(),                   // block_number
+                        change.address.to_string(),                 // account_address
+                        now.clone(),                                // updated_at
+                        now,                                        // created_at
+                    ];
+                    self.historical_slots_csv.write_record(row).context("failed to write csv historical slots")?;
+                }
             }
         }
         Ok(())
