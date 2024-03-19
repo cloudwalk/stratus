@@ -367,7 +367,7 @@ impl CsvExporter {
                 now.clone(),                       // created_at
                 now,                               // updated_at
             ];
-            self.topics_csv.write_record(record).context("failed to write csv transaction log")?;
+            self.topics_csv.write_record(record).context("failed to write csv transaction topic")?;
         }
         Ok(())
     }
