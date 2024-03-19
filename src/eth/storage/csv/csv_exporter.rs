@@ -205,6 +205,9 @@ impl CsvExporter {
         self.transactions_csv.flush()?;
         self.transactions_id.save()?;
 
+        self.blocks_csv.flush()?;
+        self.blocks_id.save()?;
+
         self.logs_csv.flush()?;
         self.logs_id.save()?;
 
