@@ -267,8 +267,8 @@ impl CsvExporter {
                         self.historical_slots_id.value.to_string(), // id
                         slot.index.to_string(),                     // idx
                         slot.value.to_string(),                     // value
-                        change.address.to_string(),                 // account_address
                         block_number.to_string(),                   // block_number
+                        change.address.to_string(),                 // account_address
                         now.clone(),                                // updated_at
                         now,                                        // created_at
                     ];
