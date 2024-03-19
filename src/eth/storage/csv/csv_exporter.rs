@@ -251,8 +251,9 @@ impl CsvExporter {
         for change in changes {
             // historical_nonces
             if let Some(nonce) = change.nonce.take_modified() {
-                let now = now();
                 self.historical_nonces_id.value += 1;
+
+                let now = now();
                 let row = [
                     self.historical_balances_id.value.to_string(), // id
                     change.address.to_string(),                    // address
@@ -261,14 +262,12 @@ impl CsvExporter {
                     now.clone(),                                   // updated_at
                     now,                                           // created_at
                 ];
-                self.historical_nonces_csv
-                    .write_record(row)
-                    .context("failed to write csv historical balances")?;
+                self.historical_nonces_csv.write_record(row).context("failed to write csv historical nonces")?;
             }
             // historical_balances
             if let Some(balance) = change.balance.take_modified() {
-                let now = now();
                 self.historical_balances_id.value += 1;
+                let now = now();
                 let row = [
                     self.historical_balances_id.value.to_string(), // id
                     change.address.to_string(),                    // address
@@ -285,8 +284,8 @@ impl CsvExporter {
             // historical_slots
             for slot in change.slots.into_values() {
                 if let Some(slot) = slot.take_modified() {
-                    let now = now();
                     self.historical_slots_id.value += 1;
+                    let now = now();
                     let row = [
                         self.historical_slots_id.value.to_string(), // id
                         slot.index.to_string(),                     // idx
@@ -306,7 +305,6 @@ impl CsvExporter {
     fn export_logs(&mut self, logs: Vec<LogMined>) -> anyhow::Result<()> {
         for log in logs {
             self.logs_id.value += 1;
-
             let now = now();
             let record = [
                 self.logs_id.value.to_string(),    // id

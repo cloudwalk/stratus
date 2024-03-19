@@ -91,15 +91,15 @@ alias sqlx := db-compile
 db-load-csv:
     echo "" > data/psql.txt
 
+    echo "truncate historical_nonces;"   >> data/psql.txt
     echo "truncate historical_balances;" >> data/psql.txt
     echo "truncate historical_slots;"    >> data/psql.txt
-    echo "truncate historical_nonce;"    >> data/psql.txt
     echo "truncate transactions;"        >> data/psql.txt
     echo "truncate logs;"                >> data/psql.txt
 
+    ls -tr1 data/historical_nonces-*.csv   | xargs -I{} printf "\\\\copy historical_nonces   from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
     ls -tr1 data/historical_balances-*.csv | xargs -I{} printf "\\\\copy historical_balances from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
     ls -tr1 data/historical_slots-*.csv    | xargs -I{} printf "\\\\copy historical_slots    from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/historical_nonce-*.csv    | xargs -I{} printf "\\\\copy historical_nonce    from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
     ls -tr1 data/transactions-*.csv        | xargs -I{} printf "\\\\copy transactions        from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
     ls -tr1 data/logs-*.csv                | xargs -I{} printf "\\\\copy logs                from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
 
