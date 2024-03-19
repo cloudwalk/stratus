@@ -15,6 +15,9 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::log_and_err;
+use tokio::time::sleep;
+
+const MAX_RETRIES: u64 = 5;
 
 pub struct PostgresExternalRpcStorage {
     pool: PgPool,
@@ -70,49 +73,71 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
     async fn read_blocks_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlock>> {
         tracing::debug!(%start, %end, "retrieving external blocks in range");
-        let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_in_range.sql",
-            start.as_i64(),
-            end.as_i64()
-        )
-        .fetch_all(&self.pool)
-        .await;
+        let mut attempts: u64 = 0;
 
-        match result {
-            Ok(rows) => {
-                let mut blocks: Vec<ExternalBlock> = Vec::with_capacity(rows.len());
-                for row in rows {
-                    blocks.push(row.payload.try_into()?);
+        loop {
+            let result = sqlx::query_file!(
+                "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_in_range.sql",
+                start.as_i64(),
+                end.as_i64()
+            )
+                .fetch_all(&self.pool)
+                .await;
+
+            match result {
+                Ok(rows) => {
+                    let mut blocks: Vec<ExternalBlock> = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        blocks.push(row.payload.try_into()?);
+                    }
+                    return Ok(blocks);
                 }
-                Ok(blocks)
+                Err(e) => {
+                    if attempts < MAX_RETRIES {
+                        attempts += 1;
+                        tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
+                        sleep(Duration::from_secs(attempts.pow(2))).await; // Exponential backoff
+                    } else {
+                        return log_and_err!(reason = e, "failed to retrieve external blocks");
+                    }
+                }
             }
-            Err(e) => log_and_err!(reason = e, "failed to retrieve external blocks"),
         }
     }
 
     async fn read_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalReceipt>> {
         tracing::debug!(%start, %end, "retrieving external receipts in range");
+        let mut attempts: u64 = 0;
 
-        let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc/sql/select_external_receipts_in_range.sql",
-            start.as_i64(),
-            end.as_i64()
-        )
-        .fetch_all(&self.pool)
-        .await;
+        loop {
+            let result = sqlx::query_file!(
+                "src/eth/storage/postgres_external_rpc/sql/select_external_receipts_in_range.sql",
+                start.as_i64(),
+                end.as_i64()
+            )
+                .fetch_all(&self.pool)
+                .await;
 
-        match result {
-            Ok(rows) => {
-                let mut receipts: Vec<ExternalReceipt> = Vec::with_capacity(rows.len());
-                for row in rows {
-                    receipts.push(row.payload.try_into()?);
+            match result {
+                Ok(rows) => {
+                    let mut receipts: Vec<ExternalReceipt> = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        receipts.push(row.payload.try_into()?);
+                    }
+                    return Ok(receipts);
                 }
-                Ok(receipts)
+                Err(e) => {
+                    if attempts < MAX_RETRIES {
+                        attempts += 1;
+                        tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
+                        sleep(Duration::from_secs(attempts.pow(2))).await; // Exponential backoff
+                    } else {
+                        return log_and_err!(reason = e, "failed to retrieve receipts");
+                    }
+                }
             }
-            Err(e) => log_and_err!(reason = e, "failed to retrieve receipts"),
         }
     }
-
     async fn read_initial_accounts(&self) -> anyhow::Result<Vec<Account>> {
         tracing::debug!("retrieving external balances");
 
