@@ -19,6 +19,8 @@ use crate::eth::primitives::TransactionMined;
 // Constants
 // -----------------------------------------------------------------------------
 
+const NULL: &str = ""; // TODO: how?
+
 const ACCOUNTS_FILE: &str = "data/accounts";
 
 const ACCOUNTS_HEADERS: [&str; 10] = [
@@ -227,6 +229,9 @@ impl CsvExporter {
         }
 
         // flush pending data
+        self.accounts_csv.flush()?;
+        self.accounts_id.save()?;
+
         self.historical_slots_csv.flush()?;
         self.historical_slots_id.save()?;
 
@@ -255,16 +260,16 @@ impl CsvExporter {
         for account in accounts {
             self.accounts_id.value += 1;
             let row = [
-                self.accounts_id.value.to_string(),                          // id
-                account.address.to_string(),                                 // address
-                account.bytecode.map(|x| x.to_string()).unwrap_or_default(), // bytecode
-                account.balance.to_string(),                                 // latest_balance
-                account.nonce.to_string(),                                   // latest_nonce
-                "0".to_owned(),                                              // creation_block
-                "0".to_owned(),                                              // previous_balance
-                "0".to_owned(),                                              // previous_nonce
-                now(),                                                       // created_at
-                now(),                                                       // updated_at
+                self.accounts_id.value.to_string(),                                  // id
+                account.address.to_string(),                                         // address
+                account.bytecode.map(|x| x.to_string()).unwrap_or(NULL.to_string()), // bytecode
+                account.balance.to_string(),                                         // latest_balance
+                account.nonce.to_string(),                                           // latest_nonce
+                "0".to_owned(),                                                      // creation_block
+                "0".to_owned(),                                                      // previous_balance
+                "0".to_owned(),                                                      // previous_nonce
+                now(),                                                               // created_at
+                now(),                                                               // updated_at
             ];
             self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -343,6 +348,30 @@ impl CsvExporter {
 
     fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
         for change in changes {
+            // accounts
+            if change.is_account_creation() {
+                self.accounts_id.value += 1;
+                let now = now();
+                let change_bytecode = change
+                    .bytecode
+                    .take_ref()
+                    .and_then(|x| x.clone().map(|bytes| bytes.to_string()))
+                    .unwrap_or(NULL.to_string());
+                let row = [
+                    self.accounts_id.value.to_string(),                                   // id
+                    change.address.to_string(),                                           // address
+                    change_bytecode,                                                      // bytecode
+                    change.balance.take_ref().map(|x| x.to_string()).unwrap_or_default(), // latest_balance
+                    change.nonce.take_ref().map(|x| x.to_string()).unwrap_or_default(),   // latest_nonce
+                    "0".to_owned(),                                                       // creation_block
+                    "0".to_owned(),                                                       // previous_balance
+                    "0".to_owned(),                                                       // previous_nonce
+                    now.clone(),                                                          // created_at
+                    now,                                                                  // updated_at
+                ];
+                self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
+            }
+
             // historical_nonces
             if let Some(nonce) = change.nonce.take_modified() {
                 self.historical_nonces_id.value += 1;
