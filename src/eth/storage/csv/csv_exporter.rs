@@ -178,6 +178,9 @@ impl CsvExporter {
         self.historical_balances_csv.flush()?;
         self.historical_balances_id.save()?;
 
+        self.historical_nonces_csv.flush()?;
+        self.historical_nonces_id.save()?;
+
         self.transactions_csv.flush()?;
         self.transactions_id.save()?;
 
