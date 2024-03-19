@@ -20,7 +20,7 @@ use crate::eth::primitives::Wei;
 
 #[derive(Debug)]
 pub struct SlotInfo {
-    value: SlotValue,
+    pub value: SlotValue,
 }
 
 #[derive(Debug)]
