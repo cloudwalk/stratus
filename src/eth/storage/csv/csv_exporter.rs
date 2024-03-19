@@ -515,7 +515,7 @@ fn csv_writer(base_path: &'static str, number: BlockNumber, headers: &[&'static 
     let mut writer = csv::WriterBuilder::new()
         .has_headers(true)
         .delimiter(b'\t')
-        .quote_style(csv::QuoteStyle::Always)
+        .quote_style(csv::QuoteStyle::Necessary)
         .buffer_capacity(buffer_size.as_u64() as usize)
         .from_path(path)
         .context("failed to create csv writer")?;
