@@ -173,36 +173,29 @@ impl HybridPermanentStorage {
         state.logs.clear();
     }
 
-    async fn check_conflicts(
-        state: &HybridPermanentStorageState,
-        hybrid_state: &HybridHistory,
-        account_changes: &[ExecutionAccountChanges],
-    ) -> Option<ExecutionConflicts> {
+    async fn check_conflicts(hybrid_state: &HybridHistory, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for change in account_changes {
             let address = &change.address;
 
-            if let Some(account) = state.accounts.get(address) {
+            if let Some(account) = hybrid_state.hybrid_accounts_slots.get(address) {
                 // check account info conflicts
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
-                    let account_nonce = account.nonce.get_current_ref();
+                    let account_nonce = &account.nonce;
                     if original_nonce != account_nonce {
                         conflicts.add_nonce(address.clone(), account_nonce.clone(), original_nonce.clone());
                     }
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
-                    let account_balance = account.balance.get_current_ref();
+                    let account_balance = &account.balance;
                     if original_balance != account_balance {
                         conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
                     }
                 }
-            }
-
-            if let Some(slots) = hybrid_state.hybrid_accounts_slots.get(address) {
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = slots.slots.get(slot_index) {
+                    if let Some(value) = account.slots.get(slot_index) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
                             let account_slot_value = value.value.clone();
                             if original_slot.value != account_slot_value {
@@ -353,7 +346,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
         // check conflicts before persisting any state changes
         let account_changes = block.compact_account_changes();
-        if let Some(conflicts) = Self::check_conflicts(&state, &hybrid_state, &account_changes).await {
+        if let Some(conflicts) = Self::check_conflicts(&hybrid_state, &account_changes).await {
             return Err(StorageError::Conflict(conflicts));
         }
 
