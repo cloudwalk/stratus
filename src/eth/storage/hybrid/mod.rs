@@ -333,7 +333,7 @@ impl PermanentStorage for HybridPermanentStorage {
         // save block
         let block = Arc::new(block);
         let number = block.number();
-        state.blocks_by_hash.truncate(600);
+        state.blocks_by_number.truncate(600);
         state.blocks_by_number.insert(*number, Arc::clone(&block));
 
         //XXX deal with errors later
