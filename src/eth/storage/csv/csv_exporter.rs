@@ -112,6 +112,21 @@ const LOGS_HEADERS: [&str; 10] = [
     "updated_at",
 ];
 
+const TOPICS_FILE: &str = "data/topics";
+
+const TOPICS_HEADERS: [&str; 10] = [
+    "id",
+    "topic",
+    "transaction_hash",
+    "transaction_idx",
+    "log_idx",
+    "topic_idx",
+    "block_number",
+    "block_hash",
+    "created_at",
+    "updated_at",
+];
+
 // -----------------------------------------------------------------------------
 // Exporter
 // -----------------------------------------------------------------------------
@@ -141,6 +156,9 @@ pub struct CsvExporter {
 
     logs_csv: csv::Writer<File>,
     logs_id: LastId,
+
+    topics_csv: csv::Writer<File>,
+    topics_id: LastId,
 }
 
 impl CsvExporter {
@@ -170,6 +188,9 @@ impl CsvExporter {
 
             logs_csv: csv_writer(LOGS_FILE, number, &LOGS_HEADERS)?,
             logs_id: LastId::new(LOGS_FILE)?,
+
+            topics_csv: csv_writer(TOPICS_FILE, number, &TOPICS_HEADERS)?,
+            topics_id: LastId::new(TOPICS_FILE)?,
         })
     }
 
@@ -223,6 +244,9 @@ impl CsvExporter {
 
         self.logs_csv.flush()?;
         self.logs_id.save()?;
+
+        self.topics_csv.flush()?;
+        self.topics_id.save()?;
 
         Ok(())
     }
@@ -389,6 +413,31 @@ impl CsvExporter {
                 now,                               // updated_at
             ];
             self.logs_csv.write_record(record).context("failed to write csv transaction log")?;
+
+            self.export_topics(log)?;
+        }
+        Ok(())
+    }
+
+    fn export_topics(&mut self, log: LogMined) -> anyhow::Result<()> {
+        let topics = log.log.topics;
+        for (idx, topic) in topics.into_iter().enumerate() {
+            self.topics_id.value += 1;
+
+            let now = now();
+            let record = [
+                self.topics_id.value.to_string(),  // id
+                topic.to_string(),                 // topic
+                log.transaction_hash.to_string(),  // transaction_hash
+                log.transaction_index.to_string(), // transaction_idx
+                log.log_index.to_string(),         // log_idx
+                idx.to_string(),                   // topic_idx
+                log.block_number.to_string(),      // block_number
+                log.block_hash.to_string(),        // block_hash
+                now.clone(),                       // created_at
+                now,                               // updated_at
+            ];
+            self.topics_csv.write_record(record).context("failed to write csv transaction topic")?;
         }
         Ok(())
     }
