@@ -223,9 +223,9 @@ impl CsvExporter {
         // export blocks
         let blocks = self.staged_blocks.drain(..).collect_vec();
         for block in blocks {
-            self.export_account_changes(block.compact_account_changes(), block.number())?;
+            self.export_account_changes(*block.number(), block.compact_account_changes(), block.number())?;
+            self.export_block(block.header)?;
             self.export_transactions(block.transactions)?;
-            self.export_blocks(block.header)?;
         }
 
         // flush pending data
@@ -259,6 +259,7 @@ impl CsvExporter {
     fn export_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
         for account in accounts {
             self.accounts_id.value += 1;
+            let now = now();
             let row = [
                 self.accounts_id.value.to_string(),                                  // id
                 account.address.to_string(),                                         // address
@@ -266,10 +267,10 @@ impl CsvExporter {
                 account.balance.to_string(),                                         // latest_balance
                 account.nonce.to_string(),                                           // latest_nonce
                 "0".to_owned(),                                                      // creation_block
-                "0".to_owned(),                                                      // previous_balance
-                "0".to_owned(),                                                      // previous_nonce
-                now(),                                                               // created_at
-                now(),                                                               // updated_at
+                NULL.to_owned(),                                                     // previous_balance
+                NULL.to_owned(),                                                     // previous_nonce
+                now.clone(),                                                         // created_at
+                now,                                                                 // updated_at
             ];
             self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -286,7 +287,7 @@ impl CsvExporter {
 
             // export data
             let now = now();
-            let record = [
+            let row = [
                 self.transactions_id.value.to_string(),                 // id
                 tx.input.hash.to_string(),                              // hash
                 tx.input.from.to_string(),                              // signer_address
@@ -308,16 +309,15 @@ impl CsvExporter {
                 now.clone(),                                            // created_at
                 now,                                                    // updated_at
             ];
-            self.transactions_csv.write_record(record).context("failed to write csv transaction")?;
+            self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }
         Ok(())
     }
 
-    fn export_blocks(&mut self, block: BlockHeader) -> anyhow::Result<()> {
+    fn export_block(&mut self, block: BlockHeader) -> anyhow::Result<()> {
         self.blocks_id.value += 1;
-
         let now = now();
-        let record = [
+        let row = [
             self.blocks_id.value.to_string(),    // id
             block.number.to_string(),            // number
             block.hash.to_string(),              // hash
@@ -341,33 +341,34 @@ impl CsvExporter {
             now,                                 // updated_at
         ];
 
-        self.blocks_csv.write_record(record).context("failed to write csv block")?;
+        self.blocks_csv.write_record(row).context("failed to write csv block")?;
 
         Ok(())
     }
 
-    fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
+    fn export_account_changes(&mut self, number: BlockNumber, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
         for change in changes {
+            let now = now();
+
             // accounts
             if change.is_account_creation() {
                 self.accounts_id.value += 1;
-                let now = now();
                 let change_bytecode = change
                     .bytecode
                     .take_ref()
                     .and_then(|x| x.clone().map(|bytes| bytes.to_string()))
                     .unwrap_or(NULL.to_string());
                 let row = [
-                    self.accounts_id.value.to_string(),                                   // id
-                    change.address.to_string(),                                           // address
-                    change_bytecode,                                                      // bytecode
-                    change.balance.take_ref().map(|x| x.to_string()).unwrap_or_default(), // latest_balance
-                    change.nonce.take_ref().map(|x| x.to_string()).unwrap_or_default(),   // latest_nonce
-                    "0".to_owned(),                                                       // creation_block
-                    "0".to_owned(),                                                       // previous_balance
-                    "0".to_owned(),                                                       // previous_nonce
-                    now.clone(),                                                          // created_at
-                    now,                                                                  // updated_at
+                    self.accounts_id.value.to_string(),                                                           // id
+                    change.address.to_string(),                                                                   // address
+                    change_bytecode,                                                                              // bytecode
+                    change.balance.take_ref().map(|x| x.to_string()).unwrap_or_default(),                         // latest_balance
+                    change.nonce.take_ref().map(|x| x.to_string()).unwrap_or_default(),                           // latest_nonce
+                    number.to_string().to_owned(),                                                                // creation_block
+                    change.balance.take_original_ref().map(|x| x.to_string()).unwrap_or_else(|| NULL.to_owned()), // previous_balance
+                    change.nonce.take_original_ref().map(|x| x.to_string()).unwrap_or_else(|| NULL.to_owned()),   // previous_nonce
+                    now.clone(),                                                                                  // created_at
+                    now.clone(),                                                                                  // updated_at
                 ];
                 self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
             }
@@ -375,29 +376,26 @@ impl CsvExporter {
             // historical_nonces
             if let Some(nonce) = change.nonce.take_modified() {
                 self.historical_nonces_id.value += 1;
-
-                let now = now();
                 let row = [
                     self.historical_balances_id.value.to_string(), // id
                     change.address.to_string(),                    // address
                     nonce.to_string(),                             // nonce
                     block_number.to_string(),                      // block_number
                     now.clone(),                                   // updated_at
-                    now,                                           // created_at
+                    now.clone(),                                   // created_at
                 ];
                 self.historical_nonces_csv.write_record(row).context("failed to write csv historical nonces")?;
             }
             // historical_balances
             if let Some(balance) = change.balance.take_modified() {
                 self.historical_balances_id.value += 1;
-                let now = now();
                 let row = [
                     self.historical_balances_id.value.to_string(), // id
                     change.address.to_string(),                    // address
                     balance.to_string(),                           // balance
                     block_number.to_string(),                      // block_number
                     now.clone(),                                   // updated_at
-                    now,                                           // created_at
+                    now.clone(),                                   // created_at
                 ];
                 self.historical_balances_csv
                     .write_record(row)
@@ -408,7 +406,6 @@ impl CsvExporter {
             for slot in change.slots.into_values() {
                 if let Some(slot) = slot.take_modified() {
                     self.historical_slots_id.value += 1;
-                    let now = now();
                     let row = [
                         self.historical_slots_id.value.to_string(), // id
                         slot.index.to_string(),                     // idx
@@ -416,7 +413,7 @@ impl CsvExporter {
                         block_number.to_string(),                   // block_number
                         change.address.to_string(),                 // account_address
                         now.clone(),                                // updated_at
-                        now,                                        // created_at
+                        now.clone(),                                // created_at
                     ];
                     self.historical_slots_csv.write_record(row).context("failed to write csv historical slots")?;
                 }
@@ -429,7 +426,7 @@ impl CsvExporter {
         for log in logs {
             self.logs_id.value += 1;
             let now = now();
-            let record = [
+            let row = [
                 self.logs_id.value.to_string(),    // id
                 log.address().to_string(),         // address
                 log.log.data.to_string(),          // data
@@ -441,7 +438,7 @@ impl CsvExporter {
                 now.clone(),                       // created_at
                 now,                               // updated_at
             ];
-            self.logs_csv.write_record(record).context("failed to write csv transaction log")?;
+            self.logs_csv.write_record(row).context("failed to write csv transaction log")?;
 
             self.export_topics(log)?;
         }
@@ -452,9 +449,8 @@ impl CsvExporter {
         let topics = log.log.topics;
         for (idx, topic) in topics.into_iter().enumerate() {
             self.topics_id.value += 1;
-
             let now = now();
-            let record = [
+            let row = [
                 self.topics_id.value.to_string(),  // id
                 topic.to_string(),                 // topic
                 log.transaction_hash.to_string(),  // transaction_hash
@@ -466,7 +462,7 @@ impl CsvExporter {
                 now.clone(),                       // created_at
                 now,                               // updated_at
             ];
-            self.topics_csv.write_record(record).context("failed to write csv transaction topic")?;
+            self.topics_csv.write_record(row).context("failed to write csv transaction topic")?;
         }
         Ok(())
     }
@@ -527,6 +523,5 @@ fn csv_writer(base_path: &'static str, number: BlockNumber, headers: &[&'static 
 
 /// Returns the current date formatted for the CSV file.
 fn now() -> String {
-    let now = chrono::Utc::now();
-    now.format("%Y-%m-%d %H:%M:%S%.6f").to_string()
+    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f").to_string()
 }
