@@ -236,9 +236,12 @@ impl CsvExporter {
 
     fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
         for change in changes {
+            // historical_nonces
             if let Some(_nonce) = change.nonce.take_modified() {
                 // todo: export historical nonce
             }
+
+            // historical_balances
             if let Some(balance) = change.balance.take_modified() {
                 let now = now();
                 self.historical_balances_id.value += 1;
@@ -254,21 +257,22 @@ impl CsvExporter {
                     .write_record(row)
                     .context("failed to write csv historical balances")?;
             }
-            // If slot is changed, save it in historical_slots table
-            if let Some(bytecode) = change.bytecode.take_modified() {
-                for slot in change.slots {
+
+            // historical_slots
+            for slot in change.slots.into_values() {
+                if let Some(slot) = slot.take_modified() {
                     let now = now();
                     self.historical_slots_id.value += 1;
                     let row = [
-                        self.historical_slots_id.value.to_string(),                  // id
-                        slot.0.to_string(),                                          // idx
-                        bytecode.clone().map(|x| x.to_string()).unwrap_or_default(), // value
-                        change.address.to_string(),                                  // account_address
-                        block_number.to_string(),                                    // block_number
-                        now.clone(),                                                 // updated_at
-                        now,                                                         // created_at
+                        self.historical_slots_id.value.to_string(), // id
+                        slot.index.to_string(),                     // idx
+                        slot.value.to_string(),                     // value
+                        change.address.to_string(),                 // account_address
+                        block_number.to_string(),                   // block_number
+                        now.clone(),                                // updated_at
+                        now,                                        // created_at
                     ];
-                    self.historical_slots_csv.write_record(row).context("failed to write csv historical balances")?;
+                    self.historical_slots_csv.write_record(row).context("failed to write csv historical slots")?;
                 }
             }
         }
