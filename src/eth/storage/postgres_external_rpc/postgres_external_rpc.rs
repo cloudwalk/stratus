@@ -5,6 +5,7 @@ use serde_json::Value as JsonValue;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
+use tokio::time::sleep;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -15,7 +16,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::log_and_err;
-use tokio::time::sleep;
 
 const MAX_RETRIES: u64 = 5;
 
@@ -81,8 +81,8 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                 start.as_i64(),
                 end.as_i64()
             )
-                .fetch_all(&self.pool)
-                .await;
+            .fetch_all(&self.pool)
+            .await;
 
             match result {
                 Ok(rows) => {
@@ -115,8 +115,8 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                 start.as_i64(),
                 end.as_i64()
             )
-                .fetch_all(&self.pool)
-                .await;
+            .fetch_all(&self.pool)
+            .await;
 
             match result {
                 Ok(rows) => {
