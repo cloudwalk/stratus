@@ -41,6 +41,10 @@ const HISTORICAL_SLOTS_HEADERS: [&str; 7] = ["id", "idx", "value", "block_number
 
 const HISTORICAL_BALANCES_HEADERS: [&str; 6] = ["id", "address", "balance", "block_number", "created_at", "updated_at"];
 
+const HISTORICAL_NONCES_FILE: &str = "data/historical_nonces";
+
+const HISTORICAL_NONCES_HEADERS: [&str; 6] = ["id", "address", "nonce", "block_number", "created_at", "updated_at"];
+
 const TRANSACTIONS_FILE: &str = "data/transactions";
 
 const TRANSACTIONS_HEADERS: [&str; 20] = [
@@ -99,6 +103,9 @@ pub struct CsvExporter {
     historical_balances_csv: csv::Writer<File>,
     historical_balances_id: LastId,
 
+    historical_nonces_csv: csv::Writer<File>,
+    historical_nonces_id: LastId,
+
     transactions_csv: csv::Writer<File>,
     transactions_id: LastId,
 
@@ -121,6 +128,9 @@ impl CsvExporter {
 
             historical_balances_csv: csv_writer(HISTORICAL_BALANCES_FILE, number, &HISTORICAL_BALANCES_HEADERS)?,
             historical_balances_id: LastId::new(HISTORICAL_BALANCES_FILE)?,
+
+            historical_nonces_csv: csv_writer(HISTORICAL_NONCES_FILE, number, &HISTORICAL_NONCES_HEADERS)?,
+            historical_nonces_id: LastId::new(HISTORICAL_NONCES_FILE)?,
 
             transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
             transactions_id: LastId::new(TRANSACTIONS_FILE)?,
@@ -167,6 +177,9 @@ impl CsvExporter {
 
         self.historical_balances_csv.flush()?;
         self.historical_balances_id.save()?;
+
+        self.historical_nonces_csv.flush()?;
+        self.historical_nonces_id.save()?;
 
         self.transactions_csv.flush()?;
         self.transactions_id.save()?;
@@ -237,10 +250,21 @@ impl CsvExporter {
     fn export_account_changes(&mut self, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
         for change in changes {
             // historical_nonces
-            if let Some(_nonce) = change.nonce.take_modified() {
-                // todo: export historical nonce
+            if let Some(nonce) = change.nonce.take_modified() {
+                let now = now();
+                self.historical_nonces_id.value += 1;
+                let row = [
+                    self.historical_balances_id.value.to_string(), // id
+                    change.address.to_string(),                    // address
+                    nonce.to_string(),                             // nonce
+                    block_number.to_string(),                      // block_number
+                    now.clone(),                                   // updated_at
+                    now,                                           // created_at
+                ];
+                self.historical_nonces_csv
+                    .write_record(row)
+                    .context("failed to write csv historical balances")?;
             }
-
             // historical_balances
             if let Some(balance) = change.balance.take_modified() {
                 let now = now();
