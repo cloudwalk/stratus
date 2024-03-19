@@ -168,7 +168,13 @@ impl HybridStorageState {
         Ok(())
     }
 
-    pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime, pool: &Pool<Postgres>) -> anyhow::Result<Option<Slot>> {
+    pub async fn get_slot_at_point(
+        &self,
+        address: &Address,
+        slot_index: &SlotIndex,
+        point_in_time: &StoragePointInTime,
+        pool: &Pool<Postgres>,
+    ) -> anyhow::Result<Option<Slot>> {
         let slot = match point_in_time {
             StoragePointInTime::Present => self.accounts.get(address).map(|account_info| {
                 let value = account_info.slots.get(slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();

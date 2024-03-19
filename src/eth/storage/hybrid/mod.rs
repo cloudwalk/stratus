@@ -20,6 +20,7 @@ use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 use tokio::sync::Semaphore;
 
+use self::hybrid_history::HybridStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -40,8 +41,6 @@ use crate::eth::storage::hybrid::hybrid_history::AccountInfo;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
-use self::hybrid_history::HybridStorageState;
-
 #[derive(Debug)]
 struct BlockTask {
     block_number: BlockNumber,
@@ -49,7 +48,6 @@ struct BlockTask {
     block_data: Block,
     account_changes: Vec<ExecutionAccountChanges>,
 }
-
 
 #[derive(Debug)]
 pub struct HybridPermanentStorage {
@@ -98,7 +96,7 @@ impl HybridPermanentStorage {
             state,
             block_number,
             task_sender,
-            pool
+            pool,
         })
     }
 
@@ -164,10 +162,9 @@ impl HybridPermanentStorage {
         for change in account_changes {
             let address = &change.address;
 
-            if let Some(account) = hybrid_state.hybrid_accounts_slots.get(address) {
+            if let Some(account) = state.accounts.get(address) {
                 // check account info conflicts
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
-                    let account_nonce = &account.nonce;
                     let account_nonce = &account.nonce;
                     if original_nonce != account_nonce {
                         conflicts.add_nonce(address.clone(), account_nonce.clone(), original_nonce.clone());
@@ -175,14 +172,12 @@ impl HybridPermanentStorage {
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = &account.balance;
-                    let account_balance = &account.balance;
                     if original_balance != account_balance {
                         conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
                     }
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = account.slots.get(slot_index) {
                     if let Some(value) = account.slots.get(slot_index) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
                             let account_slot_value = value.value.clone();
@@ -197,8 +192,6 @@ impl HybridPermanentStorage {
         conflicts.build()
     }
 }
-
-impl HybridPermanentStorage {}
 
 #[async_trait]
 impl PermanentStorage for HybridPermanentStorage {
@@ -227,7 +220,7 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
         let state = self.state.read().await;
-
+        tracing::debug!(?state.accounts);
         let account = match point_in_time {
             StoragePointInTime::Present => {
                 match state.accounts.get(address) {
@@ -420,7 +413,7 @@ impl PermanentStorage for HybridPermanentStorage {
         state.logs.retain(|l| l.block_number <= block_number);
 
         // XXX Reset in postgres and load latest account data
-        state.accounts.clear();
+        // state.accounts.clear();
 
         Ok(())
     }
