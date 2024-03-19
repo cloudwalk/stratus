@@ -19,16 +19,16 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 
 #[derive(Debug)]
-struct SlotInfo {
+pub struct SlotInfo {
     value: SlotValue,
 }
 
 #[derive(Debug)]
 pub struct AccountInfo {
-    balance: Wei,
-    nonce: Nonce,
-    bytecode: Option<Bytes>,
-    slots: HashMap<SlotIndex, SlotInfo>,
+    pub balance: Wei,
+    pub nonce: Nonce,
+    pub bytecode: Option<Bytes>,
+    pub slots: HashMap<SlotIndex, SlotInfo>,
 }
 
 #[derive(Debug)]

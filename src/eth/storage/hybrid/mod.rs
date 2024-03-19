@@ -42,6 +42,7 @@ use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
+use crate::eth::storage::hybrid::hybrid_history::AccountInfo;
 use crate::eth::storage::hybrid::hybrid_history::HybridHistory;
 use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
@@ -238,7 +239,8 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
-        let hybrid_state = self.hybrid_state.write().await;
+        let hybrid_state = self.hybrid_state.read().await;
+
         let account = match point_in_time {
             StoragePointInTime::Present => {
                 match hybrid_state.hybrid_accounts_slots.get(address) {
@@ -378,13 +380,37 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
-        let mut state = self.lock_write().await;
+        let mut state = self.hybrid_state.write().await;
+        let mut accounts_changes = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for account in accounts {
-            state.accounts.insert(
+            state.hybrid_accounts_slots.insert(
                 account.address.clone(),
-                InMemoryPermanentAccount::new_with_balance(account.address, account.balance),
+                AccountInfo {
+                    balance: account.balance.clone(),
+                    nonce: account.nonce.clone(),
+                    bytecode: account.bytecode.clone(),
+                    slots: HashMap::new(),
+                },
             );
+            accounts_changes.0.push(BlockNumber::from(0));
+            accounts_changes.1.push(account.address);
+            accounts_changes.2.push(account.bytecode);
+            accounts_changes.3.push(account.balance);
+            accounts_changes.4.push(account.nonce);
         }
+        tokio::time::sleep(Duration::from_secs(5)).await; // XXX Waiting for genesis to be commited pg
+        sqlx::query!(
+            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
+            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
+            AS t(block_number, address, bytecode, balance, nonce);",
+            accounts_changes.0 as _,
+            accounts_changes.1 as _,
+            accounts_changes.2 as _,
+            accounts_changes.3 as _,
+            accounts_changes.4 as _,
+        )
+        .execute(&*state.pool)
+        .await?;
         Ok(())
     }
 
@@ -464,7 +490,7 @@ pub struct InMemoryPermanentAccount {
 
 impl InMemoryPermanentAccount {
     /// Creates a new permanent account with initial balance.
-    pub fn new_with_balance(address: Address, balance: Wei) -> Self {
+    pub fn _new_with_balance(address: Address, balance: Wei) -> Self {
         Self {
             address,
             balance: InMemoryHistory::new_at_zero(balance),
