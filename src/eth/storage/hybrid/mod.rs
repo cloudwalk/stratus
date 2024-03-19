@@ -173,7 +173,11 @@ impl HybridPermanentStorage {
         state.logs.clear();
     }
 
-    async fn check_conflicts(state: &HybridPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
+    async fn check_conflicts(
+        state: &HybridPermanentStorageState,
+        hybrid_state: &HybridHistory,
+        account_changes: &[ExecutionAccountChanges],
+    ) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for change in account_changes {
@@ -193,12 +197,14 @@ impl HybridPermanentStorage {
                         conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
                     }
                 }
+            }
 
+            if let Some(slots) = hybrid_state.hybrid_accounts_slots.get(address) {
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(account_slot) = account.slots.get(slot_index).map(|value| value.get_current_ref()) {
+                    if let Some(value) = slots.slots.get(slot_index) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = account_slot.value.clone();
+                            let account_slot_value = value.value.clone();
                             if original_slot.value != account_slot_value {
                                 conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
                             }
@@ -347,7 +353,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
         // check conflicts before persisting any state changes
         let account_changes = block.compact_account_changes();
-        if let Some(conflicts) = Self::check_conflicts(&state, &account_changes).await {
+        if let Some(conflicts) = Self::check_conflicts(&state, &hybrid_state, &account_changes).await {
             return Err(StorageError::Conflict(conflicts));
         }
 
