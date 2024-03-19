@@ -37,7 +37,7 @@ const HISTORICAL_BALANCES_FILE: &str = "data/historical_balances";
 
 const HISTORICAL_SLOTS_FILE: &str = "data/historical_slots";
 
-const HISTORICAL_SLOTS_HEADERS: [&str; 7] = ["id", "idx", "value", "account_address", "block_number", "created_at", "updated_at"];
+const HISTORICAL_SLOTS_HEADERS: [&str; 7] = ["id", "idx", "value", "block_number", "account_address", "created_at", "updated_at"];
 
 const HISTORICAL_BALANCES_HEADERS: [&str; 6] = ["id", "address", "balance", "block_number", "created_at", "updated_at"];
 
