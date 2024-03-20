@@ -135,7 +135,7 @@ impl HybridPermanentStorage {
                 }
             } else if let Some(res) = futures.join_next().await {
                 // res.expect("future failed") XXX
-                continue
+                continue;
             }
         }
     }
