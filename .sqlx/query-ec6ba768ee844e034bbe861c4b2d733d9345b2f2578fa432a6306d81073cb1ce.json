@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM neo_transactions WHERE block_number < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec6ba768ee844e034bbe861c4b2d733d9345b2f2578fa432a6306d81073cb1ce"
+}
