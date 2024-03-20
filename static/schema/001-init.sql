@@ -734,7 +734,7 @@ CREATE TABLE public.neo_accounts (
     block_number BIGINT NOT NULL,
     address BYTEA NOT NULL,
     bytecode BYTEA,
-    balance NUMERIC(38, 0) NOT NULL,
+    balance NUMERIC NOT NULL,
     nonce NUMERIC NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (address, block_number)
