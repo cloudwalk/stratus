@@ -23,6 +23,9 @@ test() {
     npx hardhat test --bail --network stratus test/$test.test.ts
     result_code=$?
 
+    # restore original files
+    git restore .
+
     # go back to previous directory
     cd -
 
