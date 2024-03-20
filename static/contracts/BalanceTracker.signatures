@@ -1,0 +1,27 @@
+Function signatures:
+904e2a82: INITIALIZATION_DAY()
+20af2412: NEGATIVE_TIME_SHIFT()
+82bfefc8: TOKEN()
+49b7b37d: _balanceRecords(address,uint256)
+df6258be: afterTokenTransfer(address,address,uint256)
+7cbab1c7: beforeTokenTransfer(address,address,uint256)
+dffcf6c0: dayAndTime()
+34d9ac15: getDailyBalances(address,uint256,uint256)
+8129fc1c: initialize()
+8da5cb5b: owner()
+f21f8760: readBalanceRecord(address,uint256)
+715018a6: renounceOwnership()
+fc0c546a: token()
+f2fde38b: transferOwnership(address)
+
+Error signatures:
+0666bcba: FromDayPriorInitDay()
+1dd3c0a0: SafeCastOverflowUint16()
+a9627746: SafeCastOverflowUint240()
+f1f88d16: ToDayPriorFromDay()
+d86ad9cf: UnauthorizedCaller(address)
+
+Event signatures:
+8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c: BalanceRecordCreated(address,uint16,uint240)
+7f26b83ff96e1f2b6a682f133852f6798a09c465da95921460cefb3847402498: Initialized(uint8)
+8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0: OwnershipTransferred(address,address)
