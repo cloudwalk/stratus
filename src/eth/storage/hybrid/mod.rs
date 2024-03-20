@@ -426,7 +426,6 @@ impl PermanentStorage for HybridPermanentStorage {
         state.logs.retain(|l| l.block_number <= block_number);
 
         let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
-        tracing::debug!(?state.accounts, "reseting state");
 
         sqlx::query!(r#"DELETE FROM neo_blocks WHERE block_number > $1"#, block_number as _)
             .execute(&*self.pool)
@@ -447,7 +446,6 @@ impl PermanentStorage for HybridPermanentStorage {
         state.accounts.clear();
         state.load_latest_data(&self.pool).await?;
 
-        tracing::debug!(?state.accounts);
 
         Ok(())
     }
