@@ -380,7 +380,8 @@ impl PermanentStorage for HybridPermanentStorage {
         sqlx::query!(
             "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
             SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
-            AS t(block_number, address, bytecode, balance, nonce);",
+            AS t(block_number, address, bytecode, balance, nonce)
+            ON CONFLICT (address) DO NOTHING;",
             accounts_changes.0 as _,
             accounts_changes.1 as _,
             accounts_changes.2 as _,
