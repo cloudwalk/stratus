@@ -446,7 +446,6 @@ impl PermanentStorage for HybridPermanentStorage {
         state.accounts.clear();
         state.load_latest_data(&self.pool).await?;
 
-
         Ok(())
     }
 
