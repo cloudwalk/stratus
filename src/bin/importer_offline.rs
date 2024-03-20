@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
     let accounts = rpc_storage.read_initial_accounts().await?;
     if let Some(ref mut csv) = csv {
         for account in accounts.iter() {
-            csv.add_account(account.clone())?;
+            csv.add_initial_account(account.clone())?;
         }
         csv.flush()?;
     }

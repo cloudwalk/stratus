@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)\n            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])\n            AS t(block_number, address, bytecode, balance, nonce)\n            ON CONFLICT (address) DO NOTHING;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "ByteaArray",
+        "ByteaArray",
+        "NumericArray",
+        "NumericArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e95a598f0a6198f206982339dd0657ce7c4fe47714f400050f3afe3faee3b026"
+}
