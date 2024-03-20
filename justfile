@@ -411,3 +411,13 @@ contracts-test-int:
     fi
     npx hardhat test
     exit $?
+
+# Contracts: Run tests and generate coverage info. Use --html to open in browser.
+contracts-coverage *args="":
+    cd e2e-contracts && ./coverage-contracts.sh {{args}}
+
+# Contracts: Erase coverage info
+contracts-coverage-erase:
+    #!/bin/bash
+    cd e2e-contracts/repos
+    rm -rf */coverage
