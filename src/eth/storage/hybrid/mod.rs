@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use itertools::Itertools;
 use metrics::atomics::AtomicU64;
 use num_traits::cast::ToPrimitive;
 use sqlx::postgres::PgPoolOptions;
