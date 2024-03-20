@@ -133,7 +133,7 @@ impl HybridPermanentStorage {
                 if permit.is_none() {
                     permit = Some(tasks_pending.acquire().await.expect("semaphore has closed"));
                 }
-            } else if let Some(res) = futures.join_next().await {
+            } else if let Some(_res) = futures.join_next().await {
                 // res.expect("future failed") XXX
                 continue;
             }
@@ -458,9 +458,9 @@ async fn recv_block_task(receiver: &mut tokio::sync::mpsc::Receiver<BlockTask>, 
     match receiver.try_recv() {
         Ok(block_task) => Some(block_task),
         Err(mpsc::error::TryRecvError::Empty) => {
-            if let Some(_) = permit {
+            if permit.is_some() {
                 let perm = std::mem::take(permit);
-                drop(perm)
+                drop(perm);
             }
             receiver.recv().await
         }
