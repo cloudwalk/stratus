@@ -46,4 +46,4 @@ clone brlc-periphery      b8d507a
 clone brlc-token          0858ec4
 clone compound-periphery  e4d68df
 clone brlc-yield-streamer e63d8ba
-clone brlc-pix-cashier    00cc007
+clone brlc-pix-cashier    a528d0c
