@@ -132,10 +132,10 @@ impl HybridPermanentStorage {
                 futures.spawn(query_executor::commit_eventually(pool_clone, block_task));
                 if permit.is_none() {
                     permit = Some(tasks_pending.acquire().await.expect("semaphore has closed"));
-                    tracing::debug!("permit acquired");
                 }
             } else if let Some(res) = futures.join_next().await {
-                res.expect("future failed")
+                // res.expect("future failed") XXX
+                continue
             }
         }
     }
@@ -232,7 +232,6 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
         let state = self.state.read().await;
-        tracing::debug!(?state.accounts);
         let account = match point_in_time {
             StoragePointInTime::Present => {
                 match state.accounts.get(address) {
@@ -390,7 +389,6 @@ impl PermanentStorage for HybridPermanentStorage {
         }
 
         let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
-        tracing::debug!("permit acquired");
         sqlx::query!(
             "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
             SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
