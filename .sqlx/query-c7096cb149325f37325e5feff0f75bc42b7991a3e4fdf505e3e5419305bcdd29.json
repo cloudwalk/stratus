@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM neo_blocks WHERE block_number < $1",
+  "query": "DELETE FROM neo_accounts WHERE block_number > $1",
   "describe": {
     "columns": [],
     "parameters": {
@@ -10,5 +10,5 @@
     },
     "nullable": []
   },
-  "hash": "bc73ed4f80d9586a4b932b1297b3e513aaba342d131ff2d947dfc7e89823cdc7"
+  "hash": "c7096cb149325f37325e5feff0f75bc42b7991a3e4fdf505e3e5419305bcdd29"
 }

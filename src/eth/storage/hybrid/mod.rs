@@ -426,25 +426,28 @@ impl PermanentStorage for HybridPermanentStorage {
         state.logs.retain(|l| l.block_number <= block_number);
 
         let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
+        tracing::debug!(?state.accounts, "reseting state");
 
-        sqlx::query!(r#"DELETE FROM neo_blocks WHERE block_number < $1"#, block_number as _)
+        sqlx::query!(r#"DELETE FROM neo_blocks WHERE block_number > $1"#, block_number as _)
             .execute(&*self.pool)
             .await?;
-        sqlx::query!(r#"DELETE FROM neo_accounts WHERE block_number < $1"#, block_number as _)
+        sqlx::query!(r#"DELETE FROM neo_accounts WHERE block_number > $1"#, block_number as _)
             .execute(&*self.pool)
             .await?;
-        sqlx::query!(r#"DELETE FROM neo_account_slots WHERE block_number < $1"#, block_number as _)
+        sqlx::query!(r#"DELETE FROM neo_account_slots WHERE block_number > $1"#, block_number as _)
             .execute(&*self.pool)
             .await?;
-        sqlx::query!(r#"DELETE FROM neo_transactions WHERE block_number < $1"#, block_number as _)
+        sqlx::query!(r#"DELETE FROM neo_transactions WHERE block_number > $1"#, block_number as _)
             .execute(&*self.pool)
             .await?;
-        sqlx::query!(r#"DELETE FROM neo_logs WHERE block_number < $1"#, block_number as _)
+        sqlx::query!(r#"DELETE FROM neo_logs WHERE block_number > $1"#, block_number as _)
             .execute(&*self.pool)
             .await?;
 
         state.accounts.clear();
         state.load_latest_data(&self.pool).await?;
+
+        tracing::debug!(?state.accounts);
 
         Ok(())
     }
