@@ -5,6 +5,7 @@
 //! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
+use std::io::Write;
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
@@ -109,19 +110,21 @@ impl EthExecutor {
                         return Err(e);
                     };
 
-                    if block.number() == 292973.into() {
-                        InMemoryPermanentStorage::dump_snapshot(execution.changes.clone()).await;
-                        ()
-                    };
-
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.clone()).await?;
-                    executions.push((tx, receipt, execution));
+                    executions.push((tx, receipt, execution.clone()));
 
                     // track metrics
                     metrics::inc_executor_external_transaction(tx_start.elapsed());
                     block_metrics.account_reads += execution_metrics.account_reads;
                     block_metrics.slot_reads += execution_metrics.slot_reads;
+
+                    if block.number() == 292973.into() {
+                        let state = InMemoryPermanentStorage::dump_snapshot(execution.changes).await;
+                        let state_string = serde_json::to_string(&state)?;
+                        let mut file = std::fs::File::create("tests/fixtures/block-292973/snapshot.json")?;  
+                        file.write_all(state_string.as_bytes())?;
+                    };
                 }
                 Err(e) => {
                     let json_tx = serde_json::to_string(&tx).unwrap();
