@@ -44,5 +44,6 @@ coverage brlc-multisig
 coverage compound-periphery
 
 if [ -n "$1" ] && [ "$1" = "--html" ]; then
+    log "Opening coverage reports in your web browser..."
     open repos/*/coverage/index.html
 fi
