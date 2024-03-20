@@ -31,11 +31,14 @@ asdf local solidity 0.8.16
 # execute
 compile_contract brlc-token          BRLCToken
 
-compile_contract brlc-periphery      CardPaymentProcessor
+compile_contract brlc-pix-cashier    PixCashier
+
 compile_contract brlc-periphery      CashbackDistributor
-compile_contract brlc-periphery      PixCashier
-compile_contract brlc-periphery      TokenDistributor
+compile_contract brlc-periphery      CardPaymentProcessor
+
+compile_contract compound-periphery  CompoundAgent
 
 compile_contract brlc-multisig       MultiSigWallet
 
-compile_contract compound-periphery  CompoundAgent
+compile_contract brlc-yield-streamer BalanceTracker
+compile_contract brlc-yield-streamer YieldStreamer
