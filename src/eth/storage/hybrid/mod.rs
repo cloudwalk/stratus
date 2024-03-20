@@ -19,6 +19,8 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 use tokio::sync::Semaphore;
+use tokio::sync::SemaphorePermit;
+use tokio::task::JoinSet;
 
 use self::hybrid_state::HybridStorageState;
 use crate::eth::primitives::Account;
@@ -55,6 +57,7 @@ pub struct HybridPermanentStorage {
     pool: Arc<Pool<Postgres>>,
     block_number: AtomicU64,
     task_sender: mpsc::Sender<BlockTask>,
+    tasks_pending: Arc<Semaphore>,
 }
 
 #[derive(Debug)]
@@ -78,7 +81,8 @@ impl HybridPermanentStorage {
                 tracing::error!(reason = ?e, "failed to start postgres client");
                 anyhow::anyhow!("failed to start postgres client")
             })?;
-
+        let tasks_pending = Arc::new(Semaphore::new(1));
+        let worker_tasks_pending = Arc::clone(&tasks_pending);
         let (task_sender, task_receiver) = channel::<BlockTask>(32);
         let worker_pool = Arc::new(connection_pool.clone());
         let pool = Arc::clone(&worker_pool);
@@ -86,7 +90,7 @@ impl HybridPermanentStorage {
             // Assuming you define a 'response_sender' if you plan to handle responses
             let worker_pool = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&worker_pool);
             // Omitting response channel setup for simplicity
-            Self::worker(task_receiver, worker_pool, config.connections).await;
+            Self::worker(task_receiver, worker_pool, config.connections, worker_tasks_pending).await;
         });
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
@@ -97,6 +101,7 @@ impl HybridPermanentStorage {
             block_number,
             task_sender,
             pool,
+            tasks_pending,
         })
     }
 
@@ -110,21 +115,28 @@ impl HybridPermanentStorage {
         Ok(last_block_number.into())
     }
 
-    async fn worker(mut receiver: tokio::sync::mpsc::Receiver<BlockTask>, pool: Arc<sqlx::Pool<sqlx::Postgres>>, connections: u32) {
+    async fn worker(
+        mut receiver: tokio::sync::mpsc::Receiver<BlockTask>,
+        pool: Arc<sqlx::Pool<sqlx::Postgres>>,
+        connections: u32,
+        tasks_pending: Arc<Semaphore>,
+    ) {
         // Define the maximum number of concurrent tasks. Adjust this number based on your requirements.
         let max_concurrent_tasks: usize = (connections).try_into().unwrap_or(10usize);
         tracing::info!("Starting worker with max_concurrent_tasks: {}", max_concurrent_tasks);
-        let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
-
-        while let Some(block_task) = receiver.recv().await {
+        let mut futures = JoinSet::new();
+        let mut permit = None;
+        while let Some(block_task) = recv_block_task(&mut receiver, &mut permit).await {
             let pool_clone = Arc::clone(&pool);
-            let semaphore_clone = Arc::clone(&semaphore);
-
-            tokio::spawn(async move {
-                let permit = semaphore_clone.acquire_owned().await.expect("Failed to acquire semaphore permit");
-                query_executor::commit_eventually(pool_clone, block_task).await;
-                drop(permit);
-            });
+            if futures.len() < max_concurrent_tasks {
+                futures.spawn(query_executor::commit_eventually(pool_clone, block_task));
+                if permit.is_none() {
+                    permit = Some(tasks_pending.acquire().await.expect("semaphore has closed"));
+                }
+            } else if let Some(_res) = futures.join_next().await {
+                // res.expect("future failed") XXX
+                continue;
+            }
         }
     }
 
@@ -220,7 +232,6 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         //XXX TODO deal with point_in_time first, e.g create to_account at hybrid_accounts_slots
         let state = self.state.read().await;
-        tracing::debug!(?state.accounts);
         let account = match point_in_time {
             StoragePointInTime::Present => {
                 match state.accounts.get(address) {
@@ -376,7 +387,8 @@ impl PermanentStorage for HybridPermanentStorage {
             accounts_changes.3.push(account.balance);
             accounts_changes.4.push(account.nonce);
         }
-        tokio::time::sleep(Duration::from_secs(5)).await; // XXX Waiting for genesis to be commited pg
+
+        let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
         sqlx::query!(
             "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
             SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
@@ -413,13 +425,45 @@ impl PermanentStorage for HybridPermanentStorage {
         state.transactions.retain(|_, t| t.block_number <= block_number);
         state.logs.retain(|l| l.block_number <= block_number);
 
-        // XXX Reset in postgres and load latest account data
-        // state.accounts.clear();
+        let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
+
+        sqlx::query!(r#"DELETE FROM neo_blocks WHERE block_number > $1"#, block_number as _)
+            .execute(&*self.pool)
+            .await?;
+        sqlx::query!(r#"DELETE FROM neo_accounts WHERE block_number > $1"#, block_number as _)
+            .execute(&*self.pool)
+            .await?;
+        sqlx::query!(r#"DELETE FROM neo_account_slots WHERE block_number > $1"#, block_number as _)
+            .execute(&*self.pool)
+            .await?;
+        sqlx::query!(r#"DELETE FROM neo_transactions WHERE block_number > $1"#, block_number as _)
+            .execute(&*self.pool)
+            .await?;
+        sqlx::query!(r#"DELETE FROM neo_logs WHERE block_number > $1"#, block_number as _)
+            .execute(&*self.pool)
+            .await?;
+
+        state.accounts.clear();
+        state.load_latest_data(&self.pool).await?;
 
         Ok(())
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
         todo!()
+    }
+}
+
+async fn recv_block_task(receiver: &mut tokio::sync::mpsc::Receiver<BlockTask>, permit: &mut Option<SemaphorePermit<'_>>) -> Option<BlockTask> {
+    match receiver.try_recv() {
+        Ok(block_task) => Some(block_task),
+        Err(mpsc::error::TryRecvError::Empty) => {
+            if permit.is_some() {
+                let perm = std::mem::take(permit);
+                drop(perm);
+            }
+            receiver.recv().await
+        }
+        Err(_) => None,
     }
 }
