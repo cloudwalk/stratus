@@ -130,7 +130,7 @@ impl HybridPermanentStorage {
         tracing::info!("Starting worker with max_concurrent_tasks: {}", max_concurrent_tasks);
         let mut futures = JoinSet::new();
         let mut pending_tasks_guard = None;
-        while let Ok(block_task_opt) = recv_block_task(&mut receiver, &mut pending_tasks_guard, futures.len() > 0).await {
+        while let Ok(block_task_opt) = recv_block_task(&mut receiver, &mut pending_tasks_guard, !futures.is_empty()).await {
             if let Some(block_task) = block_task_opt {
                 let pool_clone = Arc::clone(&pool);
 
