@@ -10,15 +10,19 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use anyhow::anyhow;
+use anyhow::Ok;
 
+use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionResult;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
+use crate::ext::not;
 use crate::log_and_err;
 
 pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
@@ -26,6 +30,12 @@ pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
 /// Output of a executed transaction in the EVM.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Execution {
+    /// Assumed block timestamp during the execution.
+    pub block_timestamp: UnixTime,
+
+    /// Flag to indicate if the execution costs have been applied.
+    pub execution_costs_applied: bool,
+
     /// Status of the execution.
     pub result: ExecutionResult,
 
@@ -38,14 +48,39 @@ pub struct Execution {
     /// Consumed gas.
     pub gas: Gas,
 
-    /// Assumed block timestamp during the execution.
-    pub block_timestamp: UnixTime,
-
     /// Storage changes that happened during the transaction execution.
     pub changes: Vec<ExecutionAccountChanges>,
 }
 
 impl Execution {
+    /// Creates an execution from an external transaction that failed.
+    pub fn from_failed_external_transaction(block: &ExternalBlock, receipt: &ExternalReceipt, sender: Account) -> anyhow::Result<Self> {
+        if receipt.is_success() {
+            return log_and_err!("cannot create failed execution for successful transaction");
+        }
+        if not(receipt.logs.is_empty()) {
+            return log_and_err!("failed receipt should not have produced logs");
+        }
+
+        // generate sender changes incrementing the nonce
+        let mut sender_changes = ExecutionAccountChanges::from_existing_account(sender);
+        let sender_next_nonce = sender_changes.nonce.take_original_ref().unwrap().next();
+        sender_changes.nonce.set_modified(sender_next_nonce);
+
+        // crete execution and apply costs
+        let mut execution = Self {
+            block_timestamp: block.timestamp(),
+            execution_costs_applied: false,
+            result: ExecutionResult::new_reverted(), // assume it reverted
+            output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
+            logs: Vec::new(),
+            gas: receipt.gas_used.unwrap_or_default().try_into()?,
+            changes: vec![sender_changes],
+        };
+        execution.apply_execution_costs(receipt)?;
+        Ok(execution)
+    }
+
     /// When the transaction is a contract deployment, returns the address of the deployed contract.
     pub fn contract_address(&self) -> Option<Address> {
         for changes in &self.changes {
@@ -131,6 +166,12 @@ impl Execution {
     /// External transactions are re-executed locally with max gas and zero gas price,
     /// so the paid amount is applied after execution based on the receipt.
     pub fn apply_execution_costs(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
+        // do nothing if execution costs were already applied
+        if self.execution_costs_applied {
+            return Ok(());
+        }
+        self.execution_costs_applied = true;
+
         // do nothing if execution cost is zero
         let execution_cost = receipt.execution_cost();
         if execution_cost.is_zero() {

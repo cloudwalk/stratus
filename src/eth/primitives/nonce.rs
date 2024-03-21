@@ -34,6 +34,11 @@ impl Nonce {
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
     }
+
+    /// Returns the next nonce.
+    pub fn next(&self) -> Self {
+        Self(self.0 + 1)
+    }
 }
 
 impl Display for Nonce {
