@@ -131,7 +131,6 @@ impl HybridPermanentStorage {
         let mut futures = JoinSet::new();
         let mut pending_tasks_guard = None;
         while let Ok(block_task_opt) = recv_block_task(&mut receiver, &mut pending_tasks_guard, futures.len() > 0).await {
-
             if let Some(block_task) = block_task_opt {
                 let pool_clone = Arc::clone(&pool);
 
@@ -141,7 +140,6 @@ impl HybridPermanentStorage {
                     if pending_tasks_guard.is_none() {
                         pending_tasks_guard = Some(tasks_pending.lock().await);
                     }
-
                 } else if let Some(_res) = futures.join_next().await {
                     futures.spawn(query_executor::commit_eventually(pool_clone, block_task));
                 }
@@ -496,7 +494,7 @@ async fn recv_block_task(
 ) -> anyhow::Result<Option<BlockTask>> {
     match receiver.try_recv() {
         Ok(block_task) => Ok(Some(block_task)),
-        Err(mpsc::error::TryRecvError::Empty) => {
+        Err(mpsc::error::TryRecvError::Empty) =>
             if pending_tasks_guard.is_some() {
                 if !pending_tasks {
                     let guard = std::mem::take(pending_tasks_guard);
@@ -507,8 +505,7 @@ async fn recv_block_task(
                 }
             } else {
                 Ok(receiver.recv().await)
-            }
-        }
+            },
         Err(mpsc::error::TryRecvError::Disconnected) => Err(anyhow!(mpsc::error::TryRecvError::Disconnected)),
     }
 }
