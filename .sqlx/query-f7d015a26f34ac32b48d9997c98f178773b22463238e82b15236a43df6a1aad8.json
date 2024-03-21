@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select\n    payload\nfrom\n    external_blocks\nwhere number >= $1 and number <= $2\norder by number asc;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "payload",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f7d015a26f34ac32b48d9997c98f178773b22463238e82b15236a43df6a1aad8"
+}

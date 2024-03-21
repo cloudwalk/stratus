@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO public.neo_account_slots (block_number, slot_index, account_address, value)\n                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::bytea[])\n                     AS t(block_number, slot_index, account_address, value);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "ByteaArray",
+        "ByteaArray",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8b98acf06b41ab8456a6057949f1d6b28f6635e99f11c3e38ac911f8a98823c6"
+}

@@ -21,11 +21,11 @@ async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOnlineConfig = init_global_services();
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let storage = Arc::new(config.init_storage().await?);
+    let storage = Arc::new(config.init_stratus_storage().await?);
     let executor = config.init_executor(Arc::clone(&storage));
 
     // start from last imported block
-    let mut number = storage.read_current_block_number().await?;
+    let mut number = storage.read_mined_block_number().await?;
 
     // keep importing forever
     loop {
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
 
         // import block
         let mut receipts: ExternalReceipts = receipts.into();
-        executor.import_external(block, &mut receipts).await?;
+        executor.import_external_to_perm(block, &mut receipts).await?;
         metrics::inc_import_online(start.elapsed());
     }
 }

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select\n    address,\n    balance\nfrom external_balances;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "address",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "balance",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2e17a43c9bf435ddf5f9bff47e6ba85062723bdb224310a2cafd553bfb008c14"
+}

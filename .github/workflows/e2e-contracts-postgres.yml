@@ -39,4 +39,4 @@ jobs:
         run: just setup
 
       - name: Run e2e tests
-        run: just contracts-test-stratus-postgres
+        run: PERM_STORAGE=postgres://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres

@@ -9,41 +9,66 @@ use tokio::sync::RwLockWriteGuard;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug, Default)]
-pub struct InMemoryTemporaryStorage {
-    state: RwLock<InMemoryTemporaryStorageState>,
+pub struct InMemoryTemporaryStorageState {
+    pub accounts: HashMap<Address, InMemoryTemporaryAccount>,
+    pub active_block_number: Option<BlockNumber>,
 }
 
-#[derive(Debug, Default)]
-struct InMemoryTemporaryStorageState {
-    accounts: HashMap<Address, InMemoryTemporaryAccount>,
+impl InMemoryTemporaryStorageState {
+    pub fn reset(&mut self) {
+        self.accounts.clear();
+        self.active_block_number = None;
+    }
+}
+
+#[derive(Debug)]
+pub struct InMemoryTemporaryStorage {
+    pub state: RwLock<InMemoryTemporaryStorageState>,
+}
+
+impl Default for InMemoryTemporaryStorage {
+    fn default() -> Self {
+        tracing::info!("starting inmemory temporary storage");
+        Self { state: Default::default() }
+    }
 }
 
 impl InMemoryTemporaryStorage {
     /// Locks inner state for reading.
-    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
+    pub async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
         self.state.read().await
     }
 
     /// Locks inner state for writing.
-    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
+    pub async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
         self.state.write().await
     }
 }
 
 #[async_trait]
 impl TemporaryStorage for InMemoryTemporaryStorage {
-    async fn maybe_read_account(&self, address: &Address, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        let mut state = self.lock_write().await;
+        state.active_block_number = Some(number);
+        Ok(())
+    }
+
+    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+        let state = self.lock_read().await;
+        Ok(state.active_block_number)
+    }
+
+    async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         let state = self.lock_read().await;
-
         match state.accounts.get(address) {
             Some(account) => {
                 let info = account.info.clone();
@@ -65,8 +90,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
+    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %slot_index, "reading slot");
 
         let state = self.lock_read().await;
         let Some(account) = state.accounts.get(address) else {
@@ -76,38 +101,38 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         match account.slots.get(slot_index) {
             Some(slot) => {
-                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
+                tracing::trace!(%address, %slot_index, %slot, "slot found");
                 Ok(Some(slot.clone()))
             }
 
             None => {
-                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
+                tracing::trace!(%address, %slot_index, "slot not found");
                 Ok(None)
             }
         }
     }
 
-    async fn save_account_changes(&self, execution: Execution) -> anyhow::Result<()> {
+    async fn save_account_changes(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
-        for changes in execution.changes {
+        for change in changes {
             let account = state
                 .accounts
-                .entry(changes.address.clone())
-                .or_insert_with(|| InMemoryTemporaryAccount::new(changes.address));
+                .entry(change.address.clone())
+                .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
 
             // account basic info
-            if let Some(nonce) = changes.nonce.take() {
+            if let Some(nonce) = change.nonce.take() {
                 account.info.nonce = nonce;
             }
-            if let Some(balance) = changes.balance.take() {
+            if let Some(balance) = change.balance.take() {
                 account.info.balance = balance;
             }
-            if let Some(Some(bytecode)) = changes.bytecode.take() {
+            if let Some(Some(bytecode)) = change.bytecode.take() {
                 account.info.bytecode = Some(bytecode);
             }
 
             // slots
-            for (_, slot) in changes.slots {
+            for (_, slot) in change.slots {
                 if let Some(slot) = slot.take() {
                     account.slots.insert(slot.index.clone(), slot);
                 }
@@ -116,15 +141,19 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
+    async fn flush(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     async fn reset(&self) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
-        state.accounts.clear();
+        state.reset();
         Ok(())
     }
 }
 
 #[derive(Debug)]
-struct InMemoryTemporaryAccount {
+pub struct InMemoryTemporaryAccount {
     pub info: Account,
     pub slots: HashMap<SlotIndex, Slot>,
 }

@@ -1,8 +1,8 @@
 diff --git a/test/base/CWToken.complex.test.ts b/test/base/CWToken.complex.test.ts
-index 267986e..1ef6e0e 100644
+index 2e65c20..8dcf54a 100644
 --- a/test/base/CWToken.complex.test.ts
 +++ b/test/base/CWToken.complex.test.ts
-@@ -55,6 +55,21 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -49,6 +49,21 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      return { token };
    }
  
@@ -21,10 +21,10 @@ index 267986e..1ef6e0e 100644
 +    }
 +  }
 +
-   async function checkComplexBalanceGetter(
-     props: {
-       token: Contract;
-@@ -66,7 +81,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+   async function deployAndConfigureToken(): Promise<{ token: Contract }> {
+     const { token } = await deployToken();
+     await proveTx(token.connect(deployer).setMainBlocklister(deployer.address));
+@@ -72,7 +87,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        };
      }
    ) {
@@ -33,7 +33,7 @@ index 267986e..1ef6e0e 100644
      const { token, amounts } = props;
      if (amounts.mint > 0) {
        await proveTx(token.connect(deployer).mint(user.address, amounts.mint));
-@@ -271,15 +286,15 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -277,15 +292,15 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
  
    describe("Frozen and premint balances", async () => {
      let timestamp: number;
@@ -45,95 +45,95 @@ index 267986e..1ef6e0e 100644
      it("Transfer to purpose account - test 5 with release awaiting", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -294,7 +309,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -300,7 +315,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -309,7 +324,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -315,7 +330,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 15)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_FROZEN_AMOUNT);
-@@ -320,7 +335,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -326,7 +341,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 20)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_FROZEN_AMOUNT);
-@@ -331,7 +346,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -337,7 +352,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -342,7 +357,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -348,7 +363,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -357,7 +372,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -363,7 +378,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -372,7 +387,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -378,7 +393,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 15)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_FROZEN_AMOUNT);
-@@ -383,7 +398,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -389,7 +404,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 20)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_FROZEN_AMOUNT);
-@@ -394,7 +409,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -400,7 +415,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -503,15 +518,15 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -509,15 +524,15 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
  
    describe("Premint and restricted balances", async () => {
      let timestamp: number;
@@ -145,95 +145,95 @@ index 267986e..1ef6e0e 100644
      it("Transfer to purpose account - test 5 with release awaiting", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -527,7 +542,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -533,7 +548,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -543,7 +558,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -549,7 +564,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 15)
        ).to.changeTokenBalances(
-@@ -559,7 +574,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -565,7 +580,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 20)
        ).to.changeTokenBalances(
-@@ -575,7 +590,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -581,7 +596,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -587,7 +602,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -593,7 +608,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -603,7 +618,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -609,7 +624,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -619,7 +634,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -625,7 +640,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 15)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_RESTRICTED_AMOUNT);
-@@ -630,7 +645,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -636,7 +651,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 20)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_RESTRICTED_AMOUNT);
-@@ -641,7 +656,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -647,7 +662,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
        await proveTx(token.connect(deployer).mint(user.address, 10));
-       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 10, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 10));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -767,8 +782,8 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -773,8 +788,8 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
  
    describe("Frozen, restricted and premint balances", async () => {
      let timestamp: number;
@@ -244,8 +244,8 @@ index 267986e..1ef6e0e 100644
      });
      it("Transfer to purpose account - test 5 with release awaiting", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-@@ -776,7 +791,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -782,7 +797,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -253,8 +253,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(purposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -793,7 +808,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -799,7 +814,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -262,8 +262,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(purposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -810,7 +825,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -816,7 +831,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -271,8 +271,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(purposeAccount.address, 15)
        ).to.changeTokenBalances(
-@@ -827,7 +842,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -833,7 +848,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -280,8 +280,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(purposeAccount.address, 20)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_FROZEN_AMOUNT);
-@@ -839,7 +854,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -845,7 +860,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -289,8 +289,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(purposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -851,7 +866,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -857,7 +872,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -298,8 +298,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -868,7 +883,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -874,7 +889,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -307,8 +307,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -885,7 +900,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -891,7 +906,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -316,8 +316,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 15)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_RESTRICTED_AMOUNT);
-@@ -897,7 +912,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -903,7 +918,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -325,8 +325,8 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 20)
        ).to.be.revertedWithCustomError(token, REVERT_ERROR_TRANSFER_EXCEEDED_FROZEN_AMOUNT);
-@@ -909,7 +924,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
-       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp));
+@@ -915,7 +930,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+       await proveTx(token.connect(deployer).premint(user.address, 5, timestamp, PremintRestriction.None));
        await proveTx(token.connect(deployer).freeze(user.address, 5));
        await proveTx(token.connect(deployer).updateRestriction(user.address, PURPOSE, 5));
 -      await time.increaseTo(timestamp);
@@ -334,7 +334,7 @@ index 267986e..1ef6e0e 100644
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -1297,13 +1312,13 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1303,13 +1318,13 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
  
    describe("Premint balance only, no frozen balance or restricted balance", async () => {
      let timestamp: number;
@@ -345,88 +345,88 @@ index 267986e..1ef6e0e 100644
      });
      it("Transfer to purpose account with release awaiting - test 5", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -1316,7 +1331,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1322,7 +1337,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to purpose account with release awaiting - test 10", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -1329,7 +1344,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1335,7 +1350,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to purpose account with release awaiting - test 15", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 15)
        ).to.changeTokenBalances(
-@@ -1342,7 +1357,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1348,7 +1363,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to purpose account with release awaiting - test 20", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 20)
        ).to.changeTokenBalances(
-@@ -1355,7 +1370,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1361,7 +1376,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to purpose account with release awaiting - test 25", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(purposeAccount.address, 25)
        ).to.be.revertedWith(REVERT_MESSAGE_ERC20_TRANSFER_AMOUNT_EXCEEDS_BALANCE);
-@@ -1364,7 +1379,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1370,7 +1385,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to non-purpose account with release awaiting - test 5", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 5)
        ).to.changeTokenBalances(
-@@ -1377,7 +1392,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1383,7 +1398,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to non-purpose account with release awaiting - test 10", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 10)
        ).to.changeTokenBalances(
-@@ -1390,7 +1405,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1396,7 +1411,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to non-purpose account with release awaiting - test 15", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 15)
        ).to.changeTokenBalances(
-@@ -1403,7 +1418,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1409,7 +1424,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to non-purpose account with release awaiting - test 20", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(
          token.connect(user).transfer(nonPurposeAccount.address, 20)
        ).to.changeTokenBalances(
-@@ -1416,7 +1431,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
+@@ -1422,7 +1437,7 @@ describe("Contract 'CWToken' - Premintable, Freezable & Restrictable scenarios",
      it("Transfer to non-purpose account with release awaiting - test 25", async () => {
        const { token } = await setUpFixture(deployAndConfigureToken);
-       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp));
+       await proveTx(token.connect(deployer).premint(user.address, 20, timestamp, PremintRestriction.None));
 -      await time.increaseTo(timestamp);
 +      await increaseTo(timestamp);
        await expect(

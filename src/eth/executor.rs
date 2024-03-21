@@ -7,18 +7,19 @@
 
 use std::io::Write;
 use std::sync::Arc;
-use std::thread;
 use std::time::Instant;
 
 use anyhow::anyhow;
+<<<<<<< HEAD
 use ethereum_types::U64;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
+=======
+>>>>>>> main
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
-use crate::eth::evm::Evm;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -41,7 +42,7 @@ use crate::infra::metrics;
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
 
-type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
+pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
 
 /// The EthExecutor struct is responsible for orchestrating the execution of Ethereum transactions.
 /// It holds references to the EVM, block miner, and storage, managing the overall process of
@@ -63,9 +64,7 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evms: NonEmpty<Box<dyn Evm>>, storage: Arc<StratusStorage>) -> Self {
-        let evm_tx = spawn_background_evms(evms);
-
+    pub fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>) -> Self {
         Self {
             evm_tx,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
@@ -79,21 +78,46 @@ impl EthExecutor {
     // Transaction execution
     // -------------------------------------------------------------------------
 
-    /// Imports an external block by re-executing all transactions locally.
-    pub async fn import_external(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<()> {
+    /// Re-executes an external block locally and imports it to the permanent storage.
+    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+        // import block
+        let block = self.import_external_to_temp(block, receipts).await?;
+
+        // commit block
+        self.storage.set_mined_block_number(*block.number()).await?;
+        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
+            let json_block = serde_json::to_string(&block).unwrap();
+            tracing::error!(reason = ?e, %json_block);
+            return Err(e.into());
+        };
+
+        Ok(block)
+    }
+
+    /// Re-executes an external block locally and imports it to the temporary storage.
+    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
         let start = Instant::now();
         let mut block_metrics = ExecutionMetrics::default();
         tracing::info!(number = %block.number(), "importing external block");
+
+        // track active block number
+        self.storage.set_active_block_number(block.number()).await?;
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
             let tx_start = Instant::now();
 
-            // re-execute transaction
+            // re-execute transaction or create a fake execution the external transaction failed
             let receipt = receipts.try_take(&tx.hash())?;
-            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
-            let execution = self.execute_in_evm(evm_input).await;
+            let execution = if receipt.is_success() {
+                let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
+                self.execute_in_evm(evm_input).await
+            } else {
+                let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await?;
+                let execution = Execution::from_failed_external_transaction(&block, &receipt, sender)?;
+                Ok((execution, ExecutionMetrics::default()))
+            };
 
             // handle execution result
             match execution {
@@ -111,8 +135,13 @@ impl EthExecutor {
                     };
 
                     // temporarily save state to next transactions from the same block
+<<<<<<< HEAD
                     self.storage.save_account_changes_to_temp(execution.clone()).await?;
                     executions.push((tx, receipt, execution.clone()));
+=======
+                    self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
+                    executions.push((tx, receipt, execution));
+>>>>>>> main
 
                     // track metrics
                     metrics::inc_executor_external_transaction(tx_start.elapsed());
@@ -135,21 +164,15 @@ impl EthExecutor {
             }
         }
 
-        // commit block
+        // convert block
         let block = Block::from_external(block, executions)?;
-        self.storage.set_block_number(*block.number()).await?;
-        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
-            let json_block = serde_json::to_string(&block).unwrap();
-            tracing::error!(reason = ?e, %json_block);
-            return Err(e.into());
-        };
 
         // track metrics
         metrics::inc_executor_external_block(start.elapsed());
         metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
         metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
 
-        Ok(())
+        Ok(block)
     }
 
     /// Executes a transaction persisting state changes.
@@ -268,33 +291,4 @@ impl EthExecutor {
         self.evm_tx.send((evm_input, execution_tx))?;
         execution_rx.await?
     }
-}
-
-// for each evm, spawn a new thread that runs in an infinite loop executing transactions.
-fn spawn_background_evms(evms: NonEmpty<Box<dyn Evm>>) -> crossbeam_channel::Sender<EvmTask> {
-    let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
-
-    for mut evm in evms {
-        // clone shared resources for thread
-        let evm_rx = evm_rx.clone();
-        let tokio = Handle::current();
-
-        // prepare thread
-        let t = thread::Builder::new().name("evm".into());
-        t.spawn(move || {
-            // make tokio runtime available to this thread
-            let _tokio_guard = tokio.enter();
-
-            // keep executing transactions until the channel is closed
-            while let Ok((input, tx)) = evm_rx.recv() {
-                let result = evm.execute(input);
-                if let Err(e) = tx.send(result) {
-                    tracing::error!(reason = ?e, "failed to send evm execution result");
-                };
-            }
-            tracing::warn!("stopping evm thread because task channel was closed");
-        })
-        .expect("spawning evm threads should not fail");
-    }
-    evm_tx
 }

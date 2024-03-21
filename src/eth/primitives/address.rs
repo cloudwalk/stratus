@@ -13,6 +13,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use ethabi::Token;
 use ethereum_types::H160;
 use ethers_core::types::NameOrAddress;
@@ -100,6 +101,17 @@ impl From<NameOrAddress> for Address {
             NameOrAddress::Name(_) => panic!("TODO"),
             NameOrAddress::Address(value) => Self(value),
         }
+    }
+}
+
+impl TryFrom<Vec<u8>> for Address {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        if value.len() != 20 {
+            return Err(anyhow!("array of bytes to be converted to address must have exactly 20 bytes"));
+        }
+        Ok(Self(H160::from_slice(&value)))
     }
 }
 

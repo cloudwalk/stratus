@@ -8,7 +8,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -40,11 +40,19 @@ impl StratusStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    // Retrieves the last mined block number.
-    pub async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    // Retrieves the active block number.
+    pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         let start = Instant::now();
-        let result = self.perm.read_current_block_number().await;
-        metrics::inc_storage_read_current_block_number(start.elapsed(), result.is_ok());
+        let result = self.temp.read_active_block_number().await;
+        metrics::inc_storage_read_active_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
+    // Retrieves the last mined block number.
+    pub async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+        let start = Instant::now();
+        let result = self.perm.read_mined_block_number().await;
+        metrics::inc_storage_read_mined_block_number(start.elapsed(), result.is_ok());
         result
     }
 
@@ -56,11 +64,19 @@ impl StratusStorage {
         result
     }
 
-    /// Sets the block number to a specific value.
-    pub async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    /// Sets the active block number to a specific value.
+    pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.perm.set_block_number(number).await;
-        metrics::inc_storage_set_block_number(start.elapsed(), result.is_ok());
+        let result = self.temp.set_active_block_number(number).await;
+        metrics::inc_storage_set_active_block_number(start.elapsed(), result.is_ok());
+        result
+    }
+
+    /// Sets the mined block number to a specific value.
+    pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.perm.set_mined_block_number(number).await;
+        metrics::inc_storage_set_mined_block_number(start.elapsed(), result.is_ok());
         result
     }
 
@@ -72,7 +88,7 @@ impl StratusStorage {
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         let start = Instant::now();
 
-        match self.temp.maybe_read_account(address, point_in_time).await? {
+        match self.temp.maybe_read_account(address).await? {
             Some(account) => {
                 tracing::debug!("account found in the temporary storage");
                 metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
@@ -100,7 +116,7 @@ impl StratusStorage {
     pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         let start = Instant::now();
 
-        match self.temp.maybe_read_slot(address, slot_index, point_in_time).await? {
+        match self.temp.maybe_read_slot(address, slot_index).await? {
             Some(slot) => {
                 tracing::debug!("slot found in the temporary storage");
                 metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
@@ -161,10 +177,18 @@ impl StratusStorage {
     }
 
     /// Temporarily saves account's changes generated during block production.
-    pub async fn save_account_changes_to_temp(&self, execution: Execution) -> anyhow::Result<()> {
+    pub async fn save_account_changes_to_temp(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
         let start = Instant::now();
-        let result = self.temp.save_account_changes(execution).await;
+        let result = self.temp.save_account_changes(changes).await;
         metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
+        result
+    }
+
+    /// If necessary, flushes temporary state to durable storage.
+    pub async fn flush_temp(&self) -> anyhow::Result<()> {
+        let start = Instant::now();
+        let result = self.temp.flush().await;
+        metrics::inc_storage_flush_temp(start.elapsed(), result.is_ok());
         result
     }
 
@@ -177,8 +201,11 @@ impl StratusStorage {
         let label_size_by_gas = block.label_size_by_gas();
 
         // save block to permanent storage and clears temporary storage
+        let next_number = block.number().next();
         let result = self.perm.save_block(block).await;
+        self.perm.after_commit_hook().await?;
         self.reset_temp().await?;
+        self.set_active_block_number(next_number).await?;
 
         metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
         result
@@ -209,7 +236,7 @@ impl StratusStorage {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
-                let current_block = self.perm.read_current_block_number().await?;
+                let current_block = self.perm.read_mined_block_number().await?;
                 if number <= &current_block {
                     Ok(StoragePointInTime::Past(*number))
                 } else {

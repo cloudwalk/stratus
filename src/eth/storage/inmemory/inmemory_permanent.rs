@@ -156,8 +156,7 @@ impl InMemoryPermanentStorage {
 
 impl Default for InMemoryPermanentStorage {
     fn default() -> Self {
-        tracing::info!("starting inmemory storage");
-
+        tracing::info!("starting inmemory permanent storage");
         Self {
             state: RwLock::new(InMemoryPermanentStorageState::default()),
             block_number: Default::default(),
@@ -171,7 +170,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    async fn read_current_block_number(&self) -> anyhow::Result<BlockNumber> {
+    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
@@ -180,7 +179,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(next.into())
     }
 
-    async fn set_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
     }
@@ -349,6 +348,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
             }
         }
 
+        Ok(())
+    }
+
+    async fn after_commit_hook(&self) -> anyhow::Result<()> {
         Ok(())
     }
 

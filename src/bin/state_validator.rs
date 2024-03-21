@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: StateValidatorConfig = init_global_services();
-    let storage = config.init_storage().await?;
+    let storage = config.init_stratus_storage().await?;
 
     let interval = BlockNumber::from(config.interval);
 
@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut futures = JoinSet::new();
     loop {
-        let current_block = storage.read_current_block_number().await?;
+        let current_block = storage.read_mined_block_number().await?;
         if current_block - latest_compared_block >= interval && futures.len() < config.concurrent_tasks as usize {
             let future = validate_state(
                 config.method.clone(),

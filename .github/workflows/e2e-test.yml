@@ -11,7 +11,7 @@ jobs:
     name: E2E Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      test_command: 'e2e-stratus'
+      test_command: 'just e2e-stratus'
 
     concurrency:
       group: ${{ github.workflow }}-inmemory-${{ github.ref || github.run_id }}
@@ -21,7 +21,7 @@ jobs:
     name: E2E Stratus Postgres
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      test_command: 'e2e-stratus-postgres'
+      test_command: 'PERM_STORAGE=postgres://postgres:123@0.0.0.0:5432/stratus just e2e-stratus-postgres'
 
     concurrency:
       group: ${{ github.workflow }}-postgres-${{ github.ref || github.run_id }}

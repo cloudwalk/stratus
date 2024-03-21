@@ -23,7 +23,8 @@ use revm::primitives::TransactTo;
 use revm::primitives::B256;
 use revm::primitives::U256;
 use revm::Database;
-use revm::EVM;
+use revm::Evm as RevmEvm;
+use revm::Handler;
 use tokio::runtime::Handle;
 
 use crate::eth::evm::evm::EvmExecutionResult;
@@ -49,24 +50,29 @@ use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
-    evm: EVM<RevmDatabaseSession>,
-    storage: Arc<StratusStorage>,
+    evm: RevmEvm<'static, (), RevmDatabaseSession>,
 }
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
     pub fn new(storage: Arc<StratusStorage>) -> Self {
-        let mut evm = EVM::new();
+        let mut evm = RevmEvm::builder()
+            .with_handler(Handler::mainnet_with_spec(SpecId::LONDON))
+            .with_external_context(())
+            .with_db(RevmDatabaseSession::new(storage))
+            .build();
 
         // evm general config
-        evm.env.cfg.spec_id = SpecId::LONDON;
-        evm.env.cfg.limit_contract_code_size = Some(usize::MAX);
-        evm.env.block.coinbase = Address::COINBASE.into();
+        let cfg_env = evm.cfg_mut();
+        cfg_env.limit_contract_code_size = Some(usize::MAX);
 
-        // evm tx config
-        evm.env.tx.gas_priority_fee = None;
+        let block_env = evm.block_mut();
+        block_env.coinbase = Address::COINBASE.into();
 
-        Self { evm, storage }
+        let tx_env = evm.tx_mut();
+        tx_env.gas_priority_fee = None;
+
+        Self { evm }
     }
 }
 
@@ -76,48 +82,50 @@ impl Evm for Revm {
 
         // configure session
         let evm = &mut self.evm;
-        let session = RevmDatabaseSession::new(Arc::clone(&self.storage), input.clone());
-        evm.database(session);
+        evm.db_mut().reset(input.clone());
 
         // configure evm block
-        evm.env.block.basefee = U256::ZERO;
-        evm.env.block.timestamp = input.block_timestamp.into();
-        evm.env.block.number = input.block_number.into();
+        let block_env = evm.block_mut();
+        block_env.basefee = U256::ZERO;
+        block_env.timestamp = input.block_timestamp.into();
+        block_env.number = input.block_number.into();
 
         // configure tx params
-        let tx = &mut evm.env.tx;
-        tx.caller = input.from.into();
-        tx.transact_to = match input.to {
+        let tx_env = &mut evm.tx_mut();
+        tx_env.caller = input.from.into();
+        tx_env.transact_to = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create(CreateScheme::Create),
         };
-        tx.gas_limit = input.gas_limit.into();
-        tx.gas_price = input.gas_price.into();
-        tx.nonce = input.nonce.map_into();
-        tx.data = input.data.into();
-        tx.value = input.value.into();
+        tx_env.gas_limit = input.gas_limit.into();
+        tx_env.gas_price = input.gas_price.into();
+        tx_env.nonce = input.nonce.map_into();
+        tx_env.data = input.data.into();
+        tx_env.value = input.value.into();
 
         // execute evm
         let evm_result = evm.transact();
 
         // parse result and track metrics
-        let session = evm.take_db();
-        let metrics = session.metrics;
-        let point_in_time = session.input.point_in_time.clone();
+        let session = evm.db_mut();
+        let session_input = std::mem::take(&mut session.input);
+        let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
+        let session_storage_changes = std::mem::take(&mut session.storage_changes);
+        let session_metrics = std::mem::take(&mut session.metrics);
 
         let execution = match evm_result {
-            Ok(result) => Ok(parse_revm_execution(result, session.input, session.storage_changes)),
+            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
                 Err(e).context("Error executing EVM transaction.")
             }
         };
 
-        metrics::inc_evm_execution(start.elapsed(), &point_in_time, execution.is_ok());
-        metrics::inc_evm_execution_account_reads(metrics.account_reads);
-        metrics::inc_evm_execution_slot_reads(metrics.slot_reads);
+        metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
+        metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
+        metrics::inc_evm_execution_slot_reads(session_metrics.slot_reads);
 
-        execution.map(|x| (x, metrics))
+        execution.map(|x| (x, session_metrics))
     }
 }
 
@@ -141,13 +149,21 @@ struct RevmDatabaseSession {
 }
 
 impl RevmDatabaseSession {
-    pub fn new(storage: Arc<StratusStorage>, input: EvmInput) -> Self {
+    /// Creates the base session to be used with REVM.
+    pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
             storage,
-            input,
+            input: Default::default(),
             storage_changes: Default::default(),
             metrics: Default::default(),
         }
+    }
+
+    /// Resets the session to be used with a new transaction.
+    pub fn reset(&mut self, input: EvmInput) {
+        self.input = input;
+        self.storage_changes = Default::default();
+        self.metrics = Default::default();
     }
 }
 
@@ -220,11 +236,12 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
 
     tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
     Execution {
+        block_timestamp: input.block_timestamp,
+        execution_costs_applied: false,
         result,
         output,
         logs,
         gas,
-        block_timestamp: input.block_timestamp,
         changes: execution_changes.into_values().collect(),
     }
 }

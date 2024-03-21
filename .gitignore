@@ -3,8 +3,10 @@
 .tool-versions
 
 # Data
-data/*.json
-data/*.db
+data/**/*.csv
+data/**/*.db
+data/**/*.json
+data/**/*.txt
 
 # E2E (Stratus)
 e2e/artifacts
@@ -16,14 +18,20 @@ flamegraph.svg
 
 # E2E (Solidity contracts)
 e2e-contracts/repos
+e2e-contracts/integration/contracts/*.flattened.sol
+e2e-contracts/integration/cache
+e2e-contracts/integration/typechain-types
+e2e-contracts/integration/artifacts
+e2e-contracts/integration/.openzeppelin
 
 # E2E (NodeJS)
 node_modules/
 package.json
 package-lock.json
+e2e-contracts/integration/hardhat.config.ts
+e2e-contracts/integration/tsconfig.json
 
 # Build
 /target
 vendor
 stratus.log
-
