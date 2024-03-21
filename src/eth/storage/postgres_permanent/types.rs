@@ -63,6 +63,7 @@ impl PostgresTransaction {
             logs: inner_logs,
             // TODO: do this correctly
             changes: vec![],
+            execution_costs_applied: true,
         };
         let input = TransactionInput {
             chain_id: ChainId::default(),
