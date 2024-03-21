@@ -99,10 +99,16 @@ impl EthExecutor {
         for tx in block.transactions.clone() {
             let tx_start = Instant::now();
 
-            // re-execute transaction
+            // re-execute transaction or create a fake execution the external transaction failed
             let receipt = receipts.try_take(&tx.hash())?;
-            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
-            let execution = self.execute_in_evm(evm_input).await;
+            let execution = if receipt.is_success() {
+                let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
+                self.execute_in_evm(evm_input).await
+            } else {
+                let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await?;
+                let execution = Execution::from_failed_external_transaction(&block, &receipt, sender)?;
+                Ok((execution, ExecutionMetrics::default()))
+            };
 
             // handle execution result
             match execution {
