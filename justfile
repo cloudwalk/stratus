@@ -70,7 +70,7 @@ lint:
 lint-check nightly-version="":
     @just _lint "{{nightly-version}}" --check "-D warnings"
 
-# Stratus: Check for outdated crates
+# Stratus: Check for dependencies major updates
 outdated:
     @just _outdated
 
