@@ -311,17 +311,21 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let state_lock = self.lock_read().await;
+        let result: Option<_> = sqlx::query!(
+            r#"
+            SELECT transaction_data
+            FROM neo_transactions
+            WHERE hash = $1
+        "#,
+            hash as _
+        )
+        .fetch_optional(&*self.pool)
+        .await
+        .context("failed to select tx")?;
 
-        match state_lock.transactions.get(hash) {
-            Some(transaction) => {
-                tracing::trace!(%hash, "transaction found");
-                Ok(Some(transaction.clone()))
-            }
-            None => {
-                tracing::trace!(%hash, "transaction not found");
-                Ok(None)
-            }
+        match result {
+            Some(record) => Ok(Some(serde_json::from_value(record.transaction_data)?)),
+            _ => Ok(None),
         }
     }
 
