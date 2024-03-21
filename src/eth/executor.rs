@@ -10,12 +10,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::anyhow;
-<<<<<<< HEAD
 use ethereum_types::U64;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
-=======
->>>>>>> main
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -135,13 +132,8 @@ impl EthExecutor {
                     };
 
                     // temporarily save state to next transactions from the same block
-<<<<<<< HEAD
-                    self.storage.save_account_changes_to_temp(execution.clone()).await?;
-                    executions.push((tx, receipt, execution.clone()));
-=======
                     self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
-                    executions.push((tx, receipt, execution));
->>>>>>> main
+                    executions.push((tx, receipt, execution.clone()));
 
                     // track metrics
                     metrics::inc_executor_external_transaction(tx_start.elapsed());

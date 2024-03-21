@@ -265,7 +265,8 @@ impl PermanentStorage for HybridPermanentStorage {
                 SELECT address as "address: _",
                     nonce as "nonce: _",
                     balance as "balance: _",
-                    bytecode as "bytecode: _"
+                    bytecode as "bytecode: _",
+                    code_hash as "code_hash: _"
                 FROM neo_accounts
                 WHERE address = $1
                 AND block_number = (SELECT MAX(block_number)
@@ -411,6 +412,7 @@ impl PermanentStorage for HybridPermanentStorage {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
+                    code_hash: account.code_hash.clone(),
                     slots: HashMap::new(),
                 },
             );

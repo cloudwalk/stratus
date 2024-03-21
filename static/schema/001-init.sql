@@ -1,3 +1,4 @@
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -8,13 +9,6 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
-
---
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
--- *not* creating schema, since initdb creates it
-
 
 --
 -- Name: grant_sequence_privileges(); Type: PROCEDURE; Schema: public; Owner: -
@@ -39,23 +33,23 @@ BEGIN
                 seq.relname as seq_name,
                 seq.oid AS seq_oid,
                 tbl.oid as table_oid
-            FROM pg_class seq
-            JOIN pg_depend dep ON seq.relfilenode = dep.objid
-            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode
+            FROM pg_class seq 
+            JOIN pg_depend dep ON seq.relfilenode = dep.objid 
+            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode 
             JOIN pg_namespace nsp ON nsp.oid = seq.relnamespace
             WHERE
                 nsp.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND seq.relkind = 'S'
                 AND tbl.relkind = 'r'
         )
-        SELECT
+        SELECT 
             u.username,
             b.schema_name,
             b.seq_name
         FROM users u
         JOIN base b ON has_table_privilege(u.role_id, b.table_oid, 'INSERT')
-        WHERE
-            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE')
+        WHERE 
+            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE') 
              OR NOT has_sequence_privilege(u.role_id, b.seq_oid, 'SELECT'))
     )
     LOOP
@@ -119,6 +113,7 @@ CREATE TABLE public.accounts (
     id bigint NOT NULL,
     address bytea NOT NULL,
     bytecode bytea,
+    code_hash bytea NOT NULL,
     latest_balance numeric NOT NULL,
     latest_nonce numeric NOT NULL,
     creation_block numeric NOT NULL,
@@ -721,6 +716,13 @@ CREATE INDEX index_topics_on_block_hash_and_log_idx_and_topic_idx ON public.topi
 
 CREATE UNIQUE INDEX index_transactions_on_hash ON public.transactions USING btree (hash);
 
+
+--
+-- PostgreSQL database dump complete
+--
+
+
+
 --- XXX temporary
 CREATE TABLE public.neo_blocks (
     block_number BIGINT PRIMARY KEY,
@@ -734,25 +736,10 @@ CREATE TABLE public.neo_accounts (
     block_number BIGINT NOT NULL,
     address BYTEA NOT NULL,
     bytecode BYTEA,
-<<<<<<< HEAD
-    code_hash BYTEA NOT NULL CHECK (LENGTH(code_hash) = 32), -- if bytecode is null code_hash is hash of empty string
-    latest_balance NUMERIC NOT NULL CHECK (latest_balance >= 0),
-    latest_nonce NUMERIC NOT NULL CHECK (latest_nonce >= 0),
-    previous_balance NUMERIC CHECK (latest_balance >= 0),
-    previous_nonce NUMERIC CHECK (latest_balance >= 0),
-    creation_block  NUMERIC NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
-    PRIMARY KEY (address)
-);
-
-CREATE TABLE IF NOT EXISTS historical_balances (
-    address BYTEA NOT NULL CHECK (LENGTH(address) = 20) REFERENCES accounts (address) ON DELETE CASCADE,
-    balance NUMERIC NOT NULL CHECK (balance >= 0),
-    block_number NUMERIC NOT NULL REFERENCES blocks (number) ON DELETE CASCADE,
-=======
+    code_hash bytea NOT NULL,
     balance NUMERIC NOT NULL,
     nonce NUMERIC NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
->>>>>>> main
     PRIMARY KEY (address, block_number)
 );
 
@@ -783,88 +770,12 @@ CREATE TABLE public.neo_logs (
     PRIMARY KEY (hash, block_number, log_idx)
 );
 
---
--- PostgreSQL database dump complete
---
+-- XXX END
+
+
 
 SET search_path TO "$user", public;
 
-<<<<<<< HEAD
-CREATE TABLE IF NOT EXISTS topics (
-    topic BYTEA NOT NULL CHECK (LENGTH(topic) = 32)
-    ,transaction_hash BYTEA REFERENCES transactions(hash) NOT NULL CHECK (LENGTH(transaction_hash) = 32)
-    ,transaction_idx NUMERIC NOT NULL CHECK (transaction_idx >= 0)
-    ,log_idx NUMERIC NOT NULL CHECK (log_idx >= 0)
-    ,topic_idx NUMERIC NOT NULL CHECK (topic_idx >= 0)
-    ,block_number NUMERIC REFERENCES blocks(number) ON DELETE CASCADE NOT NULL CHECK (block_number >= 0)
-    ,block_hash BYTEA REFERENCES blocks(hash) NOT NULL CHECK (LENGTH(block_hash) = 32)
-    ,FOREIGN KEY (block_hash, log_idx) REFERENCES logs (block_hash, log_idx)
-    ,PRIMARY KEY (block_hash, log_idx, topic_idx)
-);
-
-
--- Insert genesis block and the pre-funded account on database creation. These should be
--- present in the database regardless of how stratus is started.
-
-INSERT INTO blocks(
-    number,
-    hash,
-    transactions_root,
-    gas_limit,
-    gas_used,
-    logs_bloom,
-    timestamp_in_secs,
-    parent_hash,
-    author,
-    extra_data,
-    miner,
-    difficulty,
-    receipts_root,
-    uncle_hash,
-    size,
-    state_root,
-    total_difficulty,
-    nonce,
-    created_at
-)
-VALUES (
-    0, -- number
-    decode('011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce', 'hex'), -- hash
-    decode('56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421', 'hex'), -- transactions_root
-    4294967295, -- gas_limit
-    0, -- gas_used
-    decode('00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000', 'hex'), -- logs_bloom
-    0, -- timestamp_in_secs
-    decode('0000000000000000000000000000000000000000000000000000000000000000', 'hex'), -- parent_hash
-    decode('0000000000000000000000000000000000000000', 'hex'), -- author
-    decode('', 'hex'), -- extra_data
-    decode('0000000000000000000000000000000000000000', 'hex'), -- miner
-    0, -- difficulty
-    decode('56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421', 'hex'), -- receipts_root
-    decode('1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347', 'hex'), -- uncle_hash
-    505, -- size
-    decode('c7cc35e75df400dd94a7f2a4db18729e87dacab31eacc7ab4a26b41fc5e32937', 'hex'), -- state_root
-    0, -- total_difficulty
-    decode('0000000000000000', 'hex'), -- nonce
-    current_timestamp -- created_at
-);
-
-INSERT INTO accounts (address, bytecode, code_hash, latest_balance, latest_nonce, creation_block)
-VALUES (
-    decode('F56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6', 'hex'),
-    NULL,
-    decode('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470', 'hex'), -- keccak256 of empty string
-    POWER(2, 256) - 1, -- U256 max balance
-    0,
-    0
-);
-
-INSERT INTO  historical_balances (address, balance, block_number)
-VALUES (decode('F56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6', 'hex'), POWER(2, 256) - 1, 0);
-
-INSERT INTO  historical_nonces (address, nonce, block_number)
-VALUES (decode('F56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6', 'hex'), 0, 0);
-=======
 INSERT INTO "schema_migrations" (version) VALUES
 ('20240222172433'),
 ('20240226173425'),
@@ -876,4 +787,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20240229183514'),
 ('20240229183643'),
 ('20240311224030');
->>>>>>> main
+

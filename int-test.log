@@ -1,0 +1,21 @@
+
+running 1 test
+test tests::test_execution ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 1 test
+starting tracing
+[2m2024-03-21T20:58:53.555533Z[0m [32m INFO[0m test_import_offline_snapshot ThreadId(02) started tracing
+[2m2024-03-21T20:58:53.555633Z[0m [32m INFO[0m test_import_offline_snapshot ThreadId(02) starting metrics
+[2m2024-03-21T20:58:53.556986Z[0m [32m INFO[0m test_import_offline_snapshot ThreadId(02) starting postgres container
+test test_import_offline_snapshot ... FAILED
+
+failures:
+
+failures:
+    test_import_offline_snapshot
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
