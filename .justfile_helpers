@@ -3,7 +3,7 @@ _lint version="" fmt-flag="" clippy-flag="":
     cargo +nightly{{version}} clippy --all-targets -- {{clippy-flag}}
 
 [unix]
-_outdated:
+_outdated_minors_only:
     #!/bin/bash
     mkdir -p .outdated_tmp
     cp -p Cargo.lock .outdated_tmp/Cargo.lock
@@ -18,3 +18,9 @@ _outdated:
         echo "Outdated dependencies, quiting with error code $result"
     fi
     exit $result
+
+_outdated:
+    #!/bin/bash
+    command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated; }
+    cargo outdated --root-deps-only --ignore-external-rel --exit-code=1
+    exit $?
