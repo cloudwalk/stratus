@@ -147,7 +147,13 @@ impl TemporaryStorage for SledTemporary {
     }
 
     async fn reset(&self) -> anyhow::Result<()> {
+        // reset temp
+        let mut temp_lock = self.temp.lock_write().await;
+        temp_lock.reset();
+
+        // reset sled
         self.db.clear()?;
+
         Ok(())
     }
 }
