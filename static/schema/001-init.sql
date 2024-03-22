@@ -738,7 +738,7 @@ CREATE TABLE public.neo_accounts (
     nonce NUMERIC NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (address, block_number)
-);
+) PARTITION BY RANGE (block_number);
 
 CREATE TABLE public.neo_account_slots (
     block_number BIGINT NOT NULL,
@@ -747,7 +747,34 @@ CREATE TABLE public.neo_account_slots (
     value BYTEA NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     PRIMARY KEY (account_address, slot_index, block_number)
-);
+) PARTITION BY RANGE (block_number);
+
+-- Create indexes on the parent tables
+CREATE INDEX neo_accounts_block_number_desc_idx ON public.neo_accounts (block_number DESC);
+CREATE INDEX neo_account_slots_block_number_desc_idx ON public.neo_account_slots (block_number DESC);
+
+DO $$
+DECLARE
+    start_block BIGINT := 0;
+    end_block BIGINT := 25999999; -- Start with 25M range
+    partition_suffix TEXT;
+BEGIN
+    FOR i IN 1..40 LOOP
+        partition_suffix := i::TEXT; -- Convert loop index to text for suffix
+
+        -- Create partitions for public.neo_accounts
+        EXECUTE 'CREATE TABLE public.neo_accounts_p' || partition_suffix || ' PARTITION OF public.neo_accounts FOR VALUES FROM (' || start_block || ') TO (' || end_block || ')';
+        EXECUTE 'CREATE INDEX neo_accounts_p' || partition_suffix || '_block_number_desc_idx ON public.neo_accounts_p' || partition_suffix || ' (block_number DESC)';
+
+        -- Create partitions for public.neo_account_slots
+        EXECUTE 'CREATE TABLE public.neo_account_slots_p' || partition_suffix || ' PARTITION OF public.neo_account_slots FOR VALUES FROM (' || start_block || ') TO (' || end_block || ')';
+        EXECUTE 'CREATE INDEX neo_account_slots_p' || partition_suffix || '_block_number_desc_idx ON public.neo_account_slots_p' || partition_suffix || ' (block_number DESC)';
+
+        -- Update range for the next partition, incrementing by 5M each time
+        start_block := end_block + 1;
+        end_block := end_block + 5000000; -- Increment by 5M
+    END LOOP;
+END$$;
 
 CREATE TABLE public.neo_transactions (
     block_number BIGINT NOT NULL,
