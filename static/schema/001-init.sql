@@ -756,10 +756,10 @@ CREATE INDEX neo_account_slots_block_number_desc_idx ON public.neo_account_slots
 DO $$
 DECLARE
     start_block BIGINT := 0;
-    end_block BIGINT := 25999999; -- Start with 25M range
+    end_block BIGINT := 30999999;
     partition_suffix TEXT;
 BEGIN
-    FOR i IN 1..40 LOOP
+    FOR i IN 1..7 LOOP -- this will create partitions until 72M blocks
         partition_suffix := i::TEXT; -- Convert loop index to text for suffix
 
         -- Create partitions for public.neo_accounts
@@ -772,7 +772,7 @@ BEGIN
 
         -- Update range for the next partition, incrementing by 5M each time
         start_block := end_block + 1;
-        end_block := end_block + 5000000; -- Increment by 5M
+        end_block := end_block + 7862400; -- Increment by a quarter considering 1 block = 1 second
     END LOOP;
 END$$;
 
