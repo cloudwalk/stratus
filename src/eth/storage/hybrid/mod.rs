@@ -337,7 +337,7 @@ impl PermanentStorage for HybridPermanentStorage {
                     Some(record) => {
                         tracing::trace!(%hash, "transaction found in postgres");
                         Ok(Some(serde_json::from_value(record.transaction_data)?))
-                    },
+                    }
                     _ => {
                         tracing::trace!(%hash, "transaction not found");
                         Ok(None)
