@@ -31,6 +31,12 @@ jobs:
           asdf install nodejs 20.10.0
           asdf global nodejs 20.10.0
 
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.7.3
+        with:
+          cache-all-crates: "true"
+          shared-key: ${{ runner.os }}-full
+
       - name: Set up Test Dependencies
         run: |
           cargo install killport
