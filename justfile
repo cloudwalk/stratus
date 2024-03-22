@@ -11,7 +11,7 @@ perm_storage         := env("PERM_STORAGE", "inmemory")
 temp_storage         := env("TEMP_STORAGE", "inmemory")
 
 # Other default values.
-wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "500")
+wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "800")
 
 # Project: Show available tasks
 default:
