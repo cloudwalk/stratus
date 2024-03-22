@@ -17,6 +17,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
@@ -59,10 +60,10 @@ struct SlotRow {
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct HybridStorageState {
     pub accounts: HashMap<Address, AccountInfo>,
-    pub transactions: HashMap<Hash, TransactionMined>,
+    pub transactions: IndexMap<Hash, TransactionMined>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
-    pub logs: Vec<LogMined>,
+    pub logs: IndexMap<(Hash, Index), LogMined>,
 }
 
 impl HybridStorageState {

@@ -9,6 +9,7 @@ use std::time::Duration;
 use anyhow::anyhow;
 use anyhow::Context;
 use async_trait::async_trait;
+use itertools::Itertools;
 use metrics::atomics::AtomicU64;
 use num_traits::cast::ToPrimitive;
 use sqlx::postgres::PgPoolOptions;
@@ -289,6 +290,7 @@ impl PermanentStorage for HybridPermanentStorage {
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+        // TODO read from pg if not in memory
         tracing::debug!(?selection, "reading block");
 
         let state_lock = self.lock_read().await;
@@ -312,26 +314,55 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let result: Option<_> = sqlx::query!(
-            r#"
-            SELECT transaction_data
-            FROM neo_transactions
-            WHERE hash = $1
-        "#,
-            hash as _
-        )
-        .fetch_optional(&*self.pool)
-        .await
-        .context("failed to select tx")?;
+        let state_lock = self.lock_read().await;
 
-        match result {
-            Some(record) => Ok(Some(serde_json::from_value(record.transaction_data)?)),
-            _ => Ok(None),
+        match state_lock.transactions.get(hash) {
+            Some(transaction) => {
+                tracing::trace!(%hash, "transaction found in memory");
+                Ok(Some(transaction.clone()))
+            }
+            None => {
+                let result = sqlx::query!(
+                    r#"
+                    SELECT transaction_data
+                    FROM neo_transactions
+                    WHERE hash = $1
+                "#,
+                    hash as _
+                )
+                .fetch_optional(&*self.pool)
+                .await
+                .context("failed to select tx")?;
+
+                match result {
+                    Some(record) => {
+                        tracing::trace!(%hash, "transaction found in postgres");
+                        Ok(Some(serde_json::from_value(record.transaction_data)?))
+                    }
+                    _ => {
+                        tracing::trace!(%hash, "transaction not found");
+                        Ok(None)
+                    }
+                }
+            }
         }
     }
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
+
+        let state_lock = self.lock_read().await;
+
+        let logs = state_lock
+            .logs
+            .values()
+            .skip_while(|log| log.block_number < filter.from_block)
+            .take_while(|log| match filter.to_block {
+                Some(to_block) => log.block_number <= to_block,
+                None => true,
+            })
+            .filter(|log| filter.matches(log))
+            .cloned();
 
         let log_query_builder = &mut QueryBuilder::new(
             r#"
@@ -361,6 +392,8 @@ impl PermanentStorage for HybridPermanentStorage {
                 json.0
             })
             .filter(|log| filter.matches(log))
+            .chain(logs) // we chain the iterators because it might be the case that some logs are yet to be written to pg
+            .unique_by(|log| (log.block_number, log.log_index, log.transaction_hash.clone()))
             .collect();
 
         Ok(pg_logs)
@@ -375,11 +408,22 @@ impl PermanentStorage for HybridPermanentStorage {
             return Err(StorageError::Conflict(conflicts));
         }
 
+        for transaction in block.transactions.clone() {
+            state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
+            for log in transaction.logs {
+                state.logs.insert((transaction.input.hash.clone(), log.log_index), log.clone());
+            }
+        }
+
         // save block
         let block = Arc::new(block);
         let number = block.number();
-        state.blocks_by_number.truncate(600);
         state.blocks_by_number.insert(*number, Arc::clone(&block));
+        state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
+        state.blocks_by_hash.truncate(600); // XXX base this on the blocks that have already been commited to pg.
+        state.blocks_by_number.truncate(600); // XXX base this on the blocks that have already been commited to pg.
+        state.transactions.truncate(10000); // XXX base this on the blocks that have already been commited to pg.
+        state.logs.truncate(10000); // XXX base this on the blocks that have already been commited to pg.
 
         //XXX deal with errors later
         let _ = state.update_state_with_execution_changes(&account_changes).await;
@@ -458,7 +502,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
         // remove transactions and logs
         state.transactions.retain(|_, t| t.block_number <= block_number);
-        state.logs.retain(|l| l.block_number <= block_number);
+        state.logs.retain(|_, l| l.block_number <= block_number);
 
         let _ = self.tasks_pending.lock().await;
 
