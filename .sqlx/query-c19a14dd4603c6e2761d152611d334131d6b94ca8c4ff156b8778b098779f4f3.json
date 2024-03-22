@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\nSELECT\n    address as \"address: _\",\n    latest_nonce as \"nonce: _\",\n    latest_balance as \"balance: _\",\n    bytecode as \"bytecode: _\"\nFROM accounts\nWHERE address = $1\n",
+  "query": "\nSELECT\n    address as \"address: _\",\n    latest_nonce as \"nonce: _\",\n    latest_balance as \"balance: _\",\n    bytecode as \"bytecode: _\",\n    code_hash as \"code_hash: _\"\nFROM accounts\nWHERE address = $1\n",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "bytecode: _",
         "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "code_hash: _",
+        "type_info": "Bytea"
       }
     ],
     "parameters": {
@@ -33,8 +38,9 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "bde1babafe65c7aa3155b7bcf487ebfb9f5cc60335f6d5ec2e0bc8f5d0ac3c8a"
+  "hash": "c19a14dd4603c6e2761d152611d334131d6b94ca8c4ff156b8778b098779f4f3"
 }

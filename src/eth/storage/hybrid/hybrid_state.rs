@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use indexmap::IndexMap;
+use revm::primitives::KECCAK_EMPTY;
 use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
@@ -13,6 +14,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
@@ -35,6 +37,7 @@ pub struct AccountInfo {
     pub balance: Wei,
     pub nonce: Nonce,
     pub bytecode: Option<Bytes>,
+    pub code_hash: CodeHash,
     pub slots: HashMap<SlotIndex, SlotInfo>,
 }
 
@@ -44,6 +47,7 @@ struct AccountRow {
     nonce: Option<BigDecimal>,
     balance: Option<BigDecimal>,
     bytecode: Option<Vec<u8>>,
+    code_hash: CodeHash,
 }
 
 #[derive(FromRow)]
@@ -73,7 +77,8 @@ impl HybridStorageState {
                 address,
                 nonce,
                 balance,
-                bytecode
+                bytecode,
+                code_hash
             FROM
                 neo_accounts
             ORDER BY
@@ -94,6 +99,7 @@ impl HybridStorageState {
                     balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
                     nonce: account_row.nonce.map(|n| n.try_into().unwrap_or_default()).unwrap_or_default(),
                     bytecode: account_row.bytecode.map(Bytes::from),
+                    code_hash: account_row.code_hash,
                     slots: HashMap::new(),
                 },
             );
@@ -144,6 +150,7 @@ impl HybridStorageState {
                 balance: Wei::ZERO, // Initialize with default values.
                 nonce: Nonce::ZERO,
                 bytecode: None,
+                code_hash: KECCAK_EMPTY.into(),
                 slots: HashMap::new(),
             });
 
@@ -219,6 +226,7 @@ impl AccountInfo {
                 nonce: self.nonce.clone(),
                 balance: self.balance.clone(),
                 bytecode: self.bytecode.clone(),
+                code_hash: self.code_hash.clone(),
             },
             StoragePointInTime::Past(_number) => Account::default(),
         }

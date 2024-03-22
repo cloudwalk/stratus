@@ -10,10 +10,10 @@
 
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
-use revm::primitives::KECCAK_EMPTY;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
@@ -32,6 +32,9 @@ pub struct Account {
 
     /// Contract bytecode. Present only if the account is a contract.
     pub bytecode: Option<Bytes>,
+
+    /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
+    pub code_hash: CodeHash,
 }
 
 impl Account {
@@ -47,6 +50,7 @@ impl Account {
             nonce: Nonce::ZERO,
             balance,
             bytecode: None,
+            code_hash: CodeHash::default(),
         }
     }
 
@@ -76,6 +80,7 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             nonce: value.1.nonce.into(),
             balance: value.1.balance.into(),
             bytecode: value.1.code.map_into(),
+            code_hash: value.1.code_hash.into(),
         }
     }
 }
@@ -83,12 +88,13 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+
 impl From<Account> for RevmAccountInfo {
     fn from(value: Account) -> Self {
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash: KECCAK_EMPTY,
+            code_hash: value.code_hash.inner().0.into(),
             code: value.bytecode.map_into(),
         }
     }

@@ -592,6 +592,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 block.header.number,
                 original_nonce,
                 original_balance,
+                change.code_hash,
             );
 
             if let Some(balance) = new_balance {
@@ -684,6 +685,7 @@ impl PermanentStorage for PostgresPermanentStorage {
             account_batch.block_number as _,
             account_batch.original_balance as _,
             account_batch.original_nonce as _,
+            account_batch.code_hash as _,
             slot_batch.index as _,
             slot_batch.value as _,
             slot_batch.address as _,
@@ -748,6 +750,7 @@ impl PermanentStorage for PostgresPermanentStorage {
             let balance = BigDecimal::try_from(acc.balance)?;
             let nonce = BigDecimal::try_from(acc.nonce)?;
             let bytecode = acc.bytecode.as_deref();
+            let code_hash: &[u8] = acc.code_hash.as_ref();
 
             sqlx::query_file!(
                 "src/eth/storage/postgres_permanent/sql/insert_account.sql",
@@ -755,9 +758,10 @@ impl PermanentStorage for PostgresPermanentStorage {
                 nonce,
                 balance,
                 bytecode,
+                code_hash,
                 block_number as _,
                 BigDecimal::from(0),
-                BigDecimal::from(0)
+                BigDecimal::from(0),
             )
             .execute(&mut *tx)
             .await

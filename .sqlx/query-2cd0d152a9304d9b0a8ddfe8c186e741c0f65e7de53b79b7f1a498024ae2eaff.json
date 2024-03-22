@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT address as \"address: _\",\n                    nonce as \"nonce: _\",\n                    balance as \"balance: _\",\n                    bytecode as \"bytecode: _\",\n                    code_hash as \"code_hash: _\"\n                FROM neo_accounts\n                WHERE address = $1\n                AND block_number = (SELECT MAX(block_number)\n                                        FROM historical_slots\n                                        WHERE address = $1\n                                        AND block_number <= $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "address: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "nonce: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "balance: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "bytecode: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "code_hash: _",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "2cd0d152a9304d9b0a8ddfe8c186e741c0f65e7de53b79b7f1a498024ae2eaff"
+}
