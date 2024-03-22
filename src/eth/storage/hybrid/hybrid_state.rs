@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Context;
+use indexmap::IndexMap;
+use revm::primitives::KECCAK_EMPTY;
 use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
@@ -9,32 +11,34 @@ use sqlx::Postgres;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::Hash;
+use crate::eth::primitives::Index;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 
-#[derive(Debug)]
-struct SlotInfo {
-    value: SlotValue,
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct SlotInfo {
+    pub value: SlotValue,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AccountInfo {
-    balance: Wei,
-    nonce: Nonce,
-    bytecode: Option<Bytes>,
-    slots: HashMap<SlotIndex, SlotInfo>,
-}
-
-#[derive(Debug)]
-pub struct HybridHistory {
-    pub hybrid_accounts_slots: HashMap<Address, AccountInfo>,
-    pool: Arc<Pool<Postgres>>,
+    pub balance: Wei,
+    pub nonce: Nonce,
+    pub bytecode: Option<Bytes>,
+    pub code_hash: CodeHash,
+    pub slots: HashMap<SlotIndex, SlotInfo>,
 }
 
 #[derive(FromRow)]
@@ -43,6 +47,7 @@ struct AccountRow {
     nonce: Option<BigDecimal>,
     balance: Option<BigDecimal>,
     bytecode: Option<Vec<u8>>,
+    code_hash: CodeHash,
 }
 
 #[derive(FromRow)]
@@ -52,22 +57,19 @@ struct SlotRow {
     value: Option<Vec<u8>>,
 }
 
-impl HybridHistory {
-    pub async fn new(pool: Arc<Pool<Postgres>>) -> Result<Self, sqlx::Error> {
-        // Initialize the structure
-        let mut history = HybridHistory {
-            hybrid_accounts_slots: HashMap::new(),
-            pool,
-        };
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct HybridStorageState {
+    pub accounts: HashMap<Address, AccountInfo>,
+    pub transactions: IndexMap<Hash, TransactionMined>,
+    pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
+    pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
+    pub logs: IndexMap<(Hash, Index), LogMined>,
+}
 
-        history.load_latest_data().await?;
-
-        Ok(history)
-    }
-
+impl HybridStorageState {
     //XXX TODO use a fixed block_number during load, in order to avoid sync problem
     // e.g other instance moving forward and this query getting incongruous data
-    async fn load_latest_data(&mut self) -> Result<(), sqlx::Error> {
+    pub async fn load_latest_data(&mut self, pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
         let account_rows = sqlx::query_as!(
             AccountRow,
             "
@@ -75,7 +77,8 @@ impl HybridHistory {
                 address,
                 nonce,
                 balance,
-                bytecode
+                bytecode,
+                code_hash
             FROM
                 neo_accounts
             ORDER BY
@@ -83,7 +86,7 @@ impl HybridHistory {
                 block_number DESC
             "
         )
-        .fetch_all(&*self.pool)
+        .fetch_all(pool)
         .await?;
 
         let mut accounts: HashMap<Address, AccountInfo> = HashMap::new();
@@ -96,6 +99,7 @@ impl HybridHistory {
                     balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
                     nonce: account_row.nonce.map(|n| n.try_into().unwrap_or_default()).unwrap_or_default(),
                     bytecode: account_row.bytecode.map(Bytes::from),
+                    code_hash: account_row.code_hash,
                     slots: HashMap::new(),
                 },
             );
@@ -117,7 +121,7 @@ impl HybridHistory {
                 block_number DESC
             "
         )
-        .fetch_all(&*self.pool)
+        .fetch_all(pool)
         .await?;
 
         for slot_row in slot_rows {
@@ -132,7 +136,7 @@ impl HybridHistory {
             }
         }
 
-        self.hybrid_accounts_slots = accounts;
+        self.accounts = accounts;
 
         Ok(())
     }
@@ -142,10 +146,11 @@ impl HybridHistory {
         for change in changes {
             let address = change.address.clone(); // Assuming Address is cloneable and the correct type.
 
-            let account_info_entry = self.hybrid_accounts_slots.entry(address).or_insert_with(|| AccountInfo {
+            let account_info_entry = self.accounts.entry(address).or_insert_with(|| AccountInfo {
                 balance: Wei::ZERO, // Initialize with default values.
                 nonce: Nonce::ZERO,
                 bytecode: None,
+                code_hash: KECCAK_EMPTY.into(),
                 slots: HashMap::new(),
             });
 
@@ -171,9 +176,15 @@ impl HybridHistory {
         Ok(())
     }
 
-    pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    pub async fn get_slot_at_point(
+        &self,
+        address: &Address,
+        slot_index: &SlotIndex,
+        point_in_time: &StoragePointInTime,
+        pool: &Pool<Postgres>,
+    ) -> anyhow::Result<Option<Slot>> {
         let slot = match point_in_time {
-            StoragePointInTime::Present => self.hybrid_accounts_slots.get(address).map(|account_info| {
+            StoragePointInTime::Present => self.accounts.get(address).map(|account_info| {
                 let value = account_info.slots.get(slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
                 Slot {
                     index: slot_index.clone(),
@@ -199,7 +210,7 @@ impl HybridHistory {
                 slot_index as _,
                 number as _
             )
-            .fetch_optional(&*self.pool)
+            .fetch_optional(pool)
             .await
             .context("failed to select slot")?,
         };
@@ -215,6 +226,7 @@ impl AccountInfo {
                 nonce: self.nonce.clone(),
                 balance: self.balance.clone(),
                 bytecode: self.bytecode.clone(),
+                code_hash: self.code_hash.clone(),
             },
             StoragePointInTime::Past(_number) => Account::default(),
         }

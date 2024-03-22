@@ -1,3 +1,4 @@
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -8,13 +9,6 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
-
---
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
--- *not* creating schema, since initdb creates it
-
 
 --
 -- Name: grant_sequence_privileges(); Type: PROCEDURE; Schema: public; Owner: -
@@ -39,23 +33,23 @@ BEGIN
                 seq.relname as seq_name,
                 seq.oid AS seq_oid,
                 tbl.oid as table_oid
-            FROM pg_class seq
-            JOIN pg_depend dep ON seq.relfilenode = dep.objid
-            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode
+            FROM pg_class seq 
+            JOIN pg_depend dep ON seq.relfilenode = dep.objid 
+            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode 
             JOIN pg_namespace nsp ON nsp.oid = seq.relnamespace
             WHERE
                 nsp.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND seq.relkind = 'S'
                 AND tbl.relkind = 'r'
         )
-        SELECT
+        SELECT 
             u.username,
             b.schema_name,
             b.seq_name
         FROM users u
         JOIN base b ON has_table_privilege(u.role_id, b.table_oid, 'INSERT')
-        WHERE
-            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE')
+        WHERE 
+            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE') 
              OR NOT has_sequence_privilege(u.role_id, b.seq_oid, 'SELECT'))
     )
     LOOP
@@ -119,6 +113,7 @@ CREATE TABLE public.accounts (
     id bigint NOT NULL,
     address bytea NOT NULL,
     bytecode bytea,
+    code_hash bytea NOT NULL,
     latest_balance numeric NOT NULL,
     latest_nonce numeric NOT NULL,
     creation_block numeric NOT NULL,
@@ -721,6 +716,13 @@ CREATE INDEX index_topics_on_block_hash_and_log_idx_and_topic_idx ON public.topi
 
 CREATE UNIQUE INDEX index_transactions_on_hash ON public.transactions USING btree (hash);
 
+
+--
+-- PostgreSQL database dump complete
+--
+
+
+
 --- XXX temporary
 CREATE TABLE public.neo_blocks (
     block_number BIGINT PRIMARY KEY,
@@ -734,12 +736,12 @@ CREATE TABLE public.neo_accounts (
     block_number BIGINT NOT NULL,
     address BYTEA NOT NULL,
     bytecode BYTEA,
-    balance NUMERIC(38, 0),
-    nonce NUMERIC,
+    code_hash bytea NOT NULL,
+    balance NUMERIC NOT NULL,
+    nonce NUMERIC NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (address, block_number),
-    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
-);
+    PRIMARY KEY (address, block_number)
+) PARTITION BY RANGE (block_number);
 
 CREATE TABLE public.neo_account_slots (
     block_number BIGINT NOT NULL,
@@ -747,17 +749,42 @@ CREATE TABLE public.neo_account_slots (
     account_address BYTEA NOT NULL,
     value BYTEA NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (account_address, slot_index, block_number),
-    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
-);
+    PRIMARY KEY (account_address, slot_index, block_number)
+) PARTITION BY RANGE (block_number);
+
+-- Create indexes on the parent tables
+CREATE INDEX neo_accounts_block_number_desc_idx ON public.neo_accounts (block_number DESC);
+CREATE INDEX neo_account_slots_block_number_desc_idx ON public.neo_account_slots (block_number DESC);
+
+DO $$
+DECLARE
+    start_block BIGINT := 0;
+    end_block BIGINT := 30999999;
+    partition_suffix TEXT;
+BEGIN
+    FOR i IN 1..7 LOOP -- this will create partitions until 72M blocks
+        partition_suffix := i::TEXT; -- Convert loop index to text for suffix
+
+        -- Create partitions for public.neo_accounts
+        EXECUTE 'CREATE TABLE public.neo_accounts_p' || partition_suffix || ' PARTITION OF public.neo_accounts FOR VALUES FROM (' || start_block || ') TO (' || end_block || ')';
+        EXECUTE 'CREATE INDEX neo_accounts_p' || partition_suffix || '_block_number_desc_idx ON public.neo_accounts_p' || partition_suffix || ' (block_number DESC)';
+
+        -- Create partitions for public.neo_account_slots
+        EXECUTE 'CREATE TABLE public.neo_account_slots_p' || partition_suffix || ' PARTITION OF public.neo_account_slots FOR VALUES FROM (' || start_block || ') TO (' || end_block || ')';
+        EXECUTE 'CREATE INDEX neo_account_slots_p' || partition_suffix || '_block_number_desc_idx ON public.neo_account_slots_p' || partition_suffix || ' (block_number DESC)';
+
+        -- Update range for the next partition, incrementing by 5M each time
+        start_block := end_block + 1;
+        end_block := end_block + 7862400; -- Increment by a quarter considering 1 block = 1 second
+    END LOOP;
+END$$;
 
 CREATE TABLE public.neo_transactions (
     block_number BIGINT NOT NULL,
     hash BYTEA NOT NULL,
     transaction_data JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (hash),
-    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
+    PRIMARY KEY (hash)
 );
 
 CREATE TABLE public.neo_logs (
@@ -767,13 +794,12 @@ CREATE TABLE public.neo_logs (
     log_idx numeric NOT NULL,
     log_data JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (hash, block_number, log_idx),
-    FOREIGN KEY (block_number) REFERENCES public.neo_blocks(block_number)
+    PRIMARY KEY (hash, block_number, log_idx)
 );
 
---
--- PostgreSQL database dump complete
---
+-- XXX END
+
+
 
 SET search_path TO "$user", public;
 
@@ -788,3 +814,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20240229183514'),
 ('20240229183643'),
 ('20240311224030');
+

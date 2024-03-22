@@ -6,6 +6,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
+use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::EcdsaRs;
 use crate::eth::primitives::EcdsaV;
 use crate::eth::primitives::Execution;
@@ -63,6 +64,7 @@ impl PostgresTransaction {
             logs: inner_logs,
             // TODO: do this correctly
             changes: vec![],
+            execution_costs_applied: true,
         };
         let input = TransactionInput {
             chain_id: ChainId::default(),
@@ -246,6 +248,7 @@ pub struct AccountBatch {
     pub block_number: Vec<BlockNumber>,
     pub original_nonce: Vec<Nonce>,
     pub original_balance: Vec<Wei>,
+    pub code_hash: Vec<CodeHash>,
 }
 
 impl AccountBatch {
@@ -259,6 +262,7 @@ impl AccountBatch {
         block_number: BlockNumber,
         original_nonce: Nonce,
         original_balance: Wei,
+        code_hash: CodeHash,
     ) {
         self.address.push(address);
         self.new_nonce.push(new_nonce);
@@ -267,6 +271,7 @@ impl AccountBatch {
         self.block_number.push(block_number);
         self.original_nonce.push(original_nonce);
         self.original_balance.push(original_balance);
+        self.code_hash.push(code_hash);
     }
 }
 

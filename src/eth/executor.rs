@@ -5,6 +5,7 @@
 //! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
+use std::io::Write;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -16,6 +17,7 @@ use tokio::sync::Mutex;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionMetrics;
@@ -25,6 +27,7 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -99,10 +102,16 @@ impl EthExecutor {
         for tx in block.transactions.clone() {
             let tx_start = Instant::now();
 
-            // re-execute transaction
+            // re-execute transaction or create a fake execution the external transaction failed
             let receipt = receipts.try_take(&tx.hash())?;
-            let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
-            let execution = self.execute_in_evm(evm_input).await;
+            let execution = if receipt.is_success() {
+                let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
+                self.execute_in_evm(evm_input).await
+            } else {
+                let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await?;
+                let execution = Execution::from_failed_external_transaction(&block, &receipt, sender)?;
+                Ok((execution, ExecutionMetrics::default()))
+            };
 
             // handle execution result
             match execution {
@@ -121,7 +130,7 @@ impl EthExecutor {
 
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
-                    executions.push((tx, receipt, execution));
+                    executions.push((tx, receipt, execution.clone()));
 
                     // track metrics
                     metrics::inc_executor_external_transaction(tx_start.elapsed());
@@ -139,6 +148,15 @@ impl EthExecutor {
 
         // convert block
         let block = Block::from_external(block, executions)?;
+
+        let block_changes = block.compact_account_changes();
+
+        if *block.number() == BlockNumber::from(292973) {
+            let state = InMemoryPermanentStorage::dump_snapshot(block_changes).await;
+            let state_string = serde_json::to_string(&state)?;
+            let mut file = std::fs::File::create("tests/fixtures/block-292973/snapshot.json")?;
+            file.write_all(state_string.as_bytes())?;
+        };
 
         // track metrics
         metrics::inc_executor_external_block(start.elapsed());

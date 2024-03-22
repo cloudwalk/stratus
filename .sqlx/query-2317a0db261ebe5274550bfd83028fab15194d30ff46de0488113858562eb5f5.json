@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT DISTINCT ON (address)\n                address,\n                nonce,\n                balance,\n                bytecode\n            FROM\n                neo_accounts\n            ORDER BY\n                address,\n                block_number DESC\n            ",
+  "query": "\n            SELECT DISTINCT ON (address)\n                address,\n                nonce,\n                balance,\n                bytecode,\n                code_hash\n            FROM\n                neo_accounts\n            ORDER BY\n                address,\n                block_number DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "bytecode",
         "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "code_hash",
+        "type_info": "Bytea"
       }
     ],
     "parameters": {
@@ -29,10 +34,11 @@
     },
     "nullable": [
       false,
+      false,
+      false,
       true,
-      true,
-      true
+      false
     ]
   },
-  "hash": "edae8a7534d957fb6f727f9222299b258a4c96059ab55cd6af5477502acd2265"
+  "hash": "2317a0db261ebe5274550bfd83028fab15194d30ff46de0488113858562eb5f5"
 }
