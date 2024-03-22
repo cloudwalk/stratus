@@ -1,5 +1,5 @@
-INSERT INTO accounts (address, latest_nonce, latest_balance, bytecode, creation_block, previous_balance, previous_nonce)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO accounts (address, latest_nonce, latest_balance, bytecode, code_hash, creation_block, previous_balance, previous_nonce)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (address) DO
 UPDATE
 SET latest_nonce = EXCLUDED.latest_nonce,

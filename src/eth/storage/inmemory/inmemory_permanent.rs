@@ -20,6 +20,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
@@ -438,6 +439,7 @@ pub struct InMemoryPermanentAccount {
     pub balance: InMemoryHistory<Wei>,
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
+    pub code_hash: CodeHash,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
@@ -454,6 +456,7 @@ impl InMemoryPermanentAccount {
             balance: InMemoryHistory::new_at_zero(balance),
             nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
             bytecode: InMemoryHistory::new_at_zero(None),
+            code_hash: CodeHash::default(),
             slots: Default::default(),
         }
     }
@@ -487,6 +490,7 @@ impl InMemoryPermanentAccount {
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
+            code_hash: self.code_hash.clone(),
         }
     }
 }
