@@ -10,9 +10,6 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::anyhow;
-use ethereum_types::U64;
-use nonempty::NonEmpty;
-use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;

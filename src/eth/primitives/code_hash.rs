@@ -1,5 +1,3 @@
-use std::io::Read;
-
 use ethereum_types::H256;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
