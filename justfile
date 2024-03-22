@@ -10,7 +10,7 @@ external_rpc_storage := env("EXTERNAL_RPC_STORAGE", "postgres://postgres:123@0.0
 perm_storage         := env("PERM_STORAGE", "inmemory")
 temp_storage         := env("TEMP_STORAGE", "inmemory")
 
-# Other default values.
+# The default timeout for wait-service
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "800")
 
 # Project: Show available tasks
