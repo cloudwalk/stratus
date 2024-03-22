@@ -225,7 +225,7 @@ impl AccountInfo {
                 nonce: self.nonce.clone(),
                 balance: self.balance.clone(),
                 bytecode: self.bytecode.clone(),
-                code_hash: self.code_hash.clone()
+                code_hash: self.code_hash.clone(),
             },
             StoragePointInTime::Past(_number) => Account::default(),
         }

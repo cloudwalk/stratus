@@ -157,10 +157,10 @@ impl EthExecutor {
         if *block.number() == BlockNumber::from(292973) {
             let state = InMemoryPermanentStorage::dump_snapshot(block_changes).await;
             let state_string = serde_json::to_string(&state)?;
-            let mut file = std::fs::File::create("tests/fixtures/block-292973/snapshot.json")?;  
+            let mut file = std::fs::File::create("tests/fixtures/block-292973/snapshot.json")?;
             file.write_all(state_string.as_bytes())?;
         };
-        
+
         // track metrics
         metrics::inc_executor_external_block(start.elapsed());
         metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
