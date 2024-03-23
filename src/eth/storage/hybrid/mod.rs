@@ -1,6 +1,5 @@
 mod hybrid_state;
 mod query_executor;
-#[cfg(feature = "rocksdb")]
 mod rocks_db;
 
 use std::collections::HashMap;
@@ -60,7 +59,7 @@ struct BlockTask {
 
 #[derive(Debug)]
 pub struct HybridPermanentStorage {
-    state: RwLock<HybridStorageState>,
+    state: RwLock<HybridStorageState>, //XXX TODO remove RwLock when rocksdb is implemented everywhere
     pool: Arc<Pool<Postgres>>,
     block_number: AtomicU64,
     task_sender: mpsc::Sender<BlockTask>,
@@ -101,7 +100,7 @@ impl HybridPermanentStorage {
         });
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
-        let state = RwLock::new(HybridStorageState::default());
+        let state = RwLock::new(HybridStorageState::new());
         state.write().await.load_latest_data(&pool).await?;
         Ok(Self {
             state,
@@ -204,9 +203,10 @@ impl HybridPermanentStorage {
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = account.slots.get(slot_index) {
+
+                    if let Some(value) = state.account_slots.get(&(address.clone(), slot_index.clone())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = value.value.clone();
+                            let account_slot_value = value.clone();
                             if original_slot.value != account_slot_value {
                                 conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
                             }
@@ -459,7 +459,6 @@ impl PermanentStorage for HybridPermanentStorage {
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
                     code_hash: account.code_hash.clone(),
-                    slots: HashMap::new(),
                 },
             );
             accounts_changes.0.push(BlockNumber::from(0));

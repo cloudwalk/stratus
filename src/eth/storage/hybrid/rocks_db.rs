@@ -16,7 +16,7 @@ pub struct RocksDb<K, V> {
     _marker: PhantomData<(K, V)>,
 }
 
-impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de>> RocksDb<K, V> {
+impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
     pub fn new(db_path: &str) -> anyhow::Result<Self> {
         let db = Arc::new(DB::open_default(&db_path)?);
         Ok(RocksDb {
@@ -75,18 +75,9 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             Some(value) => value,
             None => {
                 let new_value = default();
-                self.insert(key, new_value);
+                self.insert(key, new_value.clone());
                 new_value
             },
         }
-    }
-
-}
-
-impl<K, V> fmt::Debug for RocksDb<K, V> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RocksDb")
-         .field("db", &"Arc<DB>")
-         .finish()
     }
 }

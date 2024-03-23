@@ -128,7 +128,7 @@ semicolon_if_nothing_returned = "warn"
 # ------------------------------------------------------------------------------
 
 [features]
-default = []
+default = ["rocks"]
 dev  = []  # Application is running in develoment mode.
 perf = []  # Application is running in performance test mode.
 rocks = ["rocksdb", "bincode"]
