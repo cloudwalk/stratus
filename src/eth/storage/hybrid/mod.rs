@@ -1,5 +1,7 @@
 mod hybrid_state;
 mod query_executor;
+#[cfg(feature = "rocksdb")]
+mod rocks_db;
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;

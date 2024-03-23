@@ -57,7 +57,7 @@ struct SlotRow {
     value: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default)]
 pub struct HybridStorageState {
     pub accounts: HashMap<Address, AccountInfo>,
     pub transactions: IndexMap<Hash, TransactionMined>,
