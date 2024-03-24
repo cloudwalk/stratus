@@ -227,7 +227,7 @@ e2e-stratus test="":
     RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
     just e2e stratus {{test}}
@@ -249,13 +249,13 @@ e2e-stratus-postgres test="":
     docker-compose up -d
 
     echo "-> Waiting Postgres to start"
-    wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
     RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage {{perm_storage}} > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
     just e2e stratus {{test}}
@@ -289,7 +289,7 @@ e2e-flamegraph:
 
     # Wait for PostgreSQL
     echo "Waiting for PostgreSQL to be ready"
-    wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
     sleep 1
 
     # Start RPC mock server
@@ -306,7 +306,7 @@ e2e-flamegraph:
 
     # Wait for RPC mock server
     echo "Waiting for RPC mock server to be ready..."
-    wait-service --tcp 0.0.0.0:3003 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:3003 -t {{ wait_service_timeout }} -- echo
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
@@ -360,7 +360,7 @@ contracts-test-stratus:
     RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E Contracts tests"
     just e2e-contracts
@@ -378,13 +378,13 @@ contracts-test-stratus-postgres:
     docker-compose up -d
 
     echo "-> Waiting Postgres to start"
-    wait-service --tcp 0.0.0.0:5432 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
     RUST_LOG=debug just run-release -a 0.0.0.0:3000 --perm-storage {{perm_storage}} > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t 300 -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
     just e2e-contracts
