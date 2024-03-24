@@ -9,6 +9,7 @@ external_rpc_url     := env("EXTERNAL_RPC_URL", "http://spec.testnet.cloudwalk.n
 external_rpc_storage := env("EXTERNAL_RPC_STORAGE", "postgres://postgres:123@0.0.0.0:5432/stratus")
 perm_storage         := env("PERM_STORAGE", "inmemory")
 temp_storage         := env("TEMP_STORAGE", "inmemory")
+wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "800")
 
 # Project: Show available tasks
 default:

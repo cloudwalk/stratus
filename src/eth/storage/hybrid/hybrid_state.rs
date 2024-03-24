@@ -1,7 +1,6 @@
-use std::collections::HashMap;
+use core::fmt;
 use std::sync::Arc;
 
-use core::fmt;
 use anyhow::Context;
 use indexmap::IndexMap;
 use revm::primitives::KECCAK_EMPTY;
@@ -10,6 +9,7 @@ use sqlx::FromRow;
 use sqlx::Pool;
 use sqlx::Postgres;
 
+use super::rocks_db::RocksDb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -27,10 +27,6 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
-
-use super::rocks_db;
-use super::rocks_db::RocksDb;
-
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountInfo {
@@ -133,10 +129,8 @@ impl HybridStorageState {
 
         for slot_row in slot_rows {
             let addr: Address = slot_row.account_address.try_into().unwrap_or_default(); //XXX add alert
-            self.account_slots.insert(
-                (addr, slot_row.slot_index),
-                slot_row.value.unwrap_or_default().into()
-            );
+            self.account_slots
+                .insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
         }
 
         Ok(())
@@ -186,11 +180,9 @@ impl HybridStorageState {
         pool: &Pool<Postgres>,
     ) -> anyhow::Result<Option<Slot>> {
         let slot = match point_in_time {
-            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), slot_index.clone())).map(|account_slot_value| {
-                Slot {
-                    index: slot_index.clone(),
-                    value: account_slot_value.clone(),
-                }
+            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), slot_index.clone())).map(|account_slot_value| Slot {
+                index: slot_index.clone(),
+                value: account_slot_value.clone(),
             }),
             StoragePointInTime::Past(number) => sqlx::query_as!(
                 Slot,
@@ -221,9 +213,7 @@ impl HybridStorageState {
 
 impl fmt::Debug for HybridStorageState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RocksDb")
-         .field("db", &"Arc<DB>")
-         .finish()
+        f.debug_struct("RocksDb").field("db", &"Arc<DB>").finish()
     }
 }
 
