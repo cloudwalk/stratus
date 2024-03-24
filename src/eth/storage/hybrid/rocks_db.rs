@@ -33,9 +33,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     }
 
     pub fn get(&self, key: &K) -> Option<V> {
-        let Ok(serialized_key) = serde_json::to_vec(key) else {
-            return None
-        };
+        let Ok(serialized_key) = serde_json::to_vec(key) else { return None };
         let value_bytes = match self.db.get(serialized_key) {
             Ok(Some(value_bytes)) => Some(value_bytes),
             Ok(None) => None,
