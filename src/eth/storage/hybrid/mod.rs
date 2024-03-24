@@ -1,9 +1,7 @@
 mod hybrid_state;
 mod query_executor;
-#[cfg(feature = "rocksdb")]
 mod rocks_db;
 
-use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -60,7 +58,7 @@ struct BlockTask {
 
 #[derive(Debug)]
 pub struct HybridPermanentStorage {
-    state: RwLock<HybridStorageState>,
+    state: RwLock<HybridStorageState>, //XXX TODO remove RwLock when rocksdb is implemented everywhere
     pool: Arc<Pool<Postgres>>,
     block_number: AtomicU64,
     task_sender: mpsc::Sender<BlockTask>,
@@ -101,7 +99,7 @@ impl HybridPermanentStorage {
         });
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
-        let state = RwLock::new(HybridStorageState::default());
+        let state = RwLock::new(HybridStorageState::new());
         state.write().await.load_latest_data(&pool).await?;
         Ok(Self {
             state,
@@ -175,7 +173,7 @@ impl HybridPermanentStorage {
     /// Clears in-memory state.
     pub async fn clear(&self) {
         let mut state = self.lock_write().await;
-        state.accounts.clear();
+        let _ = state.accounts.clear();
         state.transactions.clear();
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
@@ -204,9 +202,9 @@ impl HybridPermanentStorage {
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = account.slots.get(slot_index) {
+                    if let Some(value) = state.account_slots.get(&(address.clone(), slot_index.clone())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = value.value.clone();
+                            let account_slot_value = value.clone();
                             if original_slot.value != account_slot_value {
                                 conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
                             }
@@ -449,8 +447,8 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
-        let mut state = self.state.write().await;
-        let mut accounts_changes = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let state = self.state.write().await;
+        let mut accounts_changes = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for account in accounts {
             state.accounts.insert(
                 account.address.clone(),
@@ -459,7 +457,6 @@ impl PermanentStorage for HybridPermanentStorage {
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
                     code_hash: account.code_hash.clone(),
-                    slots: HashMap::new(),
                 },
             );
             accounts_changes.0.push(BlockNumber::from(0));
@@ -467,19 +464,21 @@ impl PermanentStorage for HybridPermanentStorage {
             accounts_changes.2.push(account.bytecode);
             accounts_changes.3.push(account.balance);
             accounts_changes.4.push(account.nonce);
+            accounts_changes.5.push(account.code_hash);
         }
 
         let _ = self.tasks_pending.lock().await;
         sqlx::query!(
-            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
-            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
-            AS t(block_number, address, bytecode, balance, nonce)
+            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce, code_hash)
+            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[], $6::bytea[])
+            AS t(block_number, address, bytecode, balance, nonce, code_hash)
             ON CONFLICT (address,block_number) DO NOTHING;",
             accounts_changes.0 as _,
             accounts_changes.1 as _,
             accounts_changes.2 as _,
             accounts_changes.3 as _,
             accounts_changes.4 as _,
+            accounts_changes.5 as _,
         )
         .execute(&*self.pool)
         .await?;
@@ -524,7 +523,7 @@ impl PermanentStorage for HybridPermanentStorage {
             .execute(&*self.pool)
             .await?;
 
-        state.accounts.clear();
+        let _ = state.accounts.clear();
         state.load_latest_data(&self.pool).await?;
 
         Ok(())
