@@ -173,7 +173,7 @@ impl HybridPermanentStorage {
     /// Clears in-memory state.
     pub async fn clear(&self) {
         let mut state = self.lock_write().await;
-        state.accounts.clear();
+        let _ = state.accounts.clear();
         state.transactions.clear();
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
@@ -523,7 +523,7 @@ impl PermanentStorage for HybridPermanentStorage {
             .execute(&*self.pool)
             .await?;
 
-        state.accounts.clear();
+        let _ = state.accounts.clear();
         state.load_latest_data(&self.pool).await?;
 
         Ok(())
