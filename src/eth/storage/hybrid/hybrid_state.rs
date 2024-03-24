@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use core::fmt;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -9,6 +9,7 @@ use sqlx::FromRow;
 use sqlx::Pool;
 use sqlx::Postgres;
 
+use super::rocks_db::RocksDb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -28,17 +29,11 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
-pub struct SlotInfo {
-    pub value: SlotValue,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AccountInfo {
     pub balance: Wei,
     pub nonce: Nonce,
     pub bytecode: Option<Bytes>,
     pub code_hash: CodeHash,
-    pub slots: HashMap<SlotIndex, SlotInfo>,
 }
 
 #[derive(FromRow)]
@@ -57,9 +52,9 @@ struct SlotRow {
     value: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Default)]
 pub struct HybridStorageState {
-    pub accounts: HashMap<Address, AccountInfo>,
+    pub accounts: RocksDb<Address, AccountInfo>,
+    pub account_slots: RocksDb<(Address, SlotIndex), SlotValue>,
     pub transactions: IndexMap<Hash, TransactionMined>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
@@ -67,9 +62,20 @@ pub struct HybridStorageState {
 }
 
 impl HybridStorageState {
+    pub fn new() -> Self {
+        Self {
+            accounts: RocksDb::<Address, AccountInfo>::new("./data/accounts.rocksdb").unwrap(),
+            account_slots: RocksDb::<(Address, SlotIndex), SlotValue>::new("./data/account_slots.rocksdb").unwrap(),
+            transactions: IndexMap::new(),
+            blocks_by_number: IndexMap::new(),
+            blocks_by_hash: IndexMap::new(),
+            logs: IndexMap::new(),
+        }
+    }
+
     //XXX TODO use a fixed block_number during load, in order to avoid sync problem
     // e.g other instance moving forward and this query getting incongruous data
-    pub async fn load_latest_data(&mut self, pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
+    pub async fn load_latest_data(&mut self, pool: &Pool<Postgres>) -> anyhow::Result<()> {
         let account_rows = sqlx::query_as!(
             AccountRow,
             "
@@ -89,18 +95,15 @@ impl HybridStorageState {
         .fetch_all(pool)
         .await?;
 
-        let mut accounts: HashMap<Address, AccountInfo> = HashMap::new();
-
         for account_row in account_rows {
             let addr: Address = account_row.address.try_into().unwrap_or_default(); //XXX add alert
-            accounts.insert(
+            self.accounts.insert(
                 addr,
                 AccountInfo {
                     balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
                     nonce: account_row.nonce.map(|n| n.try_into().unwrap_or_default()).unwrap_or_default(),
                     bytecode: account_row.bytecode.map(Bytes::from),
                     code_hash: account_row.code_hash,
-                    slots: HashMap::new(),
                 },
             );
         }
@@ -125,18 +128,10 @@ impl HybridStorageState {
         .await?;
 
         for slot_row in slot_rows {
-            let addr = &slot_row.account_address.try_into().unwrap_or_default(); //XXX add alert
-            if let Some(account_info) = accounts.get_mut(addr) {
-                account_info.slots.insert(
-                    slot_row.slot_index,
-                    SlotInfo {
-                        value: slot_row.value.unwrap_or_default().into(),
-                    },
-                );
-            }
+            let addr: Address = slot_row.account_address.try_into().unwrap_or_default(); //XXX add alert
+            self.account_slots
+                .insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
         }
-
-        self.accounts = accounts;
 
         Ok(())
     }
@@ -146,12 +141,11 @@ impl HybridStorageState {
         for change in changes {
             let address = change.address.clone(); // Assuming Address is cloneable and the correct type.
 
-            let account_info_entry = self.accounts.entry(address).or_insert_with(|| AccountInfo {
+            let mut account_info_entry = self.accounts.entry_or_insert_with(address.clone(), || AccountInfo {
                 balance: Wei::ZERO, // Initialize with default values.
                 nonce: Nonce::ZERO,
                 bytecode: None,
                 code_hash: KECCAK_EMPTY.into(),
-                slots: HashMap::new(),
             });
 
             // Apply basic account info changes
@@ -165,10 +159,12 @@ impl HybridStorageState {
                 account_info_entry.bytecode = bytecode;
             }
 
+            self.accounts.insert(address.clone(), account_info_entry);
+
             // Apply slot changes
             for (slot_index, slot_change) in change.slots.clone() {
                 if let Some(slot) = slot_change.take_modified() {
-                    account_info_entry.slots.insert(slot_index, SlotInfo { value: slot.value });
+                    self.account_slots.insert((address.clone(), slot_index), slot.value);
                 }
             }
         }
@@ -184,12 +180,9 @@ impl HybridStorageState {
         pool: &Pool<Postgres>,
     ) -> anyhow::Result<Option<Slot>> {
         let slot = match point_in_time {
-            StoragePointInTime::Present => self.accounts.get(address).map(|account_info| {
-                let value = account_info.slots.get(slot_index).map(|slot_info| slot_info.value.clone()).unwrap_or_default();
-                Slot {
-                    index: slot_index.clone(),
-                    value,
-                }
+            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), slot_index.clone())).map(|account_slot_value| Slot {
+                index: slot_index.clone(),
+                value: account_slot_value.clone(),
             }),
             StoragePointInTime::Past(number) => sqlx::query_as!(
                 Slot,
@@ -215,6 +208,12 @@ impl HybridStorageState {
             .context("failed to select slot")?,
         };
         Ok(slot)
+    }
+}
+
+impl fmt::Debug for HybridStorageState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RocksDb").field("db", &"Arc<DB>").finish()
     }
 }
 
