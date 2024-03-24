@@ -450,7 +450,7 @@ impl PermanentStorage for HybridPermanentStorage {
         tracing::debug!(?accounts, "saving initial accounts");
 
         let mut state = self.state.write().await;
-        let mut accounts_changes = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let mut accounts_changes = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for account in accounts {
             state.accounts.insert(
                 account.address.clone(),
@@ -466,19 +466,21 @@ impl PermanentStorage for HybridPermanentStorage {
             accounts_changes.2.push(account.bytecode);
             accounts_changes.3.push(account.balance);
             accounts_changes.4.push(account.nonce);
+            accounts_changes.5.push(account.code_hash);
         }
 
         let _ = self.tasks_pending.lock().await;
         sqlx::query!(
-            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
-            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
-            AS t(block_number, address, bytecode, balance, nonce)
+            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce, code_hash)
+            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[], $6::bytea[])
+            AS t(block_number, address, bytecode, balance, nonce, code_hash)
             ON CONFLICT (address,block_number) DO NOTHING;",
             accounts_changes.0 as _,
             accounts_changes.1 as _,
             accounts_changes.2 as _,
             accounts_changes.3 as _,
             accounts_changes.4 as _,
+            accounts_changes.5 as _,
         )
         .execute(&*self.pool)
         .await?;
