@@ -139,16 +139,13 @@ impl HybridStorageState {
     /// Updates the in-memory state with changes from transaction execution.
     pub async fn update_state_with_execution_changes(&mut self, changes: &Vec<ExecutionAccountChanges>) -> anyhow::Result<(), sqlx::Error> {
         for change in changes {
-            let address = change.address.clone(); // Assuming Address is cloneable and the correct type.
-
+            let address = change.address.clone();
             let mut account_info_entry = self.accounts.entry_or_insert_with(address.clone(), || AccountInfo {
                 balance: Wei::ZERO, // Initialize with default values.
                 nonce: Nonce::ZERO,
                 bytecode: None,
                 code_hash: KECCAK_EMPTY.into(),
             });
-
-            // Apply basic account info changes
             if let Some(nonce) = change.nonce.clone().take_modified() {
                 account_info_entry.nonce = nonce;
             }
@@ -158,16 +155,19 @@ impl HybridStorageState {
             if let Some(bytecode) = change.bytecode.clone().take_modified() {
                 account_info_entry.bytecode = bytecode;
             }
-
             self.accounts.insert(address.clone(), account_info_entry);
+        }
 
-            // Apply slot changes
+        let mut slot_changes = Vec::new();
+        for change in changes {
+            let address = change.address.clone();
             for (slot_index, slot_change) in change.slots.clone() {
                 if let Some(slot) = slot_change.take_modified() {
-                    self.account_slots.insert((address.clone(), slot_index), slot.value);
+                    slot_changes.push(((address.clone(), slot_index), slot.value));
                 }
             }
         }
+        self.account_slots.insert_batch(slot_changes);
 
         Ok(())
     }
