@@ -149,8 +149,9 @@ impl EthExecutor {
         // convert block
         let block = Block::from_external(block, executions)?;
 
+        // Update block snapshot for integration testing
+        // Block 292973 from CloudWalk Network Mainnet
         let block_changes = block.compact_account_changes();
-
         if *block.number() == BlockNumber::from(292973) {
             let state = InMemoryPermanentStorage::dump_snapshot(block_changes).await;
             let state_string = serde_json::to_string(&state)?;
