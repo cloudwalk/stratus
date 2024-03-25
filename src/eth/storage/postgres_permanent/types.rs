@@ -66,7 +66,7 @@ impl PostgresTransaction {
             execution_costs_applied: true,
         };
         let input = TransactionInput {
-            chain_id: None, // TODO: chain_id should be saved in the database
+            chain_id: Some(2008u64.into()), // TODO: chain_id should be saved in the database instead of using hardcoded value
             hash: self.hash,
             nonce: self.nonce,
             signer: self.signer_address,
