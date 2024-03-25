@@ -39,7 +39,7 @@ impl Hash {
     pub fn zero() -> Self {
         Self(H256::zero())
     }
-  
+
     pub fn into_hash_partition(self) -> i16 {
         let n = self.0.to_low_u64_ne() % 10;
         n as i16

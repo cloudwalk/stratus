@@ -88,7 +88,7 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
     let mut transaction_batch = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut logs_batch = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for transaction in block_task.block_data.transactions {
-        let last_char_vec  = transaction.input.hash.clone().into_hash_partition();
+        let last_char_vec = transaction.input.hash.clone().into_hash_partition();
 
         for log in transaction.logs.iter() {
             logs_batch.0.push(transaction.block_number);
