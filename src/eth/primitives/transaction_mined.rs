@@ -84,7 +84,7 @@ impl From<TransactionMined> for EthersTransaction {
     fn from(value: TransactionMined) -> Self {
         let input = value.input;
         Self {
-            chain_id: Some(input.chain_id.into()),
+            chain_id: input.chain_id.map_into(),
             hash: input.hash.into(),
             nonce: input.nonce.into(),
             block_hash: Some(value.block_hash.into()),
