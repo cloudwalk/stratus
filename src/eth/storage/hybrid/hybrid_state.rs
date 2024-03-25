@@ -1,5 +1,6 @@
 use core::fmt;
 use std::sync::Arc;
+use tokio::join;
 
 use anyhow::Context;
 use indexmap::IndexMap;
@@ -8,6 +9,7 @@ use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
 use sqlx::Postgres;
+use tokio::sync::Mutex;
 
 use super::rocks_db::RocksDb;
 use crate::eth::primitives::Account;
@@ -136,38 +138,51 @@ impl HybridStorageState {
         Ok(())
     }
 
-    /// Updates the in-memory state with changes from transaction execution.
-    pub async fn update_state_with_execution_changes(&mut self, changes: &Vec<ExecutionAccountChanges>) -> anyhow::Result<(), sqlx::Error> {
-        for change in changes {
-            let address = change.address.clone();
-            let mut account_info_entry = self.accounts.entry_or_insert_with(address.clone(), || AccountInfo {
-                balance: Wei::ZERO, // Initialize with default values.
-                nonce: Nonce::ZERO,
-                bytecode: None,
-                code_hash: KECCAK_EMPTY.into(),
-            });
-            if let Some(nonce) = change.nonce.clone().take_modified() {
-                account_info_entry.nonce = nonce;
-            }
-            if let Some(balance) = change.balance.clone().take_modified() {
-                account_info_entry.balance = balance;
-            }
-            if let Some(bytecode) = change.bytecode.clone().take_modified() {
-                account_info_entry.bytecode = bytecode;
-            }
-            self.accounts.insert(address.clone(), account_info_entry);
-        }
+    /// Updates the in-memory state with changes from transaction execution
+    pub async fn update_state_with_execution_changes(&mut self, changes: &[ExecutionAccountChanges]) -> Result<(), sqlx::Error> {
+        // Directly capture the fields needed by each future from `self`
+        let accounts = &self.accounts;
+        let account_slots = &self.account_slots;
 
-        let mut slot_changes = Vec::new();
-        for change in changes {
-            let address = change.address.clone();
-            for (slot_index, slot_change) in change.slots.clone() {
-                if let Some(slot) = slot_change.take_modified() {
-                    slot_changes.push(((address.clone(), slot_index), slot.value));
+        let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
+        let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
+
+        let account_changes_future = async move {
+            for change in changes_clone_for_accounts {
+                let address = change.address.clone();
+                let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
+                    balance: Wei::ZERO, // Initialize with default values
+                    nonce: Nonce::ZERO,
+                    bytecode: None,
+                    code_hash: KECCAK_EMPTY.into(),
+                });
+                if let Some(nonce) = change.nonce.clone().take_modified() {
+                    account_info_entry.nonce = nonce;
+                }
+                if let Some(balance) = change.balance.clone().take_modified() {
+                    account_info_entry.balance = balance;
+                }
+                if let Some(bytecode) = change.bytecode.clone().take_modified() {
+                    account_info_entry.bytecode = bytecode;
+                }
+                accounts.insert(address.clone(), account_info_entry);
+            }
+        };
+
+        let slot_changes_future = async move {
+            let mut slot_changes = Vec::new();
+            for change in changes_clone_for_slots {
+                let address = change.address.clone();
+                for (slot_index, slot_change) in change.slots.clone() {
+                    if let Some(slot) = slot_change.take_modified() {
+                        slot_changes.push(((address.clone(), slot_index), slot.value));
+                    }
                 }
             }
-        }
-        self.account_slots.insert_batch(slot_changes);
+            account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
+        };
+
+        join!(account_changes_future, slot_changes_future);
 
         Ok(())
     }
