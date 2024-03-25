@@ -25,10 +25,11 @@ const NULL: &str = ""; // TODO: how?
 
 const ACCOUNTS_FILE: &str = "data/accounts";
 
-const ACCOUNTS_HEADERS: [&str; 10] = [
+const ACCOUNTS_HEADERS: [&str; 11] = [
     "id",
     "address",
     "bytecode",
+    "code_hash",
     "latest_balance",
     "latest_nonce",
     "creation_block",
@@ -266,6 +267,7 @@ impl CsvExporter {
                 self.accounts_id.value.to_string(),                         // id
                 to_bytea(account.address),                                  // address
                 account.bytecode.map(to_bytea).unwrap_or(NULL.to_string()), // bytecode
+                to_bytea(account.code_hash),                                // code_hash
                 account.balance.to_string(),                                // latest_balance
                 account.nonce.to_string(),                                  // latest_nonce
                 "0".to_owned(),                                             // creation_block
@@ -361,6 +363,7 @@ impl CsvExporter {
                     self.accounts_id.value.to_string(),                                                           // id
                     to_bytea(&change.address),                                                                    // address
                     change_bytecode,                                                                              // bytecode
+                    to_bytea(change.code_hash),                                                                   // code_hash
                     change.balance.take_ref().map(|x| x.to_string()).unwrap_or_default(),                         // latest_balance
                     change.nonce.take_ref().map(|x| x.to_string()).unwrap_or_default(),                           // latest_nonce
                     number.to_string().to_owned(),                                                                // creation_block
