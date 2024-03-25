@@ -5,7 +5,6 @@ use anyhow::Context;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ChainId;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::EcdsaRs;
 use crate::eth::primitives::EcdsaV;
@@ -67,7 +66,7 @@ impl PostgresTransaction {
             execution_costs_applied: true,
         };
         let input = TransactionInput {
-            chain_id: ChainId::default(),
+            chain_id: None, // TODO: chain_id should be saved in the database
             hash: self.hash,
             nonce: self.nonce,
             signer: self.signer_address,

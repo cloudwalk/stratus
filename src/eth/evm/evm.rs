@@ -107,7 +107,7 @@ impl EvmInput {
             block_number: BlockNumber::ZERO, // TODO: use number of block being mined
             block_timestamp: UnixTime::now(),
             point_in_time: StoragePointInTime::Present,
-            chain_id: Some(input.chain_id),
+            chain_id: input.chain_id,
         }
     }
 

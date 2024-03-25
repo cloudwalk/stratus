@@ -14,7 +14,7 @@ async fn test_execution() {
     let storage = config.init_stratus_storage().await.unwrap();
     let mut rng = thread_rng();
     let mut fake_transaction_input = TransactionInput::dummy_with_rng(&Faker, &mut rng);
-    fake_transaction_input.chain_id = 2008u64.into();
+    fake_transaction_input.chain_id = Some(2008u64.into());
     fake_transaction_input.nonce = 0u64.into();
     fake_transaction_input.gas_price = 0u64.into();
     fake_transaction_input.gas_limit = 0u64.into();

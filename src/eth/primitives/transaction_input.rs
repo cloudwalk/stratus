@@ -27,7 +27,10 @@ use crate::log_and_err;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
-    pub chain_id: ChainId,
+    /// TODO: Optional for external/older transactions, but it should be required for newer transactions.
+    ///
+    /// Maybe TransactionInput should be split into two structs for representing these two different requirements.
+    pub chain_id: Option<ChainId>,
     pub hash: Hash,
     pub nonce: Nonce,
     pub signer: Address,
@@ -100,12 +103,6 @@ impl TryFrom<EthersTransaction> for TransactionInput {
             }
         };
 
-        // extract chain id
-        let chain_id: ChainId = match value.chain_id {
-            Some(chain_id) => chain_id.try_into()?,
-            None => return log_and_err!("transaction without chain id is not allowed"),
-        };
-
         // extract gas price
         let gas_price: Wei = match value.gas_price {
             Some(wei) => wei.into(),
@@ -113,7 +110,10 @@ impl TryFrom<EthersTransaction> for TransactionInput {
         };
 
         Ok(Self {
-            chain_id,
+            chain_id: match value.chain_id {
+                Some(chain_id) => Some(chain_id.try_into()?),
+                None => None,
+            },
             hash: value.hash.into(),
             nonce: value.nonce.try_into()?,
             signer,
