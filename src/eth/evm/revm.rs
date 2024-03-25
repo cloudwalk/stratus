@@ -57,6 +57,8 @@ pub struct Revm {
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
     pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
+        tracing::info!(%chain_id, "starting revm");
+
         let mut evm = RevmEvm::builder()
             .with_handler(Handler::mainnet_with_spec(SpecId::LONDON))
             .with_external_context(())
