@@ -28,7 +28,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             let (key, _) = item?; // Handle or unwrap the Result
             batch.delete(key);
         }
-
+        self.db.write(batch)?;
         Ok(())
     }
 
