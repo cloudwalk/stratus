@@ -33,28 +33,24 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     }
 
     pub fn get(&self, key: &K) -> Option<V> {
-        let Ok(serialized_key) = serde_json::to_vec(key) else { return None };
-        let value_bytes = match self.db.get(serialized_key) {
-            Ok(Some(value_bytes)) => Some(value_bytes),
-            Ok(None) => None,
-            Err(_) => None,
+        let serialized_key = match bincode::serialize(key) {
+            Ok(serialized_key) => serialized_key,
+            Err(_) => return None,
         };
-        match value_bytes {
-            Some(value_bytes) => match serde_json::from_slice(&value_bytes) {
-                Ok(value) => Some(value),
-                Err(_) => None,
-            },
-            None => None,
-        }
+
+        let value_bytes = match self.db.get(&serialized_key) {
+            Ok(Some(value_bytes)) => value_bytes,
+            _ => return None,
+        };
+
+        bincode::deserialize(&value_bytes).ok()
     }
 
     // Mimics the 'insert' functionality of a HashMap
-    pub fn insert(&self, key: K, value: V) -> Option<V> {
-        let serialized_key = serde_json::to_vec(&key).unwrap(); //XXX this is trully a reason for panic, but maybe we can figure a way to serialize
-        let prev_value = self.get(&key);
-        let serialized_value = serde_json::to_vec(&value).unwrap();
+    pub fn insert(&self, key: K, value: V) {
+        let serialized_key = bincode::serialize(&key).unwrap();
+        let serialized_value = bincode::serialize(&value).unwrap();
         self.db.put(serialized_key, serialized_value).unwrap();
-        prev_value
     }
 
     // Custom method that combines entry and or_insert_with from a HashMap
