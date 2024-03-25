@@ -786,21 +786,42 @@ END$$;
 
 CREATE TABLE public.neo_transactions (
     hash BYTEA NOT NULL,
+    hash_partition SMALLINT NOT NULL,
     block_number BIGINT NOT NULL,
     transaction_data JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (hash)
-);
+    PRIMARY KEY (hash, hash_partition)
+) PARTITION BY LIST (hash_partition);
+CREATE INDEX idx_neo_transactions_hash ON public.neo_transactions (hash);
 
 CREATE TABLE public.neo_logs (
     hash BYTEA NOT NULL,
+    hash_partition SMALLINT NOT NULL,
     block_number BIGINT NOT NULL,
-    log_idx numeric NOT NULL,
+    log_idx NUMERIC NOT NULL,
     address BYTEA NOT NULL,
     log_data JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (hash, block_number, log_idx)
-);
+    PRIMARY KEY (hash, block_number, log_idx, hash_partition)
+) PARTITION BY LIST (hash_partition);
+CREATE INDEX idx_neo_logs_hash ON public.neo_logs (hash);
+
+DO $$
+DECLARE
+    partition_id INT;
+BEGIN
+    FOR partition_id IN 0..9 LOOP
+        -- Create partitions for public.neo_transactions
+        EXECUTE format('CREATE TABLE public.neo_transactions_%s PARTITION OF public.neo_transactions FOR VALUES IN (%L);', partition_id, partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_transactions_%s (hash_partition);', partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_transactions_%s (hash);', partition_id);
+
+        -- Create partitions for public.neo_logs
+        EXECUTE format('CREATE TABLE public.neo_logs_%s PARTITION OF public.neo_logs FOR VALUES IN (%L);', partition_id, partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_logs_%s (hash_partition);', partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_logs_%s (hash);', partition_id);
+    END LOOP;
+END$$;
 
 -- XXX END
 
