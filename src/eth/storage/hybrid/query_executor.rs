@@ -158,7 +158,7 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
                     transaction_batch.0 as _,
                     transaction_batch.1 as _,
                     transaction_batch.2 as _,
-                    &transaction_batch.3,
+                    transaction_batch.3 as _,
                 )
                 .execute(&mut *tx)
                 .await?;
@@ -174,7 +174,7 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
                     logs_batch.2 as _,
                     logs_batch.3 as _,
                     logs_batch.4 as _,
-                    &logs_batch.5,
+                    logs_batch.5 as _,
                 )
                 .execute(&mut *tx)
                 .await?;
