@@ -7,7 +7,6 @@ use rocksdb::WriteBatch;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json;
 
 // A generic struct that abstracts over key-value pairs stored in RocksDB.
 pub struct RocksDb<K, V> {
@@ -33,15 +32,8 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     }
 
     pub fn get(&self, key: &K) -> Option<V> {
-        let serialized_key = match bincode::serialize(key) {
-            Ok(serialized_key) => serialized_key,
-            Err(_) => return None,
-        };
-
-        let value_bytes = match self.db.get(&serialized_key) {
-            Ok(Some(value_bytes)) => value_bytes,
-            _ => return None,
-        };
+        let Ok(serialized_key) = bincode::serialize(key) else { return None };
+        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return None };
 
         bincode::deserialize(&value_bytes).ok()
     }
