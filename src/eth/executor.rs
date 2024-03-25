@@ -151,8 +151,8 @@ impl EthExecutor {
 
         // Update block snapshot for integration testing
         // Block 292973 from CloudWalk Network Mainnet
-        let block_changes = block.compact_account_changes();
         if *block.number() == BlockNumber::from(292973) {
+            let block_changes = block.compact_account_changes();
             let state = InMemoryPermanentStorage::dump_snapshot(block_changes).await;
             let state_string = serde_json::to_string(&state)?;
             let mut file = std::fs::File::create("tests/fixtures/block-292973/snapshot.json")?;
