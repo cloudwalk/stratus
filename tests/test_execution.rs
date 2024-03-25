@@ -22,6 +22,7 @@ async fn test_execution() {
         temp_storage: TemporaryStorageConfig {
             temp_storage_kind: TemporaryStorageKind::InMemory,
         },
+        chain_id: 2008,
         num_evms: 1usize,
         num_async_threads: 1usize,
         num_blocking_threads: 1usize,

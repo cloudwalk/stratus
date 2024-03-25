@@ -23,6 +23,7 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::log_and_err;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -86,7 +87,6 @@ impl Decodable for TransactionInput {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
-/// TODO: this kind of conversion should be infallibe.
 impl TryFrom<EthersTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
@@ -103,20 +103,13 @@ impl TryFrom<EthersTransaction> for TransactionInput {
         // extract chain id
         let chain_id: ChainId = match value.chain_id {
             Some(chain_id) => chain_id.try_into()?,
-            None => {
-                let transaction_value = value.clone();
-                tracing::warn!(reason = %"transaction without chain id", ?transaction_value);
-                2009u64.into() //XXX this might have unexpected consequences, we need to review this down the road
-            }
+            None => return log_and_err!("transaction without chain id is not allowed"),
         };
 
         // extract gas price
         let gas_price: Wei = match value.gas_price {
             Some(wei) => wei.into(),
-            None => {
-                tracing::warn!(reason = %"transaction without gasPrice");
-                return Err(anyhow!("Transaction sent without gasPrice is not allowed."));
-            }
+            None => return log_and_err!("transaction without gas_price id is not allowed"),
         };
 
         Ok(Self {
