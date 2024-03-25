@@ -524,6 +524,7 @@ impl PermanentStorage for HybridPermanentStorage {
             .await?;
 
         let _ = state.accounts.clear();
+        let _ = state.account_slots.clear();
         state.load_latest_data(&self.pool).await?;
 
         Ok(())

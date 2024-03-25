@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO public.neo_transactions (block_number, hash, transaction_data, hash_partition)\n                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::jsonb[], $4::smallint[])\n                     AS t(block_number, hash, transaction_data, hash_partition);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "ByteaArray",
+        "JsonbArray",
+        "Int2Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e19eca16239dc7685d111fcdd69277992cb0381970dff6a18896f0cb752185e"
+}

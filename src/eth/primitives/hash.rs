@@ -39,6 +39,11 @@ impl Hash {
     pub fn zero() -> Self {
         Self(H256::zero())
     }
+
+    pub fn into_u8(self) -> u8 {
+        let n = self.0.to_low_u64_ne() % 10;
+        n as u8
+    }
 }
 
 impl Display for Hash {

@@ -730,7 +730,7 @@ CREATE TABLE public.neo_blocks (
     block JSONB NOT NULL,
     account_changes JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
-);
+) PARTITION BY RANGE (block_number);
 
 CREATE TABLE public.neo_accounts (
     block_number BIGINT NOT NULL,
@@ -753,6 +753,7 @@ CREATE TABLE public.neo_account_slots (
 ) PARTITION BY RANGE (block_number);
 
 -- Create indexes on the parent tables
+CREATE INDEX neo_blocks_block_number_desc_idx ON public.neo_blocks (block_number DESC);
 CREATE INDEX neo_accounts_block_number_desc_idx ON public.neo_accounts (block_number DESC);
 CREATE INDEX neo_account_slots_block_number_desc_idx ON public.neo_account_slots (block_number DESC);
 
@@ -764,6 +765,10 @@ DECLARE
 BEGIN
     FOR i IN 1..7 LOOP -- this will create partitions until 72M blocks
         partition_suffix := i::TEXT; -- Convert loop index to text for suffix
+
+        -- Create partitions for public.neo_blocks
+        EXECUTE 'CREATE TABLE public.neo_blocks_p' || partition_suffix || ' PARTITION OF public.neo_blocks FOR VALUES FROM (' || start_block || ') TO (' || end_block || ')';
+        EXECUTE 'CREATE INDEX neo_blocks_p' || partition_suffix || '_block_number_desc_idx ON public.neo_blocks_p' || partition_suffix || ' (block_number DESC)';
 
         -- Create partitions for public.neo_accounts
         EXECUTE 'CREATE TABLE public.neo_accounts_p' || partition_suffix || ' PARTITION OF public.neo_accounts FOR VALUES FROM (' || start_block || ') TO (' || end_block || ')';
@@ -780,22 +785,43 @@ BEGIN
 END$$;
 
 CREATE TABLE public.neo_transactions (
-    block_number BIGINT NOT NULL,
     hash BYTEA NOT NULL,
+    hash_partition SMALLINT NOT NULL,
+    block_number BIGINT NOT NULL,
     transaction_data JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (hash)
-);
+    PRIMARY KEY (hash, hash_partition)
+) PARTITION BY LIST (hash_partition);
+CREATE INDEX idx_neo_transactions_hash ON public.neo_transactions (hash);
 
 CREATE TABLE public.neo_logs (
-    block_number BIGINT NOT NULL,
     hash BYTEA NOT NULL,
+    hash_partition SMALLINT NOT NULL,
+    block_number BIGINT NOT NULL,
+    log_idx NUMERIC NOT NULL,
     address BYTEA NOT NULL,
-    log_idx numeric NOT NULL,
     log_data JSONB NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-    PRIMARY KEY (hash, block_number, log_idx)
-);
+    PRIMARY KEY (hash, block_number, log_idx, hash_partition)
+) PARTITION BY LIST (hash_partition);
+CREATE INDEX idx_neo_logs_hash ON public.neo_logs (hash);
+
+DO $$
+DECLARE
+    partition_id INT;
+BEGIN
+    FOR partition_id IN 0..9 LOOP
+        -- Create partitions for public.neo_transactions
+        EXECUTE format('CREATE TABLE public.neo_transactions_%s PARTITION OF public.neo_transactions FOR VALUES IN (%L);', partition_id, partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_transactions_%s (hash_partition);', partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_transactions_%s (hash);', partition_id);
+
+        -- Create partitions for public.neo_logs
+        EXECUTE format('CREATE TABLE public.neo_logs_%s PARTITION OF public.neo_logs FOR VALUES IN (%L);', partition_id, partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_logs_%s (hash_partition);', partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_logs_%s (hash);', partition_id);
+    END LOOP;
+END$$;
 
 -- XXX END
 
