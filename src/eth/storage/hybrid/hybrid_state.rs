@@ -1,6 +1,5 @@
 use core::fmt;
 use std::sync::Arc;
-use tokio::join;
 
 use anyhow::Context;
 use indexmap::IndexMap;
@@ -9,7 +8,7 @@ use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
 use sqlx::Postgres;
-use tokio::sync::Mutex;
+use tokio::join;
 
 use super::rocks_db::RocksDb;
 use crate::eth::primitives::Account;
