@@ -60,7 +60,8 @@ const METRIC_QUERIES: [&str; 30] = [
 
 #[tokio::test]
 async fn test_import_offline_snapshot() {
-    let config = init_global_services::<CommonConfig>();
+    let mut config = init_global_services::<CommonConfig>();
+    config.chain_id = 2009;
 
     // init containers
     let docker = Docker::default();

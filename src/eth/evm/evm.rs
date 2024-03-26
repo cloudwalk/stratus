@@ -10,6 +10,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
@@ -85,6 +86,11 @@ pub struct EvmInput {
 
     /// Point-in-time from where accounts and slots will be read.
     pub point_in_time: StoragePointInTime,
+
+    /// ID of the blockchain where the transaction will be or was included.
+    ///
+    /// If not specified, it will not be validated.
+    pub chain_id: Option<ChainId>,
 }
 
 impl EvmInput {
@@ -101,6 +107,7 @@ impl EvmInput {
             block_number: BlockNumber::ZERO, // TODO: use number of block being mined
             block_timestamp: UnixTime::now(),
             point_in_time: StoragePointInTime::Present,
+            chain_id: input.chain_id,
         }
     }
 
@@ -123,6 +130,7 @@ impl EvmInput {
                 StoragePointInTime::Past(_) => UnixTime::now(), // TODO: use timestamp of the specified block
             },
             point_in_time,
+            chain_id: None,
         }
     }
 
@@ -141,6 +149,10 @@ impl EvmInput {
             point_in_time: StoragePointInTime::Present,
             block_number: block.number(),
             block_timestamp: block.timestamp(),
+            chain_id: match tx.0.chain_id {
+                Some(chain_id) => Some(chain_id.try_into()?),
+                None => None,
+            },
         })
     }
 }

@@ -33,6 +33,7 @@ use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
@@ -55,7 +56,9 @@ pub struct Revm {
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
-    pub fn new(storage: Arc<StratusStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
+        tracing::info!(%chain_id, "starting revm");
+
         let mut evm = RevmEvm::builder()
             .with_handler(Handler::mainnet_with_spec(SpecId::LONDON))
             .with_external_context(())
@@ -64,6 +67,7 @@ impl Revm {
 
         // evm general config
         let cfg_env = evm.cfg_mut();
+        cfg_env.chain_id = chain_id.into();
         cfg_env.limit_contract_code_size = Some(usize::MAX);
 
         let block_env = evm.block_mut();
@@ -99,6 +103,7 @@ impl Evm for Revm {
         };
         tx_env.gas_limit = input.gas_limit.into();
         tx_env.gas_price = input.gas_price.into();
+        tx_env.chain_id = input.chain_id.map_into();
         tx_env.nonce = input.nonce.map_into();
         tx_env.data = input.data.into();
         tx_env.value = input.value.into();

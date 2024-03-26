@@ -20,9 +20,9 @@ type Addresses = Vec<Address>;
 type OptionalBytes = Vec<Option<Bytes>>;
 type Weis = Vec<Wei>;
 type Nonces = Vec<Nonce>;
-type CodeHashs = Vec<CodeHash>;
+type CodeHashes = Vec<CodeHash>;
 
-type AccountChanges = (BlockNumbers, Addresses, OptionalBytes, Weis, Nonces, CodeHashs);
+type AccountChanges = (BlockNumbers, Addresses, OptionalBytes, Weis, Nonces, CodeHashes);
 type AccountSlotChanges = (BlockNumbers, Vec<SlotIndex>, Addresses, Vec<SlotValue>);
 
 async fn execute_with_retry<F, Fut>(mut attempt: F, max_attempts: u32, initial_delay: Duration) -> Result<(), sqlx::Error>
