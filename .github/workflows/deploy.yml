@@ -1,0 +1,18 @@
+name: Deploy to k8s
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - 'staging'
+          - 'production'
+        default: 'staging'
+jobs:
+  deploy:
+    uses: cloudwalk/github-builder/.github/workflows/deploy.yaml@v2
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
