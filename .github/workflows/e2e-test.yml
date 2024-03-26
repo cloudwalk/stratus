@@ -28,6 +28,7 @@ jobs:
       cancel-in-progress: true
 
   e2e-stratus-hybrid:
+    if: github.event_name != 'pull_request'
     name: E2E Stratus Hybrid
     uses: ./.github/workflows/_setup-e2e.yml
     with:
