@@ -118,6 +118,7 @@ impl EthExecutor {
                 Ok((mut execution, execution_metrics)) => {
                     // apply execution costs that were not consided when re-executing the transaction
                     execution.apply_execution_costs(&receipt)?;
+                    execution.gas = receipt.gas_used.unwrap_or_default().try_into()?;
 
                     // ensure it matches receipt before saving
                     if let Err(e) = execution.compare_with_receipt(&receipt) {
