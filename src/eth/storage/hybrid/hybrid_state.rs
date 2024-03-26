@@ -147,6 +147,7 @@ impl HybridStorageState {
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
         let account_changes_future = async move {
+            let mut account_changes = Vec::new();
             for change in changes_clone_for_accounts {
                 let address = change.address.clone();
                 let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
@@ -164,8 +165,10 @@ impl HybridStorageState {
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode;
                 }
-                accounts.insert(address.clone(), account_info_entry);
+                account_changes.push((address.clone(), account_info_entry));
             }
+            accounts.insert_batch(account_changes);
+
         };
 
         let slot_changes_future = async move {
