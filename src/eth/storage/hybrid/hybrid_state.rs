@@ -55,7 +55,9 @@ struct SlotRow {
 
 pub struct HybridStorageState {
     pub accounts: RocksDb<Address, AccountInfo>,
+    pub accounts_history: RocksDb<(Address, BlockNumber), AccountInfo>,
     pub account_slots: RocksDb<(Address, SlotIndex), SlotValue>,
+    pub account_slots_history: RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>,
     pub transactions: IndexMap<Hash, TransactionMined>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
@@ -65,8 +67,10 @@ pub struct HybridStorageState {
 impl HybridStorageState {
     pub fn new() -> Self {
         Self {
-            accounts: RocksDb::<Address, AccountInfo>::new("./data/accounts.rocksdb").unwrap(),
-            account_slots: RocksDb::<(Address, SlotIndex), SlotValue>::new("./data/account_slots.rocksdb").unwrap(),
+            accounts: RocksDb::new("./data/accounts.rocksdb").unwrap(),
+            accounts_history: RocksDb::new("./data/accounts_history.rocksdb").unwrap(),
+            account_slots: RocksDb::new("./data/account_slots.rocksdb").unwrap(),
+            account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb").unwrap(),
             transactions: IndexMap::new(),
             blocks_by_number: IndexMap::new(),
             blocks_by_hash: IndexMap::new(),
@@ -138,16 +142,20 @@ impl HybridStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    pub async fn update_state_with_execution_changes(&mut self, changes: &[ExecutionAccountChanges]) -> Result<(), sqlx::Error> {
+    pub async fn update_state_with_execution_changes(&mut self, changes: &[ExecutionAccountChanges], block_number: BlockNumber) -> Result<(), sqlx::Error> {
         // Directly capture the fields needed by each future from `self`
         let accounts = &self.accounts;
+        let accounts_history = &self.accounts_history;
         let account_slots = &self.account_slots;
+        let account_slots_history = &self.account_slots_history;
 
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
         let account_changes_future = async move {
             let mut account_changes = Vec::new();
+            let mut account_history_changes = Vec::new();
+
             for change in changes_clone_for_accounts {
                 let address = change.address.clone();
                 let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
@@ -165,22 +173,28 @@ impl HybridStorageState {
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode;
                 }
-                account_changes.push((address.clone(), account_info_entry));
+                account_changes.push((address.clone(), account_info_entry.clone()));
+                account_history_changes.push(((address.clone(), block_number), account_info_entry));
             }
             accounts.insert_batch(account_changes);
+            accounts_history.insert_batch(account_history_changes);
         };
 
         let slot_changes_future = async move {
             let mut slot_changes = Vec::new();
+            let mut slot_history_changes = Vec::new();
+
             for change in changes_clone_for_slots {
                 let address = change.address.clone();
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
-                        slot_changes.push(((address.clone(), slot_index), slot.value));
+                        slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
+                        slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value));
                     }
                 }
             }
             account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
+            account_slots_history.insert_batch(slot_history_changes);
         };
 
         join!(account_changes_future, slot_changes_future);
@@ -200,9 +214,16 @@ impl HybridStorageState {
                 index: slot_index.clone(),
                 value: account_slot_value.clone(),
             }),
-            StoragePointInTime::Past(number) => sqlx::query_as!(
-                Slot,
-                r#"
+            StoragePointInTime::Past(number) => {
+                if let Some(account_slot_value) = self.account_slots_history.get(&(address.clone(), slot_index.clone(), *number)) {
+                    Some(Slot {
+                        index: slot_index.clone(),
+                        value: account_slot_value.clone(),
+                    })
+                } else {
+                    sqlx::query_as!(
+                        Slot,
+                        r#"
                     SELECT
                     slot_index as "index: _",
                     value as "value: _"
@@ -215,13 +236,15 @@ impl HybridStorageState {
                                             AND idx = $2
                                             AND block_number <= $3)
                 "#,
-                address as _,
-                slot_index as _,
-                number as _
-            )
-            .fetch_optional(pool)
-            .await
-            .context("failed to select slot")?,
+                        address as _,
+                        slot_index as _,
+                        number as _
+                    )
+                    .fetch_optional(pool)
+                    .await
+                    .context("failed to select slot")?
+                }
+            }
         };
         Ok(slot)
     }
@@ -234,16 +257,13 @@ impl fmt::Debug for HybridStorageState {
 }
 
 impl AccountInfo {
-    pub async fn to_account(&self, point_in_time: &StoragePointInTime, address: &Address) -> Account {
-        match point_in_time {
-            StoragePointInTime::Present => Account {
-                address: address.clone(),
-                nonce: self.nonce.clone(),
-                balance: self.balance.clone(),
-                bytecode: self.bytecode.clone(),
-                code_hash: self.code_hash.clone(),
-            },
-            StoragePointInTime::Past(_number) => Account::default(),
+    pub async fn to_account(&self, address: &Address) -> Account {
+        Account {
+            address: address.clone(),
+            nonce: self.nonce.clone(),
+            balance: self.balance.clone(),
+            bytecode: self.bytecode.clone(),
+            code_hash: self.code_hash.clone(),
         }
     }
 }
