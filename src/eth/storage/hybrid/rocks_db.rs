@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 use anyhow::Result;
 use rocksdb::IteratorMode;
@@ -10,13 +9,13 @@ use serde::Serialize;
 
 // A generic struct that abstracts over key-value pairs stored in RocksDB.
 pub struct RocksDb<K, V> {
-    db: Arc<DB>,
+    pub db: DB,
     _marker: PhantomData<(K, V)>,
 }
 
 impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
     pub fn new(db_path: &str) -> anyhow::Result<Self> {
-        let db = Arc::new(DB::open_default(db_path)?);
+        let db = DB::open_default(db_path)?;
         Ok(RocksDb { db, _marker: PhantomData })
     }
 
