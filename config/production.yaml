@@ -1,0 +1,99 @@
+kubernetes:
+  base:
+    sourceRepo:
+      name: stratus
+      org: cloudwalk
+    monoRepo:
+      url: git@github.com:cloudwalk/monorepo-gitops.git
+      appsFolder: apps-config
+      argoCDValues: helms/argocd/values.yaml
+    containerRegistry:
+      url: gcr.io/infinitepay-production
+    deployConfig:
+      cluster: infinitepay-production
+      environment: production
+      steps:
+        - build
+        - push
+        - versioning
+        - deploy
+      service:
+        asmRevision: asm-managed-stable
+  apps:
+    # --------------------------------------------------------------------------
+    # EVM api
+    # --------------------------------------------------------------------------
+    - name: stratus-api
+      secretsManager:
+        enabled: true
+        provider: gcpsm
+      imageRepoName: stratus
+      kind: deployment
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 1
+          maxUnavailable: 0
+      replicas: 2
+      resources:
+        requests:
+          cpu: 30000m
+          memory: 60Gi
+      envs:
+        - name: ENV
+          value: "production"
+      service:
+        metrics:
+          path: "/"
+          port: "9000"
+        ports:
+          - containerPort: 3000
+            name: app
+            virtualservice:
+              gateway: internal
+              hosts:
+                - stratus-api.services.production.cloudwalk.network
+          - containerPort: 9000
+            name: metrics
+        healthcheck:
+          initialDelaySeconds: 10
+          interval: 10
+          path: /health
+          port: 3000
+          timeoutSeconds: 5
+
+    # --------------------------------------------------------------------------
+    # worker
+    # --------------------------------------------------------------------------
+    - name: stratus-worker
+      secretsManager:
+        enabled: true
+        provider: gcpsm
+      imageRepoName: stratus
+      kind: deployment
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 1
+          maxUnavailable: 0
+      replicas: 1
+      resources:
+        requests:
+          cpu: 30000m
+          memory: 60Gi
+      envs:
+        - name: ENV
+          value: "production"
+      service:
+        metrics:
+          path: "/"
+          port: "9000"
+        ports:
+          - containerPort: 9000
+            name: metrics
+        healthcheck:
+          initialDelaySeconds: 10
+          interval: 10
+          path: /health
+          port: 3000
+          timeoutSeconds: 5

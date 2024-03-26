@@ -1,0 +1,12 @@
+name: GitHub Builder Production
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: cloudwalk/github-builder/.github/workflows/deploy.yaml@v2
+    secrets: inherit
+    with:
+      environment: production
+      config_path: config
