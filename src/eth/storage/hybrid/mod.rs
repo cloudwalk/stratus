@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use itertools::Itertools;
 use metrics::atomics::AtomicU64;
 use num_traits::cast::ToPrimitive;
+use rocksdb::IteratorMode;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::Json;
 use sqlx::Pool;
@@ -256,10 +257,22 @@ impl PermanentStorage for HybridPermanentStorage {
                     }
                 }
             }
-            StoragePointInTime::Past(block_number) =>
-                if let Some(account_info) = state.accounts_history.get(&(address.clone(), *block_number)) {
-                    Some(account_info.to_account(address).await)
-                } else {
+            StoragePointInTime::Past(block_number) => {
+                let serialized_key = bincode::serialize(&(address.clone(), *block_number))?;
+                let iterator_mode = IteratorMode::From(&serialized_key, rocksdb::Direction::Reverse);
+                let mut iterator = state.accounts_history.db.iterator(iterator_mode);
+
+                if let Some(key_value) = iterator.next() {
+                    let (key, value) = key_value?;
+
+                    let key_decoded: (Address, BlockNumber) = bincode::deserialize(&key)?;
+                    let account_info: AccountInfo = bincode::deserialize(&value)?;
+
+                    if address == &key_decoded.0 {
+                        return Ok(Some(account_info.to_account(address).await));
+                    }
+                }
+                {
                     sqlx::query_as!(
                         Account,
                         r#"
@@ -280,7 +293,8 @@ impl PermanentStorage for HybridPermanentStorage {
                     .fetch_optional(&*self.pool)
                     .await
                     .context("failed to select account")?
-                },
+                }
+            }
         };
         Ok(account)
     }
@@ -498,6 +512,7 @@ impl PermanentStorage for HybridPermanentStorage {
     }
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        sleep(Duration::from_secs(2)).await;
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {

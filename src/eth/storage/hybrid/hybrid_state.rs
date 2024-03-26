@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use indexmap::IndexMap;
 use revm::primitives::KECCAK_EMPTY;
+use rocksdb::IteratorMode;
 use sqlx::types::BigDecimal;
 use sqlx::FromRow;
 use sqlx::Pool;
@@ -215,12 +216,22 @@ impl HybridStorageState {
                 value: account_slot_value.clone(),
             }),
             StoragePointInTime::Past(number) => {
-                if let Some(account_slot_value) = self.account_slots_history.get(&(address.clone(), slot_index.clone(), *number)) {
-                    Some(Slot {
-                        index: slot_index.clone(),
-                        value: account_slot_value.clone(),
-                    })
-                } else {
+                // XXX validate further that this actually works every time
+                let serialized_key = bincode::serialize(&(address.clone(), slot_index.clone(), *number))?;
+                let iterator_mode = IteratorMode::From(&serialized_key, rocksdb::Direction::Reverse);
+                let mut iterator = self.account_slots_history.db.iterator(iterator_mode);
+
+                if let Some(key_value) = iterator.next() {
+                    let (key, value) = key_value.unwrap();
+
+                    let key_decoded: (Address, SlotIndex, BlockNumber) = bincode::deserialize(&key).unwrap();
+                    let value: SlotValue = bincode::deserialize(&value).unwrap();
+
+                    if slot_index == &key_decoded.1 || address == &key_decoded.0 {
+                        return Ok(Some(Slot { index: key_decoded.1, value }));
+                    }
+                }
+                {
                     sqlx::query_as!(
                         Slot,
                         r#"
