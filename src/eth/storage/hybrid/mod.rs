@@ -25,6 +25,7 @@ use tokio::sync::RwLockWriteGuard;
 use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
 use tokio::task::JoinSet;
+use tokio::time::sleep;
 
 use self::hybrid_state::HybridStorageState;
 use crate::eth::primitives::Account;
@@ -436,6 +437,7 @@ impl PermanentStorage for HybridPermanentStorage {
     }
 
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        sleep(Duration::from_secs(2)).await;
         tracing::debug!(?accounts, "saving initial accounts");
 
         let state = self.state.write().await;
@@ -477,6 +479,7 @@ impl PermanentStorage for HybridPermanentStorage {
     }
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        sleep(Duration::from_secs(2)).await;
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
