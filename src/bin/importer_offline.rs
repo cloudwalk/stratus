@@ -154,9 +154,7 @@ async fn execute_external_rpc_storage_loader(
     end: BlockNumber,
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
-    tracing::info!("external rpc storage loader starting");
-
-    tracing::info!(%start, %end, "block limits");
+    tracing::info!(%start, %end, "external rpc storage loader starting");
 
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();
