@@ -34,11 +34,11 @@ kubernetes:
         rollingUpdate:
           maxSurge: 1
           maxUnavailable: 0
-      replicas: 1
+      replicas: 2
       resources:
         requests:
           cpu: 30000m
-          memory: 120Gi
+          memory: 60Gi
       envs:
         - name: ENV
           value: "production"
