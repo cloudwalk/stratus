@@ -512,6 +512,7 @@ impl PermanentStorage for HybridPermanentStorage {
     }
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        sleep(Duration::from_secs(2)).await;
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
