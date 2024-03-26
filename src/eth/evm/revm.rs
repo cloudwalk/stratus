@@ -298,7 +298,10 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         let account_modified_slots: Vec<Slot> = revm_account
             .storage
             .into_iter()
-            .map(|(index, value)| Slot::new(index, value.present_value))
+            .filter_map(|(index, value)| match value.is_changed() {
+                true => Some(Slot::new(index, value.present_value)),
+                false => None,
+            })
             .collect();
 
         // status: created
