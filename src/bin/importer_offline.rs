@@ -42,7 +42,15 @@ async fn main() -> anyhow::Result<()> {
     let stratus_storage = config.init_stratus_storage().await?;
     let executor = config.init_executor(Arc::clone(&stratus_storage));
 
-    let block_start = block_number_to_resume(&stratus_storage).await?;
+    let block_start = match config.block_start {
+        Some(start) => BlockNumber::from(start),
+        None => block_number_to_start(&stratus_storage).await?,
+    };
+    let block_end = match config.block_end {
+        Some(end) => BlockNumber::from(end),
+        None => block_number_to_stop(&rpc_storage).await?,
+    };
+
     let mut csv = if_else!(config.export_csv, Some(CsvExporter::new(block_start)?), None);
 
     // init shared data between importer and external rpc storage loader
@@ -65,6 +73,7 @@ async fn main() -> anyhow::Result<()> {
         cancellation.clone(),
         config.paralellism,
         block_start,
+        block_end,
         backlog_tx,
     ));
     execute_block_importer(executor, Arc::clone(&stratus_storage), csv, cancellation, backlog_rx).await?;
@@ -142,20 +151,10 @@ async fn execute_external_rpc_storage_loader(
     // data
     paralellism: usize,
     mut start: BlockNumber,
+    end: BlockNumber,
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
-    tracing::info!("external rpc storage loader starting");
-
-    // find last block number
-    let end = match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
-        Ok(Some(number)) => number,
-        Ok(None) => BlockNumber::ZERO,
-        Err(e) => {
-            cancellation.cancel();
-            return Err(e);
-        }
-    };
-    tracing::info!(%start, %end, "block limits");
+    tracing::info!(%start, %end, "external rpc storage loader starting");
 
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();
@@ -213,8 +212,8 @@ async fn load_blocks_and_receipts(
     try_join!(blocks_task, receipts_task)
 }
 
-// Finds the block number to resume the import job.
-async fn block_number_to_resume(stratus_storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
+// Finds the block number to start the import job.
+async fn block_number_to_start(stratus_storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
     // when has an active number, resume from it because it was not imported yet.
     let active_number = stratus_storage.read_active_block_number().await?;
     if let Some(active_number) = active_number {
@@ -230,4 +229,13 @@ async fn block_number_to_resume(stratus_storage: &StratusStorage) -> anyhow::Res
         mined_number = mined_number.next();
     }
     Ok(mined_number)
+}
+
+// Finds the block number to stop the import job.
+async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyhow::Result<BlockNumber> {
+    match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
+        Ok(Some(number)) => Ok(number),
+        Ok(None) => Ok(BlockNumber::ZERO),
+        Err(e) => Err(e),
+    }
 }
