@@ -5,6 +5,8 @@ use anyhow::Context;
 use anyhow::Ok;
 use byte_unit::Byte;
 use byte_unit::Unit;
+use const_hex::hex;
+use ethereum_types::U256;
 use itertools::Itertools;
 
 use crate::eth::primitives::Account;
@@ -23,10 +25,11 @@ const NULL: &str = ""; // TODO: how?
 
 const ACCOUNTS_FILE: &str = "data/accounts";
 
-const ACCOUNTS_HEADERS: [&str; 10] = [
+const ACCOUNTS_HEADERS: [&str; 11] = [
     "id",
     "address",
     "bytecode",
+    "code_hash",
     "latest_balance",
     "latest_nonce",
     "creation_block",
@@ -261,16 +264,17 @@ impl CsvExporter {
             self.accounts_id.value += 1;
             let now = now();
             let row = [
-                self.accounts_id.value.to_string(),                                  // id
-                account.address.to_string(),                                         // address
-                account.bytecode.map(|x| x.to_string()).unwrap_or(NULL.to_string()), // bytecode
-                account.balance.to_string(),                                         // latest_balance
-                account.nonce.to_string(),                                           // latest_nonce
-                "0".to_owned(),                                                      // creation_block
-                NULL.to_owned(),                                                     // previous_balance
-                NULL.to_owned(),                                                     // previous_nonce
-                now.clone(),                                                         // created_at
-                now,                                                                 // updated_at
+                self.accounts_id.value.to_string(),                         // id
+                to_bytea(account.address),                                  // address
+                account.bytecode.map(to_bytea).unwrap_or(NULL.to_string()), // bytecode
+                to_bytea(account.code_hash),                                // code_hash
+                account.balance.to_string(),                                // latest_balance
+                account.nonce.to_string(),                                  // latest_nonce
+                "0".to_owned(),                                             // creation_block
+                NULL.to_owned(),                                            // previous_balance
+                NULL.to_owned(),                                            // previous_nonce
+                now.clone(),                                                // created_at
+                now,                                                        // updated_at
             ];
             self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -288,26 +292,26 @@ impl CsvExporter {
             // export data
             let now = now();
             let row = [
-                self.transactions_id.value.to_string(),                 // id
-                tx.input.hash.to_string(),                              // hash
-                tx.input.from.to_string(),                              // signer_address
-                tx.input.nonce.to_string(),                             // nonce
-                tx.input.from.to_string(),                              // address_from
-                tx.input.to.map(|x| x.to_string()).unwrap_or_default(), // address_to
-                tx.input.input.to_string(),                             // input
-                tx.execution.output.to_string(),                        // output
-                tx.input.gas_limit.to_string(),                         // gas
-                tx.input.gas_price.to_string(),                         // gas_price
-                tx.transaction_index.to_string(),                       // idx_in_block
-                tx.block_number.to_string(),                            // block_number
-                tx.block_hash.to_string(),                              // block_hash
-                tx.input.v.to_string(),                                 // v
-                tx.input.r.to_string(),                                 // r
-                tx.input.s.to_string(),                                 // s
-                tx.input.value.to_string(),                             // value
-                tx.execution.result.to_string(),                        // result
-                now.clone(),                                            // created_at
-                now,                                                    // updated_at
+                self.transactions_id.value.to_string(),        // id
+                to_bytea(tx.input.hash),                       // hash
+                to_bytea(&tx.input.from),                      // signer_address
+                tx.input.nonce.to_string(),                    // nonce
+                to_bytea(&tx.input.from),                      // address_from
+                tx.input.to.map(to_bytea).unwrap_or_default(), // address_to
+                to_bytea(tx.input.input),                      // input
+                to_bytea(tx.execution.output),                 // output
+                tx.input.gas_limit.to_string(),                // gas
+                tx.input.gas_price.to_string(),                // gas_price
+                tx.transaction_index.to_string(),              // idx_in_block
+                tx.block_number.to_string(),                   // block_number
+                to_bytea(tx.block_hash),                       // block_hash
+                to_bytea(tx.input.v.as_u64().to_ne_bytes()),   // v
+                u256_to_bytea(tx.input.r),                     // r
+                u256_to_bytea(tx.input.s),                     // s
+                tx.input.value.to_string(),                    // value
+                tx.execution.result.to_string(),               // result
+                now.clone(),                                   // created_at
+                now,                                           // updated_at
             ];
             self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -316,29 +320,31 @@ impl CsvExporter {
 
     fn export_block(&mut self, block: BlockHeader) -> anyhow::Result<()> {
         self.blocks_id.value += 1;
+
         let now = now();
-        let row = [
-            self.blocks_id.value.to_string(),    // id
-            block.number.to_string(),            // number
-            block.hash.to_string(),              // hash
-            block.transactions_root.to_string(), // transactions_root
-            block.gas_limit.to_string(),         // gas_limit
-            block.gas_used.to_string(),          // gas_used
-            block.bloom.to_string(),             // logs_bloom
-            block.timestamp.to_string(),         // timestamp_in_secs
-            block.parent_hash.to_string(),       // parent_hash
-            block.author.to_string(),            // author
-            block.extra_data.to_string(),        // extra_data
-            block.miner.to_string(),             // miner
-            block.difficulty.to_string(),        // difficulty
-            block.receipts_root.to_string(),     // receipts_root
-            block.uncle_hash.to_string(),        // uncle_hash
-            block.size.to_string(),              // size
-            block.state_root.to_string(),        // state_root
-            block.total_difficulty.to_string(),  // total_difficulty
-            block.nonce.to_string(),             // nonce
-            now.clone(),                         // created_at
-            now,                                 // updated_at
+
+        let row = &[
+            self.blocks_id.value.to_string(),   // id
+            block.number.to_string(),           // number
+            to_bytea(block.hash),               // hash
+            to_bytea(block.transactions_root),  // transactions_root
+            block.gas_limit.to_string(),        // gas_limit
+            block.gas_used.to_string(),         // gas_used
+            to_bytea(*block.bloom),             // logs_bloom
+            block.timestamp.to_string(),        // timestamp_in_secs
+            to_bytea(block.parent_hash),        // parent_hash
+            to_bytea(block.author),             // author
+            block.extra_data.to_string(),       // extra_data
+            to_bytea(block.miner),              // miner
+            block.difficulty.to_string(),       // difficulty
+            to_bytea(block.receipts_root),      // receipts_root
+            to_bytea(block.uncle_hash),         // uncle_hash
+            block.size.to_string(),             // size
+            to_bytea(block.state_root),         // state_root
+            block.total_difficulty.to_string(), // total_difficulty
+            to_bytea(block.nonce),              // nonce
+            now.clone(),                        // created_at
+            now,                                // updated_at
         ];
 
         self.blocks_csv.write_record(row).context("failed to write csv block")?;
@@ -350,18 +356,14 @@ impl CsvExporter {
         for change in changes {
             let now = now();
 
-            // accounts
             if change.is_account_creation() {
                 self.accounts_id.value += 1;
-                let change_bytecode = change
-                    .bytecode
-                    .take_ref()
-                    .and_then(|x| x.clone().map(|bytes| bytes.to_string()))
-                    .unwrap_or(NULL.to_string());
+                let change_bytecode = change.bytecode.take_ref().and_then(|x| x.clone().map(to_bytea)).unwrap_or(NULL.to_string());
                 let row = [
                     self.accounts_id.value.to_string(),                                                           // id
-                    change.address.to_string(),                                                                   // address
+                    to_bytea(&change.address),                                                                    // address
                     change_bytecode,                                                                              // bytecode
+                    to_bytea(change.code_hash),                                                                   // code_hash
                     change.balance.take_ref().map(|x| x.to_string()).unwrap_or_default(),                         // latest_balance
                     change.nonce.take_ref().map(|x| x.to_string()).unwrap_or_default(),                           // latest_nonce
                     number.to_string().to_owned(),                                                                // creation_block
@@ -378,7 +380,7 @@ impl CsvExporter {
                 self.historical_nonces_id.value += 1;
                 let row = [
                     self.historical_balances_id.value.to_string(), // id
-                    change.address.to_string(),                    // address
+                    to_bytea(&change.address),                     // address
                     nonce.to_string(),                             // nonce
                     block_number.to_string(),                      // block_number
                     now.clone(),                                   // updated_at
@@ -391,7 +393,7 @@ impl CsvExporter {
                 self.historical_balances_id.value += 1;
                 let row = [
                     self.historical_balances_id.value.to_string(), // id
-                    change.address.to_string(),                    // address
+                    to_bytea(&change.address),                     // address
                     balance.to_string(),                           // balance
                     block_number.to_string(),                      // block_number
                     now.clone(),                                   // updated_at
@@ -408,10 +410,10 @@ impl CsvExporter {
                     self.historical_slots_id.value += 1;
                     let row = [
                         self.historical_slots_id.value.to_string(), // id
-                        slot.index.to_string(),                     // idx
-                        slot.value.to_string(),                     // value
+                        u256_to_bytea(slot.index.as_u256()),        // idx
+                        u256_to_bytea(slot.value.as_u256()),        // value
                         block_number.to_string(),                   // block_number
-                        change.address.to_string(),                 // account_address
+                        to_bytea(&change.address),                  // account_address
                         now.clone(),                                // updated_at
                         now.clone(),                                // created_at
                     ];
@@ -428,13 +430,13 @@ impl CsvExporter {
             let now = now();
             let row = [
                 self.logs_id.value.to_string(),    // id
-                log.address().to_string(),         // address
-                log.log.data.to_string(),          // data
-                log.transaction_hash.to_string(),  // transaction_hash
+                to_bytea(log.address()),           // address
+                to_bytea(&log.log.data),           // data
+                to_bytea(&log.transaction_hash),   // transaction_hash
                 log.transaction_index.to_string(), // transaction_idx
                 log.log_index.to_string(),         // log_idx
                 log.block_number.to_string(),      // block_number
-                log.block_hash.to_string(),        // block_hash
+                to_bytea(&log.block_hash),         // block_hash
                 now.clone(),                       // created_at
                 now,                               // updated_at
             ];
@@ -452,13 +454,13 @@ impl CsvExporter {
             let now = now();
             let row = [
                 self.topics_id.value.to_string(),  // id
-                topic.to_string(),                 // topic
-                log.transaction_hash.to_string(),  // transaction_hash
+                to_bytea(topic),                   // topic
+                to_bytea(&log.transaction_hash),   // transaction_hash
                 log.transaction_index.to_string(), // transaction_idx
                 log.log_index.to_string(),         // log_idx
                 idx.to_string(),                   // topic_idx
                 log.block_number.to_string(),      // block_number
-                log.block_hash.to_string(),        // block_hash
+                to_bytea(&log.block_hash),         // block_hash
                 now.clone(),                       // created_at
                 now,                               // updated_at
             ];
@@ -516,9 +518,20 @@ fn csv_writer(base_path: &'static str, number: BlockNumber, headers: &[&'static 
         .from_path(path)
         .context("failed to create csv writer")?;
 
-    writer.write_record(headers).context("fai;ed to write csv header")?;
+    writer.write_record(headers).context("failed to write csv header")?;
 
     Ok(writer)
+}
+
+/// Convert a byte sequence to a `bytea` representation that is parseable by Postgres.
+fn to_bytea(bytes: impl AsRef<[u8]>) -> String {
+    let hex = hex::encode(bytes.as_ref());
+    format!("\\x{hex}")
+}
+
+fn u256_to_bytea(integer: U256) -> String {
+    let bytes: Vec<u8> = integer.as_ref().iter().copied().rev().flat_map(u64::to_be_bytes).collect();
+    to_bytea(bytes)
 }
 
 /// Returns the current date formatted for the CSV file.

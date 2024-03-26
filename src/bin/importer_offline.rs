@@ -29,7 +29,7 @@ const BLOCKS_BY_FETCH: usize = 10_000;
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 
-/// Number of blocks processed in memory between data is flushed to temporary storage and CSV files.
+/// Number of blocks processed in memory before data is flushed to temporary storage and CSV files.
 const FLUSH_INTERVAL_IN_BLOCKS: u64 = 100;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
