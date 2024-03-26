@@ -9,6 +9,7 @@ use tokio::time::Duration;
 use super::BlockTask;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
@@ -19,8 +20,9 @@ type Addresses = Vec<Address>;
 type OptionalBytes = Vec<Option<Bytes>>;
 type Weis = Vec<Wei>;
 type Nonces = Vec<Nonce>;
+type CodeHashes = Vec<CodeHash>;
 
-type AccountChanges = (BlockNumbers, Addresses, OptionalBytes, Weis, Nonces);
+type AccountChanges = (BlockNumbers, Addresses, OptionalBytes, Weis, Nonces, CodeHashes);
 type AccountSlotChanges = (BlockNumbers, Vec<SlotIndex>, Addresses, Vec<SlotValue>);
 
 async fn execute_with_retry<F, Fut>(mut attempt: F, max_attempts: u32, initial_delay: Duration) -> Result<(), sqlx::Error>
@@ -48,7 +50,7 @@ where
 pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask) {
     let block_data = serde_json::to_value(&block_task.block_data).unwrap();
     let account_changes = serde_json::to_value(&block_task.account_changes).unwrap();
-    let mut accounts_changes: AccountChanges = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut accounts_changes: AccountChanges = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut accounts_slots_changes: AccountSlotChanges = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
 
     for changes in block_task.account_changes.clone() {
@@ -80,21 +82,26 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
         accounts_changes.2.push(bytecode);
         accounts_changes.3.push(balance);
         accounts_changes.4.push(nonce);
+        accounts_changes.5.push(changes.code_hash);
     }
 
-    let mut transaction_batch = (Vec::new(), Vec::new(), Vec::new());
-    let mut logs_batch = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut transaction_batch = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut logs_batch = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for transaction in block_task.block_data.transactions {
+        let last_char_vec = transaction.input.hash.clone().into_hash_partition();
+
         for log in transaction.logs.iter() {
             logs_batch.0.push(transaction.block_number);
             logs_batch.1.push(transaction.input.hash.clone());
             logs_batch.2.push(log.log.address.clone());
             logs_batch.3.push(log.log_index);
             logs_batch.4.push(serde_json::to_value(log).unwrap());
+            logs_batch.5.push(last_char_vec);
         }
         transaction_batch.0.push(transaction.block_number);
         transaction_batch.1.push(transaction.input.hash.clone());
         transaction_batch.2.push(serde_json::to_value(transaction).unwrap());
+        transaction_batch.3.push(last_char_vec);
     }
 
     let pool_clone = Arc::<sqlx::Pool<sqlx::Postgres>>::clone(&pool);
@@ -115,14 +122,15 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
 
             if !accounts_changes.0.is_empty() {
                 sqlx::query!(
-                    "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
-                    SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
-                    AS t(block_number, address, bytecode, balance, nonce);",
+                    "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce, code_hash)
+                    SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[], $6::bytea[])
+                    AS t(block_number, address, bytecode, balance, nonce, code_hash);",
                     accounts_changes.0 as _,
                     accounts_changes.1 as _,
                     accounts_changes.2 as _,
                     accounts_changes.3 as _,
                     accounts_changes.4 as _,
+                    accounts_changes.5 as _,
                 )
                 .execute(&mut *tx)
                 .await?;
@@ -144,12 +152,13 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
 
             if !transaction_batch.0.is_empty() {
                 sqlx::query!(
-                    "INSERT INTO public.neo_transactions (block_number, hash, transaction_data)
-                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::jsonb[])
-                     AS t(block_number, hash, transaction_data);",
+                    "INSERT INTO public.neo_transactions (block_number, hash, transaction_data, hash_partition)
+                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::jsonb[], $4::smallint[])
+                     AS t(block_number, hash, transaction_data, hash_partition);",
                     transaction_batch.0 as _,
                     transaction_batch.1 as _,
                     transaction_batch.2 as _,
+                    transaction_batch.3 as _,
                 )
                 .execute(&mut *tx)
                 .await?;
@@ -157,14 +166,15 @@ pub async fn commit_eventually(pool: Arc<Pool<Postgres>>, block_task: BlockTask)
 
             if !logs_batch.0.is_empty() {
                 sqlx::query!(
-                    "INSERT INTO public.neo_logs (block_number, hash, address, log_idx, log_data)
-                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::jsonb[])
-                     AS t(block_number, hash, address, log_idx, log_data);",
+                    "INSERT INTO public.neo_logs (block_number, hash, address, log_idx, log_data, hash_partition)
+                     SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::jsonb[], $6::smallint[])
+                     AS t(block_number, hash, address, log_idx, log_data, hash_partition);",
                     logs_batch.0 as _,
                     logs_batch.1 as _,
                     logs_batch.2 as _,
                     logs_batch.3 as _,
                     logs_batch.4 as _,
+                    logs_batch.5 as _,
                 )
                 .execute(&mut *tx)
                 .await?;

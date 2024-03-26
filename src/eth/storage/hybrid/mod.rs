@@ -1,12 +1,11 @@
 mod hybrid_state;
 mod query_executor;
+mod rocks_db;
 
-use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Context;
 use async_trait::async_trait;
 use itertools::Itertools;
@@ -20,11 +19,11 @@ use sqlx::QueryBuilder;
 use sqlx::Row;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::channel;
-use tokio::sync::Mutex;
-use tokio::sync::MutexGuard;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
+use tokio::sync::Semaphore;
+use tokio::sync::SemaphorePermit;
 use tokio::task::JoinSet;
 
 use self::hybrid_state::HybridStorageState;
@@ -58,11 +57,11 @@ struct BlockTask {
 
 #[derive(Debug)]
 pub struct HybridPermanentStorage {
-    state: RwLock<HybridStorageState>,
+    state: RwLock<HybridStorageState>, //XXX TODO remove RwLock when rocksdb is implemented everywhere
     pool: Arc<Pool<Postgres>>,
     block_number: AtomicU64,
     task_sender: mpsc::Sender<BlockTask>,
-    tasks_pending: Arc<Mutex<()>>,
+    tasks_pending: Arc<Semaphore>, // TODO change to Mutex<()>
 }
 
 #[derive(Debug)]
@@ -86,7 +85,7 @@ impl HybridPermanentStorage {
                 tracing::error!(reason = ?e, "failed to start postgres client");
                 anyhow::anyhow!("failed to start postgres client")
             })?;
-        let tasks_pending = Arc::new(Mutex::new(()));
+        let tasks_pending = Arc::new(Semaphore::new(1));
         let worker_tasks_pending = Arc::clone(&tasks_pending);
         let (task_sender, task_receiver) = channel::<BlockTask>(32);
         let worker_pool = Arc::new(connection_pool.clone());
@@ -99,7 +98,7 @@ impl HybridPermanentStorage {
         });
 
         let block_number = Self::preload_block_number(connection_pool.clone()).await?;
-        let state = RwLock::new(HybridStorageState::default());
+        let state = RwLock::new(HybridStorageState::new());
         state.write().await.load_latest_data(&pool).await?;
         Ok(Self {
             state,
@@ -124,30 +123,22 @@ impl HybridPermanentStorage {
         mut receiver: tokio::sync::mpsc::Receiver<BlockTask>,
         pool: Arc<sqlx::Pool<sqlx::Postgres>>,
         connections: u32,
-        tasks_pending: Arc<Mutex<()>>,
+        tasks_pending: Arc<Semaphore>,
     ) {
         // Define the maximum number of concurrent tasks. Adjust this number based on your requirements.
         let max_concurrent_tasks: usize = (connections).try_into().unwrap_or(10usize);
         tracing::info!("Starting worker with max_concurrent_tasks: {}", max_concurrent_tasks);
         let mut futures = JoinSet::new();
-        let mut pending_tasks_guard = None;
-        while let Ok(block_task_opt) = recv_block_task(&mut receiver, &mut pending_tasks_guard, !futures.is_empty()).await {
-            if let Some(block_task) = block_task_opt {
-                let pool_clone = Arc::clone(&pool);
-
-                if futures.len() < max_concurrent_tasks {
-                    futures.spawn(query_executor::commit_eventually(pool_clone, block_task));
-
-                    if pending_tasks_guard.is_none() {
-                        pending_tasks_guard = Some(tasks_pending.lock().await);
-                    }
-                } else if let Some(_res) = futures.join_next().await {
-                    futures.spawn(query_executor::commit_eventually(pool_clone, block_task));
+        let mut permit = None;
+        while let Some(block_task) = recv_block_task(&mut receiver, &mut permit).await {
+            let pool_clone = Arc::clone(&pool);
+            if futures.len() < max_concurrent_tasks {
+                futures.spawn(query_executor::commit_eventually(pool_clone, block_task));
+                if permit.is_none() {
+                    permit = Some(tasks_pending.acquire().await.expect("semaphore has closed"));
                 }
-            } else {
-                let timeout = Duration::from_millis(100);
-                tokio::time::sleep(timeout).await;
-                while futures.try_join_next().is_some() {}
+            } else if let Some(_res) = futures.join_next().await {
+                futures.spawn(query_executor::commit_eventually(pool_clone, block_task));
             }
         }
     }
@@ -173,7 +164,7 @@ impl HybridPermanentStorage {
     /// Clears in-memory state.
     pub async fn clear(&self) {
         let mut state = self.lock_write().await;
-        state.accounts.clear();
+        let _ = state.accounts.clear();
         state.transactions.clear();
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
@@ -202,9 +193,9 @@ impl HybridPermanentStorage {
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = account.slots.get(slot_index) {
+                    if let Some(value) = state.account_slots.get(&(address.clone(), slot_index.clone())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = value.value.clone();
+                            let account_slot_value = value.clone();
                             if original_slot.value != account_slot_value {
                                 conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
                             }
@@ -447,8 +438,8 @@ impl PermanentStorage for HybridPermanentStorage {
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
-        let mut state = self.state.write().await;
-        let mut accounts_changes = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let state = self.state.write().await;
+        let mut accounts_changes = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for account in accounts {
             state.accounts.insert(
                 account.address.clone(),
@@ -457,7 +448,6 @@ impl PermanentStorage for HybridPermanentStorage {
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
                     code_hash: account.code_hash.clone(),
-                    slots: HashMap::new(),
                 },
             );
             accounts_changes.0.push(BlockNumber::from(0));
@@ -465,19 +455,21 @@ impl PermanentStorage for HybridPermanentStorage {
             accounts_changes.2.push(account.bytecode);
             accounts_changes.3.push(account.balance);
             accounts_changes.4.push(account.nonce);
+            accounts_changes.5.push(account.code_hash);
         }
 
-        let _ = self.tasks_pending.lock().await;
+        let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
         sqlx::query!(
-            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce)
-            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[])
-            AS t(block_number, address, bytecode, balance, nonce)
+            "INSERT INTO public.neo_accounts (block_number, address, bytecode, balance, nonce, code_hash)
+            SELECT * FROM UNNEST($1::bigint[], $2::bytea[], $3::bytea[], $4::numeric[], $5::numeric[], $6::bytea[])
+            AS t(block_number, address, bytecode, balance, nonce, code_hash)
             ON CONFLICT (address,block_number) DO NOTHING;",
             accounts_changes.0 as _,
             accounts_changes.1 as _,
             accounts_changes.2 as _,
             accounts_changes.3 as _,
             accounts_changes.4 as _,
+            accounts_changes.5 as _,
         )
         .execute(&*self.pool)
         .await?;
@@ -504,7 +496,7 @@ impl PermanentStorage for HybridPermanentStorage {
         state.transactions.retain(|_, t| t.block_number <= block_number);
         state.logs.retain(|_, l| l.block_number <= block_number);
 
-        let _ = self.tasks_pending.lock().await;
+        let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
 
         sqlx::query!(r#"DELETE FROM neo_blocks WHERE block_number > $1"#, block_number as _)
             .execute(&*self.pool)
@@ -522,7 +514,8 @@ impl PermanentStorage for HybridPermanentStorage {
             .execute(&*self.pool)
             .await?;
 
-        state.accounts.clear();
+        let _ = state.accounts.clear();
+        let _ = state.account_slots.clear();
         state.load_latest_data(&self.pool).await?;
 
         Ok(())
@@ -533,29 +526,16 @@ impl PermanentStorage for HybridPermanentStorage {
     }
 }
 
-/// This function blocks if the mpsc is empty AND either:
-/// 1. We have the pending_tasks_guard and there are no tasks pending
-/// 2. We don't have the pending_tasks_guard
-/// Otherwise this function is non-blocking until we can finish the pending tasks and release the lock.
-async fn recv_block_task(
-    receiver: &mut tokio::sync::mpsc::Receiver<BlockTask>,
-    pending_tasks_guard: &mut Option<MutexGuard<'_, ()>>,
-    pending_tasks: bool,
-) -> anyhow::Result<Option<BlockTask>> {
+async fn recv_block_task(receiver: &mut tokio::sync::mpsc::Receiver<BlockTask>, permit: &mut Option<SemaphorePermit<'_>>) -> Option<BlockTask> {
     match receiver.try_recv() {
-        Ok(block_task) => Ok(Some(block_task)),
-        Err(mpsc::error::TryRecvError::Empty) =>
-            if pending_tasks_guard.is_some() {
-                if !pending_tasks {
-                    let guard = std::mem::take(pending_tasks_guard);
-                    drop(guard);
-                    Ok(receiver.recv().await)
-                } else {
-                    Ok(None)
-                }
-            } else {
-                Ok(receiver.recv().await)
-            },
-        Err(mpsc::error::TryRecvError::Disconnected) => Err(anyhow!(mpsc::error::TryRecvError::Disconnected)),
+        Ok(block_task) => Some(block_task),
+        Err(mpsc::error::TryRecvError::Empty) => {
+            if permit.is_some() {
+                let perm = std::mem::take(permit);
+                drop(perm);
+            }
+            receiver.recv().await
+        }
+        Err(_) => None,
     }
 }
