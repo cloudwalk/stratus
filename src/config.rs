@@ -204,6 +204,10 @@ pub struct CommonConfig {
     #[clap(flatten)]
     pub perm_storage: PermanentStorageConfig,
 
+    /// Chain ID of the network.
+    #[arg(long = "chain-id", env = "CHAIN_ID", default_value = "2008")]
+    pub chain_id: u64,
+
     /// Number of EVM instances to run.
     #[arg(long = "evms", env = "EVMS", default_value = "1")]
     pub num_evms: usize,
@@ -282,6 +286,7 @@ impl CommonConfig {
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
         for _ in 1..=num_evms {
             // create evm resources
+            let evm_chain_id = self.chain_id.into();
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
             let evm_rx = evm_rx.clone();
@@ -290,7 +295,7 @@ impl CommonConfig {
             let t = thread::Builder::new().name("evm".into());
             t.spawn(move || {
                 let _tokio_guard = evm_tokio.enter();
-                let mut evm = Revm::new(evm_storage);
+                let mut evm = Revm::new(evm_storage, evm_chain_id);
 
                 // keep executing transactions until the channel is closed
                 while let Ok((input, tx)) = evm_rx.recv() {

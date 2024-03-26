@@ -1,13 +1,14 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use crate::eth::primitives::ChainId;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
 use crate::eth::EthExecutor;
 
 pub struct RpcContext {
     // blockchain config
-    pub chain_id: u16,
+    pub chain_id: ChainId,
     pub client_version: &'static str,
 
     // gas config
