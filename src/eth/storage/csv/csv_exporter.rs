@@ -297,7 +297,7 @@ impl CsvExporter {
                 to_bytea(&tx.input.from),                      // signer_address
                 tx.input.nonce.to_string(),                    // nonce
                 to_bytea(&tx.input.from),                      // address_from
-                tx.input.to.map(to_bytea).unwrap_or_default(), // address_to
+                to_bytea(tx.input.to.unwrap_or_default()), // address_to
                 to_bytea(tx.input.input),                      // input
                 to_bytea(tx.execution.output),                 // output
                 tx.input.gas_limit.to_string(),                // gas
@@ -305,7 +305,7 @@ impl CsvExporter {
                 tx.transaction_index.to_string(),              // idx_in_block
                 tx.block_number.to_string(),                   // block_number
                 to_bytea(tx.block_hash),                       // block_hash
-                to_bytea(tx.input.v.as_u64().to_ne_bytes()),   // v
+                to_bytea(tx.input.v.as_u64().to_be_bytes()),   // v
                 u256_to_bytea(tx.input.r),                     // r
                 u256_to_bytea(tx.input.s),                     // s
                 tx.input.value.to_string(),                    // value
