@@ -1,0 +1,227 @@
+kubernetes:
+  base:
+    sourceRepo:
+      name: stratus
+      org: cloudwalk
+    monoRepo:
+      url: git@github.com:cloudwalk/monorepo-gitops.git
+      appsFolder: apps-config
+      argoCDValues: helms/argocd/values.yaml
+    containerRegistry:
+      url: gcr.io/infinitepay-production
+    deployConfig:
+      cluster: infinitepay-production
+      environment: production
+      steps:
+        - build
+        - push
+        - versioning
+        - deploy
+      service:
+        asmRevision: asm-managed-stable
+  apps:
+    # --------------------------------------------------------------------------
+    # EVM api
+    # --------------------------------------------------------------------------
+    - name: stratus-api
+      secretsManager:
+        enabled: true
+        provider: gcpsm
+      imageRepoName: stratus
+      kind: deployment
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 1
+          maxUnavailable: 0
+      replicas: 1
+      resources:
+        requests:
+          cpu: 30000m
+          memory: 120Gi
+      envs:
+        - name: ENV
+          value: "production"
+      service:
+        metrics:
+          path: "/"
+          port: "9000"
+        ports:
+          - containerPort: 8001
+            name: app
+            virtualservice:
+              gateway: internal
+              hosts:
+                - stratus-api.services.production.cloudwalk.network
+          - containerPort: 9000
+            name: metrics
+        healthcheck:
+          initialDelaySeconds: 10
+          interval: 10
+          path: /health
+          port: 3000
+          timeoutSeconds: 5
+
+    # --------------------------------------------------------------------------
+    # worker
+    # --------------------------------------------------------------------------
+    - name: stratus-worker
+      imageRepoName: infinitecard-core-payment
+      imagePullPolicy: Always
+      kind: deployment
+      replicas: 1
+      secretsManager:
+        enabled: true
+        secretsName: production-issuing-authorizer-api-infinitecard-core-payment
+        provider: gcpsm
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 500m
+          memory: 512Mi
+      envs:
+        - name: ENV
+          value: "production"
+        - name: OPTIMISTIC_APPROVAL
+          value: "true"
+        - name: UNSIGNED_OPTIMISTIC_APPROVAL
+          value: "true"
+        - name: UNSIGNED_OPTIMISTIC_ADDRESS
+          value: "0x2365F528b07E3e04f5574a7e349616139354C904"
+        - name: AUTHORIZER_BLOCKCHAIN_URL
+          value: "ws://issuing.mainnet.cloudwalk.network:9946"
+        - name: AUTHORIZER_BLOCKCHAIN_BRLC_CONTRACT
+          value: "0xA9a55a81a4C085EC0C31585Aed4cFB09D78dfD53"
+        - name: AUTHORIZER_BLOCKCHAIN_CPP_CONTRACT
+          value: "0xc10dB4941fB486b2d88839775802FA03BAc6dE31"
+        - name: AUTHORIZER_BLOCKCHAIN_CPP_EXECUTOR
+          value: "0xB81f0ca18889F10077B29d1dB83ABAf9b22AC904"
+        - name: AUTHORIZER_KEYMASTER_URL
+          value: "http://issuing-keymaster.issuing-keymaster-production:8000"
+        - name: TRACING_FORMAT
+          value: "json"
+        - name: TRACING_LOG_LEVEL
+          value: "debug,hyper=info,reqwest=info,tower_http=debug,tungstenite=info,issuing_authorizer_api::blockchain::blockchain_client=info"
+        - name: TRACING_DISABLE_OPENTELEMETRY
+          value: "false"
+        - name: TRACING_OPENTELEMETRY_ENDPOINT
+          value: "http://production-collector.monitoring:14268/api/traces"
+        - name: METRICS_ADDRESS
+          value: "0.0.0.0:18001"
+        - name: "GRPC_URL"
+          value: "0.0.0.0:3000"
+        - name: BLOCKSCOUT_URL
+          value: "https://explorer.mainnet.cloudwalk.network"
+        - name: BANKING_API_CRM_USER
+          value: "issuing@cloudwalk.io"
+        - name: BANKING_API_HOST
+          value: "https://infinitepay-banking-api.services.production.infinitepay.io"
+        - name: CHARGEBACK_WALLET_ID
+          value: "accJUCA613XHY2S"
+        - name: SETTLEMENT_WALLET_ID
+          value: "accP4ZDNZHNOJBC"
+        - name: DOUBLE_WRITE_HOST
+          value: "http://infinitecard-core-payment-api.infinitecard-core-payment-production:8001"
+        - name: AUTHORIZER_KAFKA_AUTH_MODE
+          value: "sasl_ssl"
+        - name: "CARDS_API_HOST"
+          value: https://cards.infinitepay.io/cards
+        - name: AUTHORIZER_KAFKA_URL
+          value: "pkc-doomjy.southamerica-east1.gcp.confluent.cloud:9092"
+      service:
+        metrics:
+          path: "/"
+          port: "18001"
+        ports:
+          - containerPort: 3000
+            name: app
+            virtualservice:
+              gateway: internal
+              hosts:
+                - issuing-authorizer-api-core-payment.services.production.cloudwalk.network
+            appProtocol: grpc
+          - containerPort: 18001
+            name: metrics
+
+    # --------------------------------------------------------------------------
+    # Job - Transaction Hash Sync
+    # --------------------------------------------------------------------------
+    - name: issuing-authorizer-job-hash
+      kind: cronjob
+      schedule: "0 8 * * *"
+      imageRepoName: issuing-authorizer-job-hash
+      dockerfile: ./Dockerfile.job_hash
+      imagePullPolicy: Always
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 500m
+          memory: 512Mi
+      envs:
+        - name: ENV
+          value: "production"
+        - name: OPTIMISTIC_APPROVAL
+          value: "true"
+        - name: UNSIGNED_OPTIMISTIC_APPROVAL
+          value: "true"
+        - name: UNSIGNED_OPTIMISTIC_ADDRESS
+          value: "0x2365F528b07E3e04f5574a7e349616139354C904"
+        - name: TRACING_LOG_LEVEL
+          value: "issuing_authorizer_api=info,issuing_authorizer_job_hash=info,issuing_authorizer_api::blockchain::blockchain_client=info"
+        - name: BLOCKCHAIN_OR_BLOCKSCOUT_URL
+          value: "https://explorer.mainnet.cloudwalk.network"
+        - name: BLOCKCHAIN_CPP_CONTRACT
+          value: "0xc10dB4941fB486b2d88839775802FA03BAc6dE31"
+      secretsManager:
+        enabled: true
+        secretsName: production-issuing-authorizer-api-issuing-authorizer-job-hash
+        provider: gcpsm
+
+    # --------------------------------------------------------------------------
+    # Job - Transaction Status Sync
+    # --------------------------------------------------------------------------
+    - name: issuing-authorizer-job-status
+      kind: cronjob
+      schedule: "59 */8 * * *" # 3 times a day, approximately at: 6h, 14h, 22h at utc -3
+      imageRepoName: issuing-authorizer-job-status
+      dockerfile: ./Dockerfile.job_status
+      imagePullPolicy: Always
+      backoffLimit: 3 # on fail, will retry two more times
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 500m
+          memory: 512Mi
+      envs:
+        - name: ENV
+          value: "production"
+        - name: OPTIMISTIC_APPROVAL
+          value: "true"
+        - name: UNSIGNED_OPTIMISTIC_APPROVAL
+          value: "true"
+        - name: UNSIGNED_OPTIMISTIC_ADDRESS
+          value: "0x2365F528b07E3e04f5574a7e349616139354C904"
+        - name: TRACING_LOG_LEVEL
+          value: "issuing_authorizer_api=info,issuing_authorizer_job_status=info,issuing_authorizer_api::blockchain::blockchain_client=info"
+        - name: BLOCKCHAIN_URL
+          value: "http://issuing.mainnet.cloudwalk.network:9934"
+        - name: BLOCKSCOUT_URL
+          value: "https://explorer.mainnet.cloudwalk.network"
+        - name: BLOCKCHAIN_CPP_CONTRACT
+          value: "0xc10dB4941fB486b2d88839775802FA03BAc6dE31"
+        - name: BLOCKCHAIN_BLOCK_STEP
+          value: "100"
+        - name: AUTHORIZER_KAFKA_AUTH_MODE
+          value: "sasl_ssl"
+        - name: AUTHORIZER_KAFKA_URL
+          value: "pkc-doomjy.southamerica-east1.gcp.confluent.cloud:9092"
+      secretsManager:
+        enabled: true
+        secretsName: production-issuing-authorizer-api-issuing-authorizer-job-status
+        provider: gcpsm
