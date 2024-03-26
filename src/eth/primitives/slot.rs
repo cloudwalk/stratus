@@ -57,6 +57,13 @@ impl Display for Slot {
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
+impl SlotIndex {
+    /// Converts itself to [`U256`].
+    pub fn as_u256(&self) -> U256 {
+        self.0
+    }
+}
+
 impl FromStr for SlotIndex {
     type Err = anyhow::Error;
 
