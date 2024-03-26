@@ -256,7 +256,7 @@ impl PermanentStorage for HybridPermanentStorage {
                     }
                 }
             }
-            StoragePointInTime::Past(block_number) => {
+            StoragePointInTime::Past(block_number) =>
                 if let Some(account_info) = state.accounts_history.get(&(address.clone(), *block_number)) {
                     Some(account_info.to_account(address).await)
                 } else {
@@ -280,8 +280,7 @@ impl PermanentStorage for HybridPermanentStorage {
                     .fetch_optional(&*self.pool)
                     .await
                     .context("failed to select account")?
-                }
-            }
+                },
         };
         Ok(account)
     }

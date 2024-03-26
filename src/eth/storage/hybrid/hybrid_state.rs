@@ -189,7 +189,7 @@ impl HybridStorageState {
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
                         slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
-                        slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value))
+                        slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value));
                     }
                 }
             }
