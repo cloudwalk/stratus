@@ -166,6 +166,10 @@ impl HybridPermanentStorage {
     pub async fn clear(&self) {
         let mut state = self.lock_write().await;
         let _ = state.accounts.clear();
+        let _ = state.accounts_history.clear();
+        let _ = state.account_slots.clear();
+        let _ = state.account_slots_history.clear();
+
         state.transactions.clear();
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
@@ -240,7 +244,7 @@ impl PermanentStorage for HybridPermanentStorage {
             StoragePointInTime::Present => {
                 match state.accounts.get(address) {
                     Some(inmemory_account) => {
-                        let account = inmemory_account.to_account(point_in_time, address).await;
+                        let account = inmemory_account.to_account(address).await;
                         tracing::trace!(%address, ?account, "account found");
                         Some(account)
                     }
@@ -252,9 +256,13 @@ impl PermanentStorage for HybridPermanentStorage {
                     }
                 }
             }
-            StoragePointInTime::Past(block_number) => sqlx::query_as!(
-                Account,
-                r#"
+            StoragePointInTime::Past(block_number) => {
+                if let Some(account_info) = state.accounts_history.get(&(address.clone(), *block_number)) {
+                    Some(account_info.to_account(address).await)
+                } else {
+                    sqlx::query_as!(
+                        Account,
+                        r#"
                 SELECT address as "address: _",
                     nonce as "nonce: _",
                     balance as "balance: _",
@@ -266,12 +274,14 @@ impl PermanentStorage for HybridPermanentStorage {
                                         FROM historical_slots
                                         WHERE address = $1
                                         AND block_number <= $2)"#,
-                address as _,
-                block_number as _
-            )
-            .fetch_optional(&*self.pool)
-            .await
-            .context("failed to select account")?,
+                        address as _,
+                        block_number as _
+                    )
+                    .fetch_optional(&*self.pool)
+                    .await
+                    .context("failed to select account")?
+                }
+            }
         };
         Ok(account)
     }
@@ -418,7 +428,7 @@ impl PermanentStorage for HybridPermanentStorage {
         state.logs.truncate(10000); // XXX base this on the blocks that have already been commited to pg.
 
         //XXX deal with errors later
-        let _ = state.update_state_with_execution_changes(&account_changes).await;
+        let _ = state.update_state_with_execution_changes(&account_changes, *number).await;
 
         let block_task = BlockTask {
             block_number: *block.number(),
@@ -445,6 +455,16 @@ impl PermanentStorage for HybridPermanentStorage {
         for account in accounts {
             state.accounts.insert(
                 account.address.clone(),
+                AccountInfo {
+                    balance: account.balance.clone(),
+                    nonce: account.nonce.clone(),
+                    bytecode: account.bytecode.clone(),
+                    code_hash: account.code_hash.clone(),
+                },
+            );
+
+            state.accounts_history.insert(
+                (account.address.clone(), 0.into()),
                 AccountInfo {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
@@ -479,7 +499,6 @@ impl PermanentStorage for HybridPermanentStorage {
     }
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        sleep(Duration::from_secs(2)).await;
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
@@ -518,7 +537,11 @@ impl PermanentStorage for HybridPermanentStorage {
             .await?;
 
         let _ = state.accounts.clear();
+        let _ = state.accounts_history.clear();
+
         let _ = state.account_slots.clear();
+        let _ = state.account_slots_history.clear();
+
         state.load_latest_data(&self.pool).await?;
 
         Ok(())
