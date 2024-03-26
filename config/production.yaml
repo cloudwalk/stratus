@@ -80,7 +80,7 @@ kubernetes:
       resources:
         requests:
           cpu: 30000m
-          memory: 120Gi
+          memory: 60Gi
       envs:
         - name: ENV
           value: "production"
