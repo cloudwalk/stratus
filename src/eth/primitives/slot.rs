@@ -6,6 +6,7 @@
 //! for interacting with slots, including reading and modifying storage data in
 //! the context of Ethereum smart contracts.
 
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -54,7 +55,7 @@ impl Display for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
 impl SlotIndex {
@@ -77,6 +78,12 @@ impl FromStr for SlotIndex {
 impl Dummy<Faker> for SlotIndex {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
+    }
+}
+
+impl Debug for SlotIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SlotIndex({:#x})", self.0)
     }
 }
 
