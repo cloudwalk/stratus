@@ -300,7 +300,7 @@ impl CsvExporter {
                 tx.input.to.map(to_bytea).unwrap_or_default(), // address_to
                 to_bytea(tx.input.input),                      // input
                 to_bytea(tx.execution.output),                 // output
-                tx.input.gas_limit.to_string(),                // gas
+                tx.execution.gas.to_string(),                  // gas
                 tx.input.gas_price.to_string(),                // gas_price
                 tx.transaction_index.to_string(),              // idx_in_block
                 tx.block_number.to_string(),                   // block_number
