@@ -42,11 +42,11 @@ async fn main() -> anyhow::Result<()> {
     let stratus_storage = config.init_stratus_storage().await?;
     let executor = config.init_executor(Arc::clone(&stratus_storage));
 
-    let block_start = match config.start {
+    let block_start = match config.block_start {
         Some(start) => start,
         None => block_number_to_start(&stratus_storage).await?,
     };
-    let block_end = match config.end {
+    let block_end = match config.block_end {
         Some(end) => end,
         None => block_number_to_stop(&rpc_storage).await?,
     };
