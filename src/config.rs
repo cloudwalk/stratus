@@ -111,6 +111,14 @@ pub struct ImporterOfflineConfig {
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
 
+    /// Initial block number to be imported.
+    #[arg(long = "start", env = "START")]
+    pub start: Option<BlockNumber>,
+
+    /// Final block number to be imported.
+    #[arg(long = "end", env = "END")]
+    pub end: Option<BlockNumber>,
+
     /// Number of parallel database fetches.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
