@@ -168,7 +168,6 @@ impl HybridStorageState {
                 account_changes.push((address.clone(), account_info_entry));
             }
             accounts.insert_batch(account_changes);
-
         };
 
         let slot_changes_future = async move {
