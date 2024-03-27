@@ -1,14 +1,15 @@
 use core::fmt;
-use std::sync::Arc;
 
 use anyhow::Context;
-use indexmap::IndexMap;
+use itertools::Itertools;
 use revm::primitives::KECCAK_EMPTY;
-use rocksdb::IteratorMode;
 use sqlx::types::BigDecimal;
+use sqlx::types::Json;
 use sqlx::FromRow;
 use sqlx::Pool;
 use sqlx::Postgres;
+use sqlx::QueryBuilder;
+use sqlx::Row;
 use tokio::join;
 
 use super::rocks_db::RocksDb;
@@ -21,6 +22,7 @@ use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
+use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
@@ -59,10 +61,10 @@ pub struct HybridStorageState {
     pub accounts_history: RocksDb<(Address, BlockNumber), AccountInfo>,
     pub account_slots: RocksDb<(Address, SlotIndex), SlotValue>,
     pub account_slots_history: RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>,
-    pub transactions: IndexMap<Hash, TransactionMined>,
-    pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
-    pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
-    pub logs: IndexMap<(Hash, Index), LogMined>,
+    pub transactions: RocksDb<Hash, TransactionMined>,
+    pub blocks_by_number: RocksDb<BlockNumber, Block>,
+    pub blocks_by_hash: RocksDb<Hash, Block>,
+    pub logs: RocksDb<(Hash, Index), LogMined>,
 }
 
 impl HybridStorageState {
@@ -72,10 +74,10 @@ impl HybridStorageState {
             accounts_history: RocksDb::new("./data/accounts_history.rocksdb").unwrap(),
             account_slots: RocksDb::new("./data/account_slots.rocksdb").unwrap(),
             account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb").unwrap(),
-            transactions: IndexMap::new(),
-            blocks_by_number: IndexMap::new(),
-            blocks_by_hash: IndexMap::new(),
-            logs: IndexMap::new(),
+            transactions: RocksDb::new("./data/transactions.rocksdb").unwrap(),
+            blocks_by_number: RocksDb::new("./data/blocks_by_number.rocksdb").unwrap(),
+            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb").unwrap(),
+            logs: RocksDb::new("./data/logs.rocksdb").unwrap(),
         }
     }
 
@@ -203,6 +205,52 @@ impl HybridStorageState {
         Ok(())
     }
 
+    pub async fn read_logs(&self, filter: &LogFilter, pool: &Pool<Postgres>) -> anyhow::Result<Vec<LogMined>> {
+        let logs = self
+            .logs
+            .iter_start()
+            .skip_while(|(_, log)| log.block_number < filter.from_block)
+            .take_while(|(_, log)| match filter.to_block {
+                Some(to_block) => log.block_number <= to_block,
+                None => true,
+            })
+            .filter_map(|(_, log)| if filter.matches(&log) { Some(log) } else { None });
+
+        let log_query_builder = &mut QueryBuilder::new(
+            r#"
+                SELECT log_data
+                FROM neo_logs
+            "#,
+        );
+        log_query_builder.push(" WHERE block_number >= ").push_bind(filter.from_block);
+
+        // verifies if to_block exists
+        if let Some(block_number) = filter.to_block {
+            log_query_builder.push(" AND block_number <= ").push_bind(block_number);
+        }
+
+        for address in filter.addresses.iter() {
+            log_query_builder.push(" AND address = ").push_bind(address);
+        }
+
+        let log_query = log_query_builder.build();
+
+        let query_result = log_query.fetch_all(pool).await?;
+
+        let pg_logs = query_result
+            .into_iter()
+            .map(|row| {
+                let json: Json<LogMined> = row.get("log_data");
+                json.0
+            })
+            .filter(|log| filter.matches(log))
+            .chain(logs) // we chain the iterators because it might be the case that some logs are yet to be written to pg
+            .unique_by(|log| (log.block_number, log.log_index, log.transaction_hash.clone()))
+            .collect();
+
+        Ok(pg_logs)
+    }
+
     pub async fn get_slot_at_point(
         &self,
         address: &Address,
@@ -217,18 +265,14 @@ impl HybridStorageState {
             }),
             StoragePointInTime::Past(number) => {
                 // XXX validate further that this actually works every time
-                let serialized_key = bincode::serialize(&(address.clone(), slot_index.clone(), *number))?;
-                let iterator_mode = IteratorMode::From(&serialized_key, rocksdb::Direction::Reverse);
-                let mut iterator = self.account_slots_history.db.iterator(iterator_mode);
 
-                if let Some(key_value) = iterator.next() {
-                    let (key, value) = key_value.unwrap();
-
-                    let key_decoded: (Address, SlotIndex, BlockNumber) = bincode::deserialize(&key).unwrap();
-                    let value: SlotValue = bincode::deserialize(&value).unwrap();
-
-                    if slot_index == &key_decoded.1 || address == &key_decoded.0 {
-                        return Ok(Some(Slot { index: key_decoded.1, value }));
+                if let Some(((addr, index, _), value)) = self
+                    .account_slots_history
+                    .iter_from((address.clone(), slot_index.clone(), *number), rocksdb::Direction::Reverse)
+                    .next()
+                {
+                    if slot_index == &index || address == &addr {
+                        return Ok(Some(Slot { index, value }));
                     }
                 }
                 {
