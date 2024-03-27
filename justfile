@@ -329,8 +329,8 @@ contracts-flatten:
     cd e2e-contracts && ./flatten-contracts.sh
 
 # Contracts: Test selected Solidity contracts on Stratus
-contracts-test:
-    cd e2e-contracts && ./test-contracts.sh
+contracts-test *args="":
+    cd e2e-contracts && ./test-contracts.sh {{ args }}
 alias e2e-contracts := contracts-test
 
 # Contracts: Run BRLCToken contract tests
@@ -354,7 +354,7 @@ contracts-remove:
     cd e2e-contracts && ./remove-contracts.sh
 
 # Contracts: Start Stratus and run contracts test
-contracts-test-stratus:
+contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
@@ -363,7 +363,7 @@ contracts-test-stratus:
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E Contracts tests"
-    just e2e-contracts
+    just e2e-contracts {{ args }}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -371,7 +371,7 @@ contracts-test-stratus:
     exit $result_code
 
 # Contracts: Start Stratus with Postgres and run contracts test
-contracts-test-stratus-postgres:
+contracts-test-stratus-postgres *args="":
     #!/bin/bash
     echo "-> Starting Postgres"
     docker-compose down
@@ -387,7 +387,7 @@ contracts-test-stratus-postgres:
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e-contracts
+    just e2e-contracts  {{ args }}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -422,3 +422,4 @@ contracts-coverage-erase:
     #!/bin/bash
     cd e2e-contracts/repos
     rm -rf */coverage
+
