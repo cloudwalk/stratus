@@ -8,10 +8,8 @@ use std::time::Duration;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use itertools::Itertools;
 use metrics::atomics::AtomicU64;
 use num_traits::cast::ToPrimitive;
-use rocksdb::IteratorMode;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::Json;
 use sqlx::Pool;
@@ -165,16 +163,16 @@ impl HybridPermanentStorage {
 
     /// Clears in-memory state.
     pub async fn clear(&self) {
-        let mut state = self.lock_write().await;
+        let state = self.lock_write().await;
         let _ = state.accounts.clear();
         let _ = state.accounts_history.clear();
         let _ = state.account_slots.clear();
         let _ = state.account_slots_history.clear();
 
-        state.transactions.clear();
-        state.blocks_by_hash.clear();
-        state.blocks_by_number.clear();
-        state.logs.clear();
+        state.transactions.clear().unwrap();
+        state.blocks_by_hash.clear().unwrap();
+        state.blocks_by_number.clear().unwrap();
+        state.logs.clear().unwrap();
     }
 
     async fn check_conflicts(state: &HybridStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
@@ -258,17 +256,12 @@ impl PermanentStorage for HybridPermanentStorage {
                 }
             }
             StoragePointInTime::Past(block_number) => {
-                let serialized_key = bincode::serialize(&(address.clone(), *block_number))?;
-                let iterator_mode = IteratorMode::From(&serialized_key, rocksdb::Direction::Reverse);
-                let mut iterator = state.accounts_history.db.iterator(iterator_mode);
-
-                if let Some(key_value) = iterator.next() {
-                    let (key, value) = key_value?;
-
-                    let key_decoded: (Address, BlockNumber) = bincode::deserialize(&key)?;
-                    let account_info: AccountInfo = bincode::deserialize(&value)?;
-
-                    if address == &key_decoded.0 {
+                if let Some(((addr, _), account_info)) = state
+                    .accounts_history
+                    .iter_from((address.clone(), *block_number), rocksdb::Direction::Reverse)
+                    .next()
+                {
+                    if address == &addr {
                         return Ok(Some(account_info.to_account(address).await));
                     }
                 }
@@ -310,19 +303,34 @@ impl PermanentStorage for HybridPermanentStorage {
 
         let state_lock = self.lock_read().await;
         let block = match selection {
-            BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
-            BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
-            BlockSelection::Number(number) => state_lock.blocks_by_number.get(number).cloned(),
-            BlockSelection::Hash(hash) => state_lock.blocks_by_hash.get(hash).cloned(),
+            BlockSelection::Latest => state_lock.blocks_by_number.iter_end().next().map(|(_, block)| block),
+            BlockSelection::Earliest => state_lock.blocks_by_number.iter_start().next().map(|(_, block)| block),
+            BlockSelection::Number(number) => state_lock.blocks_by_number.get(number),
+            BlockSelection::Hash(hash) => state_lock.blocks_by_hash.get(hash),
         };
         match block {
             Some(block) => {
                 tracing::trace!(?selection, ?block, "block found");
-                Ok(Some((*block).clone()))
+                Ok(Some(block))
             }
             None => {
-                tracing::trace!(?selection, "block not found");
-                Ok(None)
+                let block_query = &mut QueryBuilder::new(
+                    r#"
+                    SELECT block
+                    FROM neo_blocks
+                "#,
+                );
+                match selection {
+                    BlockSelection::Latest => block_query.push(" WHERE block_number = (SELECT MAX(block_number) FROM neo_blocks)"),
+                    BlockSelection::Earliest => block_query.push(" WHERE block_number = 0"),
+                    BlockSelection::Number(number) => block_query.push(" WHERE block_number = ").push_bind(number),
+                    BlockSelection::Hash(hash) => block_query.push(" WHERE block_hash = ").push_bind(hash),
+                };
+                Ok(block_query
+                    .build()
+                    .fetch_optional(&*self.pool)
+                    .await?
+                    .map(|row| row.get::<Json<Block>, _>("block").0))
             }
         }
     }
@@ -365,53 +373,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
-
-        let state_lock = self.lock_read().await;
-
-        let logs = state_lock
-            .logs
-            .values()
-            .skip_while(|log| log.block_number < filter.from_block)
-            .take_while(|log| match filter.to_block {
-                Some(to_block) => log.block_number <= to_block,
-                None => true,
-            })
-            .filter(|log| filter.matches(log))
-            .cloned();
-
-        let log_query_builder = &mut QueryBuilder::new(
-            r#"
-                SELECT log_data
-                FROM neo_logs
-            "#,
-        );
-        log_query_builder.push(" WHERE block_number >= ").push_bind(filter.from_block);
-
-        // verifies if to_block exists
-        if let Some(block_number) = filter.to_block {
-            log_query_builder.push(" AND block_number <= ").push_bind(block_number);
-        }
-
-        for address in filter.addresses.iter() {
-            log_query_builder.push(" AND address = ").push_bind(address);
-        }
-
-        let log_query = log_query_builder.build();
-
-        let query_result = log_query.fetch_all(&*self.pool).await?;
-
-        let pg_logs = query_result
-            .into_iter()
-            .map(|row| {
-                let json: Json<LogMined> = row.get("log_data");
-                json.0
-            })
-            .filter(|log| filter.matches(log))
-            .chain(logs) // we chain the iterators because it might be the case that some logs are yet to be written to pg
-            .unique_by(|log| (log.block_number, log.log_index, log.transaction_hash.clone()))
-            .collect();
-
-        Ok(pg_logs)
+        self.state.read().await.read_logs(filter, &self.pool).await
     }
 
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
@@ -431,22 +393,18 @@ impl PermanentStorage for HybridPermanentStorage {
         }
 
         // save block
-        let block = Arc::new(block);
         let number = block.number();
-        state.blocks_by_number.insert(*number, Arc::clone(&block));
-        state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
-        state.blocks_by_hash.truncate(600); // XXX base this on the blocks that have already been commited to pg.
-        state.blocks_by_number.truncate(600); // XXX base this on the blocks that have already been commited to pg.
-        state.transactions.truncate(10000); // XXX base this on the blocks that have already been commited to pg.
-        state.logs.truncate(10000); // XXX base this on the blocks that have already been commited to pg.
+        let hash = block.hash().clone();
+        state.blocks_by_number.insert(*number, block.clone());
+        state.blocks_by_hash.insert(hash.clone(), block.clone());
 
         //XXX deal with errors later
         let _ = state.update_state_with_execution_changes(&account_changes, *number).await;
 
         let block_task = BlockTask {
-            block_number: *block.number(),
-            block_hash: block.hash().clone(),
-            block_data: (*block).clone(),
+            block_number: *number,
+            block_hash: hash,
+            block_data: block,
             account_changes, //TODO make account changes work from postgres then we can load it on memory
         };
 
@@ -525,12 +483,12 @@ impl PermanentStorage for HybridPermanentStorage {
 
         // remove blocks
         let mut state = self.lock_write().await;
-        state.blocks_by_hash.retain(|_, b| *b.number() <= block_number);
-        state.blocks_by_number.retain(|_, b| *b.number() <= block_number);
+        state.blocks_by_hash.clear()?;
+        state.blocks_by_number.clear()?;
 
         // remove transactions and logs
-        state.transactions.retain(|_, t| t.block_number <= block_number);
-        state.logs.retain(|_, l| l.block_number <= block_number);
+        state.transactions.clear()?;
+        state.logs.clear()?;
 
         let _ = self.tasks_pending.acquire().await.expect("semaphore has closed");
 

@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use anyhow::Result;
+use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
@@ -70,6 +71,56 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 self.insert(key, new_value.clone());
                 new_value
             }
+        }
+    }
+
+    pub fn iter_start(&self) -> RocksDBIterator<K, V> {
+        let iter = self.db.iterator(IteratorMode::Start);
+        RocksDBIterator::<K, V>::new(iter)
+    }
+
+    pub fn iter_end(&self) -> RocksDBIterator<K, V> {
+        let iter = self.db.iterator(IteratorMode::End);
+        RocksDBIterator::<K, V>::new(iter)
+    }
+
+    pub fn iter_from<P: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq>(
+        &self,
+        key_prefix: P,
+        direction: rocksdb::Direction,
+    ) -> RocksDBIterator<K, V> {
+        let serialized_key = bincode::serialize(&key_prefix).unwrap();
+        let iter = self.db.iterator(IteratorMode::From(&serialized_key, direction));
+        RocksDBIterator::<K, V>::new(iter)
+    }
+}
+
+pub struct RocksDBIterator<'a, K, V> {
+    iter: DBIteratorWithThreadMode<'a, DB>,
+    _marker: PhantomData<(K, V)>,
+}
+
+impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDBIterator<'a, K, V> {
+    pub fn new(iter: DBIteratorWithThreadMode<'a, DB>) -> Self {
+        Self { iter, _marker: PhantomData }
+    }
+}
+
+impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> Iterator
+    for RocksDBIterator<'a, K, V>
+{
+    type Item = (K, V);
+    fn next(&mut self) -> Option<Self::Item> {
+        let key_value = self.iter.next();
+        match key_value {
+            Some(key_value) => {
+                let (key, value) = key_value.unwrap(); // XXX deal with the result
+
+                let key: K = bincode::deserialize(&key).unwrap();
+                let value: V = bincode::deserialize(&value).unwrap();
+                Some((key, value))
+            }
+            None => None,
         }
     }
 }
