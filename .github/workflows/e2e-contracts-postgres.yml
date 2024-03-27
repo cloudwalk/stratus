@@ -8,7 +8,11 @@ on:
 
 jobs:
   contract_test_psql:
-    name: Contracts E2E Postgres Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        contract: [token, pix, periphery, compound, yield, multisig]
+    name: ${{ matrix.contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -39,4 +43,4 @@ jobs:
         run: just setup
 
       - name: Run e2e tests
-        run: PERM_STORAGE=postgres://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres
+        run: PERM_STORAGE=postgres://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres --${{ matrix.contract }}
