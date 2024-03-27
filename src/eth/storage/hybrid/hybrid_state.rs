@@ -235,7 +235,7 @@ impl HybridStorageState {
 
         let log_query = log_query_builder.build();
 
-        let query_result = log_query.fetch_all(&*pool).await?;
+        let query_result = log_query.fetch_all(pool).await?;
 
         let pg_logs = query_result
             .into_iter()
