@@ -264,14 +264,12 @@ impl HybridStorageState {
                 value: account_slot_value.clone(),
             }),
             StoragePointInTime::Past(number) => {
-                // XXX validate further that this actually works every time
-
                 if let Some(((addr, index, _), value)) = self
                     .account_slots_history
                     .iter_from((address.clone(), slot_index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if slot_index == &index || address == &addr {
+                    if slot_index == &index && address == &addr {
                         return Ok(Some(Slot { index, value }));
                     }
                 }
