@@ -1,5 +1,6 @@
 use std::fs;
 use std::fs::File;
+use std::path::Path;
 
 use anyhow::Context;
 use anyhow::Ok;
@@ -138,7 +139,6 @@ const TOPICS_HEADERS: [&str; 10] = [
 
 /// Export CSV files in the same format of the PostgreSQL tables.
 pub struct CsvExporter {
-    staged_initial_accounts: Vec<Account>,
     staged_blocks: Vec<Block>,
 
     accounts_csv: csv::Writer<File>,
@@ -182,10 +182,9 @@ impl CsvExporter {
 
         Ok(Self {
             staged_blocks: Vec::new(),
-            staged_initial_accounts: Vec::new(),
 
             accounts_csv,
-            accounts_id: LastId::new_zero(ACCOUNTS_FILE),
+            accounts_id: LastId::new(ACCOUNTS_FILE)?,
 
             historical_slots_csv,
             historical_slots_id: LastId::new(HISTORICAL_SLOTS_FILE)?,
@@ -210,15 +209,13 @@ impl CsvExporter {
         })
     }
 
+    pub fn is_accounts_empty(&self) -> bool {
+        self.accounts_id.value == 0
+    }
+
     // -------------------------------------------------------------------------
     // Stagers
     // -------------------------------------------------------------------------
-
-    /// Add an initial account to be exported.
-    pub fn add_initial_account(&mut self, account: Account) -> anyhow::Result<()> {
-        self.staged_initial_accounts.push(account);
-        Ok(())
-    }
 
     /// Add a block to be exported.
     pub fn add_block(&mut self, block: Block) -> anyhow::Result<()> {
@@ -230,10 +227,6 @@ impl CsvExporter {
     // Exporters
     // -------------------------------------------------------------------------
     pub fn flush(&mut self) -> anyhow::Result<()> {
-        // export accounts
-        let initial_accounts = self.staged_initial_accounts.drain(..).collect_vec();
-        self.export_initial_accounts(initial_accounts)?;
-
         // export blocks
         let blocks = self.staged_blocks.drain(..).collect_vec();
         for block in blocks {
@@ -297,7 +290,7 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    pub fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
         for account in accounts {
             self.accounts_id.value += 1;
             let now = now();
@@ -529,7 +522,7 @@ impl LastId {
         let mut id = Self::new_zero(base_path);
 
         // when file exist, read value from file
-        if fs::metadata(&id.file).is_ok() {
+        if Path::new(&id.file).exists() {
             let content = fs::read_to_string(&id.file).context("failed to read last_id file")?;
             id.value = content.parse().context("failed to parse last_id file content")?;
         }
