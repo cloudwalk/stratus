@@ -178,7 +178,7 @@ impl CsvExporter {
             blocks_csv,
             logs_csv,
             topics_csv,
-        } = CsvFiles::load(number)?;
+        } = CsvFiles::create(number)?;
 
         Ok(Self {
             staged_blocks: Vec::new(),
@@ -283,7 +283,7 @@ impl CsvExporter {
             blocks_csv,
             logs_csv,
             topics_csv,
-        } = CsvFiles::load(block_number)?;
+        } = CsvFiles::create(block_number)?;
 
         self.accounts_csv = accounts_csv;
         self.historical_slots_csv = historical_slots_csv;
@@ -556,7 +556,7 @@ struct CsvFiles {
 }
 
 impl CsvFiles {
-    fn load(block_number: BlockNumber) -> anyhow::Result<Self> {
+    fn create(block_number: BlockNumber) -> anyhow::Result<Self> {
         Ok(Self {
             accounts_csv: csv_writer(ACCOUNTS_FILE, block_number, &ACCOUNTS_HEADERS)?,
             historical_slots_csv: csv_writer(HISTORICAL_SLOTS_FILE, block_number, &HISTORICAL_SLOTS_HEADERS)?,
