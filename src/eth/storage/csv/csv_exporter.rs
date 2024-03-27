@@ -330,26 +330,26 @@ impl CsvExporter {
             // export data
             let now = now();
             let row = [
-                self.transactions_id.value.to_string(),        // id
-                to_bytea(tx.input.hash),                       // hash
-                to_bytea(&tx.input.from),                      // signer_address
-                tx.input.nonce.to_string(),                    // nonce
-                to_bytea(&tx.input.from),                      // address_from
-                tx.input.to.map(to_bytea).unwrap_or_default(), // address_to
-                to_bytea(tx.input.input),                      // input
-                to_bytea(tx.execution.output),                 // output
-                tx.input.gas_limit.to_string(),                // gas
-                tx.input.gas_price.to_string(),                // gas_price
-                tx.transaction_index.to_string(),              // idx_in_block
-                tx.block_number.to_string(),                   // block_number
-                to_bytea(tx.block_hash),                       // block_hash
-                to_bytea(tx.input.v.as_u64().to_ne_bytes()),   // v
-                u256_to_bytea(tx.input.r),                     // r
-                u256_to_bytea(tx.input.s),                     // s
-                tx.input.value.to_string(),                    // value
-                tx.execution.result.to_string(),               // result
-                now.clone(),                                   // created_at
-                now,                                           // updated_at
+                self.transactions_id.value.to_string(),      // id
+                to_bytea(tx.input.hash),                     // hash
+                to_bytea(&tx.input.from),                    // signer_address
+                tx.input.nonce.to_string(),                  // nonce
+                to_bytea(&tx.input.from),                    // address_from
+                to_bytea(tx.input.to.unwrap_or_default()),   // address_to
+                to_bytea(tx.input.input),                    // input
+                to_bytea(tx.execution.output),               // output
+                tx.execution.gas.to_string(),                // gas
+                tx.input.gas_price.to_string(),              // gas_price
+                tx.transaction_index.to_string(),            // idx_in_block
+                tx.block_number.to_string(),                 // block_number
+                to_bytea(tx.block_hash),                     // block_hash
+                to_bytea(tx.input.v.as_u64().to_be_bytes()), // v
+                u256_to_bytea(tx.input.r),                   // r
+                u256_to_bytea(tx.input.s),                   // s
+                tx.input.value.to_string(),                  // value
+                tx.execution.result.to_string(),             // result
+                now.clone(),                                 // created_at
+                now,                                         // updated_at
             ];
             self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }

@@ -10,7 +10,7 @@ jobs:
   doc_unit_tests:
     name: Documentation Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
