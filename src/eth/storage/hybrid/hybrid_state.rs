@@ -208,7 +208,7 @@ impl HybridStorageState {
     pub async fn read_logs(&self, filter: &LogFilter, pool: &Pool<Postgres>) -> anyhow::Result<Vec<LogMined>> {
         let logs = self
             .logs
-            .iter_end()
+            .iter_start()
             .skip_while(|(_, log)| log.block_number < filter.from_block)
             .take_while(|(_, log)| match filter.to_block {
                 Some(to_block) => log.block_number <= to_block,
