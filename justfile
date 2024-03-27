@@ -387,7 +387,7 @@ contracts-test-stratus-postgres *args="":
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e-contracts  {{ args }}
+    just e2e-contracts {{ args }}
     result_code=$?
 
     echo "-> Killing Stratus"
