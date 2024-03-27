@@ -32,6 +32,9 @@ const BACKLOG_SIZE: usize = 50;
 /// Number of blocks processed in memory before data is flushed to temporary storage and CSV files.
 const FLUSH_INTERVAL_IN_BLOCKS: u64 = 100;
 
+/// The maximum amount of blocks in each CSV chunk file.
+const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 250_000;
+
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
 #[tokio::main]
@@ -118,13 +121,24 @@ async fn execute_block_importer(
                 Some(ref mut csv) => {
                     let block = executor.import_external_to_temp(block, &mut receipts).await?;
                     let number = *block.number();
+
                     csv.add_block(block)?;
 
-                    // flush when reached the specified interval or is the last block in the loop
-                    let should_flush = (number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0) || (block_index == block_last_index);
+                    let is_last_block = block_index == block_last_index;
+                    let is_chunk_interval_end = number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
+                    let is_flush_interval_end = number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
+
+                    let should_chunk_csv_files = is_chunk_interval_end && !is_last_block;
+                    let should_flush = is_flush_interval_end || is_last_block || should_chunk_csv_files;
+
                     if should_flush {
                         csv.flush()?;
                         stratus_storage.flush_temp().await?;
+                    }
+
+                    if should_chunk_csv_files {
+                        tracing::info!("Chunk ended at block number {number}, starting next CSV chunks for the next block");
+                        csv.finish_current_chunks(number)?;
                     }
                 }
                 // when not exporting to csv, persist the entire block to permanent immediately
