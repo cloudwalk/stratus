@@ -779,7 +779,7 @@ BEGIN
         EXECUTE 'CREATE INDEX neo_account_slots_p' || partition_suffix || '_block_number_desc_idx ON public.neo_account_slots_p' || partition_suffix || ' (block_number DESC)';
 
         -- Update range for the next partition, incrementing by 5M each time
-        start_block := end_block + 1;
+        start_block := end_block;
         end_block := end_block + 7862400; -- Increment by a quarter considering 1 block = 1 second
     END LOOP;
 END$$;
