@@ -16,7 +16,6 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
-use stratus::if_else;
 use stratus::infra::metrics;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -54,21 +53,28 @@ async fn main() -> anyhow::Result<()> {
         None => block_number_to_stop(&rpc_storage).await?,
     };
 
-    let mut csv = if_else!(config.export_csv, Some(CsvExporter::new(block_start)?), None);
-
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
 
-    // import genesis accounts
-    let accounts = rpc_storage.read_initial_accounts().await?;
-    if let Some(ref mut csv) = csv {
-        for account in accounts.iter() {
-            csv.add_initial_account(account.clone())?;
+    // load genesis accounts
+    let initial_accounts = rpc_storage.read_initial_accounts().await?;
+
+    // initialize CSV and write initial accounts if necessary
+    let csv = if config.export_csv {
+        let mut csv = CsvExporter::new(block_start)?;
+
+        // write initial accounts once, even between runs
+        if csv.is_accounts_empty() {
+            csv.export_initial_accounts(initial_accounts.clone())?;
         }
-        csv.flush()?;
-    }
-    stratus_storage.save_accounts_to_perm(accounts).await?;
+
+        Some(csv)
+    } else {
+        None
+    };
+
+    stratus_storage.save_accounts_to_perm(initial_accounts).await?;
 
     // execute parallel tasks (external rpc storage loader and block importer)
     tokio::spawn(execute_external_rpc_storage_loader(

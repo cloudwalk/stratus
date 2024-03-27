@@ -138,6 +138,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
             }
         }
     }
+
     async fn read_initial_accounts(&self) -> anyhow::Result<Vec<Account>> {
         tracing::debug!("retrieving external balances");
 
