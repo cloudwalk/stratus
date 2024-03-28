@@ -4364,6 +4364,7 @@ dependencies = [
  "csv",
  "derive-new",
  "derive_more",
+ "dotenvy",
  "ethabi",
  "ethereum-types",
  "ethers-core",
