@@ -53,8 +53,8 @@ jobs:
 
       - name: Set up Test and clone repositories
         run: |
-          cargo install killport
-          cargo install wait-service
+          cargo install killport || true
+          cargo install wait-service || true
           just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests

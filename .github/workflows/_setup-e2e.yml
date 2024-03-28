@@ -45,8 +45,8 @@ jobs:
 
       - name: Set up Test Dependencies
         run: |
-          cargo install killport
-          cargo install wait-service
+          cargo install killport || true
+          cargo install wait-service || true
 
       - name: Run e2e tests
         run: ${{ inputs.test_command }}
