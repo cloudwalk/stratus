@@ -86,7 +86,7 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
-# execute
+# Execute
 if [ "$token" == 1 ]; then
     test brlc-token BRLCToken
     test brlc-token base/CWToken.complex
