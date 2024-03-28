@@ -7,7 +7,36 @@ on:
   workflow_dispatch:
 
 jobs:
+  doc_unit_tests_file_changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-changes
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Check file changes
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          # Avoid using single or double quotes for multiline patterns
+          files: |
+            README.md
+            CONTRIBUTING.md
+            LICENSE
+            static/contracts/*.signatures
+            config/*
+            .github/workflows/deploy.yml
+            .github/CODEOWNERS
+            .github/workflows/docs-release.yml
+            .github/workflows/outdated.yml
+    outputs:
+      only_modified: ${{ steps.changed-files.outputs.only_modified }}
   doc_unit_tests:
+    needs: doc_unit_tests_file_changes
+    if: ${{ needs.doc_unit_tests_file_changes.outputs.only_modified == 'true' }}
     name: Documentation Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
