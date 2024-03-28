@@ -192,7 +192,7 @@ impl Database for RevmDatabaseSession {
         // track original value, except if ignored address
         if not(account.address.is_ignored()) {
             self.storage_changes
-                .insert(account.address.clone(), ExecutionAccountChanges::from_existing_account(account.clone()));
+                .insert(account.address.clone(), ExecutionAccountChanges::from_original_values(account.clone()));
         }
 
         Ok(Some(account.into()))
@@ -291,7 +291,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
             slots = %revm_account.storage.len(),
             "evm account"
         );
-        let (account_created, account_updated) = (revm_account.is_created(), revm_account.is_touched());
+        let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
 
         // parse revm to internal representation
         let account: Account = (revm_address, revm_account.info).into();
@@ -308,17 +308,17 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         if account_created {
             execution_changes.insert(
                 account.address.clone(),
-                ExecutionAccountChanges::from_new_account(account, account_modified_slots),
+                ExecutionAccountChanges::from_modified_values(account, account_modified_slots),
             );
         }
-        // status: touched (updated)
-        else if account_updated {
-            let Some(existing_account) = execution_changes.get_mut(&address) else {
-                tracing::error!(keys = ?execution_changes.keys(), %address, "account updated, but not loaded by evm");
+        // status: touched
+        else if account_touched {
+            let Some(touched_account) = execution_changes.get_mut(&address) else {
+                tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
                 // TODO: panic! only when in dev-mode or try to refactor to avoid panic!
                 panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
             };
-            existing_account.apply_changes(account, account_modified_slots);
+            touched_account.apply_modifications(account, account_modified_slots);
         }
     }
     execution_changes

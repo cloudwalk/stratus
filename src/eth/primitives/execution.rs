@@ -63,7 +63,7 @@ impl Execution {
         }
 
         // generate sender changes incrementing the nonce
-        let mut sender_changes = ExecutionAccountChanges::from_existing_account(sender);
+        let mut sender_changes = ExecutionAccountChanges::from_original_values(sender);
         let sender_next_nonce = sender_changes.nonce.take_original_ref().unwrap().next();
         sender_changes.nonce.set_modified(sender_next_nonce);
 

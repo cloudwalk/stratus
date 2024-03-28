@@ -1,5 +1,6 @@
 use std::fs;
 use std::fs::File;
+use std::path::Path;
 
 use anyhow::Context;
 use anyhow::Ok;
@@ -138,7 +139,6 @@ const TOPICS_HEADERS: [&str; 10] = [
 
 /// Export CSV files in the same format of the PostgreSQL tables.
 pub struct CsvExporter {
-    staged_initial_accounts: Vec<Account>,
     staged_blocks: Vec<Block>,
 
     accounts_csv: csv::Writer<File>,
@@ -169,45 +169,53 @@ pub struct CsvExporter {
 impl CsvExporter {
     /// Creates a new [`CsvExporter`].
     pub fn new(number: BlockNumber) -> anyhow::Result<Self> {
+        let CsvFiles {
+            accounts_csv,
+            historical_slots_csv,
+            historical_balances_csv,
+            historical_nonces_csv,
+            transactions_csv,
+            blocks_csv,
+            logs_csv,
+            topics_csv,
+        } = CsvFiles::create(number)?;
+
         Ok(Self {
             staged_blocks: Vec::new(),
-            staged_initial_accounts: Vec::new(),
 
-            accounts_csv: csv_writer(ACCOUNTS_FILE, BlockNumber::ZERO, &ACCOUNTS_HEADERS)?,
-            accounts_id: LastId::new_zero(ACCOUNTS_FILE),
+            accounts_csv,
+            accounts_id: LastId::new(ACCOUNTS_FILE)?,
 
-            historical_slots_csv: csv_writer(HISTORICAL_SLOTS_FILE, number, &HISTORICAL_SLOTS_HEADERS)?,
+            historical_slots_csv,
             historical_slots_id: LastId::new(HISTORICAL_SLOTS_FILE)?,
 
-            historical_balances_csv: csv_writer(HISTORICAL_BALANCES_FILE, number, &HISTORICAL_BALANCES_HEADERS)?,
+            historical_balances_csv,
             historical_balances_id: LastId::new(HISTORICAL_BALANCES_FILE)?,
 
-            historical_nonces_csv: csv_writer(HISTORICAL_NONCES_FILE, number, &HISTORICAL_NONCES_HEADERS)?,
+            historical_nonces_csv,
             historical_nonces_id: LastId::new(HISTORICAL_NONCES_FILE)?,
 
-            transactions_csv: csv_writer(TRANSACTIONS_FILE, number, &TRANSACTIONS_HEADERS)?,
+            transactions_csv,
             transactions_id: LastId::new(TRANSACTIONS_FILE)?,
 
-            blocks_csv: csv_writer(BLOCKS_FILE, number, &BLOCKS_HEADERS)?,
+            blocks_csv,
             blocks_id: LastId::new(BLOCKS_FILE)?,
 
-            logs_csv: csv_writer(LOGS_FILE, number, &LOGS_HEADERS)?,
+            logs_csv,
             logs_id: LastId::new(LOGS_FILE)?,
 
-            topics_csv: csv_writer(TOPICS_FILE, number, &TOPICS_HEADERS)?,
+            topics_csv,
             topics_id: LastId::new(TOPICS_FILE)?,
         })
+    }
+
+    pub fn is_accounts_empty(&self) -> bool {
+        self.accounts_id.value == 0
     }
 
     // -------------------------------------------------------------------------
     // Stagers
     // -------------------------------------------------------------------------
-
-    /// Add an initial account to be exported.
-    pub fn add_initial_account(&mut self, account: Account) -> anyhow::Result<()> {
-        self.staged_initial_accounts.push(account);
-        Ok(())
-    }
 
     /// Add a block to be exported.
     pub fn add_block(&mut self, block: Block) -> anyhow::Result<()> {
@@ -219,10 +227,6 @@ impl CsvExporter {
     // Exporters
     // -------------------------------------------------------------------------
     pub fn flush(&mut self) -> anyhow::Result<()> {
-        // export accounts
-        let initial_accounts = self.staged_initial_accounts.drain(..).collect_vec();
-        self.export_initial_accounts(initial_accounts)?;
-
         // export blocks
         let blocks = self.staged_blocks.drain(..).collect_vec();
         for block in blocks {
@@ -259,7 +263,34 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    /// Close current files and creates new CSV chunks to write on instead.
+    pub fn finish_current_chunks(&mut self, block_number: BlockNumber) -> anyhow::Result<()> {
+        self.flush()?;
+
+        let CsvFiles {
+            accounts_csv,
+            historical_slots_csv,
+            historical_balances_csv,
+            historical_nonces_csv,
+            transactions_csv,
+            blocks_csv,
+            logs_csv,
+            topics_csv,
+        } = CsvFiles::create(block_number)?;
+
+        self.accounts_csv = accounts_csv;
+        self.historical_slots_csv = historical_slots_csv;
+        self.historical_balances_csv = historical_balances_csv;
+        self.historical_nonces_csv = historical_nonces_csv;
+        self.transactions_csv = transactions_csv;
+        self.blocks_csv = blocks_csv;
+        self.logs_csv = logs_csv;
+        self.topics_csv = topics_csv;
+
+        Ok(())
+    }
+
+    pub fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
         for account in accounts {
             self.accounts_id.value += 1;
             let now = now();
@@ -292,26 +323,26 @@ impl CsvExporter {
             // export data
             let now = now();
             let row = [
-                self.transactions_id.value.to_string(),        // id
-                to_bytea(tx.input.hash),                       // hash
-                to_bytea(&tx.input.from),                      // signer_address
-                tx.input.nonce.to_string(),                    // nonce
-                to_bytea(&tx.input.from),                      // address_from
-                tx.input.to.map(to_bytea).unwrap_or_default(), // address_to
-                to_bytea(tx.input.input),                      // input
-                to_bytea(tx.execution.output),                 // output
-                tx.input.gas_limit.to_string(),                // gas
-                tx.input.gas_price.to_string(),                // gas_price
-                tx.transaction_index.to_string(),              // idx_in_block
-                tx.block_number.to_string(),                   // block_number
-                to_bytea(tx.block_hash),                       // block_hash
-                to_bytea(tx.input.v.as_u64().to_ne_bytes()),   // v
-                u256_to_bytea(tx.input.r),                     // r
-                u256_to_bytea(tx.input.s),                     // s
-                tx.input.value.to_string(),                    // value
-                tx.execution.result.to_string(),               // result
-                now.clone(),                                   // created_at
-                now,                                           // updated_at
+                self.transactions_id.value.to_string(),      // id
+                to_bytea(tx.input.hash),                     // hash
+                to_bytea(&tx.input.from),                    // signer_address
+                tx.input.nonce.to_string(),                  // nonce
+                to_bytea(&tx.input.from),                    // address_from
+                to_bytea(tx.input.to.unwrap_or_default()),   // address_to
+                to_bytea(tx.input.input),                    // input
+                to_bytea(tx.execution.output),               // output
+                tx.execution.gas.to_string(),                // gas
+                tx.input.gas_price.to_string(),              // gas_price
+                tx.transaction_index.to_string(),            // idx_in_block
+                tx.block_number.to_string(),                 // block_number
+                to_bytea(tx.block_hash),                     // block_hash
+                to_bytea(tx.input.v.as_u64().to_be_bytes()), // v
+                u256_to_bytea(tx.input.r),                   // r
+                u256_to_bytea(tx.input.s),                   // s
+                tx.input.value.to_string(),                  // value
+                tx.execution.result.to_string(),             // result
+                now.clone(),                                 // created_at
+                now,                                         // updated_at
             ];
             self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -491,7 +522,7 @@ impl LastId {
         let mut id = Self::new_zero(base_path);
 
         // when file exist, read value from file
-        if fs::metadata(&id.file).is_ok() {
+        if Path::new(&id.file).exists() {
             let content = fs::read_to_string(&id.file).context("failed to read last_id file")?;
             id.value = content.parse().context("failed to parse last_id file content")?;
         }
@@ -503,6 +534,32 @@ impl LastId {
     fn save(&self) -> anyhow::Result<()> {
         fs::write(&self.file, self.value.to_string()).context("failed to write last_id file")?;
         Ok(())
+    }
+}
+
+struct CsvFiles {
+    accounts_csv: csv::Writer<File>,
+    historical_slots_csv: csv::Writer<File>,
+    historical_balances_csv: csv::Writer<File>,
+    historical_nonces_csv: csv::Writer<File>,
+    transactions_csv: csv::Writer<File>,
+    blocks_csv: csv::Writer<File>,
+    logs_csv: csv::Writer<File>,
+    topics_csv: csv::Writer<File>,
+}
+
+impl CsvFiles {
+    fn create(block_number: BlockNumber) -> anyhow::Result<Self> {
+        Ok(Self {
+            accounts_csv: csv_writer(ACCOUNTS_FILE, block_number, &ACCOUNTS_HEADERS)?,
+            historical_slots_csv: csv_writer(HISTORICAL_SLOTS_FILE, block_number, &HISTORICAL_SLOTS_HEADERS)?,
+            historical_balances_csv: csv_writer(HISTORICAL_BALANCES_FILE, block_number, &HISTORICAL_BALANCES_HEADERS)?,
+            historical_nonces_csv: csv_writer(HISTORICAL_NONCES_FILE, block_number, &HISTORICAL_NONCES_HEADERS)?,
+            transactions_csv: csv_writer(TRANSACTIONS_FILE, block_number, &TRANSACTIONS_HEADERS)?,
+            blocks_csv: csv_writer(BLOCKS_FILE, block_number, &BLOCKS_HEADERS)?,
+            logs_csv: csv_writer(LOGS_FILE, block_number, &LOGS_HEADERS)?,
+            topics_csv: csv_writer(TOPICS_FILE, block_number, &TOPICS_HEADERS)?,
+        })
     }
 }
 

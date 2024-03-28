@@ -16,7 +16,6 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
-use stratus::if_else;
 use stratus::infra::metrics;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -31,6 +30,9 @@ const BACKLOG_SIZE: usize = 50;
 
 /// Number of blocks processed in memory before data is flushed to temporary storage and CSV files.
 const FLUSH_INTERVAL_IN_BLOCKS: u64 = 100;
+
+/// The maximum amount of blocks in each CSV chunk file.
+const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 250_000;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
@@ -51,21 +53,28 @@ async fn main() -> anyhow::Result<()> {
         None => block_number_to_stop(&rpc_storage).await?,
     };
 
-    let mut csv = if_else!(config.export_csv, Some(CsvExporter::new(block_start)?), None);
-
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
 
-    // import genesis accounts
-    let accounts = rpc_storage.read_initial_accounts().await?;
-    if let Some(ref mut csv) = csv {
-        for account in accounts.iter() {
-            csv.add_initial_account(account.clone())?;
+    // load genesis accounts
+    let initial_accounts = rpc_storage.read_initial_accounts().await?;
+
+    // initialize CSV and write initial accounts if necessary
+    let csv = if config.export_csv {
+        let mut csv = CsvExporter::new(block_start)?;
+
+        // write initial accounts once, even between runs
+        if csv.is_accounts_empty() {
+            csv.export_initial_accounts(initial_accounts.clone())?;
         }
-        csv.flush()?;
-    }
-    stratus_storage.save_accounts_to_perm(accounts).await?;
+
+        Some(csv)
+    } else {
+        None
+    };
+
+    stratus_storage.save_accounts_to_perm(initial_accounts).await?;
 
     // execute parallel tasks (external rpc storage loader and block importer)
     tokio::spawn(execute_external_rpc_storage_loader(
@@ -118,13 +127,24 @@ async fn execute_block_importer(
                 Some(ref mut csv) => {
                     let block = executor.import_external_to_temp(block, &mut receipts).await?;
                     let number = *block.number();
+
                     csv.add_block(block)?;
 
-                    // flush when reached the specified interval or is the last block in the loop
-                    let should_flush = (number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0) || (block_index == block_last_index);
+                    let is_last_block = block_index == block_last_index;
+                    let is_chunk_interval_end = number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
+                    let is_flush_interval_end = number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
+
+                    let should_chunk_csv_files = is_chunk_interval_end && !is_last_block;
+                    let should_flush = is_flush_interval_end || is_last_block || should_chunk_csv_files;
+
                     if should_flush {
                         csv.flush()?;
                         stratus_storage.flush_temp().await?;
+                    }
+
+                    if should_chunk_csv_files {
+                        tracing::info!("Chunk ended at block number {number}, starting next CSV chunks for the next block");
+                        csv.finish_current_chunks(number)?;
                     }
                 }
                 // when not exporting to csv, persist the entire block to permanent immediately
