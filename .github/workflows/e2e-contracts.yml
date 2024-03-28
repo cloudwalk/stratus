@@ -52,7 +52,10 @@ jobs:
           asdf global nodejs 20.10.0
 
       - name: Set up Test and clone repositories
-        run: just setup
+        run: |
+          cargo install killport
+          cargo install wait-service
+          just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
         run: just contracts-test-stratus --${{ matrix.contract }}
