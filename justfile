@@ -317,8 +317,8 @@ e2e-flamegraph:
 # ------------------------------------------------------------------------------
 
 # Contracts: Clone Solidity repositories
-contracts-clone:
-    cd e2e-contracts && ./clone-contracts.sh
+contracts-clone *args="":
+    cd e2e-contracts && ./clone-contracts.sh {{ args }}
 
 # Contracts: Compile selected Solidity contracts
 contracts-compile:
