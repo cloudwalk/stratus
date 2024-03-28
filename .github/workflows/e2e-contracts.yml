@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - '*'
-    paths-ignore:
-      - 'config/**'
-      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
