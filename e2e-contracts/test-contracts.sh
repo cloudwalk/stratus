@@ -42,26 +42,26 @@ test() {
 # configure tools
 asdf local nodejs 20.10.0
 
-while getopts tpmchix flag
-do
-    case "${flag}" in
-        t) token=1;;
-        p) periphery=1;;
-        m) multisig=1;;
-        c) compound=1;;
-        i) yield=1;;
-        x) pix=1;;
-        h) echo "Usage: test-contracts.sh [-[tpchix]]";
-           echo "-t for brlc-token";
-           echo "-p for brlc-periphery";
-           echo "-m for brlc-multisig";
-           echo "-c for compound-periphery";
-           echo "-i for brlc-yield-streamer";
-           echo "-x for brlc-pix-cashier";
-           echo "No parameter execute all tests";
-           exit;;
-    esac
-done
+# Initialize variables
+token=0
+periphery=0
+multisig=0
+compound=0
+yield=0
+pix=0
+
+# Help function
+print_help() {
+    echo "Usage: $0 [OPTIONS]"
+    echo "Options:"
+    echo "  -t, --token       for brlc-token"
+    echo "  -p, --periphery   for brlc-periphery"
+    echo "  -m, --multisig    for brlc-multisig"
+    echo "  -c, --compound    for compound-periphery"
+    echo "  -i, --yield       for brlc-yield-streamer"
+    echo "  -x, --pix         for brlc-pix-cashier"
+    echo "  -h, --help        display this help and exit"
+}
 
 if [ "$#" == 0 ]; then
     token=1
@@ -72,7 +72,21 @@ if [ "$#" == 0 ]; then
     pix=1
 fi
 
-# execute
+# Process arguments
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        -h|--help) print_help; exit 0 ;;
+        -t|--token) token=1; shift ;;
+        -p|--periphery) periphery=1; shift ;;
+        -m|--multisig) multisig=1; shift ;;
+        -c|--compound) compound=1; shift ;;
+        -i|--yield) yield=1; shift ;;
+        -x|--pix) pix=1; shift ;;
+        *) echo "Unknown option: $1"; print_help; exit 1 ;;
+    esac
+done
+
+# Execute
 if [ "$token" == 1 ]; then
     test brlc-token BRLCToken
     test brlc-token base/CWToken.complex
