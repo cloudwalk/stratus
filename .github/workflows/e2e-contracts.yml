@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         contract: [token, pix, periphery, compound, yield, multisig]
-    name: ${{ matrix.contract }}
+    name: E2E InMemory on ${{ matrix.contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
