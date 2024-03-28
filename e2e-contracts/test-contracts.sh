@@ -42,6 +42,14 @@ test() {
 # configure tools
 asdf local nodejs 20.10.0
 
+# Initialize variables
+token=0
+periphery=0
+multisig=0
+compound=0
+yield=0
+pix=0
+
 # Função de ajuda
 print_help() {
     echo "Usage: $0 [OPTIONS]"
@@ -55,7 +63,16 @@ print_help() {
     echo "  -h, --help        display this help and exit"
 }
 
-# Processar argumentos
+if [ "$#" == 0 ]; then
+    token=1
+    periphery=1
+    multisig=1
+    compound=1
+    yield=1
+    pix=1
+fi
+
+# Process arguments
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         -h|--help) print_help; exit 0 ;;
@@ -68,15 +85,6 @@ while [[ "$#" -gt 0 ]]; do
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
 done
-
-if [ "$#" == 0 ]; then
-    token=1
-    periphery=1
-    multisig=1
-    compound=1
-    yield=1
-    pix=1
-fi
 
 # execute
 if [ "$token" == 1 ]; then
