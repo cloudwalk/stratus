@@ -16,16 +16,16 @@ use crate::ext::not;
 pub struct ExecutionAccountChanges {
     new_account: bool,
     pub address: Address,
-    pub code_hash: CodeHash,
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
     pub bytecode: ExecutionValueChange<Option<Bytes>>,
+    pub code_hash: CodeHash,
     pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
 }
 
 impl ExecutionAccountChanges {
-    /// Creates a new [`ExecutionAccountChanges`] that represents an existing account.
-    pub fn from_existing_account(account: impl Into<Account>) -> Self {
+    /// Creates a new [`ExecutionAccountChanges`] from Account original values.
+    pub fn from_original_values(account: impl Into<Account>) -> Self {
         let account: Account = account.into();
         Self {
             new_account: false,
@@ -38,8 +38,8 @@ impl ExecutionAccountChanges {
         }
     }
 
-    /// Creates a new [`ExecutionAccountChanges`] that represents an account being created by this transaction.
-    pub fn from_new_account(account: impl Into<Account>, modified_slots: Vec<Slot>) -> Self {
+    /// Creates a new [`ExecutionAccountChanges`] from Account modified values.
+    pub fn from_modified_values(account: impl Into<Account>, modified_slots: Vec<Slot>) -> Self {
         let account: Account = account.into();
         let mut changes = Self {
             new_account: true,
@@ -47,8 +47,8 @@ impl ExecutionAccountChanges {
             nonce: ExecutionValueChange::from_modified(account.nonce),
             balance: ExecutionValueChange::from_modified(account.balance),
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
-            slots: HashMap::new(),
             code_hash: account.code_hash,
+            slots: HashMap::new(),
         };
 
         for slot in modified_slots {
@@ -59,10 +59,26 @@ impl ExecutionAccountChanges {
     }
 
     /// Updates an existing account state with changes that happened during the transaction.
-    pub fn apply_changes(&mut self, account: Account, modified_slots: Vec<Slot>) {
-        self.nonce.set_modified(account.nonce);
-        self.balance.set_modified(account.balance);
+    pub fn apply_modifications(&mut self, modified_account: Account, modified_slots: Vec<Slot>) {
+        // update nonce if modified
+        let nonce_modified = match self.nonce.take_original_ref() {
+            Some(nonce) => *nonce != modified_account.nonce,
+            None => true,
+        };
+        if nonce_modified {
+            self.nonce.set_modified(modified_account.nonce);
+        }
 
+        // update balance if modified
+        let balance_modified = match self.balance.take_modified_ref() {
+            Some(balance) => *balance != modified_account.balance,
+            None => true,
+        };
+        if balance_modified {
+            self.balance.set_modified(modified_account.balance);
+        }
+
+        // update all slots because all of them are modified
         for slot in modified_slots {
             match self.slots.get_mut(&slot.index) {
                 Some(ref mut entry) => {
