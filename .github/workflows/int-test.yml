@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  unit_tests:
+  int_tests:
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
