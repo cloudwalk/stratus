@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Cache Cargo Registry and Target Directory
-        uses: actions/cache@v2
+        uses: actions/cache@v4.0.2
         with:
           path: |
             ~/.cargo/registry
