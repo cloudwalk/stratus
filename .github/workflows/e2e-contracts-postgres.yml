@@ -8,17 +8,33 @@ on:
 
 jobs:
   contract_test_psql:
-    name: Contracts E2E Postgres Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        contract: [token, pix, periphery, compound, yield, multisig]
+    name: ${{ matrix.contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.contract }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Cache Cargo Registry and Target Directory
+        uses: actions/cache@v4.0.2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: ${{ runner.os }}-cargo-${{ github.workflow }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ github.workflow }}
 
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -36,7 +52,10 @@ jobs:
           asdf global nodejs 20.10.0
 
       - name: Set up Test and clone repositories
-        run: just setup
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+          just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
-        run: PERM_STORAGE=postgres://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres
+        run: PERM_STORAGE=postgres://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres --${{ matrix.contract }}

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  unit_tests:
+  int_tests:
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -19,6 +19,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Cache Cargo Registry and Target Directory
+        uses: actions/cache@v4.0.2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ github.workflow }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ github.workflow }}
 
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
