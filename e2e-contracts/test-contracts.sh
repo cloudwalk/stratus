@@ -50,7 +50,7 @@ compound=0
 yield=0
 pix=0
 
-# Função de ajuda
+# Help function
 print_help() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
