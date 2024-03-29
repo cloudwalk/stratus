@@ -375,7 +375,7 @@ impl PermanentStorage for HybridPermanentStorage {
         let hash = block.hash().clone();
 
         self.state.blocks_by_number.insert(*number, block.clone());
-        self.state.blocks_by_number.insert_current_block_number(number.as_u64());
+        self.state.metadata.insert("current_block_number".to_string(), number.as_u64().to_string());
         self.state.blocks_by_hash.insert(hash.clone(), block.clone());
 
         //XXX deal with errors later

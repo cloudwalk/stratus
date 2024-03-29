@@ -59,13 +59,6 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.write(batch).unwrap();
     }
 
-    // For syncronizing the current block number on program start
-    pub fn insert_current_block_number(&self, block_number: u64) {
-        let serialized_key = bincode::serialize(&"current_block_number").unwrap();
-        let serialized_value = bincode::serialize(&block_number).unwrap();
-        self.db.put(serialized_key, serialized_value).unwrap();
-    }
-
     // Custom method that combines entry and or_insert_with from a HashMap
     pub fn entry_or_insert_with<F>(&self, key: K, default: F) -> V
     where
