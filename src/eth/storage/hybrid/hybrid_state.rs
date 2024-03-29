@@ -76,7 +76,7 @@ impl HybridStorageState {
             account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb").unwrap(),
             transactions: RocksDb::new("./data/transactions.rocksdb").unwrap(),
             blocks_by_number: RocksDb::new("./data/blocks_by_number.rocksdb").unwrap(),
-            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb").unwrap(),
+            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb").unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: RocksDb::new("./data/logs.rocksdb").unwrap(),
         }
     }
