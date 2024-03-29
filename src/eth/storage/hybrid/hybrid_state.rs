@@ -83,7 +83,7 @@ impl HybridStorageState {
 
     //XXX TODO use a fixed block_number during load, in order to avoid sync problem
     // e.g other instance moving forward and this query getting incongruous data
-    pub async fn load_latest_data(&mut self, pool: &Pool<Postgres>) -> anyhow::Result<()> {
+    pub async fn load_latest_data(&self, pool: &Pool<Postgres>) -> anyhow::Result<()> {
         let account_rows = sqlx::query_as!(
             AccountRow,
             "
@@ -145,7 +145,7 @@ impl HybridStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    pub async fn update_state_with_execution_changes(&mut self, changes: &[ExecutionAccountChanges], block_number: BlockNumber) -> Result<(), sqlx::Error> {
+    pub async fn update_state_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber) -> Result<(), sqlx::Error> {
         // Directly capture the fields needed by each future from `self`
         let accounts = &self.accounts;
         let accounts_history = &self.accounts_history;
