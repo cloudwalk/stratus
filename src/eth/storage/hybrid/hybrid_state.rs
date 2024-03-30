@@ -12,6 +12,7 @@ use sqlx::QueryBuilder;
 use sqlx::Row;
 use tokio::join;
 
+use super::rocks_db::DbConfig;
 use super::rocks_db::RocksDb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -71,15 +72,15 @@ pub struct HybridStorageState {
 impl HybridStorageState {
     pub fn new() -> Self {
         Self {
-            accounts: RocksDb::new("./data/accounts.rocksdb").unwrap(),
-            accounts_history: RocksDb::new("./data/accounts_history.rocksdb").unwrap(),
-            account_slots: RocksDb::new("./data/account_slots.rocksdb").unwrap(),
-            account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb").unwrap(),
-            transactions: RocksDb::new("./data/transactions.rocksdb").unwrap(),
-            blocks_by_number: RocksDb::new("./data/blocks_by_number.rocksdb").unwrap(),
-            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb").unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
-            logs: RocksDb::new("./data/logs.rocksdb").unwrap(),
-            metadata: RocksDb::new("./data/metadata.rocksdb").unwrap(),
+            accounts: RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap(),
+            accounts_history: RocksDb::new("./data/accounts_history.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            account_slots: RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap(),
+            account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            transactions: RocksDb::new("./data/transactions.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_number: RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            logs: RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            metadata: RocksDb::new("./data/metadata.rocksdb", DbConfig::Default).unwrap(),
         }
     }
 
