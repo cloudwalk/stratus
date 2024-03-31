@@ -3,10 +3,16 @@ use std::marker::PhantomData;
 use anyhow::Result;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
+use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
+
+pub enum DbConfig {
+    LargeSSTFiles,
+    Default,
+}
 
 // A generic struct that abstracts over key-value pairs stored in RocksDB.
 pub struct RocksDb<K, V> {
@@ -15,8 +21,25 @@ pub struct RocksDb<K, V> {
 }
 
 impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
-    pub fn new(db_path: &str) -> anyhow::Result<Self> {
-        let db = DB::open_default(db_path)?;
+    pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Self> {
+        let mut opts = Options::default();
+
+        opts.create_if_missing(true);
+
+        match config {
+            DbConfig::LargeSSTFiles => {
+                // Adjusting for large SST files
+                opts.set_target_file_size_base(256 * 1024 * 1024); // 128MB
+                opts.set_max_write_buffer_number(4);
+                opts.set_write_buffer_size(64 * 1024 * 1024); // 64MB
+                opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // 512MB
+                opts.set_max_open_files(100);
+            }
+            DbConfig::Default => {} // Default options are already set
+        }
+
+        let db = DB::open(&opts, db_path)?;
+
         Ok(RocksDb { db, _marker: PhantomData })
     }
 
