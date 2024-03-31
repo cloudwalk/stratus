@@ -24,6 +24,8 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Self> {
         let mut opts = Options::default();
 
+        opts.create_if_missing(true);
+
         match config {
             DbConfig::LargeSSTFiles => {
                 // Adjusting for large SST files
