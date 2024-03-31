@@ -64,7 +64,7 @@ pub struct HybridStorageState {
     pub account_slots_history: RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>,
     pub transactions: RocksDb<Hash, TransactionMined>,
     pub blocks_by_number: RocksDb<BlockNumber, Block>,
-    pub blocks_by_hash: RocksDb<Hash, Block>,
+    pub blocks_by_hash: RocksDb<Hash, BlockNumber>,
     pub logs: RocksDb<(Hash, Index), LogMined>,
     pub metadata: RocksDb<String, String>,
 }
