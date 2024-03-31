@@ -287,7 +287,10 @@ impl PermanentStorage for HybridPermanentStorage {
             BlockSelection::Latest => self.state.blocks_by_number.iter_end().next().map(|(_, block)| block),
             BlockSelection::Earliest => self.state.blocks_by_number.iter_start().next().map(|(_, block)| block),
             BlockSelection::Number(number) => self.state.blocks_by_number.get(number),
-            BlockSelection::Hash(hash) => self.state.blocks_by_hash.get(hash),
+            BlockSelection::Hash(hash) => {
+                let block_number = self.state.blocks_by_hash.get(hash).unwrap_or_default();
+                self.state.blocks_by_number.get(&block_number)
+            }
         };
         match block {
             Some(block) => {
@@ -376,7 +379,7 @@ impl PermanentStorage for HybridPermanentStorage {
 
         self.state.blocks_by_number.insert(*number, block.clone());
         self.state.metadata.insert("current_block_number".to_string(), number.as_u64().to_string());
-        self.state.blocks_by_hash.insert(hash.clone(), block.clone());
+        self.state.blocks_by_hash.insert(hash.clone(), *number);
 
         //XXX deal with errors later
         let _ = self.state.update_state_with_execution_changes(&account_changes, *number).await;
