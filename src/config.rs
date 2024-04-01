@@ -14,6 +14,7 @@ use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
+use crate::bin_name;
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 #[cfg(feature = "dev")]
@@ -42,8 +43,180 @@ use crate::eth::EvmTask;
 #[cfg(feature = "dev")]
 use crate::ext::not;
 
+/// Loads .env files according to the binary and environment.
+pub fn load_dotenv() {
+    let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
+    let env_filename = format!("config/{}.env.{}", bin_name(), env);
+
+    println!("Reading ENV file: {}", env_filename);
+    let _ = dotenvy::from_filename(env_filename);
+}
+
+// -----------------------------------------------------------------------------
+// Config: Common
+// -----------------------------------------------------------------------------
+
 pub trait WithCommonConfig {
     fn common(&self) -> &CommonConfig;
+}
+
+/// Configuration that can be used by any binary.
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct CommonConfig {
+    /// Number of threads to execute global async tasks.
+    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
+    pub num_async_threads: usize,
+
+    /// Number of threads to execute global blocking tasks.
+    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
+    pub num_blocking_threads: usize,
+
+    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
+    pub metrics_histogram_kind: MetricsHistogramKind,
+
+    /// Prevents clap from breaking when passing `nocapture` options in tests.
+    #[arg(long = "nocapture")]
+    pub nocapture: bool,
+}
+
+impl WithCommonConfig for CommonConfig {
+    fn common(&self) -> &CommonConfig {
+        self
+    }
+}
+
+impl CommonConfig {
+    /// Initializes Tokio runtime.
+    pub fn init_runtime(&self) -> Runtime {
+        tracing::info!(
+            async_threads = %self.num_async_threads,
+            blocking_threads = %self.num_blocking_threads,
+            "starting tokio runtime"
+        );
+
+        let runtime = Builder::new_multi_thread()
+            .enable_all()
+            .thread_name("tokio")
+            .worker_threads(self.num_async_threads)
+            .max_blocking_threads(self.num_blocking_threads)
+            .thread_keep_alive(Duration::from_secs(u64::MAX))
+            .build()
+            .expect("failed to start tokio runtime");
+
+        runtime
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: StratusStorage
+// -----------------------------------------------------------------------------
+
+/// Configuration that can be used by any binary that interacts with Stratus storage.
+#[derive(Parser, Debug)]
+pub struct StratusStorageConfig {
+    #[clap(flatten)]
+    pub temp_storage: TemporaryStorageConfig,
+
+    #[clap(flatten)]
+    pub perm_storage: PermanentStorageConfig,
+
+    /// Generates genesis block on startup when it does not exist.
+    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
+    pub enable_genesis: bool,
+
+    /// Enables test accounts with max wei on startup.
+    #[cfg(feature = "dev")]
+    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
+    pub enable_test_accounts: bool,
+}
+
+impl StratusStorageConfig {
+    /// Initializes Stratus storage.
+    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+        let temp_storage = self.temp_storage.init().await?;
+        let perm_storage = self.perm_storage.init().await?;
+        let storage = StratusStorage::new(temp_storage, perm_storage);
+
+        if self.enable_genesis {
+            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+            if genesis.is_none() {
+                tracing::info!("enabling genesis block");
+                storage.commit_to_perm(BlockMiner::genesis()).await?;
+            }
+        }
+
+        #[cfg(feature = "dev")]
+        if self.enable_test_accounts {
+            let mut test_accounts_to_insert = Vec::new();
+            for test_account in test_accounts() {
+                let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
+                if storage_account.is_empty() {
+                    test_accounts_to_insert.push(test_account);
+                }
+            }
+
+            if not(test_accounts_to_insert.is_empty()) {
+                tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
+                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
+            }
+        }
+
+        Ok(Arc::new(storage))
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: Executor
+// -----------------------------------------------------------------------------
+
+#[derive(Parser, Debug)]
+pub struct ExecutorConfig {
+    /// Chain ID of the network.
+    #[arg(long = "chain-id", env = "CHAIN_ID")]
+    pub chain_id: u64,
+
+    /// Number of EVM instances to run.
+    #[arg(long = "evms", env = "EVMS")]
+    pub num_evms: usize,
+}
+
+impl ExecutorConfig {
+    /// Initializes EthExecutor. Should be called inside an async runtime.
+    pub fn init(&self, storage: Arc<StratusStorage>) -> EthExecutor {
+        let num_evms = max(self.num_evms, 1);
+        tracing::info!(evms = %num_evms, "starting executor and evms");
+
+        // spawn evm in background using native threads
+        let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
+        for _ in 1..=num_evms {
+            // create evm resources
+            let evm_chain_id = self.chain_id.into();
+            let evm_storage = Arc::clone(&storage);
+            let evm_tokio = Handle::current();
+            let evm_rx = evm_rx.clone();
+
+            // spawn thread that will run evm
+            let t = thread::Builder::new().name("evm".into());
+            t.spawn(move || {
+                let _tokio_guard = evm_tokio.enter();
+                let mut evm = Revm::new(evm_storage, evm_chain_id);
+
+                // keep executing transactions until the channel is closed
+                while let Ok((input, tx)) = evm_rx.recv() {
+                    let result = evm.execute(input);
+                    if let Err(e) = tx.send(result) {
+                        tracing::error!(reason = ?e, "failed to send evm execution result");
+                    };
+                }
+                tracing::warn!("stopping evm thread because task channel was closed");
+            })
+            .expect("spawning evm threads should not fail");
+        }
+
+        // creates an executor that can communicate with background evms
+        EthExecutor::new(evm_tx, Arc::clone(&storage))
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -56,6 +229,12 @@ pub struct StratusConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -127,6 +306,12 @@ pub struct ImporterOfflineConfig {
     #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
 
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
+
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
@@ -149,6 +334,12 @@ pub struct ImporterOnlineConfig {
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
 
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
+
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
@@ -167,10 +358,6 @@ impl WithCommonConfig for ImporterOnlineConfig {
 /// Configuration for `state-validator` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct StateValidatorConfig {
-    #[deref]
-    #[clap(flatten)]
-    pub common: CommonConfig,
-
     /// How many slots to validate per batch. 0 means every slot.
     #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
     pub sample_size: u64,
@@ -190,6 +377,13 @@ pub struct StateValidatorConfig {
     /// How many concurrent validation tasks to run
     #[arg(short = 'c', long = "concurrent-tasks", env = "CONCURRENT_TASKS", default_value_t = 10)]
     pub concurrent_tasks: u16,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
 }
 
 impl WithCommonConfig for StateValidatorConfig {
@@ -199,151 +393,34 @@ impl WithCommonConfig for StateValidatorConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Config: Common
+// Config: Test
 // -----------------------------------------------------------------------------
 
-/// Common configuration that can be used by any binary.
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct CommonConfig {
+/// Configuration for integration tests.
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct IntegrationTestConfig {
+    #[deref]
     #[clap(flatten)]
-    pub temp_storage: TemporaryStorageConfig,
+    pub common: CommonConfig,
 
     #[clap(flatten)]
-    pub perm_storage: PermanentStorageConfig,
+    pub executor: ExecutorConfig,
 
-    /// Chain ID of the network.
-    #[arg(long = "chain-id", env = "CHAIN_ID", default_value = "2008")]
-    pub chain_id: u64,
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
 
-    /// Number of EVM instances to run.
-    #[arg(long = "evms", env = "EVMS", default_value = "1")]
-    pub num_evms: usize,
-
-    /// Number of threads to execute global async tasks.
-    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "1")]
-    pub num_async_threads: usize,
-
-    /// Number of threads to execute global blocking tasks.
-    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "1")]
-    pub num_blocking_threads: usize,
-
-    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
-    pub metrics_histogram_kind: MetricsHistogramKind,
-
-    /// Generates genesis block on startup when it does not exist.
-    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
-    pub enable_genesis: bool,
-
-    /// Enables test accounts with max wei on startup.
-    #[cfg(feature = "dev")]
-    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
-    pub enable_test_accounts: bool,
-
-    /// Prevents clap from breaking when passing `nocapture` options in tests.
-    #[arg(long = "nocapture")]
-    pub nocapture: bool,
+    #[clap(flatten)]
+    pub rpc_storage: ExternalRpcStorageConfig,
 }
 
-impl WithCommonConfig for CommonConfig {
+impl WithCommonConfig for IntegrationTestConfig {
     fn common(&self) -> &CommonConfig {
-        self
-    }
-}
-
-impl CommonConfig {
-    /// Initializes Stratus storage.
-    pub async fn init_stratus_storage(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp_storage = self.temp_storage.init().await?;
-        let perm_storage = self.perm_storage.init().await?;
-        let storage = StratusStorage::new(temp_storage, perm_storage);
-
-        if self.enable_genesis {
-            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
-            if genesis.is_none() {
-                tracing::info!("enabling genesis block");
-                storage.commit_to_perm(BlockMiner::genesis()).await?;
-            }
-        }
-
-        #[cfg(feature = "dev")]
-        if self.enable_test_accounts {
-            let mut test_accounts_to_insert = Vec::new();
-            for test_account in test_accounts() {
-                let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
-                if storage_account.is_empty() {
-                    test_accounts_to_insert.push(test_account);
-                }
-            }
-
-            if not(test_accounts_to_insert.is_empty()) {
-                tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
-            }
-        }
-
-        Ok(Arc::new(storage))
-    }
-
-    /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub fn init_executor(&self, storage: Arc<StratusStorage>) -> EthExecutor {
-        let num_evms = max(self.num_evms, 1);
-        tracing::info!(evms = %num_evms, "starting executor and evms");
-
-        // spawn evm in background using native threads
-        let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
-        for _ in 1..=num_evms {
-            // create evm resources
-            let evm_chain_id = self.chain_id.into();
-            let evm_storage = Arc::clone(&storage);
-            let evm_tokio = Handle::current();
-            let evm_rx = evm_rx.clone();
-
-            // spawn thread that will run evm
-            let t = thread::Builder::new().name("evm".into());
-            t.spawn(move || {
-                let _tokio_guard = evm_tokio.enter();
-                let mut evm = Revm::new(evm_storage, evm_chain_id);
-
-                // keep executing transactions until the channel is closed
-                while let Ok((input, tx)) = evm_rx.recv() {
-                    let result = evm.execute(input);
-                    if let Err(e) = tx.send(result) {
-                        tracing::error!(reason = ?e, "failed to send evm execution result");
-                    };
-                }
-                tracing::warn!("stopping evm thread because task channel was closed");
-            })
-            .expect("spawning evm threads should not fail");
-        }
-
-        // creates an executor that can communicate with background evms
-        EthExecutor::new(evm_tx, Arc::clone(&storage))
-    }
-
-    /// Initializes Tokio runtime.
-    pub fn init_runtime(&self) -> Runtime {
-        tracing::info!(
-            async_threads = %self.num_async_threads,
-            blocking_threads = %self.num_blocking_threads,
-            "starting tokio runtime"
-        );
-
-        let runtime = Builder::new_multi_thread()
-            .enable_all()
-            .thread_name("tokio")
-            .worker_threads(self.num_async_threads)
-            .max_blocking_threads(self.num_blocking_threads)
-            .thread_keep_alive(Duration::from_secs(u64::MAX))
-            .build()
-            .expect("failed to start tokio runtime");
-
-        runtime
+        &self.common
     }
 }
 
 // -----------------------------------------------------------------------------
-// Enum: PostgresConfig
+// Config: ExternalRpcStorage
 // -----------------------------------------------------------------------------
 
 /// External RPC storage configuration.
@@ -354,11 +431,11 @@ pub struct ExternalRpcStorageConfig {
     pub external_rpc_storage_kind: ExternalRpcStorageKind,
 
     /// External RPC storage number of parallel open connections.
-    #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS", default_value = "5")]
+    #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS")]
     pub external_rpc_storage_connections: u32,
 
     /// External RPC storage timeout when opening a connection (in millis).
-    #[arg(long = "external-rpc-storage-timeout", env = "EXTERNAL_RPC_STORAGE_TIMEOUT", default_value = "2000")]
+    #[arg(long = "external-rpc-storage-timeout", env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
     pub external_rpc_storage_timeout_millis: u64,
 }
 
@@ -402,7 +479,7 @@ impl FromStr for ExternalRpcStorageKind {
 #[derive(Parser, Debug)]
 pub struct TemporaryStorageConfig {
     /// Temporary storage implementation.
-    #[arg(long = "temp-storage", env = "TEMP_STORAGE", default_value = "inmemory")]
+    #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
     pub temp_storage_kind: TemporaryStorageKind,
 }
 
@@ -442,15 +519,15 @@ impl FromStr for TemporaryStorageKind {
 #[derive(Parser, Debug)]
 pub struct PermanentStorageConfig {
     /// Permamenent storage implementation.
-    #[arg(long = "perm-storage", env = "PERM_STORAGE", default_value = "inmemory")]
+    #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
     /// Permamenent storage number of parallel open connections.
-    #[arg(long = "perm-storage-connections", env = "PERM_STORAGE_CONNECTIONS", default_value = "5")]
+    #[arg(long = "perm-storage-connections", env = "PERM_STORAGE_CONNECTIONS")]
     pub perm_storage_connections: u32,
 
     /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "perm-storage-timeout", env = "PERM_STORAGE_TIMEOUT", default_value = "2000")]
+    #[arg(long = "perm-storage-timeout", env = "PERM_STORAGE_TIMEOUT")]
     pub perm_storage_timeout_millis: u64,
 }
 
