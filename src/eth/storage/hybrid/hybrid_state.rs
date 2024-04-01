@@ -81,7 +81,7 @@ impl HybridStorageState {
             blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-            metadata: Arc::new(RocksDb::new("./data/metadata.rocksdb", DbConfig::Default).unwrap())
+            metadata: Arc::new(RocksDb::new("./data/metadata.rocksdb", DbConfig::Default).unwrap()),
         }
     }
 
@@ -149,7 +149,11 @@ impl HybridStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    pub async fn update_state_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber) -> Result<Vec<JoinHandle<()>>, sqlx::Error> {
+    pub async fn update_state_with_execution_changes(
+        &self,
+        changes: &[ExecutionAccountChanges],
+        block_number: BlockNumber,
+    ) -> Result<Vec<JoinHandle<()>>, sqlx::Error> {
         // Directly capture the fields needed by each future from `self`
         let accounts = Arc::clone(&self.accounts);
         let accounts_history = Arc::clone(&self.accounts_history);
@@ -159,7 +163,7 @@ impl HybridStorageState {
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
-        let account_changes_future = tokio::spawn(async move {
+        let account_changes_future = tokio::task::spawn_blocking(move || {
             let mut account_changes = Vec::new();
             let mut account_history_changes = Vec::new();
 
@@ -187,7 +191,7 @@ impl HybridStorageState {
             accounts_history.insert_batch(account_history_changes);
         });
 
-        let slot_changes_future = tokio::spawn(async move {
+        let slot_changes_future = tokio::task::spawn_blocking(move || {
             let mut slot_changes = Vec::new();
             let mut slot_history_changes = Vec::new();
 
@@ -203,7 +207,6 @@ impl HybridStorageState {
             account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
             account_slots_history.insert_batch(slot_history_changes);
         });
-
 
         Ok(vec![account_changes_future, slot_changes_future])
     }
