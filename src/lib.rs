@@ -31,7 +31,7 @@ pub fn bin_name() -> String {
     let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
 
     if binary_basename.starts_with("test_") {
-        "test".to_string()
+        "tests".to_string()
     } else {
         binary_basename
     }
