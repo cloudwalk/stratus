@@ -133,7 +133,7 @@ alias importer-online := bin-importer-online
 
 # Bin: Validate Stratus storage slots matches reference slots
 bin-state-validator *args="":
-    cargo run --bin state-validator  --features dev --release -- --method {{external_rpc_url}} {{args}}
+    cargo run --bin state-validator  --features dev --release -- {{args}}
 alias state-validator := bin-state-validator
 
 # ------------------------------------------------------------------------------
