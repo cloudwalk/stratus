@@ -25,6 +25,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let mut opts = Options::default();
 
         opts.create_if_missing(true);
+        opts.increase_parallelism(4);
 
         match config {
             DbConfig::LargeSSTFiles => {
