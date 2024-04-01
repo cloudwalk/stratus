@@ -1,7 +1,7 @@
 use ethers_core::rand::thread_rng;
 // Adjust this import to include your Revm and related structs
 use fake::{Dummy, Faker};
-use stratus::config::StratusConfig;
+use stratus::config::IntegrationTestConfig;
 use stratus::eth::primitives::test_accounts;
 use stratus::eth::primitives::TransactionInput;
 use stratus::eth::primitives::Wei;
@@ -9,7 +9,7 @@ use stratus::init_global_services;
 
 #[tokio::test]
 async fn test_execution() {
-    let config = init_global_services::<StratusConfig>();
+    let config = init_global_services::<IntegrationTestConfig>();
 
     let storage = config.stratus_storage.init().await.unwrap();
     let mut rng = thread_rng();

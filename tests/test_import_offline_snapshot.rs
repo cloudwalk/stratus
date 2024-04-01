@@ -4,7 +4,7 @@ use std::time::Duration;
 use const_format::formatcp;
 use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
-use stratus::config::StratusConfig;
+use stratus::config::IntegrationTestConfig;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::StoragePointInTime;
@@ -60,7 +60,7 @@ const METRIC_QUERIES: [&str; 30] = [
 
 #[tokio::test]
 async fn test_import_offline_snapshot() {
-    let mut config = init_global_services::<StratusConfig>();
+    let mut config = init_global_services::<IntegrationTestConfig>();
     config.executor.chain_id = 2009;
 
     // init containers

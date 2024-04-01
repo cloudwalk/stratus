@@ -356,14 +356,8 @@ impl WithCommonConfig for ImporterOnlineConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `state-validator` binary.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, derive_more::Deref)]
 pub struct StateValidatorConfig {
-    #[clap(flatten)]
-    pub common: CommonConfig,
-
-    #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
-
     /// How many slots to validate per batch. 0 means every slot.
     #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
     pub sample_size: u64,
@@ -383,9 +377,43 @@ pub struct StateValidatorConfig {
     /// How many concurrent validation tasks to run
     #[arg(short = 'c', long = "concurrent-tasks", env = "CONCURRENT_TASKS", default_value_t = 10)]
     pub concurrent_tasks: u16,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
 }
 
 impl WithCommonConfig for StateValidatorConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: Test
+// -----------------------------------------------------------------------------
+
+/// Configuration for integration tests.
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct IntegrationTestConfig {
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub rpc_storage: ExternalRpcStorageConfig,
+}
+
+impl WithCommonConfig for IntegrationTestConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }

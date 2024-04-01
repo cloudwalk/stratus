@@ -30,7 +30,7 @@ pub fn bin_name() -> String {
     let binary = std::env::current_exe().unwrap();
     let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
 
-    if binary.starts_with("test_") {
+    if binary_basename.starts_with("test_") {
         "test".to_string()
     } else {
         binary_basename
