@@ -65,11 +65,11 @@ pub trait WithCommonConfig {
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
     /// Number of threads to execute global async tasks.
-    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "1")]
+    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
     pub num_async_threads: usize,
 
     /// Number of threads to execute global blocking tasks.
-    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "1")]
+    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
     pub num_blocking_threads: usize,
 
     #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
@@ -177,7 +177,7 @@ pub struct ExecutorConfig {
     pub chain_id: u64,
 
     /// Number of EVM instances to run.
-    #[arg(long = "evms", env = "EVMS", default_value = "1")]
+    #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
 }
 
