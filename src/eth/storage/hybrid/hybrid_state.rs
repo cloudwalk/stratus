@@ -11,6 +11,7 @@ use sqlx::Pool;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use sqlx::Row;
+use tokio::join;
 use tokio::task::JoinHandle;
 
 use super::rocks_db::DbConfig;
@@ -163,7 +164,7 @@ impl HybridStorageState {
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
-        let account_changes_future = tokio::task::spawn_blocking(move || {
+        let account_changes_future = tokio::task::spawn(async move {
             let mut account_changes = Vec::new();
             let mut account_history_changes = Vec::new();
 
@@ -187,11 +188,13 @@ impl HybridStorageState {
                 account_changes.push((address.clone(), account_info_entry.clone()));
                 account_history_changes.push(((address.clone(), block_number), account_info_entry));
             }
-            accounts.insert_batch(account_changes);
-            accounts_history.insert_batch(account_history_changes);
+            let _ = join!(
+                tokio::task::spawn_blocking(move || accounts.insert_batch(account_changes)),
+                tokio::task::spawn_blocking(move || accounts_history.insert_batch(account_history_changes))
+            ); // A little bit faster than creating 4 blocking tasks on the top level of the function
         });
 
-        let slot_changes_future = tokio::task::spawn_blocking(move || {
+        let slot_changes_future = tokio::task::spawn(async move {
             let mut slot_changes = Vec::new();
             let mut slot_history_changes = Vec::new();
 
@@ -204,8 +207,10 @@ impl HybridStorageState {
                     }
                 }
             }
-            account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
-            account_slots_history.insert_batch(slot_history_changes);
+            let _ = join!(
+                tokio::task::spawn_blocking(move || account_slots.insert_batch(slot_changes)),
+                tokio::task::spawn_blocking(move || account_slots_history.insert_batch(slot_history_changes))
+            );
         });
 
         Ok(vec![account_changes_future, slot_changes_future])

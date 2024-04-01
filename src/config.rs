@@ -332,6 +332,8 @@ impl CommonConfig {
         let runtime = Builder::new_multi_thread()
             .enable_all()
             .thread_name("tokio")
+            .worker_threads(self.num_async_threads)
+            .max_blocking_threads(self.num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
             .build()
             .expect("failed to start tokio runtime");
