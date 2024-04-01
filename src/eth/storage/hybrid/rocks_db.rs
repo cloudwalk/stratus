@@ -44,6 +44,8 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             }
         }
 
+        opts.set_block_based_table_factory(&block_based_options);
+
         let db = DB::open(&opts, db_path)?;
 
         Ok(RocksDb { db, _marker: PhantomData })
