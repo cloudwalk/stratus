@@ -366,12 +366,17 @@ impl PermanentStorage for HybridPermanentStorage {
             return Err(StorageError::Conflict(conflicts));
         }
 
+        let mut txs_batch = vec![];
+        let mut logs_batch = vec![];
         for transaction in block.transactions.clone() {
-            self.state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
+            txs_batch.push((transaction.input.hash.clone(), transaction.clone()));
             for log in transaction.logs {
-                self.state.logs.insert((transaction.input.hash.clone(), log.log_index), log.clone());
+                logs_batch.push(((transaction.input.hash.clone(), log.log_index), log.clone()));
             }
         }
+
+        self.state.transactions.insert_batch(txs_batch);
+        self.state.logs.insert_batch(logs_batch);
 
         // save block
         let number = block.number();
