@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use async_trait::async_trait;
+use futures::future::join_all;
 use metrics::atomics::AtomicU64;
 use num_traits::cast::ToPrimitive;
 use sqlx::postgres::PgPoolOptions;
@@ -366,6 +367,8 @@ impl PermanentStorage for HybridPermanentStorage {
             return Err(StorageError::Conflict(conflicts));
         }
 
+        let mut futures = Vec::with_capacity(9);
+
         let mut txs_batch = vec![];
         let mut logs_batch = vec![];
         for transaction in block.transactions.clone() {
@@ -375,29 +378,43 @@ impl PermanentStorage for HybridPermanentStorage {
             }
         }
 
-        self.state.transactions.insert_batch(txs_batch);
-        self.state.logs.insert_batch(logs_batch);
+        let txs_rocks = Arc::clone(&self.state.transactions);
+        let logs_rocks = Arc::clone(&self.state.logs);
+        futures.push(tokio::spawn(async move { txs_rocks.insert_batch(txs_batch) }));
+        futures.push(tokio::spawn(async move { logs_rocks.insert_batch(logs_batch) }));
 
         // save block
-        let number = block.number();
+        let number = block.number().clone();
         let hash = block.hash().clone();
 
-        self.state.blocks_by_number.insert(*number, block.clone());
-        self.state.metadata.insert("current_block_number".to_string(), number.as_u64().to_string());
-        self.state.blocks_by_hash.insert(hash.clone(), *number);
+        let blocks_by_number = Arc::clone(&self.state.blocks_by_number);
+        let metadata = Arc::clone(&self.state.metadata);
+        let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
+        let block_clone = block.clone();
+        let hash_clone = hash.clone();
+        futures.push(tokio::spawn(async move { blocks_by_number.insert(number, block_clone) }));
+        futures.push(tokio::spawn(async move {
+            metadata.insert("current_block_number".to_string(), number.as_u64().to_string())
+        }));
+        futures.push(tokio::spawn(async move { blocks_by_hash.insert(hash_clone, number) }));
 
-        //XXX deal with errors later
-        let _ = self.state.update_state_with_execution_changes(&account_changes, *number).await;
+        futures.append(
+            &mut self
+                .state
+                .update_state_with_execution_changes(&account_changes, number)
+                .await
+                .context("failed to update state with execution changes")?,
+        );
 
         let block_task = BlockTask {
-            block_number: *number,
+            block_number: number,
             block_hash: hash,
             block_data: block,
             account_changes, //TODO make account changes work from postgres then we can load it on memory
         };
 
         self.task_sender.send(block_task).await.expect("Failed to send block task");
-
+        join_all(futures).await;
         Ok(())
     }
 

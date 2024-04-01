@@ -1,4 +1,5 @@
 use core::fmt;
+use std::sync::Arc;
 
 use anyhow::Context;
 use itertools::Itertools;
@@ -10,7 +11,7 @@ use sqlx::Pool;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use sqlx::Row;
-use tokio::join;
+use tokio::task::JoinHandle;
 
 use super::rocks_db::DbConfig;
 use super::rocks_db::RocksDb;
@@ -58,29 +59,29 @@ struct SlotRow {
 }
 
 pub struct HybridStorageState {
-    pub accounts: RocksDb<Address, AccountInfo>,
-    pub accounts_history: RocksDb<(Address, BlockNumber), AccountInfo>,
-    pub account_slots: RocksDb<(Address, SlotIndex), SlotValue>,
-    pub account_slots_history: RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>,
-    pub transactions: RocksDb<Hash, TransactionMined>,
-    pub blocks_by_number: RocksDb<BlockNumber, Block>,
-    pub blocks_by_hash: RocksDb<Hash, BlockNumber>,
-    pub logs: RocksDb<(Hash, Index), LogMined>,
-    pub metadata: RocksDb<String, String>,
+    pub accounts: Arc<RocksDb<Address, AccountInfo>>,
+    pub accounts_history: Arc<RocksDb<(Address, BlockNumber), AccountInfo>>,
+    pub account_slots: Arc<RocksDb<(Address, SlotIndex), SlotValue>>,
+    pub account_slots_history: Arc<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>,
+    pub transactions: Arc<RocksDb<Hash, TransactionMined>>,
+    pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
+    pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
+    pub logs: Arc<RocksDb<(Hash, Index), LogMined>>,
+    pub metadata: Arc<RocksDb<String, String>>,
 }
 
 impl HybridStorageState {
     pub fn new() -> Self {
         Self {
-            accounts: RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap(),
-            accounts_history: RocksDb::new("./data/accounts_history.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
-            account_slots: RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap(),
-            account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
-            transactions: RocksDb::new("./data/transactions.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_number: RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
-            logs: RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
-            metadata: RocksDb::new("./data/metadata.rocksdb", DbConfig::Default).unwrap(),
+            accounts: Arc::new(RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap()),
+            accounts_history: Arc::new(RocksDb::new("./data/accounts_history.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
+            account_slots: Arc::new(RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap()),
+            account_slots_history: Arc::new(RocksDb::new("./data/account_slots_history.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
+            transactions: Arc::new(RocksDb::new("./data/transactions.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
+            blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
+            blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
+            metadata: Arc::new(RocksDb::new("./data/metadata.rocksdb", DbConfig::Default).unwrap())
         }
     }
 
@@ -148,17 +149,17 @@ impl HybridStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    pub async fn update_state_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber) -> Result<(), sqlx::Error> {
+    pub async fn update_state_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber) -> Result<Vec<JoinHandle<()>>, sqlx::Error> {
         // Directly capture the fields needed by each future from `self`
-        let accounts = &self.accounts;
-        let accounts_history = &self.accounts_history;
-        let account_slots = &self.account_slots;
-        let account_slots_history = &self.account_slots_history;
+        let accounts = Arc::clone(&self.accounts);
+        let accounts_history = Arc::clone(&self.accounts_history);
+        let account_slots = Arc::clone(&self.account_slots);
+        let account_slots_history = Arc::clone(&self.account_slots_history);
 
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
-        let account_changes_future = async move {
+        let account_changes_future = tokio::spawn(async move {
             let mut account_changes = Vec::new();
             let mut account_history_changes = Vec::new();
 
@@ -184,9 +185,9 @@ impl HybridStorageState {
             }
             accounts.insert_batch(account_changes);
             accounts_history.insert_batch(account_history_changes);
-        };
+        });
 
-        let slot_changes_future = async move {
+        let slot_changes_future = tokio::spawn(async move {
             let mut slot_changes = Vec::new();
             let mut slot_history_changes = Vec::new();
 
@@ -201,11 +202,10 @@ impl HybridStorageState {
             }
             account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
             account_slots_history.insert_batch(slot_history_changes);
-        };
+        });
 
-        join!(account_changes_future, slot_changes_future);
 
-        Ok(())
+        Ok(vec![account_changes_future, slot_changes_future])
     }
 
     pub async fn read_logs(&self, filter: &LogFilter, pool: &Pool<Postgres>) -> anyhow::Result<Vec<LogMined>> {
