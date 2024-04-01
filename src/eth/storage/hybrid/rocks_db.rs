@@ -1,12 +1,19 @@
 use std::marker::PhantomData;
 
 use anyhow::Result;
+use rocksdb::BlockBasedOptions;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
+use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
+
+pub enum DbConfig {
+    LargeSSTFiles,
+    Default,
+}
 
 // A generic struct that abstracts over key-value pairs stored in RocksDB.
 pub struct RocksDb<K, V> {
@@ -15,8 +22,32 @@ pub struct RocksDb<K, V> {
 }
 
 impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
-    pub fn new(db_path: &str) -> anyhow::Result<Self> {
-        let db = DB::open_default(db_path)?;
+    pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Self> {
+        let mut opts = Options::default();
+        let mut block_based_options = BlockBasedOptions::default();
+
+        opts.create_if_missing(true);
+        opts.increase_parallelism(4);
+
+        match config {
+            DbConfig::LargeSSTFiles => {
+                // Adjusting for large SST files
+                opts.set_target_file_size_base(256 * 1024 * 1024); // 128MB
+                opts.set_max_write_buffer_number(4);
+                opts.set_write_buffer_size(64 * 1024 * 1024); // 64MB
+                opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // 512MB
+                opts.set_max_open_files(100);
+            }
+            DbConfig::Default => {
+                block_based_options.set_block_size(16 * 1024);
+                block_based_options.set_ribbon_filter(15.5); // https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter
+            }
+        }
+
+        opts.set_block_based_table_factory(&block_based_options);
+
+        let db = DB::open(&opts, db_path)?;
+
         Ok(RocksDb { db, _marker: PhantomData })
     }
 
