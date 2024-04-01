@@ -9,10 +9,13 @@ use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use tokio::task::JoinSet;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
-    // init services
+fn main() -> anyhow::Result<()> {
     let config: StateValidatorConfig = init_global_services();
+    let runtime = config.init_runtime();
+    runtime.block_on(run(config))
+}
+
+async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
 
     let interval = BlockNumber::from(config.interval);

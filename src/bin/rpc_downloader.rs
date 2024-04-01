@@ -19,10 +19,13 @@ use stratus::log_and_err;
 /// Number of blocks each parallel download will process.
 const BLOCKS_BY_TASK: usize = 1_000;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
-    // init services
+fn main() -> anyhow::Result<()> {
     let config: RpcDownloaderConfig = init_global_services();
+    let runtime = config.init_runtime();
+    runtime.block_on(run(config))
+}
+
+async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
     let chain = Arc::new(BlockchainClient::new(&config.external_rpc).await?);
 

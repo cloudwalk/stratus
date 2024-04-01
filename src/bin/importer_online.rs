@@ -16,10 +16,14 @@ use stratus::log_and_err;
 /// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
-    // init services
+fn main() -> anyhow::Result<()> {
     let config: ImporterOnlineConfig = init_global_services();
+    let runtime = config.init_runtime();
+    runtime.block_on(run(config))
+}
+
+async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
+    // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
     let storage = Arc::new(config.stratus_storage.init().await?);
     let executor = config.executor.init(Arc::clone(&storage));
