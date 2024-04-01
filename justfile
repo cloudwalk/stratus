@@ -118,17 +118,17 @@ db-load-csv:
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 bin-rpc-downloader *args="":
-    cargo run --bin rpc-downloader   --features dev --release -- --external-rpc-storage {{external_rpc_storage}} --external-rpc {{external_rpc_url}} {{args}}
+    cargo run --bin rpc-downloader   --features dev --release -- {{args}}
 alias rpc-downloader := bin-rpc-downloader
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 bin-importer-offline *args="":
-    cargo run --bin importer-offline --features dev --release -- --external-rpc-storage {{external_rpc_storage}} --perm-storage {{perm_storage}} {{args}}
+    cargo run --bin importer-offline --features dev --release -- {{args}}
 alias importer-offline := bin-importer-offline
 
 # Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
 bin-importer-online *args="":
-    cargo run --bin importer-online  --features dev --release -- --external-rpc {{external_rpc_url}} --perm-storage {{perm_storage}} {{args}}
+    cargo run --bin importer-online  --features dev --release -- {{args}}
 alias importer-online := bin-importer-online
 
 # Bin: Validate Stratus storage slots matches reference slots

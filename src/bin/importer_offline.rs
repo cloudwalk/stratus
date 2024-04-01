@@ -41,8 +41,8 @@ async fn main() -> anyhow::Result<()> {
     // init services
     let config: ImporterOfflineConfig = init_global_services();
     let rpc_storage = config.rpc_storage.init().await?;
-    let stratus_storage = config.init_stratus_storage().await?;
-    let executor = config.init_executor(Arc::clone(&stratus_storage));
+    let stratus_storage = config.stratus_storage.init().await?;
+    let executor = config.executor.init(Arc::clone(&stratus_storage));
 
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),

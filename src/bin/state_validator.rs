@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 async fn main() -> anyhow::Result<()> {
     // init services
     let config: StateValidatorConfig = init_global_services();
-    let storage = config.init_stratus_storage().await?;
+    let storage = config.stratus_storage.init().await?;
 
     let interval = BlockNumber::from(config.interval);
 

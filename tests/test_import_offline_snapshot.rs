@@ -4,7 +4,7 @@ use std::time::Duration;
 use const_format::formatcp;
 use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
-use stratus::config::CommonConfig;
+use stratus::config::StratusConfig;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::StoragePointInTime;
@@ -60,8 +60,8 @@ const METRIC_QUERIES: [&str; 30] = [
 
 #[tokio::test]
 async fn test_import_offline_snapshot() {
-    let mut config = init_global_services::<CommonConfig>();
-    config.chain_id = 2009;
+    let mut config = init_global_services::<StratusConfig>();
+    config.executor.chain_id = 2009;
 
     // init containers
     let docker = Docker::default();
@@ -94,7 +94,7 @@ async fn test_import_offline_snapshot() {
 
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
-    let executor = config.init_executor(storage);
+    let executor = config.executor.init(storage);
     executor.import_external_to_perm(block, &mut receipts).await.unwrap();
 
     // get metrics from prometheus

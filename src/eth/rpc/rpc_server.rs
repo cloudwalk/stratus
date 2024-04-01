@@ -53,7 +53,7 @@ pub async fn serve_rpc(executor: EthExecutor, storage: Arc<StratusStorage>, conf
 
     // configure context
     let ctx = RpcContext {
-        chain_id: config.chain_id.into(),
+        chain_id: config.executor.chain_id.into(),
         client_version: "stratus",
         gas_price: 0,
 
