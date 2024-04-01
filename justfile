@@ -5,10 +5,6 @@ export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
 # Default URLs that can be passed as argument.
-external_rpc_url     := env("EXTERNAL_RPC_URL", "http://spec.testnet.cloudwalk.network:9934/")
-external_rpc_storage := env("EXTERNAL_RPC_STORAGE", "postgres://postgres:123@0.0.0.0:5432/stratus")
-perm_storage         := env("PERM_STORAGE", "inmemory")
-temp_storage         := env("TEMP_STORAGE", "inmemory")
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "1200")
 
 # Project: Show available tasks
@@ -252,7 +248,7 @@ e2e-stratus-postgres test="":
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
-    RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage {{perm_storage}} > stratus.log &
+    RUST_LOG=debug just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -310,7 +306,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --perm-storage={{perm_storage}}
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
