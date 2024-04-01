@@ -11,7 +11,6 @@ use sqlx::Pool;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use sqlx::Row;
-use tokio::join;
 use tokio::task::JoinHandle;
 
 use super::rocks_db::DbConfig;
@@ -164,56 +163,65 @@ impl HybridStorageState {
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
-        let account_changes_future = tokio::task::spawn(async move {
-            let mut account_changes = Vec::new();
-            let mut account_history_changes = Vec::new();
+        let mut account_changes = Vec::new();
+        let mut account_history_changes = Vec::new();
 
-            for change in changes_clone_for_accounts {
-                let address = change.address.clone();
-                let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
-                    balance: Wei::ZERO, // Initialize with default values
-                    nonce: Nonce::ZERO,
-                    bytecode: None,
-                    code_hash: KECCAK_EMPTY.into(),
-                });
-                if let Some(nonce) = change.nonce.clone().take_modified() {
-                    account_info_entry.nonce = nonce;
-                }
-                if let Some(balance) = change.balance.clone().take_modified() {
-                    account_info_entry.balance = balance;
-                }
-                if let Some(bytecode) = change.bytecode.clone().take_modified() {
-                    account_info_entry.bytecode = bytecode;
-                }
-                account_changes.push((address.clone(), account_info_entry.clone()));
-                account_history_changes.push(((address.clone(), block_number), account_info_entry));
+        for change in changes_clone_for_accounts {
+            let address = change.address.clone();
+            let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
+                balance: Wei::ZERO, // Initialize with default values
+                nonce: Nonce::ZERO,
+                bytecode: None,
+                code_hash: KECCAK_EMPTY.into(),
+            });
+            if let Some(nonce) = change.nonce.clone().take_modified() {
+                account_info_entry.nonce = nonce;
             }
-            let _ = join!(
-                tokio::task::spawn_blocking(move || accounts.insert_batch(account_changes)),
-                tokio::task::spawn_blocking(move || accounts_history.insert_batch(account_history_changes))
-            ); // A little bit faster than creating 4 blocking tasks on the top level of the function
+            if let Some(balance) = change.balance.clone().take_modified() {
+                account_info_entry.balance = balance;
+            }
+            if let Some(bytecode) = change.bytecode.clone().take_modified() {
+                account_info_entry.bytecode = bytecode;
+            }
+            account_changes.push((address.clone(), account_info_entry.clone()));
+            account_history_changes.push(((address.clone(), block_number), account_info_entry));
+        }
+
+        let account_changes_future = tokio::task::spawn_blocking(move || {
+            accounts.insert_batch(account_changes);
         });
 
-        let slot_changes_future = tokio::task::spawn(async move {
-            let mut slot_changes = Vec::new();
-            let mut slot_history_changes = Vec::new();
-
-            for change in changes_clone_for_slots {
-                let address = change.address.clone();
-                for (slot_index, slot_change) in change.slots.clone() {
-                    if let Some(slot) = slot_change.take_modified() {
-                        slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
-                        slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value));
-                    }
-                }
-            }
-            let _ = join!(
-                tokio::task::spawn_blocking(move || account_slots.insert_batch(slot_changes)),
-                tokio::task::spawn_blocking(move || account_slots_history.insert_batch(slot_history_changes))
-            );
+        let account_history_changes_future = tokio::task::spawn_blocking(move || {
+            accounts_history.insert_batch(account_history_changes);
         });
 
-        Ok(vec![account_changes_future, slot_changes_future])
+        let mut slot_changes = Vec::new();
+        let mut slot_history_changes = Vec::new();
+
+        for change in changes_clone_for_slots {
+            let address = change.address.clone();
+            for (slot_index, slot_change) in change.slots.clone() {
+                if let Some(slot) = slot_change.take_modified() {
+                    slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
+                    slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value));
+                }
+            }
+        }
+
+        let slot_changes_future = tokio::task::spawn_blocking(move || {
+            account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
+        });
+
+        let slot_history_changes_future = tokio::task::spawn_blocking(move || {
+            account_slots_history.insert_batch(slot_history_changes);
+        });
+
+        Ok(vec![
+            account_changes_future,
+            slot_changes_future,
+            slot_history_changes_future,
+            account_history_changes_future,
+        ])
     }
 
     pub async fn read_logs(&self, filter: &LogFilter, pool: &Pool<Postgres>) -> anyhow::Result<Vec<LogMined>> {
