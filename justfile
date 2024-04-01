@@ -377,7 +377,7 @@ contracts-test-stratus-postgres *args="":
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 --perm-storage {{perm_storage}} > stratus.log &
+    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
