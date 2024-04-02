@@ -34,7 +34,6 @@ jobs:
             ${{ runner.os }}-cargo-${{ github.workflow }}
 
       - name: Set up Rust Nightly
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01
 
       - name: Set up Just
