@@ -16,11 +16,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Builds the documentation and upload as an artifact
+  # Build the documentation and upload as an artifact
   docs-build:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Cache Cargo Registry and Target Directory
+        uses: actions/cache@v4.0.2
+        id: cache-cargo
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-nightly-debug-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-nightly-debug-
+            ${{ runner.os }}-cargo-${{ github.workflow }}
+      
       - name: Set up Rust Nightly and Rust Docs
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
@@ -43,7 +56,7 @@ jobs:
         with:
           path: 'target/doc'
 
-  # Uploads the documentation to GitHub Pages
+  # Upload the documentation to GitHub Pages
   docs-release:
     runs-on: ubuntu-latest
     needs: docs-build

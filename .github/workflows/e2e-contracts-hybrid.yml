@@ -21,7 +21,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Cache Cargo Registry and Target Directory
+        uses: actions/cache@v4.0.2
+        id: cache-cargo
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-stable-release-
+            ${{ runner.os }}-cargo-${{ github.workflow }}-
+
       - name: Set up Rust
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
       - name: Set up Just
