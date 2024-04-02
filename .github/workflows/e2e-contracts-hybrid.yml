@@ -8,13 +8,16 @@ on:
 
 jobs:
   contract_test_hybrid:
-    if: github.event_name != 'pull_request'
-    name: Contracts E2E Hybrid Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        contract: [token, pix, periphery, compound, yield, multisig]
+    name: E2E Hybrid on ${{ matrix.contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.contract }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -51,8 +54,14 @@ jobs:
           asdf install nodejs 20.10.0
           asdf global nodejs 20.10.0
 
-      - name: Set up Test and clone repositories
-        run: just setup
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+        
+      - name: Clone ${{ matrix.contract }} repository
+        run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
-        run: PERM_STORAGE=hybrid://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres
+        run: PERM_STORAGE=hybrid://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres --${{ matrix.contract }}

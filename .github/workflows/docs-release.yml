@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Cache Cargo Registry and Target Directory
         uses: actions/cache@v4.0.2
         id: cache-cargo
@@ -41,9 +44,6 @@ jobs:
       
       - name: Set up Just
         uses: extractions/setup-just@v1
-
-      - name: Checkout code
-        uses: actions/checkout@v3
 
       - name: Generate docs
         run: |
