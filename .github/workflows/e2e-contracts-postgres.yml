@@ -32,9 +32,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-${{ github.workflow }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ github.workflow }}
+            ${{ runner.os }}-cargo-stable-release-
+            ${{ runner.os }}-cargo-${{ github.workflow }}-
 
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
