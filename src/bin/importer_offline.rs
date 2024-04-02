@@ -36,13 +36,16 @@ const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 250_000;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // init services
+fn main() -> anyhow::Result<()> {
     let config: ImporterOfflineConfig = init_global_services();
+    let runtime = config.init_runtime();
+    runtime.block_on(run(config))
+}
+
+async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
-    let stratus_storage = config.init_stratus_storage().await?;
-    let executor = config.init_executor(Arc::clone(&stratus_storage));
+    let stratus_storage = config.stratus_storage.init().await?;
+    let executor = config.executor.init(Arc::clone(&stratus_storage));
 
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),

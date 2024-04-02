@@ -5,10 +5,6 @@ export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
 # Default URLs that can be passed as argument.
-external_rpc_url     := env("EXTERNAL_RPC_URL", "http://spec.testnet.cloudwalk.network:9934/")
-external_rpc_storage := env("EXTERNAL_RPC_STORAGE", "postgres://postgres:123@0.0.0.0:5432/stratus")
-perm_storage         := env("PERM_STORAGE", "inmemory")
-temp_storage         := env("TEMP_STORAGE", "inmemory")
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "1200")
 
 # Project: Show available tasks
@@ -60,8 +56,8 @@ clean:
     cargo clean
 
 # Stratus: Build documentation
-doc:
-    cargo +nightly doc --no-deps
+doc nightly-version="":
+    @just _doc "{{nightly-version}}"
 
 # Stratus: Lint and format code
 lint:
@@ -118,22 +114,22 @@ db-load-csv:
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 bin-rpc-downloader *args="":
-    cargo run --bin rpc-downloader   --features dev --release -- --external-rpc-storage {{external_rpc_storage}} --external-rpc {{external_rpc_url}} {{args}}
+    cargo run --bin rpc-downloader   --features dev --release -- {{args}}
 alias rpc-downloader := bin-rpc-downloader
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 bin-importer-offline *args="":
-    cargo run --bin importer-offline --features dev --release -- --external-rpc-storage {{external_rpc_storage}} --perm-storage {{perm_storage}} {{args}}
+    cargo run --bin importer-offline --features dev --release -- {{args}}
 alias importer-offline := bin-importer-offline
 
 # Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
 bin-importer-online *args="":
-    cargo run --bin importer-online  --features dev --release -- --external-rpc {{external_rpc_url}} --perm-storage {{perm_storage}} {{args}}
+    cargo run --bin importer-online  --features dev --release -- {{args}}
 alias importer-online := bin-importer-online
 
 # Bin: Validate Stratus storage slots matches reference slots
 bin-state-validator *args="":
-    cargo run --bin state-validator  --features dev --release -- --method {{external_rpc_url}} {{args}}
+    cargo run --bin state-validator  --features dev --release -- {{args}}
 alias state-validator := bin-state-validator
 
 # ------------------------------------------------------------------------------
@@ -252,7 +248,7 @@ e2e-stratus-postgres test="":
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
-    RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage {{perm_storage}} > stratus.log &
+    RUST_LOG=debug just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -310,7 +306,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --perm-storage={{perm_storage}}
+    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
@@ -381,7 +377,7 @@ contracts-test-stratus-postgres *args="":
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 --perm-storage {{perm_storage}} > stratus.log &
+    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo

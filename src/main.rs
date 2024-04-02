@@ -7,12 +7,12 @@ use stratus::init_global_services;
 fn main() -> anyhow::Result<()> {
     let config: StratusConfig = init_global_services();
     let runtime = config.init_runtime();
-    runtime.block_on(run_rpc_server(config))
+    runtime.block_on(run(config))
 }
 
-async fn run_rpc_server(config: StratusConfig) -> anyhow::Result<()> {
-    let storage = config.init_stratus_storage().await?;
-    let executor = config.init_executor(Arc::clone(&storage));
+async fn run(config: StratusConfig) -> anyhow::Result<()> {
+    let storage = config.stratus_storage.init().await?;
+    let executor = config.executor.init(Arc::clone(&storage));
     serve_rpc(executor, storage, config).await?;
     Ok(())
 }

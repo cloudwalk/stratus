@@ -26,17 +26,20 @@ jobs:
 
       - name: Cache Cargo Registry and Target Directory
         uses: actions/cache@v4.0.2
+        id: cache-cargo
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-${{ github.workflow }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-stable-debug-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ github.workflow }}
+            ${{ runner.os }}-cargo-stable-debug-
+            ${{ runner.os }}-cargo-${{ github.workflow }}-
 
       - name: Set up Rust
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
       - name: Set up Just
@@ -51,11 +54,14 @@ jobs:
           asdf install nodejs 20.10.0
           asdf global nodejs 20.10.0
 
-      - name: Set up Test and clone repositories
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: |
           cargo install killport || true
           cargo install wait-service || true
-          just contracts-clone --${{ matrix.contract }}
+
+      - name: Clone ${{ matrix.contract }} repository
+        run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
         run: just contracts-test-stratus --${{ matrix.contract }}
