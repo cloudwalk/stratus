@@ -39,7 +39,7 @@ jobs:
       
       - name: Set up Rust Nightly and Rust Docs
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01
           rustup component add rust-docs
       
       - name: Set up Just
@@ -47,7 +47,7 @@ jobs:
 
       - name: Generate docs
         run: |
-          just doc
+          just doc -2024-01-01
           echo "<meta http-equiv='refresh' content='0; URL=./stratus/'>" >> target/doc/index.html
           chmod -c -R +rX target/doc/
 

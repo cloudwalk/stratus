@@ -56,8 +56,8 @@ clean:
     cargo clean
 
 # Stratus: Build documentation
-doc:
-    cargo +nightly doc --no-deps
+doc nightly-version="":
+    @just _doc "{{nightly-version}}"
 
 # Stratus: Lint and format code
 lint:
