@@ -2,6 +2,7 @@ use core::fmt;
 use std::sync::Arc;
 
 use anyhow::Context;
+use futures::future::join_all;
 use itertools::Itertools;
 use revm::primitives::KECCAK_EMPTY;
 use sqlx::types::BigDecimal;
@@ -88,9 +89,14 @@ impl HybridStorageState {
     //XXX TODO use a fixed block_number during load, in order to avoid sync problem
     // e.g other instance moving forward and this query getting incongruous data
     pub async fn load_latest_data(&self, pool: &Pool<Postgres>) -> anyhow::Result<()> {
-        let account_rows = sqlx::query_as!(
-            AccountRow,
-            "
+        let pool_clone_accounts = pool.clone();
+        let self_clone_accounts = Arc::<RocksDb<Address, AccountInfo>>::clone(&self.accounts);
+
+        // Spawn the first blocking task for accounts
+        let accounts_task = tokio::spawn(async move {
+            let account_rows = sqlx::query_as!(
+                AccountRow,
+                "
             SELECT DISTINCT ON (address)
                 address,
                 nonce,
@@ -103,27 +109,33 @@ impl HybridStorageState {
                 address,
                 block_number DESC
             "
-        )
-        .fetch_all(pool)
-        .await?;
+            )
+            .fetch_all(&pool_clone_accounts)
+            .await?;
 
-        for account_row in account_rows {
-            let addr: Address = account_row.address.try_into().unwrap_or_default(); //XXX add alert
-            self.accounts.insert(
-                addr,
-                AccountInfo {
-                    balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
-                    nonce: account_row.nonce.map(|n| n.try_into().unwrap_or_default()).unwrap_or_default(),
-                    bytecode: account_row.bytecode.map(Bytes::from),
-                    code_hash: account_row.code_hash,
-                },
-            );
-        }
+            for account_row in account_rows {
+                let addr: Address = account_row.address.try_into().unwrap_or_default();
+                self_clone_accounts.insert(
+                    addr,
+                    AccountInfo {
+                        balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
+                        nonce: account_row.nonce.map(|n| n.try_into().unwrap_or_default()).unwrap_or_default(),
+                        bytecode: account_row.bytecode.map(Bytes::from),
+                        code_hash: account_row.code_hash,
+                    },
+                );
+            }
+            Result::<(), anyhow::Error>::Ok(())
+        });
 
-        // Load slots
-        let slot_rows = sqlx::query_as!(
-            SlotRow,
-            "
+        let pool_clone_slots = pool.clone();
+        let self_clone_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
+
+        // Spawn the second blocking task for slots
+        let slots_task = tokio::spawn(async move {
+            let slot_rows = sqlx::query_as!(
+                SlotRow,
+                "
             SELECT DISTINCT ON (account_address, slot_index)
                 account_address,
                 slot_index,
@@ -135,14 +147,27 @@ impl HybridStorageState {
                 slot_index,
                 block_number DESC
             "
-        )
-        .fetch_all(pool)
-        .await?;
+            )
+            .fetch_all(&pool_clone_slots)
+            .await?;
 
-        for slot_row in slot_rows {
-            let addr: Address = slot_row.account_address.try_into().unwrap_or_default(); //XXX add alert
-            self.account_slots
-                .insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
+            for slot_row in slot_rows {
+                let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
+                self_clone_slots.insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
+            }
+            Result::<(), anyhow::Error>::Ok(())
+        });
+
+        // Await both tasks concurrently
+        let results = join_all(vec![accounts_task, slots_task]).await;
+
+        // Check the results of both tasks
+        for result in results {
+            match result {
+                Ok(Ok(())) => continue,                      // Successfully completed task
+                Ok(Err(e)) => return Err(e),                 // Task completed with an error
+                Err(e) => return Err(anyhow::Error::new(e)), // Task panicked
+            }
         }
 
         Ok(())
