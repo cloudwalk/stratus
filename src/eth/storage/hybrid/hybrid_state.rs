@@ -2,6 +2,7 @@ use core::fmt;
 use std::sync::Arc;
 
 use anyhow::Context;
+use futures::future::join_all;
 use itertools::Itertools;
 use revm::primitives::KECCAK_EMPTY;
 use sqlx::types::BigDecimal;
@@ -11,6 +12,7 @@ use sqlx::Pool;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use sqlx::Row;
+use tokio::task;
 use tokio::task::JoinHandle;
 
 use super::rocks_db::DbConfig;
@@ -87,7 +89,13 @@ impl HybridStorageState {
 
     //XXX TODO use a fixed block_number during load, in order to avoid sync problem
     // e.g other instance moving forward and this query getting incongruous data
-    pub async fn load_latest_data(&self, pool: &Pool<Postgres>) -> anyhow::Result<()> {
+pub async fn load_latest_data(&self, pool: &Pool<Postgres>) -> anyhow::Result<()> {
+    let pool_clone_accounts = pool.clone();
+    let self_clone_accounts = self.accounts.clone();
+
+
+    // Spawn the first blocking task for accounts
+    let accounts_task = tokio::spawn(async move {
         let account_rows = sqlx::query_as!(
             AccountRow,
             "
@@ -104,12 +112,12 @@ impl HybridStorageState {
                 block_number DESC
             "
         )
-        .fetch_all(pool)
+        .fetch_all(&pool_clone_accounts)
         .await?;
 
         for account_row in account_rows {
-            let addr: Address = account_row.address.try_into().unwrap_or_default(); //XXX add alert
-            self.accounts.insert(
+            let addr: Address = account_row.address.try_into().unwrap_or_default();
+            self_clone_accounts.insert(
                 addr,
                 AccountInfo {
                     balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
@@ -119,8 +127,14 @@ impl HybridStorageState {
                 },
             );
         }
+        Result::<(), anyhow::Error>::Ok(())
+    });
 
-        // Load slots
+    let pool_clone_slots = pool.clone();
+    let self_clone_slots = self.account_slots.clone();
+
+    // Spawn the second blocking task for slots
+    let slots_task = tokio::spawn(async move {
         let slot_rows = sqlx::query_as!(
             SlotRow,
             "
@@ -136,17 +150,30 @@ impl HybridStorageState {
                 block_number DESC
             "
         )
-        .fetch_all(pool)
+        .fetch_all(&pool_clone_slots)
         .await?;
 
         for slot_row in slot_rows {
-            let addr: Address = slot_row.account_address.try_into().unwrap_or_default(); //XXX add alert
-            self.account_slots
-                .insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
+            let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
+            self_clone_slots.insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
         }
+        Result::<(), anyhow::Error>::Ok(())
+    });
 
-        Ok(())
+    // Await both tasks concurrently
+    let results = join_all(vec![accounts_task, slots_task]).await;
+
+    // Check the results of both tasks
+    for result in results {
+        match result {
+            Ok(Ok(())) => continue, // Successfully completed task
+            Ok(Err(e)) => return Err(e), // Task completed with an error
+            Err(e) => return Err(anyhow::Error::new(e)), // Task panicked
+        }
     }
+
+    Ok(())
+}
 
     /// Updates the in-memory state with changes from transaction execution
     pub async fn update_state_with_execution_changes(
