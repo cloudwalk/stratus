@@ -54,11 +54,14 @@ jobs:
           asdf install nodejs 20.10.0
           asdf global nodejs 20.10.0
 
-      - name: Set up Test and clone repositories
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: |
           cargo install killport || true
           cargo install wait-service || true
-          just contracts-clone --${{ matrix.contract }}
+
+      - name: Clone ${{ matrix.contract }} repository
+        run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
         run: just contracts-test-stratus --${{ matrix.contract }}
