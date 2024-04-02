@@ -586,7 +586,7 @@ impl FromStr for PermanentStorageKind {
 // Enum: MetricsHistogramKind
 // -----------------------------------------------------------------------------
 
-/// See: https://prometheus.io/docs/practices/histograms/
+/// See: <https://prometheus.io/docs/practices/histograms/>
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MetricsHistogramKind {
     /// Quantiles are calculated on client-side based on recent data kept in-memory.
