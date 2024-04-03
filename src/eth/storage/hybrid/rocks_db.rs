@@ -69,13 +69,16 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         bincode::deserialize(&value_bytes).ok()
     }
 
-    pub fn get_current_block_number(&self) -> Option<i64> {
+    pub fn get_current_block_number(&self) -> i64 {
         let Ok(serialized_key) = bincode::serialize(&"current_block") else {
-            return None;
+            return -1;
         };
-        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return None };
+        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return -1 };
 
-        bincode::deserialize(&value_bytes).ok()
+        match bincode::deserialize(&value_bytes).ok() {
+            Some(block_number) => block_number,
+            None => -1,
+        }
     }
 
     // Mimics the 'insert' functionality of a HashMap
