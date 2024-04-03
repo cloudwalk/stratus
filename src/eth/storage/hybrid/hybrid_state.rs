@@ -68,7 +68,6 @@ pub struct HybridStorageState {
     pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
     pub logs: Arc<RocksDb<(Hash, Index), LogMined>>,
-    pub metadata: Arc<RocksDb<String, String>>,
 }
 
 impl HybridStorageState {
@@ -82,7 +81,6 @@ impl HybridStorageState {
             blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-            metadata: Arc::new(RocksDb::new("./data/metadata.rocksdb", DbConfig::Default).unwrap()),
         }
     }
 
@@ -213,11 +211,11 @@ impl HybridStorageState {
         }
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
-            accounts.insert_batch(account_changes);
+            accounts.insert_batch(account_changes, Some(block_number.as_u64()));
         });
 
         let account_history_changes_future = tokio::task::spawn_blocking(move || {
-            accounts_history.insert_batch(account_history_changes);
+            accounts_history.insert_batch(account_history_changes, Some(block_number.as_u64()));
         });
 
         let mut slot_changes = Vec::new();
@@ -234,11 +232,11 @@ impl HybridStorageState {
         }
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
+            account_slots.insert_batch(slot_changes, Some(block_number.as_u64())); // Assuming `insert_batch` is an async function
         });
 
         let slot_history_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots_history.insert_batch(slot_history_changes);
+            account_slots_history.insert_batch(slot_history_changes, Some(block_number.as_u64()));
         });
 
         Ok(vec![

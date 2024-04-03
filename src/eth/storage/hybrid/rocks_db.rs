@@ -76,7 +76,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.put(serialized_key, serialized_value).unwrap();
     }
 
-    pub fn insert_batch(&self, changes: Vec<(K, V)>) {
+    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<u64>) {
         let mut batch = WriteBatch::default();
 
         for (key, value) in changes {
@@ -85,6 +85,10 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             // Add each serialized key-value pair to the batch
             batch.put(serialized_key, serialized_value);
         }
+
+        let serialized_block_key = bincode::serialize(&"current_block").unwrap();
+        let serialized_block_value = bincode::serialize(&current_block).unwrap();
+        batch.put(serialized_block_key, serialized_block_value);
 
         // Execute the batch operation atomically
         self.db.write(batch).unwrap();
