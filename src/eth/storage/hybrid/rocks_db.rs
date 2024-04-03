@@ -163,7 +163,7 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Ser
                 let (key, value) = key_value.unwrap(); // XXX deal with the result
 
                 if key == bincode::serialize(&"current_block").unwrap().into_boxed_slice() {
-                    self.next();
+                    return self.next();
                 }
 
                 let key: K = bincode::deserialize(&key).unwrap();
