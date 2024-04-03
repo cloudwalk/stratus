@@ -64,4 +64,4 @@ jobs:
         run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
-        run: PERM_STORAGE=hybrid://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres --${{ matrix.contract }}
+        run: CARGO_PROFILE_RELEASE_DEBUG=0 PERM_STORAGE=hybrid://postgres:123@0.0.0.0:5432/stratus just contracts-test-stratus-postgres --${{ matrix.contract }}
