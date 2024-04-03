@@ -70,7 +70,9 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     }
 
     pub fn get_current_block_number(&self) -> Option<i64> {
-        let Ok(serialized_key) = bincode::serialize(&"current_block") else { return None };
+        let Ok(serialized_key) = bincode::serialize(&"current_block") else {
+            return None;
+        };
         let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return None };
 
         bincode::deserialize(&value_bytes).ok()
