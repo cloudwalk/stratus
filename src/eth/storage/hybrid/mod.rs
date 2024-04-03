@@ -388,14 +388,10 @@ impl PermanentStorage for HybridPermanentStorage {
         let hash = block.hash().clone();
 
         let blocks_by_number = Arc::clone(&self.state.blocks_by_number);
-        let metadata = Arc::clone(&self.state.metadata);
         let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
         let block_clone = block.clone();
         let hash_clone = hash.clone();
         futures.push(tokio::task::spawn_blocking(move || blocks_by_number.insert(number, block_clone)));
-        futures.push(tokio::task::spawn_blocking(move || {
-            metadata.insert("current_block_number".to_string(), number.as_u64().to_string());
-        }));
         futures.push(tokio::task::spawn_blocking(move || blocks_by_hash.insert(hash_clone, number)));
 
         futures.append(
