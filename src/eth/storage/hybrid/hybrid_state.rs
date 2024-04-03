@@ -211,7 +211,7 @@ impl HybridStorageState {
         }
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
-            accounts.insert_batch(account_changes, None);
+            accounts.insert_batch(account_changes, Some(block_number.as_i64()));
         });
 
         let account_history_changes_future = tokio::task::spawn_blocking(move || {
@@ -232,7 +232,7 @@ impl HybridStorageState {
         }
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots.insert_batch(slot_changes, None); // Assuming `insert_batch` is an async function
+            account_slots.insert_batch(slot_changes, Some(block_number.as_i64())); // Assuming `insert_batch` is an async function
         });
 
         let slot_history_changes_future = tokio::task::spawn_blocking(move || {
