@@ -92,21 +92,25 @@ impl HybridStorageState {
 
         // Spawn the first blocking task for accounts
         let accounts_task = tokio::spawn(async move {
+            let current_block_number = self_clone_accounts.get_current_block_number();
             let account_rows = sqlx::query_as!(
                 AccountRow,
                 "
-            SELECT DISTINCT ON (address)
-                address,
-                nonce,
-                balance,
-                bytecode,
-                code_hash
-            FROM
-                neo_accounts
-            ORDER BY
-                address,
-                block_number DESC
-            "
+                SELECT DISTINCT ON (address)
+                    address,
+                    nonce,
+                    balance,
+                    bytecode,
+                    code_hash
+                FROM
+                    neo_accounts
+                WHERE
+                    block_number > $1
+                ORDER BY
+                    address,
+                    block_number DESC
+                ",
+                current_block_number,
             )
             .fetch_all(&pool_clone_accounts)
             .await?;
@@ -131,20 +135,24 @@ impl HybridStorageState {
 
         // Spawn the second blocking task for slots
         let slots_task = tokio::spawn(async move {
+            let current_block_number = self_clone_slots.get_current_block_number();
             let slot_rows = sqlx::query_as!(
                 SlotRow,
                 "
-            SELECT DISTINCT ON (account_address, slot_index)
-                account_address,
-                slot_index,
-                value
-            FROM
-                neo_account_slots
-            ORDER BY
-                account_address,
-                slot_index,
-                block_number DESC
-            "
+                SELECT DISTINCT ON (account_address, slot_index)
+                    account_address,
+                    slot_index,
+                    value
+                FROM
+                    neo_account_slots
+                WHERE
+                    block_number > $1
+                ORDER BY
+                    account_address,
+                    slot_index,
+                    block_number DESC
+                ",
+                current_block_number,
             )
             .fetch_all(&pool_clone_slots)
             .await?;
@@ -162,9 +170,9 @@ impl HybridStorageState {
         // Check the results of both tasks
         for result in results {
             match result {
-                Ok(Ok(())) => continue,                      // Successfully completed task
-                Ok(Err(e)) => return Err(e),                 // Task completed with an error
-                Err(e) => return Err(anyhow::Error::new(e)), // Task panicked
+                Ok(Ok(())) => continue,
+                Ok(Err(e)) => return Err(e),
+                Err(e) => return Err(anyhow::Error::new(e)),
             }
         }
 
