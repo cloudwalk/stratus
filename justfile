@@ -31,9 +31,7 @@ setup:
 
 # Stratus: Run main service with debug options
 run *args="":
-    #!/bin/bash
     cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
-    exit 0
 
 # Stratus: Run main service with release options
 run-release *args="":
@@ -242,7 +240,7 @@ e2e-stratus-postgres test="":
 
     echo "-> Starting Postgres"
     docker compose down
-    docker compose up -d
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
@@ -371,7 +369,7 @@ contracts-test-stratus-postgres *args="":
     #!/bin/bash
     echo "-> Starting Postgres"
     docker compose down
-    docker compose up -d
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
