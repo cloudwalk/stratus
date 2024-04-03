@@ -27,7 +27,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let mut block_based_options = BlockBasedOptions::default();
 
         opts.create_if_missing(true);
-        opts.increase_parallelism(4);
+        opts.increase_parallelism(16);
 
         match config {
             DbConfig::LargeSSTFiles => {
@@ -36,7 +36,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_max_write_buffer_number(4);
                 opts.set_write_buffer_size(64 * 1024 * 1024); // 64MB
                 opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // 512MB
-                opts.set_max_open_files(100);
+                opts.set_max_open_files(1000);
             }
             DbConfig::Default => {
                 block_based_options.set_block_size(16 * 1024);
