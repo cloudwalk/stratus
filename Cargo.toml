@@ -65,8 +65,8 @@ reqwest = { version = "=0.11.24", features = ["json"] }
 tower = "=0.4.13"
 
 # observability
-metrics = "=0.21.1"
-metrics-exporter-prometheus = "=0.12.2"
+metrics = { version = "=0.21.1", optional = true }
+metrics-exporter-prometheus = { version = "=0.12.2", optional = true }
 tracing = "=0.1.40"
 tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
 
@@ -132,6 +132,15 @@ semicolon_if_nothing_returned = "warn"
 
 [features]
 default = ["rocks"]
-dev  = []  # Application is running in develoment mode.
-perf = []  # Application is running in performance test mode.
+
+# Application is running in develoment mode.
+dev  = []
+
+# Application is running in performance test mode.
+perf = []
+
+# Enable metrics dependencies and code for metrics collection.
+metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
+
+# Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
