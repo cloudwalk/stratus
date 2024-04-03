@@ -27,7 +27,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let mut block_based_options = BlockBasedOptions::default();
 
         opts.create_if_missing(true);
-        opts.increase_parallelism(4);
+        opts.increase_parallelism(16);
 
         match config {
             DbConfig::LargeSSTFiles => {
@@ -36,7 +36,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_max_write_buffer_number(4);
                 opts.set_write_buffer_size(64 * 1024 * 1024); // 64MB
                 opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // 512MB
-                opts.set_max_open_files(100);
+                opts.set_max_open_files(1000);
             }
             DbConfig::Default => {
                 block_based_options.set_block_size(16 * 1024);
@@ -69,6 +69,15 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         bincode::deserialize(&value_bytes).ok()
     }
 
+    pub fn get_current_block_number(&self) -> i64 {
+        let Ok(serialized_key) = bincode::serialize(&"current_block") else {
+            return -1;
+        };
+        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return -1 };
+
+        bincode::deserialize(&value_bytes).ok().unwrap_or(-1)
+    }
+
     // Mimics the 'insert' functionality of a HashMap
     pub fn insert(&self, key: K, value: V) {
         let serialized_key = bincode::serialize(&key).unwrap();
@@ -76,7 +85,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.put(serialized_key, serialized_value).unwrap();
     }
 
-    pub fn insert_batch(&self, changes: Vec<(K, V)>) {
+    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<i64>) {
         let mut batch = WriteBatch::default();
 
         for (key, value) in changes {
@@ -84,6 +93,12 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             let serialized_value = bincode::serialize(&value).unwrap();
             // Add each serialized key-value pair to the batch
             batch.put(serialized_key, serialized_value);
+        }
+
+        if let Some(current_block) = current_block {
+            let serialized_block_key = bincode::serialize(&"current_block").unwrap();
+            let serialized_block_value = bincode::serialize(&current_block).unwrap();
+            batch.put(serialized_block_key, serialized_block_value);
         }
 
         // Execute the batch operation atomically
@@ -146,6 +161,10 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Ser
         match key_value {
             Some(key_value) => {
                 let (key, value) = key_value.unwrap(); // XXX deal with the result
+
+                if key == bincode::serialize(&"current_block").unwrap().into_boxed_slice() {
+                    return self.next();
+                }
 
                 let key: K = bincode::deserialize(&key).unwrap();
                 let value: V = bincode::deserialize(&value).unwrap();

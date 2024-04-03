@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT DISTINCT ON (address)\n                address,\n                nonce,\n                balance,\n                bytecode,\n                code_hash\n            FROM\n                neo_accounts\n            ORDER BY\n                address,\n                block_number DESC\n            ",
+  "query": "\n                SELECT DISTINCT ON (address)\n                    address,\n                    nonce,\n                    balance,\n                    bytecode,\n                    code_hash\n                FROM\n                    neo_accounts\n                WHERE\n                    block_number > $1\n                ORDER BY\n                    address,\n                    block_number DESC\n                ",
   "describe": {
     "columns": [
       {
@@ -30,7 +30,9 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int8"
+      ]
     },
     "nullable": [
       false,
@@ -40,5 +42,5 @@
       false
     ]
   },
-  "hash": "2317a0db261ebe5274550bfd83028fab15194d30ff46de0488113858562eb5f5"
+  "hash": "e0ee78b433b1534cb9bdda76c879f87eeff0cbc426765dd616f70a8015196aa3"
 }

@@ -18,4 +18,5 @@ RUN cargo build --release
 FROM rust:1.75 as runtime
 WORKDIR /app
 COPY --from=builder /app/target/release/stratus /app/stratus
-CMD ["/app/stratus"]
+
+CMD ["sh", "-c", "/app/stratus", "--pem-storage=$PERM_STORAGE", "--perm-storage-connections=$PERM_STORAGE_CONNECTIONS", "--perm-storage-timeout=$PERM_STORAGE_TIMEOUT", "--chain-id=$CHAIN_ID", "--blocking-threads=$BLOCKING_THREADS"]

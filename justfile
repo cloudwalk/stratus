@@ -5,8 +5,10 @@ export CARGO_PROFILE_RELEASE_DEBUG := "1"
 export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
-# Default URLs that can be passed as argument.
-wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "1200")
+# Default values.
+wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
+build_flags := "--bin stratus --features dev"
+run_flags := "--enable-genesis --enable-test-accounts"
 
 # Project: Show available tasks
 default:
@@ -32,21 +34,19 @@ setup:
 
 # Stratus: Run main service with debug options
 run *args="":
-    #!/bin/bash
-    cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
-    exit 0
+    cargo run {{ build_flags }} -- {{ run_flags }} {{args}}
 
 # Stratus: Run main service with release options
 run-release *args="":
-    cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
+    cargo run --release {{ build_flags }} -- {{ run_flags }} {{args}}
 
 # Stratus: Compile with debug options
 build:
-    cargo build
+    cargo build {{ build_flags }}
 
 # Stratus: Compile with release options
 build-release:
-    cargo build --release
+    cargo build --release {{ build_flags }}
 
 # Stratus: Check, or compile without generating code
 check:
@@ -221,6 +221,7 @@ e2e-stratus test="":
     fi
 
     echo "-> Starting Stratus"
+    just build || exit 1
     RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -242,13 +243,14 @@ e2e-stratus-postgres test="":
     fi
 
     echo "-> Starting Postgres"
-    docker-compose down
-    docker-compose up -d
+    docker compose down
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
+    just build || exit 1
     RUST_LOG=debug just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -262,7 +264,7 @@ e2e-stratus-postgres test="":
     killport 3000
 
     echo "-> Killing Postgres"
-    docker-compose down
+    docker compose down
 
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
@@ -281,8 +283,8 @@ e2e-flamegraph:
 
     # Start PostgreSQL
     echo "Starting PostgreSQL"
-    docker-compose down -v
-    docker-compose up -d --force-recreate
+    docker compose down -v
+    docker compose up -d --force-recreate
 
     # Wait for PostgreSQL
     echo "Waiting for PostgreSQL to be ready"
@@ -307,7 +309,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
-    cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc
+    cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
@@ -354,6 +356,7 @@ contracts-remove:
 contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
+    just build || exit 1
     RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -371,13 +374,14 @@ contracts-test-stratus *args="":
 contracts-test-stratus-postgres *args="":
     #!/bin/bash
     echo "-> Starting Postgres"
-    docker-compose down
-    docker-compose up -d
+    docker compose down
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
+    just build-release || exit 1
     RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -391,7 +395,7 @@ contracts-test-stratus-postgres *args="":
     killport 3000
 
     echo "-> Killing Postgres"
-    docker-compose down
+    docker compose down
 
     exit $result_code
 

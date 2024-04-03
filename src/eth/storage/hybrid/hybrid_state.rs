@@ -2,6 +2,7 @@ use core::fmt;
 use std::sync::Arc;
 
 use anyhow::Context;
+use futures::future::join_all;
 use itertools::Itertools;
 use revm::primitives::KECCAK_EMPTY;
 use sqlx::types::BigDecimal;
@@ -67,7 +68,6 @@ pub struct HybridStorageState {
     pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
     pub logs: Arc<RocksDb<(Hash, Index), LogMined>>,
-    pub metadata: Arc<RocksDb<String, String>>,
 }
 
 impl HybridStorageState {
@@ -81,68 +81,99 @@ impl HybridStorageState {
             blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-            metadata: Arc::new(RocksDb::new("./data/metadata.rocksdb", DbConfig::Default).unwrap()),
         }
     }
 
     //XXX TODO use a fixed block_number during load, in order to avoid sync problem
     // e.g other instance moving forward and this query getting incongruous data
     pub async fn load_latest_data(&self, pool: &Pool<Postgres>) -> anyhow::Result<()> {
-        let account_rows = sqlx::query_as!(
-            AccountRow,
-            "
-            SELECT DISTINCT ON (address)
-                address,
-                nonce,
-                balance,
-                bytecode,
-                code_hash
-            FROM
-                neo_accounts
-            ORDER BY
-                address,
-                block_number DESC
-            "
-        )
-        .fetch_all(pool)
-        .await?;
+        let pool_clone_accounts = pool.clone();
+        let self_clone_accounts = Arc::<RocksDb<Address, AccountInfo>>::clone(&self.accounts);
 
-        for account_row in account_rows {
-            let addr: Address = account_row.address.try_into().unwrap_or_default(); //XXX add alert
-            self.accounts.insert(
-                addr,
-                AccountInfo {
-                    balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
-                    nonce: account_row.nonce.map(|n| n.try_into().unwrap_or_default()).unwrap_or_default(),
-                    bytecode: account_row.bytecode.map(Bytes::from),
-                    code_hash: account_row.code_hash,
-                },
-            );
-        }
+        // Spawn the first blocking task for accounts
+        let accounts_task = tokio::spawn(async move {
+            let current_block_number = self_clone_accounts.get_current_block_number();
+            let account_rows = sqlx::query_as!(
+                AccountRow,
+                "
+                SELECT DISTINCT ON (address)
+                    address,
+                    nonce,
+                    balance,
+                    bytecode,
+                    code_hash
+                FROM
+                    neo_accounts
+                WHERE
+                    block_number > $1
+                ORDER BY
+                    address,
+                    block_number DESC
+                ",
+                current_block_number,
+            )
+            .fetch_all(&pool_clone_accounts)
+            .await?;
 
-        // Load slots
-        let slot_rows = sqlx::query_as!(
-            SlotRow,
-            "
-            SELECT DISTINCT ON (account_address, slot_index)
-                account_address,
-                slot_index,
-                value
-            FROM
-                neo_account_slots
-            ORDER BY
-                account_address,
-                slot_index,
-                block_number DESC
-            "
-        )
-        .fetch_all(pool)
-        .await?;
+            for account_row in account_rows {
+                let addr: Address = account_row.address.try_into().unwrap_or_default();
+                self_clone_accounts.insert(
+                    addr,
+                    AccountInfo {
+                        balance: account_row.balance.map(|b| b.try_into().unwrap_or_default()).unwrap_or_default(),
+                        nonce: account_row.nonce.map(|n| n.try_into().unwrap_or_default()).unwrap_or_default(),
+                        bytecode: account_row.bytecode.map(Bytes::from),
+                        code_hash: account_row.code_hash,
+                    },
+                );
+            }
+            Result::<(), anyhow::Error>::Ok(())
+        });
 
-        for slot_row in slot_rows {
-            let addr: Address = slot_row.account_address.try_into().unwrap_or_default(); //XXX add alert
-            self.account_slots
-                .insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
+        let pool_clone_slots = pool.clone();
+        let self_clone_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
+
+        // Spawn the second blocking task for slots
+        let slots_task = tokio::spawn(async move {
+            let current_block_number = self_clone_slots.get_current_block_number();
+            let slot_rows = sqlx::query_as!(
+                SlotRow,
+                "
+                SELECT DISTINCT ON (account_address, slot_index)
+                    account_address,
+                    slot_index,
+                    value
+                FROM
+                    neo_account_slots
+                WHERE
+                    block_number > $1
+                ORDER BY
+                    account_address,
+                    slot_index,
+                    block_number DESC
+                ",
+                current_block_number,
+            )
+            .fetch_all(&pool_clone_slots)
+            .await?;
+
+            for slot_row in slot_rows {
+                let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
+                self_clone_slots.insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
+            }
+            Result::<(), anyhow::Error>::Ok(())
+        });
+
+        // Await both tasks concurrently
+        let results = join_all(vec![accounts_task, slots_task]).await;
+
+        // Check the results of both tasks
+        for result in results {
+            match result {
+                Ok(Ok(())) => continue,
+                Ok(Err(e)) => return Err(e),
+                Err(e) => return Err(anyhow::Error::new(e)),
+            }
         }
 
         Ok(())
@@ -188,11 +219,11 @@ impl HybridStorageState {
         }
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
-            accounts.insert_batch(account_changes);
+            accounts.insert_batch(account_changes, Some(block_number.as_i64()));
         });
 
         let account_history_changes_future = tokio::task::spawn_blocking(move || {
-            accounts_history.insert_batch(account_history_changes);
+            accounts_history.insert_batch(account_history_changes, None);
         });
 
         let mut slot_changes = Vec::new();
@@ -209,11 +240,12 @@ impl HybridStorageState {
         }
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
+            account_slots.insert_batch(slot_changes, Some(block_number.as_i64()));
+            // Assuming `insert_batch` is an async function
         });
 
         let slot_history_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots_history.insert_batch(slot_history_changes);
+            account_slots_history.insert_batch(slot_history_changes, None);
         });
 
         Ok(vec![
