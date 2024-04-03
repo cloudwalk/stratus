@@ -6,7 +6,6 @@
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -47,6 +46,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
@@ -82,7 +82,8 @@ impl Revm {
 
 impl Evm for Revm {
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
 
         // configure session
         let evm = &mut self.evm;
@@ -114,9 +115,11 @@ impl Evm for Revm {
         // parse result and track metrics
         let session = evm.db_mut();
         let session_input = std::mem::take(&mut session.input);
-        let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
+
         let session_storage_changes = std::mem::take(&mut session.storage_changes);
         let session_metrics = std::mem::take(&mut session.metrics);
+        #[cfg(feature = "metrics")]
+        let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
 
         let execution = match evm_result {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
@@ -126,9 +129,12 @@ impl Evm for Revm {
             }
         };
 
-        metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
-        metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
-        metrics::inc_evm_execution_slot_reads(session_metrics.slot_reads);
+        #[cfg(feature = "metrics")]
+        {
+            metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
+            metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
+            metrics::inc_evm_execution_slot_reads(session_metrics.slot_reads);
+        }
 
         execution.map(|x| (x, session_metrics))
     }

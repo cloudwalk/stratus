@@ -7,7 +7,6 @@
 
 use std::io::Write;
 use std::sync::Arc;
-use std::time::Instant;
 
 use anyhow::anyhow;
 use tokio::sync::broadcast;
@@ -31,6 +30,7 @@ use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
 /// Number of events in the backlog.
@@ -90,7 +90,9 @@ impl EthExecutor {
 
     /// Re-executes an external block locally and imports it to the temporary storage.
     pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let mut block_metrics = ExecutionMetrics::default();
         tracing::info!(number = %block.number(), "importing external block");
 
@@ -100,7 +102,8 @@ impl EthExecutor {
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
-            let tx_start = Instant::now();
+            #[cfg(feature = "metrics")]
+            let tx_start = metrics::now();
 
             // re-execute transaction or create a fake execution the external transaction failed
             let receipt = receipts.try_take(&tx.hash())?;
@@ -134,6 +137,7 @@ impl EthExecutor {
                     executions.push((tx, receipt, execution.clone()));
 
                     // track metrics
+                    #[cfg(feature = "metrics")]
                     metrics::inc_executor_external_transaction(tx_start.elapsed());
                     block_metrics.account_reads += execution_metrics.account_reads;
                     block_metrics.slot_reads += execution_metrics.slot_reads;
@@ -161,16 +165,21 @@ impl EthExecutor {
         };
 
         // track metrics
-        metrics::inc_executor_external_block(start.elapsed());
-        metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
-        metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
+        #[cfg(feature = "metrics")]
+        {
+            metrics::inc_executor_external_block(start.elapsed());
+            metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
+            metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
+        }
 
         Ok(block)
     }
 
     /// Executes a transaction persisting state changes.
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         tracing::info!(
             hash = %transaction.hash,
             nonce = %transaction.nonce,
@@ -205,6 +214,7 @@ impl EthExecutor {
                     continue;
                 }
                 Err(e) => {
+                    #[cfg(feature = "metrics")]
                     metrics::inc_executor_transact(start.elapsed(), false);
                     return Err(e.into());
                 }
@@ -226,13 +236,17 @@ impl EthExecutor {
             }
         }
 
+        #[cfg(feature = "metrics")]
         metrics::inc_executor_transact(start.elapsed(), true);
+
         Ok(execution)
     }
 
     /// Executes a transaction without persisting state changes.
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         tracing::info!(
             from = ?input.from,
             to = ?input.to,
@@ -243,7 +257,10 @@ impl EthExecutor {
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
         let result = self.execute_in_evm(evm_input).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_executor_call(start.elapsed(), result.is_ok());
+
         result.map(|x| x.0)
     }
 

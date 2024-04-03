@@ -1,12 +1,12 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use metrics::atomics::AtomicU64;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
