@@ -69,6 +69,13 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         bincode::deserialize(&value_bytes).ok()
     }
 
+    pub fn get_current_block_number(&self) -> Option<i64> {
+        let Ok(serialized_key) = bincode::serialize(&"current_block") else { return None };
+        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return None };
+
+        bincode::deserialize(&value_bytes).ok()
+    }
+
     // Mimics the 'insert' functionality of a HashMap
     pub fn insert(&self, key: K, value: V) {
         let serialized_key = bincode::serialize(&key).unwrap();
@@ -76,7 +83,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.put(serialized_key, serialized_value).unwrap();
     }
 
-    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<u64>) {
+    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<i64>) {
         let mut batch = WriteBatch::default();
 
         for (key, value) in changes {
@@ -152,6 +159,10 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Ser
         match key_value {
             Some(key_value) => {
                 let (key, value) = key_value.unwrap(); // XXX deal with the result
+
+                if key == bincode::serialize(&"current_block").unwrap().into_boxed_slice() {
+                    self.next();
+                }
 
                 let key: K = bincode::deserialize(&key).unwrap();
                 let value: V = bincode::deserialize(&value).unwrap();
