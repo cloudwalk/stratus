@@ -211,11 +211,11 @@ impl HybridStorageState {
         }
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
-            accounts.insert_batch(account_changes);
+            accounts.insert_batch(account_changes, None);
         });
 
         let account_history_changes_future = tokio::task::spawn_blocking(move || {
-            accounts_history.insert_batch(account_history_changes);
+            accounts_history.insert_batch(account_history_changes, None);
         });
 
         let mut slot_changes = Vec::new();
@@ -232,11 +232,11 @@ impl HybridStorageState {
         }
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots.insert_batch(slot_changes); // Assuming `insert_batch` is an async function
+            account_slots.insert_batch(slot_changes, None); // Assuming `insert_batch` is an async function
         });
 
         let slot_history_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots_history.insert_batch(slot_history_changes);
+            account_slots_history.insert_batch(slot_history_changes, None);
         });
 
         Ok(vec![
