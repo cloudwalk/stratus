@@ -380,8 +380,8 @@ impl PermanentStorage for HybridPermanentStorage {
 
         let txs_rocks = Arc::clone(&self.state.transactions);
         let logs_rocks = Arc::clone(&self.state.logs);
-        futures.push(tokio::task::spawn_blocking(move || txs_rocks.insert_batch(txs_batch)));
-        futures.push(tokio::task::spawn_blocking(move || logs_rocks.insert_batch(logs_batch)));
+        futures.push(tokio::task::spawn_blocking(move || txs_rocks.insert_batch(txs_batch, None)));
+        futures.push(tokio::task::spawn_blocking(move || logs_rocks.insert_batch(logs_batch, None)));
 
         // save block
         let number = *block.number();
