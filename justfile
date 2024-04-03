@@ -241,8 +241,8 @@ e2e-stratus-postgres test="":
     fi
 
     echo "-> Starting Postgres"
-    docker-compose down
-    docker-compose up -d
+    docker compose down
+    docker compose up -d
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
@@ -261,7 +261,7 @@ e2e-stratus-postgres test="":
     killport 3000
 
     echo "-> Killing Postgres"
-    docker-compose down
+    docker compose down
 
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
@@ -280,8 +280,8 @@ e2e-flamegraph:
 
     # Start PostgreSQL
     echo "Starting PostgreSQL"
-    docker-compose down -v
-    docker-compose up -d --force-recreate
+    docker compose down -v
+    docker compose up -d --force-recreate
 
     # Wait for PostgreSQL
     echo "Waiting for PostgreSQL to be ready"
@@ -370,8 +370,8 @@ contracts-test-stratus *args="":
 contracts-test-stratus-postgres *args="":
     #!/bin/bash
     echo "-> Starting Postgres"
-    docker-compose down
-    docker-compose up -d
+    docker compose down
+    docker compose up -d
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
@@ -390,7 +390,7 @@ contracts-test-stratus-postgres *args="":
     killport 3000
 
     echo "-> Killing Postgres"
-    docker-compose down
+    docker compose down
 
     exit $result_code
 
