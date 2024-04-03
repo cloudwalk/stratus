@@ -86,9 +86,11 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             batch.put(serialized_key, serialized_value);
         }
 
-        let serialized_block_key = bincode::serialize(&"current_block").unwrap();
-        let serialized_block_value = bincode::serialize(&current_block).unwrap();
-        batch.put(serialized_block_key, serialized_block_value);
+        if let Some(current_block) = current_block {
+            let serialized_block_key = bincode::serialize(&"current_block").unwrap();
+            let serialized_block_value = bincode::serialize(&current_block).unwrap();
+            batch.put(serialized_block_key, serialized_block_value);
+        }
 
         // Execute the batch operation atomically
         self.db.write(batch).unwrap();
