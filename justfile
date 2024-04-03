@@ -242,7 +242,7 @@ e2e-stratus-postgres test="":
 
     echo "-> Starting Postgres"
     docker compose down
-    docker compose up -d
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
@@ -371,7 +371,7 @@ contracts-test-stratus-postgres *args="":
     #!/bin/bash
     echo "-> Starting Postgres"
     docker compose down
-    docker compose up -d
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
