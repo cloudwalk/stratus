@@ -1,7 +1,7 @@
 import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables (automatically set in all actions).
-export CARGO_PROFILE_RELEASE_DEBUG := "1"
+export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
@@ -423,4 +423,3 @@ contracts-coverage-erase:
     #!/bin/bash
     cd e2e-contracts/repos
     rm -rf */coverage
-
