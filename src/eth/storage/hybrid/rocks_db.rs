@@ -75,10 +75,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         };
         let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return -1 };
 
-        match bincode::deserialize(&value_bytes).ok() {
-            Some(block_number) => block_number,
-            None => -1,
-        }
+        bincode::deserialize(&value_bytes).ok().unwrap_or(-1)
     }
 
     // Mimics the 'insert' functionality of a HashMap
