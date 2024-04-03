@@ -1,6 +1,7 @@
 import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables (automatically set in all actions).
+export CARGO_PROFILE_RELEASE_DEBUG := "1"
 export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
@@ -306,7 +307,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc
+    cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
