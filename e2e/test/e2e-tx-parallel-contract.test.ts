@@ -3,8 +3,6 @@ import { expect } from "chai";
 import { TestContractBalances, TestContractCounter } from "../typechain-types";
 import { ALICE, BOB, CHARLIE, randomAccounts } from "./helpers/account";
 import {
-    CHAIN_ID,
-    GAS as GAS_LIMIT,
     TX_PARAMS,
     deployTestContractBalances,
     deployTestContractCounter,
