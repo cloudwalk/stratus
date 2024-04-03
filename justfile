@@ -31,9 +31,7 @@ setup:
 
 # Stratus: Run main service with debug options
 run *args="":
-    #!/bin/bash
     cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
-    exit 0
 
 # Stratus: Run main service with release options
 run-release *args="":
