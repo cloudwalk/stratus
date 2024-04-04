@@ -2,6 +2,7 @@ mod hybrid_state;
 mod query_executor;
 mod rocks_db;
 
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,7 +10,6 @@ use std::time::Duration;
 use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
-use metrics::atomics::AtomicU64;
 use num_traits::cast::ToPrimitive;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::Json;

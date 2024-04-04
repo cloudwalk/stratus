@@ -1,6 +1,8 @@
 //! Metrics services.
+#![cfg(feature = "metrics")]
 
 use std::stringify;
+use std::time::Instant;
 
 use metrics::counter;
 use metrics::describe_counter;
@@ -60,6 +62,11 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
     for metric in &metrics {
         metric.register_description();
     }
+}
+
+/// Track metrics execution starting instant.
+pub fn now() -> Instant {
+    Instant::now()
 }
 
 // JSON-RPC metrics.

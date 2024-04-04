@@ -8,6 +8,7 @@ use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
+#[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
@@ -33,7 +34,9 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 
     // keep importing forever
     loop {
-        let start = std::time::Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         number = number.next();
 
         // fetch block and receipts
@@ -49,6 +52,8 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
         // import block
         let mut receipts: ExternalReceipts = receipts.into();
         executor.import_external_to_perm(block, &mut receipts).await?;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_import_online(start.elapsed());
     }
 }

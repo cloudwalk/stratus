@@ -1,6 +1,5 @@
 use std::cmp::min;
 use std::sync::Arc;
-use std::time::Instant;
 
 use anyhow::anyhow;
 use futures::try_join;
@@ -16,6 +15,7 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
+#[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::init_global_services;
 use stratus::log_and_err;
@@ -123,7 +123,8 @@ async fn execute_block_importer(
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         let block_last_index = blocks.len() - 1;
         for (block_index, block) in blocks.into_iter().enumerate() {
-            let start = Instant::now();
+            #[cfg(feature = "metrics")]
+            let start = metrics::now();
 
             match csv {
                 // when exporting to csv, only persist temporary changes because permanent will be bulk loaded at the end of the process
@@ -156,6 +157,7 @@ async fn execute_block_importer(
                 }
             }
 
+            #[cfg(feature = "metrics")]
             metrics::inc_import_offline(start.elapsed());
         }
     };

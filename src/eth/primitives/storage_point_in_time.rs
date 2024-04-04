@@ -7,6 +7,7 @@
 //! block number, facilitating temporal queries in Ethereum.
 
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics::LabelValue;
 
 /// EVM storage point-in-time indicator.
@@ -23,6 +24,7 @@ pub enum StoragePointInTime {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+#[cfg(feature = "metrics")]
 impl From<&StoragePointInTime> for LabelValue {
     fn from(value: &StoragePointInTime) -> Self {
         match value {
