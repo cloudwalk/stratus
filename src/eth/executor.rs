@@ -5,7 +5,6 @@
 //! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
-use std::io::Write;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -16,7 +15,6 @@ use tokio::sync::Mutex;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionMetrics;
@@ -26,7 +24,6 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -151,19 +148,6 @@ impl EthExecutor {
             }
         }
 
-        // convert block
-        let block = Block::from_external(block, executions)?;
-
-        // Update block snapshot for integration testing
-        // Block 292973 from CloudWalk Network Mainnet
-        if *block.number() == BlockNumber::from(292973) {
-            let block_changes = block.compact_account_changes();
-            let state = InMemoryPermanentStorage::dump_snapshot(block_changes).await;
-            let state_string = serde_json::to_string(&state)?;
-            let mut file = std::fs::File::create("tests/fixtures/block-292973/snapshot.json")?;
-            file.write_all(state_string.as_bytes())?;
-        };
-
         // track metrics
         #[cfg(feature = "metrics")]
         {
@@ -172,7 +156,7 @@ impl EthExecutor {
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
         }
 
-        Ok(block)
+        Block::from_external(block, executions)
     }
 
     /// Executes a transaction persisting state changes.

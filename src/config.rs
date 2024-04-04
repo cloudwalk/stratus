@@ -306,6 +306,9 @@ pub struct ImporterOfflineConfig {
     #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
 
+    #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
+    pub export_snapshot: Vec<u64>,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
