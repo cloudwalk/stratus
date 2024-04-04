@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
 use stratus::config::ImporterOfflineConfig;
+use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::BlockSelection;
 use stratus::eth::primitives::ExternalBlock;
@@ -94,7 +95,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 }
 
 // -----------------------------------------------------------------------------
-// Importer
+// Block Importer
 // -----------------------------------------------------------------------------
 async fn execute_block_importer(
     // services
@@ -126,32 +127,13 @@ async fn execute_block_importer(
             #[cfg(feature = "metrics")]
             let start = metrics::now();
 
+            // when exporting to csv, permanent state is written to csv.
+            // when not exporting to csv, permanent state is written to storage.
             match csv {
-                // when exporting to csv, only persist temporary changes because permanent will be bulk loaded at the end of the process
                 Some(ref mut csv) => {
                     let block = executor.import_external_to_temp(block, &mut receipts).await?;
-                    let number = *block.number();
-
-                    csv.add_block(block)?;
-
-                    let is_last_block = block_index == block_last_index;
-                    let is_chunk_interval_end = number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
-                    let is_flush_interval_end = number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
-
-                    let should_chunk_csv_files = is_chunk_interval_end && !is_last_block;
-                    let should_flush = is_flush_interval_end || is_last_block || should_chunk_csv_files;
-
-                    if should_flush {
-                        csv.flush()?;
-                        stratus_storage.flush_temp().await?;
-                    }
-
-                    if should_chunk_csv_files {
-                        tracing::info!("Chunk ended at block number {number}, starting next CSV chunks for the next block");
-                        csv.finish_current_chunks(number)?;
-                    }
+                    import_external_to_csv(csv, &stratus_storage, block, block_index, block_last_index).await?;
                 }
-                // when not exporting to csv, persist the entire block to permanent immediately
                 None => {
                     executor.import_external_to_perm(block, &mut receipts).await?;
                 }
@@ -167,7 +149,7 @@ async fn execute_block_importer(
 }
 
 // -----------------------------------------------------------------------------
-// External RPC storage loader
+// Block loader
 // -----------------------------------------------------------------------------
 async fn execute_external_rpc_storage_loader(
     // services
@@ -263,4 +245,41 @@ async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyh
         Ok(None) => Ok(BlockNumber::ZERO),
         Err(e) => Err(e),
     }
+}
+
+// -----------------------------------------------------------------------------
+// Csv Exporter
+// -----------------------------------------------------------------------------
+async fn import_external_to_csv(
+    csv: &mut CsvExporter,
+    stratus_storage: &StratusStorage,
+    block: Block,
+    block_index: usize,
+    block_last_index: usize,
+) -> anyhow::Result<()> {
+    // export block to csv
+    let number = *block.number();
+    csv.add_block(block)?;
+
+    // check if should flush
+    let is_last_block = block_index == block_last_index;
+    let is_chunk_interval_end = number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
+    let is_flush_interval_end = number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
+
+    let should_chunk_csv_files = is_chunk_interval_end && !is_last_block;
+    let should_flush = is_flush_interval_end || is_last_block || should_chunk_csv_files;
+
+    // flush
+    if should_flush {
+        csv.flush()?;
+        stratus_storage.flush_temp().await?;
+    }
+
+    // chunk
+    if should_chunk_csv_files {
+        tracing::info!("Chunk ended at block number {number}, starting next CSV chunks for the next block");
+        csv.finish_current_chunks(number)?;
+    }
+
+    Ok(())
 }
