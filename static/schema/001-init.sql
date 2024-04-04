@@ -815,11 +815,13 @@ BEGIN
         EXECUTE format('CREATE TABLE public.neo_transactions_%s PARTITION OF public.neo_transactions FOR VALUES IN (%L);', partition_id, partition_id);
         EXECUTE format('CREATE INDEX ON public.neo_transactions_%s (hash_partition);', partition_id);
         EXECUTE format('CREATE INDEX ON public.neo_transactions_%s (hash);', partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_transactions_%s (block_number);', partition_id);
 
         -- Create partitions for public.neo_logs
         EXECUTE format('CREATE TABLE public.neo_logs_%s PARTITION OF public.neo_logs FOR VALUES IN (%L);', partition_id, partition_id);
         EXECUTE format('CREATE INDEX ON public.neo_logs_%s (hash_partition);', partition_id);
         EXECUTE format('CREATE INDEX ON public.neo_logs_%s (hash);', partition_id);
+        EXECUTE format('CREATE INDEX ON public.neo_logs_%s (block_number);', partition_id);
     END LOOP;
 END$$;
 
