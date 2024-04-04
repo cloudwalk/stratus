@@ -105,7 +105,7 @@ async fn execute_block_importer(
     cancellation: CancellationToken,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
-    block_snapshots: Vec<BlockNumber>,
+    blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
     tracing::info!("block importer starting");
 
@@ -130,17 +130,19 @@ async fn execute_block_importer(
 
             // when exporting to csv, permanent state is written to csv.
             // when not exporting to csv, permanent state is written to storage.
-            match csv {
+            let mined_block = match csv {
                 Some(ref mut csv) => {
-                    let block = executor.import_external_to_temp(block, &mut receipts).await?;
-                    export_snapshot_if_necessary(&block, &block_snapshots)?;
-                    import_external_to_csv(stratus_storage, csv, block, block_index, block_last_index).await?;
+                    let mined_block = executor.import_external_to_temp(block.clone(), &mut receipts).await?;
+                    import_external_to_csv(stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
+                    mined_block
                 }
-                None => {
-                    let block = executor.import_external_to_perm(block, &mut receipts).await?;
-                    export_snapshot_if_necessary(&block, &block_snapshots)?;
-                }
+                None => executor.import_external_to_perm(block.clone(), &mut receipts).await?,
             };
+
+            // export snapshot
+            if blocks_to_export_snapshot.contains(&block.number()) {
+                export_snapshot(&block, &receipts, &mined_block)?;
+            }
 
             #[cfg(feature = "metrics")]
             metrics::inc_import_offline(start.elapsed());
@@ -253,22 +255,18 @@ async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyh
 // -----------------------------------------------------------------------------
 // Snapshot exporter
 // -----------------------------------------------------------------------------
-#[inline(always)]
-fn export_snapshot_if_necessary(block: &Block, snapshots: &[BlockNumber]) -> anyhow::Result<()> {
-    if not(snapshots.contains(block.number())) {
-        return Ok(());
-    }
-
+fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalReceipts, mined_block: &Block) -> anyhow::Result<()> {
     // generate snapshot
-    let snapshot = InMemoryPermanentStorage::dump_snapshot(block.compact_account_changes());
-    let snapshot_json = serde_json::to_string_pretty(&snapshot)?;
+    let snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
 
     // create dir
-    let dir = format!("tests/fixtures/block-{}/", block.number());
+    let dir = format!("tests/fixtures/block-{}/", mined_block.number());
     fs::create_dir_all(&dir)?;
 
-    // write files
-    fs::write(format!("{}/snapshot.json", dir), snapshot_json)?;
+    // write json
+    fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block)?)?;
+    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(external_receipts)?)?;
+    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&snapshot)?)?;
 
     Ok(())
 }

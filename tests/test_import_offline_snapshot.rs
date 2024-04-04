@@ -5,7 +5,7 @@ use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::config::IntegrationTestConfig;
 use stratus::eth::primitives::ExternalBlock;
-use stratus::eth::primitives::ExternalReceipt;
+use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::StoragePointInTime;
 use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
@@ -81,11 +81,7 @@ async fn test_import_offline_snapshot() {
 
     // init receipts data
     let receipts_json = include_str!("fixtures/block-292973/receipts.json");
-    let mut receipts = receipts_json
-        .lines()
-        .map(|json| serde_json::from_str::<ExternalReceipt>(json).unwrap())
-        .collect_vec()
-        .into();
+    let mut receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
 
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");

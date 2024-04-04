@@ -6,6 +6,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 
 /// A collection of [`ExternalReceipt`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExternalReceipts(HashMap<Hash, ExternalReceipt>);
 
 impl ExternalReceipts {
