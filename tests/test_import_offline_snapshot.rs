@@ -81,7 +81,7 @@ async fn test_import_offline_snapshot() {
 
     // init receipts data
     let receipts_json = include_str!("fixtures/block-292973/receipts.json");
-    let mut receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
+    let receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
 
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
@@ -98,7 +98,7 @@ async fn test_import_offline_snapshot() {
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
     let executor = config.executor.init(storage);
-    executor.import_external_to_perm(block, &mut receipts).await.unwrap();
+    executor.import_external_to_perm(block, &receipts).await.unwrap();
 
     // get metrics from prometheus
     // sleep to ensure prometheus collected

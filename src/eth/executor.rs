@@ -70,7 +70,7 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
-    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
         let block = self.import_external_to_temp(block, receipts).await?;
 
@@ -86,7 +86,7 @@ impl EthExecutor {
     }
 
     /// Re-executes an external block locally and imports it to the temporary storage.
-    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -103,13 +103,13 @@ impl EthExecutor {
             let tx_start = metrics::now();
 
             // re-execute transaction or create a fake execution the external transaction failed
-            let receipt = receipts.try_take(&tx.hash())?;
+            let receipt = receipts.try_get(&tx.hash())?;
             let execution = if receipt.is_success() {
-                let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
+                let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), receipt)?;
                 self.execute_in_evm(evm_input).await
             } else {
                 let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await?;
-                let execution = Execution::from_failed_external_transaction(&block, &receipt, sender)?;
+                let execution = Execution::from_failed_external_transaction(&block, receipt, sender)?;
                 Ok((execution, ExecutionMetrics::default()))
             };
 
@@ -117,11 +117,11 @@ impl EthExecutor {
             match execution {
                 Ok((mut execution, execution_metrics)) => {
                     // apply execution costs that were not consided when re-executing the transaction
-                    execution.apply_execution_costs(&receipt)?;
+                    execution.apply_execution_costs(receipt)?;
                     execution.gas = receipt.gas_used.unwrap_or_default().try_into()?;
 
                     // ensure it matches receipt before saving
-                    if let Err(e) = execution.compare_with_receipt(&receipt) {
+                    if let Err(e) = execution.compare_with_receipt(receipt) {
                         let json_tx = serde_json::to_string(&tx).unwrap();
                         let json_receipt = serde_json::to_string(&receipt).unwrap();
                         let json_execution_logs = serde_json::to_string(&execution.logs).unwrap();
@@ -131,7 +131,7 @@ impl EthExecutor {
 
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
-                    executions.push((tx, receipt, execution.clone()));
+                    executions.push((tx, receipt.clone(), execution.clone()));
 
                     // track metrics
                     #[cfg(feature = "metrics")]

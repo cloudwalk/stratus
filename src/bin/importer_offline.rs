@@ -120,7 +120,7 @@ async fn execute_block_importer(
         // imports transactions
         let block_start = blocks.first().unwrap().number();
         let block_end = blocks.last().unwrap().number();
-        let mut receipts = ExternalReceipts::from(receipts);
+        let receipts = ExternalReceipts::from(receipts);
 
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         let block_last_index = blocks.len() - 1;
@@ -132,11 +132,11 @@ async fn execute_block_importer(
             // when not exporting to csv, permanent state is written to storage.
             let mined_block = match csv {
                 Some(ref mut csv) => {
-                    let mined_block = executor.import_external_to_temp(block.clone(), &mut receipts).await?;
+                    let mined_block = executor.import_external_to_temp(block.clone(), &receipts).await?;
                     import_external_to_csv(stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
                     mined_block
                 }
-                None => executor.import_external_to_perm(block.clone(), &mut receipts).await?,
+                None => executor.import_external_to_perm(block.clone(), &receipts).await?,
             };
 
             // export snapshot
