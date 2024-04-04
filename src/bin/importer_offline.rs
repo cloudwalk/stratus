@@ -117,19 +117,20 @@ async fn execute_block_importer(
             break "block loader finished or failed";
         };
 
-        // imports transactions
         let block_start = blocks.first().unwrap().number();
         let block_end = blocks.last().unwrap().number();
+        let block_last_index = blocks.len() - 1;
         let receipts = ExternalReceipts::from(receipts);
 
+        // imports block transactions
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
-        let block_last_index = blocks.len() - 1;
         for (block_index, block) in blocks.into_iter().enumerate() {
             #[cfg(feature = "metrics")]
             let start = metrics::now();
 
-            // when exporting to csv, permanent state is written to csv.
-            // when not exporting to csv, permanent state is written to storage.
+            // import block
+            // * when exporting to csv, permanent state is written to csv
+            // * when not exporting to csv, permanent state is written to storage
             let mined_block = match csv {
                 Some(ref mut csv) => {
                     let mined_block = executor.import_external_to_temp(block.clone(), &receipts).await?;
@@ -139,7 +140,7 @@ async fn execute_block_importer(
                 None => executor.import_external_to_perm(block.clone(), &receipts).await?,
             };
 
-            // export snapshot
+            // export snapshot for tests
             if blocks_to_export_snapshot.contains(&block.number()) {
                 export_snapshot(&block, &receipts, &mined_block)?;
             }

@@ -207,16 +207,12 @@ impl EthExecutor {
         };
 
         // notify new blocks
-        if let Err(e) = self.block_notifier.send(block.clone()) {
-            tracing::error!(reason = ?e, "failed to send block notification");
-        };
+        let _ = self.block_notifier.send(block.clone());
 
         // notify transaction logs
         for trx in block.transactions {
             for log in trx.logs {
-                if let Err(e) = self.log_notifier.send(log) {
-                    tracing::error!(reason = ?e, "failed to send log notification");
-                };
+                let _ = self.log_notifier.send(log);
             }
         }
 
