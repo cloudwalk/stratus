@@ -287,9 +287,6 @@ impl WithCommonConfig for RpcDownloaderConfig {
 /// Configuration for `importer-offline` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct ImporterOfflineConfig {
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
-
     /// Initial block number to be imported.
     #[arg(long = "block-start", env = "BLOCK_START")]
     pub block_start: Option<u64>,
@@ -306,11 +303,18 @@ pub struct ImporterOfflineConfig {
     #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
 
+    /// Export selected blocks to fixtures snapshots to be used in tests.
+    #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
+    pub export_snapshot: Vec<u64>,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub rpc_storage: ExternalRpcStorageConfig,
 
     #[deref]
     #[clap(flatten)]

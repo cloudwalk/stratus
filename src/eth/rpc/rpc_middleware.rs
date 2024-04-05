@@ -19,6 +19,7 @@ use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
 // -----------------------------------------------------------------------------
@@ -55,6 +56,7 @@ where
         );
 
         // metrify request
+        #[cfg(feature = "metrics")]
         metrics::inc_rpc_requests_started(method, function);
 
         RpcResponse {
@@ -129,6 +131,7 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
             );
 
             // metrify response
+            #[cfg(feature = "metrics")]
             metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.success_or_error.is_success());
         }
 

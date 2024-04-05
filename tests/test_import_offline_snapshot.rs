@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use const_format::formatcp;
 use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::config::IntegrationTestConfig;
 use stratus::eth::primitives::ExternalBlock;
-use stratus::eth::primitives::ExternalReceipt;
+use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::StoragePointInTime;
 use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
@@ -15,48 +14,56 @@ use stratus::eth::storage::PostgresPermanentStorage;
 use stratus::eth::storage::PostgresPermanentStorageConfig;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::docker::Docker;
-use stratus::infra::metrics::METRIC_EVM_EXECUTION;
-use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
-use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
-use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
 use stratus::init_global_services;
+#[cfg(feature = "metrics")]
+mod m {
+    pub use const_format::formatcp;
+    pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
+    pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
+    pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
+    pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
+}
 
+#[cfg(feature = "metrics")]
 const METRIC_QUERIES: [&str; 30] = [
     // EVM
     "",
-    formatcp!("{}_count", METRIC_EVM_EXECUTION),
-    formatcp!("{}_sum", METRIC_EVM_EXECUTION),
-    formatcp!("{}{{quantile='1'}}", METRIC_EVM_EXECUTION),
+    m::formatcp!("{}_count", m::METRIC_EVM_EXECUTION),
+    m::formatcp!("{}_sum", m::METRIC_EVM_EXECUTION),
+    m::formatcp!("{}{{quantile='1'}}", m::METRIC_EVM_EXECUTION),
     // STORAGE ACCOUNTS
     "",
-    formatcp!("sum({}_count)", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}_count{{found_at='temporary'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}_count{{found_at='permanent'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}_count{{found_at='default'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("sum({}_sum)", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}_sum{{found_at='temporary'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}_sum{{found_at='permanent'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}_sum{{found_at='default'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}{{found_at='temporary', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}{{found_at='permanent', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
-    formatcp!("{}{{found_at='default', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     // STORAGE SLOTS
     "",
-    formatcp!("sum({}_count)", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}_count{{found_at='temporary'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}_count{{found_at='permanent'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}_count{{found_at='default'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("sum({}_sum)", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}_sum{{found_at='temporary'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}_sum{{found_at='permanent'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}_sum{{found_at='default'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}{{found_at='temporary', quantile='1'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}{{found_at='permanent', quantile='1'}}", METRIC_STORAGE_READ_SLOT),
-    formatcp!("{}{{found_at='default', quantile='1'}}", METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
     // STORAGE COMMIT
     "",
-    formatcp!("{}{{quantile='1'}}", METRIC_STORAGE_COMMIT),
+    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_COMMIT),
 ];
+
+#[cfg(not(feature = "metrics"))]
+const METRIC_QUERIES: [&str; 0] = [];
 
 #[tokio::test]
 async fn test_import_offline_snapshot() {
@@ -74,11 +81,7 @@ async fn test_import_offline_snapshot() {
 
     // init receipts data
     let receipts_json = include_str!("fixtures/block-292973/receipts.json");
-    let mut receipts = receipts_json
-        .lines()
-        .map(|json| serde_json::from_str::<ExternalReceipt>(json).unwrap())
-        .collect_vec()
-        .into();
+    let receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
 
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
@@ -95,7 +98,7 @@ async fn test_import_offline_snapshot() {
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
     let executor = config.executor.init(storage);
-    executor.import_external_to_perm(block, &mut receipts).await.unwrap();
+    executor.import_external_to_perm(block, &receipts).await.unwrap();
 
     // get metrics from prometheus
     // sleep to ensure prometheus collected
