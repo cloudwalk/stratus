@@ -216,7 +216,6 @@ impl HybridStorageState {
     ) -> Result<Vec<JoinHandle<()>>, sqlx::Error> {
         // Directly capture the fields needed by each future from `self`
         let accounts = Arc::clone(&self.accounts);
-        let accounts_history = Arc::clone(&self.accounts_history);
         let account_slots = Arc::clone(&self.account_slots);
 
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
