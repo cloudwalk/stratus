@@ -13,7 +13,7 @@ use sqlx::Pool;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use sqlx::Row;
-use tokio::sync::mpsc;
+
 use tokio::task::JoinHandle;
 
 use super::rocks_db::DbConfig;
