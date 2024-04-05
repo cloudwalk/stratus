@@ -1,8 +1,6 @@
 use core::fmt;
-use std::sync::Arc;
-
-use tokio::sync::mpsc;
 use std::convert::TryInto;
+use std::sync::Arc;
 
 use anyhow::Context;
 use futures::future::join_all;
@@ -15,6 +13,7 @@ use sqlx::Pool;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use sqlx::Row;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use super::rocks_db::DbConfig;
@@ -115,8 +114,8 @@ impl HybridStorageState {
                 ",
                 current_block_number,
             )
-                .fetch_all(&pool_clone_accounts)
-                .await?;
+            .fetch_all(&pool_clone_accounts)
+            .await?;
 
             for account_row in account_rows {
                 let addr: Address = account_row.address.try_into().unwrap_or_default();
@@ -160,10 +159,12 @@ impl HybridStorageState {
                         WHERE block_number > $1 AND block_number <= $2
                         ORDER BY account_address, slot_index, block_number DESC
                         ",
-                        start_block, end_block
+                        start_block,
+                        end_block
                     )
-                        .fetch_all(&pool_clone_slots)
-                        .await.expect("Failed to fetch slot rows from partition");
+                    .fetch_all(&pool_clone_slots)
+                    .await
+                    .expect("Failed to fetch slot rows from partition");
 
                     if slot_rows.is_empty() {
                         continue; // Skip to the next partition if no rows fetched
@@ -181,10 +182,7 @@ impl HybridStorageState {
                 while let Some(slot_rows) = rx.recv().await {
                     for slot_row in slot_rows {
                         let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
-                        self_clone_slots.insert(
-                            (addr, slot_row.slot_index),
-                            slot_row.value.unwrap_or_default().into()
-                        );
+                        self_clone_slots.insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
                     }
                 }
             });
@@ -250,7 +248,6 @@ impl HybridStorageState {
             accounts.insert_batch(account_changes, Some(block_number.as_i64()));
         });
 
-
         let mut slot_changes = Vec::new();
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
@@ -267,10 +264,7 @@ impl HybridStorageState {
             // Assuming `insert_batch` is an async function
         });
 
-        Ok(vec![
-            account_changes_future,
-            slot_changes_future,
-        ])
+        Ok(vec![account_changes_future, slot_changes_future])
     }
 
     pub async fn read_logs(&self, filter: &LogFilter, pool: &Pool<Postgres>) -> anyhow::Result<Vec<LogMined>> {
@@ -361,9 +355,9 @@ impl HybridStorageState {
                         slot_index as _,
                         number as _
                     )
-                        .fetch_optional(pool)
-                        .await
-                        .context("failed to select slot")?
+                    .fetch_optional(pool)
+                    .await
+                    .context("failed to select slot")?
                 }
             }
         };
