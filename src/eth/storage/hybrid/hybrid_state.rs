@@ -216,12 +216,15 @@ impl HybridStorageState {
     ) -> Result<Vec<JoinHandle<()>>, sqlx::Error> {
         // Directly capture the fields needed by each future from `self`
         let accounts = Arc::clone(&self.accounts);
+        let accounts_history = Arc::clone(&self.accounts_history);
         let account_slots = Arc::clone(&self.account_slots);
+        let account_slots_history = Arc::clone(&self.account_slots_history);
 
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
         let mut account_changes = Vec::new();
+        let mut account_history_changes = Vec::new();
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_accounts {
@@ -242,9 +245,11 @@ impl HybridStorageState {
                     account_info_entry.bytecode = bytecode;
                 }
                 account_changes.push((address.clone(), account_info_entry.clone()));
+                account_history_changes.push(((address.clone(), block_number), account_info_entry));
             }
 
             accounts.insert_batch(account_changes, Some(block_number.as_i64()));
+            accounts_history.insert_batch(account_history_changes, None);
         });
 
         let mut slot_changes = Vec::new();
@@ -255,12 +260,12 @@ impl HybridStorageState {
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
                         slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
+                        slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value));
                     }
                 }
             }
-
             account_slots.insert_batch(slot_changes, Some(block_number.as_i64()));
-            // Assuming `insert_batch` is an async function
+            account_slots_history.insert_batch(slot_history_changes, None);
         });
 
         Ok(vec![account_changes_future, slot_changes_future])
