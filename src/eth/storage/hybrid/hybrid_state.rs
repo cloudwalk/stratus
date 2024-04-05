@@ -253,6 +253,7 @@ impl HybridStorageState {
         });
 
         let mut slot_changes = Vec::new();
+        let mut slot_history_changes = Vec::new();
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_slots {
