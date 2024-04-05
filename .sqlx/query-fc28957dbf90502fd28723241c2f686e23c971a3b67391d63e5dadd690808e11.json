@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT DISTINCT ON (account_address, slot_index)\n                    account_address,\n                    slot_index,\n                    value\n                FROM\n                    neo_account_slots\n                WHERE\n                    block_number > $1\n                ORDER BY\n                    account_address,\n                    slot_index,\n                    block_number DESC\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_address",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "slot_index",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "value",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fc28957dbf90502fd28723241c2f686e23c971a3b67391d63e5dadd690808e11"
+}

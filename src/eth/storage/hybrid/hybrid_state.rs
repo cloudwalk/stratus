@@ -134,62 +134,32 @@ impl HybridStorageState {
 
         let pool_clone_slots = pool.clone();
         let self_clone_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
-
         let slots_task = tokio::spawn(async move {
-            let partitions = vec![
-                ("neo_account_slots_p1", 0, 30_999_999),
-                ("neo_account_slots_p2", 30_999_999, 38_862_399),
-                ("neo_account_slots_p3", 38_862_399, 46_724_799),
-                ("neo_account_slots_p4", 46_724_799, 54_587_199),
-                ("neo_account_slots_p5", 54_587_199, 62_449_599),
-                ("neo_account_slots_p6", 62_449_599, 70_311_999),
-                ("neo_account_slots_p7", 70_311_999, 78_174_399),
-            ];
-
-            let (tx, mut rx) = mpsc::channel(1); // Channel to prefetch and process batches
-
-            // Producer task to fetch slot rows from each partition
-            let producer = tokio::spawn(async move {
-                for (_, start_block, end_block) in partitions.iter() {
-                    let slot_rows = sqlx::query_as!(
-                        SlotRow,
-                        "
-                        SELECT account_address, slot_index, value
-                        FROM neo_account_slots
-                        WHERE block_number > $1 AND block_number <= $2
-                        ORDER BY account_address, slot_index, block_number DESC
-                        ",
-                        start_block,
-                        end_block
-                    )
-                    .fetch_all(&pool_clone_slots)
-                    .await
-                    .expect("Failed to fetch slot rows from partition");
-
-                    if slot_rows.is_empty() {
-                        continue; // Skip to the next partition if no rows fetched
-                    }
-
-                    // Send fetched rows for processing
-                    if tx.send(slot_rows).await.is_err() {
-                        break; // Exit loop if receiving end is dropped
-                    }
-                }
-            });
-
-            // Consumer task to process batches of slot rows
-            let consumer = tokio::spawn(async move {
-                while let Some(slot_rows) = rx.recv().await {
-                    for slot_row in slot_rows {
-                        let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
-                        self_clone_slots.insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
-                    }
-                }
-            });
-
-            // Await both the producer and consumer to complete
-            let _ = tokio::try_join!(producer, consumer);
-
+            let current_block_number = self_clone_slots.get_current_block_number();
+            let slot_rows = sqlx::query_as!(
+                SlotRow,
+                "
+                SELECT DISTINCT ON (account_address, slot_index)
+                    account_address,
+                    slot_index,
+                    value
+                FROM
+                    neo_account_slots
+                WHERE
+                    block_number > $1
+                ORDER BY
+                    account_address,
+                    slot_index,
+                    block_number DESC
+                ",
+                current_block_number,
+            )
+            .fetch_all(&pool_clone_slots)
+            .await?;
+            for slot_row in slot_rows {
+                let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
+                self_clone_slots.insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
+            }
             Result::<(), anyhow::Error>::Ok(())
         });
 
