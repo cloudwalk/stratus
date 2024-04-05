@@ -1,6 +1,9 @@
 use core::fmt;
 use std::sync::Arc;
 
+use tokio::sync::mpsc;
+use std::convert::TryInto;
+
 use anyhow::Context;
 use futures::future::join_all;
 use itertools::Itertools;
@@ -112,8 +115,8 @@ impl HybridStorageState {
                 ",
                 current_block_number,
             )
-            .fetch_all(&pool_clone_accounts)
-            .await?;
+                .fetch_all(&pool_clone_accounts)
+                .await?;
 
             for account_row in account_rows {
                 let addr: Address = account_row.address.try_into().unwrap_or_default();
@@ -133,34 +136,62 @@ impl HybridStorageState {
         let pool_clone_slots = pool.clone();
         let self_clone_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
 
-        // Spawn the second blocking task for slots
         let slots_task = tokio::spawn(async move {
-            let current_block_number = self_clone_slots.get_current_block_number();
-            let slot_rows = sqlx::query_as!(
-                SlotRow,
-                "
-                SELECT DISTINCT ON (account_address, slot_index)
-                    account_address,
-                    slot_index,
-                    value
-                FROM
-                    neo_account_slots
-                WHERE
-                    block_number > $1
-                ORDER BY
-                    account_address,
-                    slot_index,
-                    block_number DESC
-                ",
-                current_block_number,
-            )
-            .fetch_all(&pool_clone_slots)
-            .await?;
+            let partitions = vec![
+                ("neo_account_slots_p1", 0, 30_999_999),
+                ("neo_account_slots_p2", 30_999_999, 38_862_399),
+                ("neo_account_slots_p3", 38_862_399, 46_724_799),
+                ("neo_account_slots_p4", 46_724_799, 54_587_199),
+                ("neo_account_slots_p5", 54_587_199, 62_449_599),
+                ("neo_account_slots_p6", 62_449_599, 70_311_999),
+                ("neo_account_slots_p7", 70_311_999, 78_174_399),
+            ];
 
-            for slot_row in slot_rows {
-                let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
-                self_clone_slots.insert((addr, slot_row.slot_index), slot_row.value.unwrap_or_default().into());
-            }
+            let (tx, mut rx) = mpsc::channel(1); // Channel to prefetch and process batches
+
+            // Producer task to fetch slot rows from each partition
+            let producer = tokio::spawn(async move {
+                for (_, start_block, end_block) in partitions.iter() {
+                    let slot_rows = sqlx::query_as!(
+                        SlotRow,
+                        "
+                        SELECT account_address, slot_index, value
+                        FROM neo_account_slots
+                        WHERE block_number > $1 AND block_number <= $2
+                        ORDER BY account_address, slot_index, block_number DESC
+                        ",
+                        start_block, end_block
+                    )
+                        .fetch_all(&pool_clone_slots)
+                        .await.expect("Failed to fetch slot rows from partition");
+
+                    if slot_rows.is_empty() {
+                        continue; // Skip to the next partition if no rows fetched
+                    }
+
+                    // Send fetched rows for processing
+                    if tx.send(slot_rows).await.is_err() {
+                        break; // Exit loop if receiving end is dropped
+                    }
+                }
+            });
+
+            // Consumer task to process batches of slot rows
+            let consumer = tokio::spawn(async move {
+                while let Some(slot_rows) = rx.recv().await {
+                    for slot_row in slot_rows {
+                        let addr: Address = slot_row.account_address.try_into().unwrap_or_default();
+                        self_clone_slots.insert(
+                            (addr, slot_row.slot_index),
+                            slot_row.value.unwrap_or_default().into()
+                        );
+                    }
+                }
+            });
+
+            // Await both the producer and consumer to complete
+            let _ = tokio::try_join!(producer, consumer);
+
             Result::<(), anyhow::Error>::Ok(())
         });
 
@@ -189,70 +220,56 @@ impl HybridStorageState {
         let accounts = Arc::clone(&self.accounts);
         let accounts_history = Arc::clone(&self.accounts_history);
         let account_slots = Arc::clone(&self.account_slots);
-        let account_slots_history = Arc::clone(&self.account_slots_history);
 
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
 
         let mut account_changes = Vec::new();
-        let mut account_history_changes = Vec::new();
-
-        for change in changes_clone_for_accounts {
-            let address = change.address.clone();
-            let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
-                balance: Wei::ZERO, // Initialize with default values
-                nonce: Nonce::ZERO,
-                bytecode: None,
-                code_hash: KECCAK_EMPTY.into(),
-            });
-            if let Some(nonce) = change.nonce.clone().take_modified() {
-                account_info_entry.nonce = nonce;
-            }
-            if let Some(balance) = change.balance.clone().take_modified() {
-                account_info_entry.balance = balance;
-            }
-            if let Some(bytecode) = change.bytecode.clone().take_modified() {
-                account_info_entry.bytecode = bytecode;
-            }
-            account_changes.push((address.clone(), account_info_entry.clone()));
-            account_history_changes.push(((address.clone(), block_number), account_info_entry));
-        }
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
+            for change in changes_clone_for_accounts {
+                let address = change.address.clone();
+                let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
+                    balance: Wei::ZERO, // Initialize with default values
+                    nonce: Nonce::ZERO,
+                    bytecode: None,
+                    code_hash: KECCAK_EMPTY.into(),
+                });
+                if let Some(nonce) = change.nonce.clone().take_modified() {
+                    account_info_entry.nonce = nonce;
+                }
+                if let Some(balance) = change.balance.clone().take_modified() {
+                    account_info_entry.balance = balance;
+                }
+                if let Some(bytecode) = change.bytecode.clone().take_modified() {
+                    account_info_entry.bytecode = bytecode;
+                }
+                account_changes.push((address.clone(), account_info_entry.clone()));
+            }
+
             accounts.insert_batch(account_changes, Some(block_number.as_i64()));
         });
 
-        let account_history_changes_future = tokio::task::spawn_blocking(move || {
-            accounts_history.insert_batch(account_history_changes, None);
-        });
 
         let mut slot_changes = Vec::new();
-        let mut slot_history_changes = Vec::new();
-
-        for change in changes_clone_for_slots {
-            let address = change.address.clone();
-            for (slot_index, slot_change) in change.slots.clone() {
-                if let Some(slot) = slot_change.take_modified() {
-                    slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
-                    slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value));
-                }
-            }
-        }
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
+            for change in changes_clone_for_slots {
+                let address = change.address.clone();
+                for (slot_index, slot_change) in change.slots.clone() {
+                    if let Some(slot) = slot_change.take_modified() {
+                        slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
+                    }
+                }
+            }
+
             account_slots.insert_batch(slot_changes, Some(block_number.as_i64()));
             // Assuming `insert_batch` is an async function
-        });
-
-        let slot_history_changes_future = tokio::task::spawn_blocking(move || {
-            account_slots_history.insert_batch(slot_history_changes, None);
         });
 
         Ok(vec![
             account_changes_future,
             slot_changes_future,
-            slot_history_changes_future,
-            account_history_changes_future,
         ])
     }
 
@@ -344,9 +361,9 @@ impl HybridStorageState {
                         slot_index as _,
                         number as _
                     )
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to select slot")?
+                        .fetch_optional(pool)
+                        .await
+                        .context("failed to select slot")?
                 }
             }
         };

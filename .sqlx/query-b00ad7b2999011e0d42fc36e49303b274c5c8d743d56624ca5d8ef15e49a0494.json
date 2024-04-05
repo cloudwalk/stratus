@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        SELECT account_address, slot_index, value\n                        FROM neo_account_slots\n                        WHERE block_number > $1 AND block_number <= $2\n                        ORDER BY account_address, slot_index, block_number DESC\n                        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_address",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "slot_index",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "value",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b00ad7b2999011e0d42fc36e49303b274c5c8d743d56624ca5d8ef15e49a0494"
+}
