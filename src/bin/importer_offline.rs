@@ -1,9 +1,11 @@
 use std::cmp::min;
+use std::fs;
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
+use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
@@ -13,6 +15,7 @@ use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::storage::CsvExporter;
 use stratus::eth::storage::ExternalRpcStorage;
+use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 use stratus::ext::not;
@@ -44,10 +47,12 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
+    // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.stratus_storage.init().await?;
     let executor = config.executor.init(Arc::clone(&stratus_storage));
 
+    // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
         None => block_number_to_start(&stratus_storage).await?,
@@ -57,28 +62,21 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         None => block_number_to_stop(&rpc_storage).await?,
     };
 
+    // init csv
+    let mut csv = if config.export_csv { Some(CsvExporter::new(block_start)?) } else { None };
+
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
-
-    // initialize CSV and write initial accounts if necessary
-    let csv = if config.export_csv {
-        let mut csv = CsvExporter::new(block_start)?;
-
-        // write initial accounts once, even between runs
+    stratus_storage.save_accounts_to_perm(initial_accounts.clone()).await?;
+    if let Some(ref mut csv) = csv {
         if csv.is_accounts_empty() {
             csv.export_initial_accounts(initial_accounts.clone())?;
         }
-
-        Some(csv)
-    } else {
-        None
-    };
-
-    stratus_storage.save_accounts_to_perm(initial_accounts).await?;
+    }
 
     // execute parallel tasks (external rpc storage loader and block importer)
     tokio::spawn(execute_external_rpc_storage_loader(
@@ -89,22 +87,25 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         block_end,
         backlog_tx,
     ));
-    execute_block_importer(executor, Arc::clone(&stratus_storage), csv, cancellation, backlog_rx).await?;
+
+    let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
+    execute_block_importer(executor, &stratus_storage, csv, cancellation, backlog_rx, block_snapshots).await?;
 
     Ok(())
 }
 
 // -----------------------------------------------------------------------------
-// Block Importer
+// Block importer
 // -----------------------------------------------------------------------------
 async fn execute_block_importer(
     // services
     executor: EthExecutor,
-    stratus_storage: Arc<StratusStorage>,
+    stratus_storage: &StratusStorage,
     mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
+    blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
     tracing::info!("block importer starting");
 
@@ -116,27 +117,32 @@ async fn execute_block_importer(
             break "block loader finished or failed";
         };
 
-        // imports transactions
         let block_start = blocks.first().unwrap().number();
         let block_end = blocks.last().unwrap().number();
-        let mut receipts = ExternalReceipts::from(receipts);
-
-        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         let block_last_index = blocks.len() - 1;
+        let receipts = ExternalReceipts::from(receipts);
+
+        // imports block transactions
+        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
             #[cfg(feature = "metrics")]
             let start = metrics::now();
 
-            // when exporting to csv, permanent state is written to csv.
-            // when not exporting to csv, permanent state is written to storage.
-            match csv {
+            // import block
+            // * when exporting to csv, permanent state is written to csv
+            // * when not exporting to csv, permanent state is written to storage
+            let mined_block = match csv {
                 Some(ref mut csv) => {
-                    let block = executor.import_external_to_temp(block, &mut receipts).await?;
-                    import_external_to_csv(csv, &stratus_storage, block, block_index, block_last_index).await?;
+                    let mined_block = executor.import_external_to_temp(block.clone(), &receipts).await?;
+                    import_external_to_csv(stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
+                    mined_block
                 }
-                None => {
-                    executor.import_external_to_perm(block, &mut receipts).await?;
-                }
+                None => executor.import_external_to_perm(block.clone(), &receipts).await?,
+            };
+
+            // export snapshot for tests
+            if blocks_to_export_snapshot.contains(&block.number()) {
+                export_snapshot(&block, &receipts, &mined_block)?;
             }
 
             #[cfg(feature = "metrics")]
@@ -248,11 +254,32 @@ async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyh
 }
 
 // -----------------------------------------------------------------------------
-// Csv Exporter
+// Snapshot exporter
+// -----------------------------------------------------------------------------
+fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalReceipts, mined_block: &Block) -> anyhow::Result<()> {
+    // generate snapshot
+    let snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
+
+    // create dir
+    let dir = format!("tests/fixtures/block-{}/", mined_block.number());
+    fs::create_dir_all(&dir)?;
+
+    // write json
+    fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block)?)?;
+    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(external_receipts)?)?;
+    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&snapshot)?)?;
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// Csv exporter
 // -----------------------------------------------------------------------------
 async fn import_external_to_csv(
-    csv: &mut CsvExporter,
+    // services
     stratus_storage: &StratusStorage,
+    csv: &mut CsvExporter,
+    // data
     block: Block,
     block_index: usize,
     block_last_index: usize,

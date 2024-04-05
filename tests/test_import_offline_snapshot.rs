@@ -5,7 +5,7 @@ use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::config::IntegrationTestConfig;
 use stratus::eth::primitives::ExternalBlock;
-use stratus::eth::primitives::ExternalReceipt;
+use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::StoragePointInTime;
 use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
@@ -81,11 +81,7 @@ async fn test_import_offline_snapshot() {
 
     // init receipts data
     let receipts_json = include_str!("fixtures/block-292973/receipts.json");
-    let mut receipts = receipts_json
-        .lines()
-        .map(|json| serde_json::from_str::<ExternalReceipt>(json).unwrap())
-        .collect_vec()
-        .into();
+    let receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
 
     // init snapshot data
     let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
@@ -102,7 +98,7 @@ async fn test_import_offline_snapshot() {
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
     let executor = config.executor.init(storage);
-    executor.import_external_to_perm(block, &mut receipts).await.unwrap();
+    executor.import_external_to_perm(block, &receipts).await.unwrap();
 
     // get metrics from prometheus
     // sleep to ensure prometheus collected
