@@ -8,6 +8,7 @@ mod permanent_storage;
 mod postgres_external_rpc;
 mod postgres_permanent;
 mod sled;
+pub mod rocks_db;
 mod storage_error;
 mod stratus_storage;
 mod temporary_storage;
