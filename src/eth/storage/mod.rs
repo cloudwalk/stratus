@@ -7,7 +7,7 @@ mod inmemory;
 mod permanent_storage;
 mod postgres_external_rpc;
 mod postgres_permanent;
-mod rocks;
+//XXX mod rocks;
 pub mod rocks_db;
 mod sled;
 mod storage_error;
