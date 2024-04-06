@@ -1,7 +1,5 @@
 mod hybrid_state;
 mod query_executor;
-mod rocks_db;
-
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -25,6 +23,7 @@ use tokio::task::JoinSet;
 use tokio::time::sleep;
 
 use self::hybrid_state::HybridStorageState;
+use super::rocks_db;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
