@@ -25,6 +25,7 @@ use crate::eth::primitives::BlockSelection;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::ExternalRpcStorage;
+use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::HybridPermanentStorage;
 use crate::eth::storage::HybridPermanentStorageConfig;
 use crate::eth::storage::InMemoryPermanentStorage;
@@ -538,6 +539,7 @@ pub struct PermanentStorageConfig {
 #[derive(Clone, Debug)]
 pub enum PermanentStorageKind {
     InMemory,
+    Rocks,
     Postgres { url: String },
     Hybrid { url: String },
 }
@@ -547,7 +549,7 @@ impl PermanentStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
