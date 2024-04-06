@@ -24,7 +24,6 @@ pub struct RocksDb<K, V> {
 impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
     pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Self> {
         let mut opts = Options::default();
-        let mut block_based_options = BlockBasedOptions::default();
 
         opts.create_if_missing(true);
         opts.increase_parallelism(16);
@@ -39,12 +38,30 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_max_open_files(1000);
             }
             DbConfig::Default => {
-                block_based_options.set_block_size(16 * 1024);
+                let mut block_based_options = BlockBasedOptions::default();
                 block_based_options.set_ribbon_filter(15.5); // https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter
+                opts.set_block_based_table_factory(&block_based_options);
+
+                opts.set_allow_concurrent_memtable_write(true);
+                opts.set_enable_write_thread_adaptive_yield(true);
+
+                let transform = rocksdb::SliceTransform::create_fixed_prefix(10);
+                opts.set_prefix_extractor(transform);
+                opts.set_memtable_prefix_bloom_ratio(0.2);
+
+                let pt_opts = rocksdb::PlainTableFactoryOptions {
+                    user_key_length: 0,
+                    bloom_bits_per_key: 10,
+                    hash_table_ratio: 0.75,
+                    index_sparseness: 8,
+                    encoding_type: rocksdb::KeyEncodingType::Plain, // Default encoding
+                    full_scan_mode: false,                          // Optimized for point lookups rather than full scans
+                    huge_page_tlb_size: 0,                          // Not using huge pages
+                    store_index_in_file: false,                     // Store index in memory for faster access
+                };
+                opts.set_plain_table_factory(&pt_opts);
             }
         }
-
-        opts.set_block_based_table_factory(&block_based_options);
 
         let db = DB::open(&opts, db_path)?;
 
