@@ -578,6 +578,7 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s if s.starts_with("hybrid://") => {
                 let s = s.replace("hybrid", "postgres"); //TODO there is a better way to do this

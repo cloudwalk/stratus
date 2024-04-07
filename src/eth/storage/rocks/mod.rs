@@ -2,7 +2,6 @@ use core::fmt;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -10,7 +9,6 @@ use futures::future::join_all;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 
 use super::rocks_db::DbConfig;
 use super::rocks_db::RocksDb;
@@ -269,7 +267,6 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        sleep(Duration::from_secs(2)).await;
         tracing::debug!(?accounts, "saving initial accounts");
 
         for account in accounts {
@@ -298,7 +295,6 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        sleep(Duration::from_secs(2)).await;
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
@@ -309,20 +305,91 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         });
 
-        // remove blocks
-        self.state.blocks_by_hash.clear()?;
-        self.state.blocks_by_number.clear()?;
+        // Remove blocks by hash that are greater than block_number
+        let blocks_by_hash = self.state.blocks_by_hash.iter_start();
+        for (block_hash, block_num) in blocks_by_hash {
+            if block_num > block_number {
+                self.state.blocks_by_hash.delete(&block_hash)?;
+            }
+        }
 
-        // remove transactions and logs
-        self.state.transactions.clear()?;
-        self.state.logs.clear()?;
+        // Remove blocks by number that are greater than block_number
+        let blocks_by_number = self.state.blocks_by_number.iter_start();
+        for (num, _) in blocks_by_number {
+            if num > block_number {
+                self.state.blocks_by_number.delete(&num)?;
+            }
+        }
 
-        let _ = self.state.accounts.clear();
-        let _ = self.state.accounts_history.clear();
-        let _ = self.state.account_slots.clear();
-        let _ = self.state.account_slots_history.clear();
+        let transactions = self.state.transactions.iter_start();
+        for (hash, transaction) in transactions {
+            if transaction.block_number > block_number {
+                self.state.transactions.delete(&hash)?;
+            }
+        }
 
-        self.state.load_latest_data().await?;
+        let logs = self.state.logs.iter_start();
+        for (key, log) in logs {
+            if log.block_number > block_number {
+                self.state.logs.delete(&key)?;
+            }
+        }
+
+        let accounts_historic = self.state.accounts_history.iter_start();
+        for ((address, historic_block_number), _) in accounts_historic {
+            if historic_block_number > block_number {
+                self.state.accounts_history.delete(&(address, historic_block_number))?;
+            }
+        }
+
+        let account_slots_historic = self.state.account_slots_history.iter_start();
+        for ((address, slot_index, historic_block_number), _) in account_slots_historic {
+            if historic_block_number > block_number {
+                self.state.account_slots_history.delete(&(address, slot_index, historic_block_number))?;
+            }
+        }
+
+        let _ = self.state.accounts.clear(); //TODO clear an load from history
+        let _ = self.state.account_slots.clear(); //TODO clear an load from history
+
+        // Use HashMaps to store only the latest entries for each account and slot
+        let mut latest_accounts = std::collections::HashMap::new();
+        let mut latest_slots = std::collections::HashMap::new();
+
+        // Populate latest_accounts with the most recent account info up to block_number
+        let account_histories = self.state.accounts_history.iter_start();
+        for ((address, historic_block_number), account_info) in account_histories {
+            if let Some((existing_block_number, _)) = latest_accounts.get(&address) {
+                if *existing_block_number < historic_block_number {
+                    latest_accounts.insert(address, (historic_block_number, account_info));
+                }
+            } else {
+                latest_accounts.insert(address, (historic_block_number, account_info));
+            }
+        }
+
+        // Insert the most recent account information from latest_accounts into the current state
+        for (address, (_, account_info)) in latest_accounts {
+            self.state.accounts.insert(address, account_info);
+        }
+
+        // Populate latest_slots with the most recent slot info up to block_number
+        let slot_histories = self.state.account_slots_history.iter_start();
+        for ((address, slot_index, historic_block_number), slot_value) in slot_histories {
+            let slot_key = (address, slot_index);
+            if let Some((existing_block_number, _)) = latest_slots.get(&slot_key) {
+                if *existing_block_number < historic_block_number {
+                    latest_slots.insert(slot_key, (historic_block_number, slot_value));
+                }
+            } else {
+                latest_slots.insert(slot_key, (historic_block_number, slot_value));
+            }
+        }
+
+        // Insert the most recent slot information from latest_slots into the current state
+        for ((address, slot_index), (_, slot_value)) in latest_slots {
+            self.state.account_slots.insert((address, slot_index), slot_value);
+        }
 
         Ok(())
     }
@@ -380,7 +447,7 @@ impl RocksStorageState {
     //XXX TODO use a fixed block_number during load, in order to avoid sync problem
     // e.g other instance moving forward and this query getting incongruous data
     pub async fn load_latest_data(&self) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 
     /// Updates the in-memory state with changes from transaction execution

@@ -122,6 +122,13 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.write(batch).unwrap();
     }
 
+    // Deletes an entry from the database by key
+    pub fn delete(&self, key: &K) -> Result<()> {
+        let serialized_key = bincode::serialize(key)?;
+        self.db.delete(serialized_key)?;
+        Ok(())
+    }
+
     // Custom method that combines entry and or_insert_with from a HashMap
     pub fn entry_or_insert_with<F>(&self, key: K, default: F) -> V
     where

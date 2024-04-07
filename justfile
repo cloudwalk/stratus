@@ -236,6 +236,28 @@ e2e-stratus test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
+e2e-stratus-rocks test="":
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+
+    echo "-> Starting Stratus"
+    just build || exit 1
+    RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Running E2E tests"
+    just e2e stratus {{test}}
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
+# E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus-postgres test="":
     #!/bin/bash
     if [ -d e2e ]; then
