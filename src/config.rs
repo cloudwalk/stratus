@@ -25,7 +25,6 @@ use crate::eth::primitives::BlockSelection;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::ExternalRpcStorage;
-use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::HybridPermanentStorage;
 use crate::eth::storage::HybridPermanentStorageConfig;
 use crate::eth::storage::InMemoryPermanentStorage;
@@ -35,6 +34,7 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
