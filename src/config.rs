@@ -34,6 +34,7 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
@@ -538,6 +539,7 @@ pub struct PermanentStorageConfig {
 #[derive(Clone, Debug)]
 pub enum PermanentStorageKind {
     InMemory,
+    Rocks,
     Postgres { url: String },
     Hybrid { url: String },
 }
@@ -547,7 +549,7 @@ impl PermanentStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
