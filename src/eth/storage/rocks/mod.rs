@@ -49,7 +49,7 @@ impl RocksPermanentStorage {
         tracing::info!("starting rocksdb storage");
 
         let state = RocksStorageState::new();
-        &state.sync_data().await?;
+        state.sync_data().await?;
         let block_number = state.preload_block_number().await?;
         Ok(Self { state, block_number })
     }
