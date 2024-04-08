@@ -48,12 +48,12 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub fn new() -> anyhow::Result<Self> {
         tracing::info!("starting rocksdb storage");
 
         let state = RocksStorageState::new();
-        state.sync_data().await?;
-        let block_number = state.preload_block_number().await?;
+        state.sync_data()?;
+        let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
 
@@ -62,7 +62,7 @@ impl RocksPermanentStorage {
     // -------------------------------------------------------------------------
 
     /// Clears in-memory state.
-    pub async fn clear(&self) {
+    pub fn clear(&self) {
         let _ = self.state.accounts.clear();
         let _ = self.state.accounts_history.clear();
         let _ = self.state.account_slots.clear();
@@ -74,7 +74,7 @@ impl RocksPermanentStorage {
         self.state.logs.clear().unwrap();
     }
 
-    async fn check_conflicts(state: &RocksStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
+    fn check_conflicts(state: &RocksStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for change in account_changes {
@@ -168,7 +168,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
     async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
-        self.state.get_slot_at_point(address, slot_index, point_in_time).await
+        self.state.get_slot_at_point(address, slot_index, point_in_time)
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -206,7 +206,7 @@ impl PermanentStorage for RocksPermanentStorage {
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         // check conflicts before persisting any state changes
         let account_changes = block.compact_account_changes();
-        if let Some(conflicts) = Self::check_conflicts(&self.state, &account_changes).await {
+        if let Some(conflicts) = Self::check_conflicts(&self.state, &account_changes) {
             return Err(StorageError::Conflict(conflicts));
         }
 
@@ -244,7 +244,6 @@ impl PermanentStorage for RocksPermanentStorage {
             &mut self
                 .state
                 .update_state_with_execution_changes(&account_changes, number)
-                .await
                 .context("failed to update state with execution changes")?,
         );
 
@@ -295,7 +294,7 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         });
 
-        self.state.reset_at(block_number).await
+        self.state.reset_at(block_number)
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
@@ -348,25 +347,25 @@ impl RocksStorageState {
         }
     }
 
-    async fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
+    fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
         let account_block_number = self.accounts.get_current_block_number();
 
         Ok((account_block_number.to_u64().unwrap_or(0u64)).into())
     }
 
-    pub async fn sync_data(&self) -> anyhow::Result<()> {
+    pub fn sync_data(&self) -> anyhow::Result<()> {
         let account_block_number = self.accounts.get_current_block_number();
         let slots_block_number = self.account_slots.get_current_block_number();
         if account_block_number != slots_block_number {
             warn!("block numbers are not in sync");
             let min_block_number = std::cmp::min(account_block_number, slots_block_number);
-            self.reset_at(BlockNumber::from(min_block_number)).await?;
+            self.reset_at(BlockNumber::from(min_block_number))?;
         }
 
         Ok(())
     }
 
-    async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         // Remove blocks by hash that are greater than block_number
         let blocks_by_hash = self.blocks_by_hash.iter_start();
         for (block_hash, block_num) in blocks_by_hash {
@@ -457,7 +456,7 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    pub async fn update_state_with_execution_changes(
+    pub fn update_state_with_execution_changes(
         &self,
         changes: &[ExecutionAccountChanges],
         block_number: BlockNumber,
@@ -564,7 +563,7 @@ impl RocksStorageState {
             .collect()
     }
 
-    pub async fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    pub fn get_slot_at_point(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         let slot = match point_in_time {
             StoragePointInTime::Present => self.account_slots.get(&(address.clone(), slot_index.clone())).map(|account_slot_value| Slot {
                 index: slot_index.clone(),
