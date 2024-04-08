@@ -9,6 +9,7 @@ use futures::future::join_all;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
 use tokio::task::JoinHandle;
+use tracing::warn;
 
 use super::rocks_db::DbConfig;
 use super::rocks_db::RocksDb;
@@ -48,19 +49,9 @@ impl RocksPermanentStorage {
         tracing::info!("starting rocksdb storage");
 
         let state = RocksStorageState::new();
-        let block_number = Self::preload_block_number(&state).await?;
-        state.load_latest_data().await?;
+        &state.sync_data().await?;
+        let block_number = state.preload_block_number().await?;
         Ok(Self { state, block_number })
-    }
-
-    async fn preload_block_number(state: &RocksStorageState) -> anyhow::Result<AtomicU64> {
-        let account_block_number = state.accounts.get_current_block_number();
-        let slots_block_number = state.account_slots.get_current_block_number();
-        if account_block_number != slots_block_number {
-            panic!("block numbers are not in sync"); // XXX later we will need to implement a way to sync
-        }
-
-        Ok((account_block_number.to_u64().unwrap_or(0u64)).into())
     }
 
     // -------------------------------------------------------------------------
@@ -305,93 +296,7 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         });
 
-        // Remove blocks by hash that are greater than block_number
-        let blocks_by_hash = self.state.blocks_by_hash.iter_start();
-        for (block_hash, block_num) in blocks_by_hash {
-            if block_num > block_number {
-                self.state.blocks_by_hash.delete(&block_hash)?;
-            }
-        }
-
-        // Remove blocks by number that are greater than block_number
-        let blocks_by_number = self.state.blocks_by_number.iter_start();
-        for (num, _) in blocks_by_number {
-            if num > block_number {
-                self.state.blocks_by_number.delete(&num)?;
-            }
-        }
-
-        let transactions = self.state.transactions.iter_start();
-        for (hash, transaction) in transactions {
-            if transaction.block_number > block_number {
-                self.state.transactions.delete(&hash)?;
-            }
-        }
-
-        let logs = self.state.logs.iter_start();
-        for (key, log) in logs {
-            if log.block_number > block_number {
-                self.state.logs.delete(&key)?;
-            }
-        }
-
-        let accounts_historic = self.state.accounts_history.iter_start();
-        for ((address, historic_block_number), _) in accounts_historic {
-            if historic_block_number > block_number {
-                self.state.accounts_history.delete(&(address, historic_block_number))?;
-            }
-        }
-
-        let account_slots_historic = self.state.account_slots_history.iter_start();
-        for ((address, slot_index, historic_block_number), _) in account_slots_historic {
-            if historic_block_number > block_number {
-                self.state.account_slots_history.delete(&(address, slot_index, historic_block_number))?;
-            }
-        }
-
-        let _ = self.state.accounts.clear(); //TODO clear an load from history
-        let _ = self.state.account_slots.clear(); //TODO clear an load from history
-
-        // Use HashMaps to store only the latest entries for each account and slot
-        let mut latest_accounts = std::collections::HashMap::new();
-        let mut latest_slots = std::collections::HashMap::new();
-
-        // Populate latest_accounts with the most recent account info up to block_number
-        let account_histories = self.state.accounts_history.iter_start();
-        for ((address, historic_block_number), account_info) in account_histories {
-            if let Some((existing_block_number, _)) = latest_accounts.get(&address) {
-                if *existing_block_number < historic_block_number {
-                    latest_accounts.insert(address, (historic_block_number, account_info));
-                }
-            } else {
-                latest_accounts.insert(address, (historic_block_number, account_info));
-            }
-        }
-
-        // Insert the most recent account information from latest_accounts into the current state
-        for (address, (_, account_info)) in latest_accounts {
-            self.state.accounts.insert(address, account_info);
-        }
-
-        // Populate latest_slots with the most recent slot info up to block_number
-        let slot_histories = self.state.account_slots_history.iter_start();
-        for ((address, slot_index, historic_block_number), slot_value) in slot_histories {
-            let slot_key = (address, slot_index);
-            if let Some((existing_block_number, _)) = latest_slots.get(&slot_key) {
-                if *existing_block_number < historic_block_number {
-                    latest_slots.insert(slot_key, (historic_block_number, slot_value));
-                }
-            } else {
-                latest_slots.insert(slot_key, (historic_block_number, slot_value));
-            }
-        }
-
-        // Insert the most recent slot information from latest_slots into the current state
-        for ((address, slot_index), (_, slot_value)) in latest_slots {
-            self.state.account_slots.insert((address, slot_index), slot_value);
-        }
-
-        Ok(())
+        self.state.reset_at(block_number).await
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
@@ -444,11 +349,114 @@ impl RocksStorageState {
         }
     }
 
-    //XXX TODO use a fixed block_number during load, in order to avoid sync problem
-    // e.g other instance moving forward and this query getting incongruous data
-    pub async fn load_latest_data(&self) -> anyhow::Result<()> {
+    async fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
+        let account_block_number = self.accounts.get_current_block_number();
+
+        Ok((account_block_number.to_u64().unwrap_or(0u64)).into())
+    }
+
+    pub async fn sync_data(&self) -> anyhow::Result<()> {
+        let account_block_number = self.accounts.get_current_block_number();
+        let slots_block_number = self.account_slots.get_current_block_number();
+        if account_block_number != slots_block_number {
+            warn!("block numbers are not in sync");
+            let min_block_number = std::cmp::min(account_block_number, slots_block_number);
+            self.reset_at(BlockNumber::from(min_block_number)).await?;
+        }
+
         Ok(())
     }
+
+    async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        // Remove blocks by hash that are greater than block_number
+        let blocks_by_hash = self.blocks_by_hash.iter_start();
+        for (block_hash, block_num) in blocks_by_hash {
+            if block_num > block_number {
+                self.blocks_by_hash.delete(&block_hash)?;
+            }
+        }
+
+        // Remove blocks by number that are greater than block_number
+        let blocks_by_number = self.blocks_by_number.iter_start();
+        for (num, _) in blocks_by_number {
+            if num > block_number {
+                self.blocks_by_number.delete(&num)?;
+            }
+        }
+
+        let transactions = self.transactions.iter_start();
+        for (hash, transaction) in transactions {
+            if transaction.block_number > block_number {
+                self.transactions.delete(&hash)?;
+            }
+        }
+
+        let logs = self.logs.iter_start();
+        for (key, log) in logs {
+            if log.block_number > block_number {
+                self.logs.delete(&key)?;
+            }
+        }
+
+        let accounts_historic = self.accounts_history.iter_start();
+        for ((address, historic_block_number), _) in accounts_historic {
+            if historic_block_number > block_number {
+                self.accounts_history.delete(&(address, historic_block_number))?;
+            }
+        }
+
+        let account_slots_historic = self.account_slots_history.iter_start();
+        for ((address, slot_index, historic_block_number), _) in account_slots_historic {
+            if historic_block_number > block_number {
+                self.account_slots_history.delete(&(address, slot_index, historic_block_number))?;
+            }
+        }
+
+        let _ = self.accounts.clear();
+        let _ = self.account_slots.clear();
+
+        // Use HashMaps to store only the latest entries for each account and slot
+        let mut latest_accounts = std::collections::HashMap::new();
+        let mut latest_slots = std::collections::HashMap::new();
+
+        // Populate latest_accounts with the most recent account info up to block_number
+        let account_histories = self.accounts_history.iter_start();
+        for ((address, historic_block_number), account_info) in account_histories {
+            if let Some((existing_block_number, _)) = latest_accounts.get(&address) {
+                if *existing_block_number < historic_block_number {
+                    latest_accounts.insert(address, (historic_block_number, account_info));
+                }
+            } else {
+                latest_accounts.insert(address, (historic_block_number, account_info));
+            }
+        }
+
+        // Insert the most recent account information from latest_accounts into the current state
+        for (address, (_, account_info)) in latest_accounts {
+            self.accounts.insert(address, account_info);
+        }
+
+        // Populate latest_slots with the most recent slot info up to block_number
+        let slot_histories = self.account_slots_history.iter_start();
+        for ((address, slot_index, historic_block_number), slot_value) in slot_histories {
+            let slot_key = (address, slot_index);
+            if let Some((existing_block_number, _)) = latest_slots.get(&slot_key) {
+                if *existing_block_number < historic_block_number {
+                    latest_slots.insert(slot_key, (historic_block_number, slot_value));
+                }
+            } else {
+                latest_slots.insert(slot_key, (historic_block_number, slot_value));
+            }
+        }
+
+        // Insert the most recent slot information from latest_slots into the current state
+        for ((address, slot_index), (_, slot_value)) in latest_slots {
+            self.account_slots.insert((address, slot_index), slot_value);
+        }
+
+        Ok(())
+    }
+
 
     /// Updates the in-memory state with changes from transaction execution
     pub async fn update_state_with_execution_changes(
