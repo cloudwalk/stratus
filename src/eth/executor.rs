@@ -5,7 +5,6 @@
 //! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
 //! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
 
-use std::io::Write;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -16,7 +15,6 @@ use tokio::sync::Mutex;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionMetrics;
@@ -26,7 +24,6 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -73,7 +70,7 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
-    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
         let block = self.import_external_to_temp(block, receipts).await?;
 
@@ -89,7 +86,7 @@ impl EthExecutor {
     }
 
     /// Re-executes an external block locally and imports it to the temporary storage.
-    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -106,13 +103,13 @@ impl EthExecutor {
             let tx_start = metrics::now();
 
             // re-execute transaction or create a fake execution the external transaction failed
-            let receipt = receipts.try_take(&tx.hash())?;
+            let receipt = receipts.try_get(&tx.hash())?;
             let execution = if receipt.is_success() {
-                let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), &receipt)?;
+                let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), receipt)?;
                 self.execute_in_evm(evm_input).await
             } else {
                 let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await?;
-                let execution = Execution::from_failed_external_transaction(&block, &receipt, sender)?;
+                let execution = Execution::from_failed_external_transaction(&block, receipt, sender)?;
                 Ok((execution, ExecutionMetrics::default()))
             };
 
@@ -120,11 +117,11 @@ impl EthExecutor {
             match execution {
                 Ok((mut execution, execution_metrics)) => {
                     // apply execution costs that were not consided when re-executing the transaction
-                    execution.apply_execution_costs(&receipt)?;
+                    execution.apply_execution_costs(receipt)?;
                     execution.gas = receipt.gas_used.unwrap_or_default().try_into()?;
 
                     // ensure it matches receipt before saving
-                    if let Err(e) = execution.compare_with_receipt(&receipt) {
+                    if let Err(e) = execution.compare_with_receipt(receipt) {
                         let json_tx = serde_json::to_string(&tx).unwrap();
                         let json_receipt = serde_json::to_string(&receipt).unwrap();
                         let json_execution_logs = serde_json::to_string(&execution.logs).unwrap();
@@ -134,7 +131,7 @@ impl EthExecutor {
 
                     // temporarily save state to next transactions from the same block
                     self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
-                    executions.push((tx, receipt, execution.clone()));
+                    executions.push((tx, receipt.clone(), execution.clone()));
 
                     // track metrics
                     #[cfg(feature = "metrics")]
@@ -151,19 +148,6 @@ impl EthExecutor {
             }
         }
 
-        // convert block
-        let block = Block::from_external(block, executions)?;
-
-        // Update block snapshot for integration testing
-        // Block 292973 from CloudWalk Network Mainnet
-        if *block.number() == BlockNumber::from(292973) {
-            let block_changes = block.compact_account_changes();
-            let state = InMemoryPermanentStorage::dump_snapshot(block_changes).await;
-            let state_string = serde_json::to_string(&state)?;
-            let mut file = std::fs::File::create("tests/fixtures/block-292973/snapshot.json")?;
-            file.write_all(state_string.as_bytes())?;
-        };
-
         // track metrics
         #[cfg(feature = "metrics")]
         {
@@ -172,7 +156,7 @@ impl EthExecutor {
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
         }
 
-        Ok(block)
+        Block::from_external(block, executions)
     }
 
     /// Executes a transaction persisting state changes.
@@ -223,16 +207,12 @@ impl EthExecutor {
         };
 
         // notify new blocks
-        if let Err(e) = self.block_notifier.send(block.clone()) {
-            tracing::error!(reason = ?e, "failed to send block notification");
-        };
+        let _ = self.block_notifier.send(block.clone());
 
         // notify transaction logs
         for trx in block.transactions {
             for log in trx.logs {
-                if let Err(e) = self.log_notifier.send(log) {
-                    tracing::error!(reason = ?e, "failed to send log notification");
-                };
+                let _ = self.log_notifier.send(log);
             }
         }
 

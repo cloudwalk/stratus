@@ -73,7 +73,7 @@ impl InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     /// Dump a snapshot of an execution previous state that can be used in tests.
-    pub async fn dump_snapshot(changes: Vec<ExecutionAccountChanges>) -> InMemoryPermanentStorageState {
+    pub fn dump_snapshot(changes: Vec<ExecutionAccountChanges>) -> InMemoryPermanentStorageState {
         let mut state = InMemoryPermanentStorageState::default();
         for change in changes {
             // save account

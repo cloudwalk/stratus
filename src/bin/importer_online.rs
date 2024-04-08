@@ -50,8 +50,8 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
         let receipts = futures::stream::iter(receipts).buffered(RECEIPTS_PARALELLISM).try_collect::<Vec<_>>().await?;
 
         // import block
-        let mut receipts: ExternalReceipts = receipts.into();
-        executor.import_external_to_perm(block, &mut receipts).await?;
+        let receipts: ExternalReceipts = receipts.into();
+        executor.import_external_to_perm(block, &receipts).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_import_online(start.elapsed());

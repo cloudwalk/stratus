@@ -34,6 +34,7 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
@@ -287,9 +288,6 @@ impl WithCommonConfig for RpcDownloaderConfig {
 /// Configuration for `importer-offline` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct ImporterOfflineConfig {
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
-
     /// Initial block number to be imported.
     #[arg(long = "block-start", env = "BLOCK_START")]
     pub block_start: Option<u64>,
@@ -306,11 +304,18 @@ pub struct ImporterOfflineConfig {
     #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
 
+    /// Export selected blocks to fixtures snapshots to be used in tests.
+    #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
+    pub export_snapshot: Vec<u64>,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub rpc_storage: ExternalRpcStorageConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -534,6 +539,7 @@ pub struct PermanentStorageConfig {
 #[derive(Clone, Debug)]
 pub enum PermanentStorageKind {
     InMemory,
+    Rocks,
     Postgres { url: String },
     Hybrid { url: String },
 }
@@ -543,7 +549,7 @@ impl PermanentStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new()?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
@@ -572,6 +578,7 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s if s.starts_with("hybrid://") => {
                 let s = s.replace("hybrid", "postgres"); //TODO there is a better way to do this
