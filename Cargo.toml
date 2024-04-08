@@ -116,6 +116,10 @@ path = "src/bin/importer_online.rs"
 name = "state-validator"
 path = "src/bin/state_validator.rs"
 
+[[bin]]
+name = "run-with-importer"
+path = "src/bin/run_with_importer.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------

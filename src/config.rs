@@ -62,7 +62,7 @@ pub trait WithCommonConfig {
 }
 
 /// Configuration that can be used by any binary.
-#[derive(Parser, Debug)]
+#[derive(Clone, Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
     /// Number of threads to execute global async tasks.
@@ -114,7 +114,7 @@ impl CommonConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct StratusStorageConfig {
     #[clap(flatten)]
     pub temp_storage: TemporaryStorageConfig,
@@ -171,7 +171,7 @@ impl StratusStorageConfig {
 // Config: Executor
 // -----------------------------------------------------------------------------
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone, Copy)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "chain-id", env = "CHAIN_ID")]
@@ -356,6 +356,53 @@ impl WithCommonConfig for ImporterOnlineConfig {
     }
 }
 
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct RunWithImporterConfig {
+    /// JSON-RPC binding address.
+    #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
+    pub address: SocketAddr,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    /// External RPC endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+impl RunWithImporterConfig {
+    pub fn as_importer(&self) -> ImporterOnlineConfig {
+        ImporterOnlineConfig {
+            external_rpc: self.external_rpc.clone(),
+            executor: self.executor,
+            stratus_storage: self.stratus_storage.clone(),
+            common: self.common.clone(),
+        }
+    }
+
+    pub fn as_stratus(&self) -> StratusConfig {
+        StratusConfig {
+            address: self.address,
+            executor: self.executor,
+            stratus_storage: self.stratus_storage.clone(),
+            common: self.common.clone(),
+        }
+    }
+}
+
+impl WithCommonConfig for RunWithImporterConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Config: StateValidator
 // -----------------------------------------------------------------------------
@@ -481,7 +528,7 @@ impl FromStr for ExternalRpcStorageKind {
 // -----------------------------------------------------------------------------
 
 /// Temporary storage configuration.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct TemporaryStorageConfig {
     /// Temporary storage implementation.
     #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
@@ -521,7 +568,7 @@ impl FromStr for TemporaryStorageKind {
 // -----------------------------------------------------------------------------
 
 /// Permanent storage configuration.
-#[derive(Parser, Debug)]
+#[derive(Clone, Parser, Debug)]
 pub struct PermanentStorageConfig {
     /// Permamenent storage implementation.
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
