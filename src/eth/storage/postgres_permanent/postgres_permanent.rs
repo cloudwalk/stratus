@@ -94,7 +94,9 @@ impl PostgresPermanentStorage {
 #[async_trait]
 impl PermanentStorage for PostgresPermanentStorage {
     async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        THREAD_CONN.set(Some(self.pool.acquire().await?));
+        let conn = self.pool.acquire().await?;
+        let conn = conn.leak();
+        THREAD_CONN.set(Some(conn));
         Ok(())
     }
 
@@ -891,24 +893,19 @@ fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<
 // TODO: move elsewhere if neeeded for other modules that uses PostgreSQL.
 // -----------------------------------------------------------------------------
 thread_local! {
-    pub static THREAD_CONN: Cell<Option<PoolConnection<Postgres>>> = const { Cell::new(None) };
+    pub static THREAD_CONN: Cell<Option<PgConnection>> = const { Cell::new(None) };
 }
 
 /// A Postgres connection acquired from the pool of connections or the current thread-local storage.
 ///
 /// When dropped, it will be automatically returned to the pool or to the thread-local storage according to its origin.
-struct PoolOrThreadConnection {
-    from_thread: bool,
-    conn: ManuallyDrop<PoolConnection<Postgres>>,
-}
+struct PoolOrThreadConnection(PoolOrThreadConnectionKind);
 
 impl Drop for PoolOrThreadConnection {
     fn drop(&mut self) {
-        let conn = unsafe { ManuallyDrop::take(&mut self.conn) };
-        if self.from_thread {
+        if let PoolOrThreadConnectionKind::Leaked(ref mut conn) = self.0 {
+            let conn = unsafe { ManuallyDrop::take(conn) };
             THREAD_CONN.set(Some(conn));
-        } else {
-            drop(conn);
         }
     }
 }
@@ -917,19 +914,24 @@ impl PoolOrThreadConnection {
     /// Takes ownership of a connection according to the current thread availability.
     async fn take(pool: &PgPool) -> anyhow::Result<Self> {
         match THREAD_CONN.take() {
-            Some(conn) => Ok(Self {
-                from_thread: true,
-                conn: ManuallyDrop::new(conn),
-            }),
-            None => Ok(Self {
-                from_thread: false,
-                conn: ManuallyDrop::new(pool.acquire().await?),
-            }),
+            Some(conn) => Ok(Self(PoolOrThreadConnectionKind::Leaked(ManuallyDrop::new(conn)))),
+            None => Ok(Self(PoolOrThreadConnectionKind::Managed(pool.acquire().await?))),
         }
     }
 
     /// Casts the current connection for SQLx usage.
     fn for_sqlx(&mut self) -> &mut PgConnection {
-        self.conn.as_mut()
+        match &mut self.0 {
+            PoolOrThreadConnectionKind::Leaked(ref mut conn) => conn,
+            PoolOrThreadConnectionKind::Managed(conn) => conn.as_mut(),
+        }
     }
+}
+
+enum PoolOrThreadConnectionKind {
+    /// Connection removed from SQLx pool.
+    Leaked(ManuallyDrop<PgConnection>),
+
+    /// Connection managed by SQLx pool.
+    Managed(PoolConnection<Postgres>),
 }
