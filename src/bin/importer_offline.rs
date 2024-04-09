@@ -68,6 +68,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
+    signal_handler(cancellation.clone());
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
@@ -98,6 +99,12 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         block_snapshots,
     ));
 
+    importer_task.await??;
+
+    Ok(())
+}
+
+fn signal_handler(cancellation: CancellationToken) {
     tokio::spawn(async move {
         match tokio::signal::ctrl_c().await {
             Ok(()) => {
@@ -108,10 +115,6 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
             Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
         }
     });
-
-    importer_task.await??;
-
-    Ok(())
 }
 
 // -----------------------------------------------------------------------------
