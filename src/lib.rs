@@ -16,7 +16,7 @@ where
     // parse configuration
     load_dotenv();
     let config = T::parse();
-    println!("Parsed configuration: {:?}", config);
+    println!("parsed configuration: {:?}", config);
 
     // init services
     infra::init_tracing();

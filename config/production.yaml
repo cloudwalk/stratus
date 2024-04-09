@@ -48,7 +48,7 @@ kubernetes:
           port: "9000"
         ports:
           - containerPort: 3000
-            name: app
+            name: app-stratus
             virtualservice:
               gateway: internal
               hosts:
@@ -89,7 +89,7 @@ kubernetes:
           port: "9000"
         ports:
           - containerPort: 3000
-            name: app
+            name: app-stratus-postgres
             virtualservice:
               gateway: internal
               hosts:
