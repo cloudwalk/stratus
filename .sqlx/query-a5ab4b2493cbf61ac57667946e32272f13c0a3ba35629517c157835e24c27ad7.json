@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT value\nFROM historical_slots\nWHERE account_address = $1\nAND idx = $2\nAND block_number = (SELECT MAX(block_number)\n                        FROM historical_slots\n                        WHERE account_address = $1\n                        AND idx = $2\n                        AND block_number <= $3)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a5ab4b2493cbf61ac57667946e32272f13c0a3ba35629517c157835e24c27ad7"
+}
