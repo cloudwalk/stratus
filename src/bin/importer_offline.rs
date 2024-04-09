@@ -68,6 +68,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
+    signal_handler(cancellation.clone());
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
@@ -79,7 +80,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     }
 
     // execute parallel tasks (external rpc storage loader and block importer)
-    tokio::spawn(execute_external_rpc_storage_loader(
+    let _loader_task = tokio::spawn(execute_external_rpc_storage_loader(
         rpc_storage,
         cancellation.clone(),
         config.paralellism,
@@ -89,9 +90,31 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     ));
 
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
-    execute_block_importer(executor, &stratus_storage, csv, cancellation, backlog_rx, block_snapshots).await?;
+    let importer_task = tokio::spawn(execute_block_importer(
+        executor,
+        stratus_storage,
+        csv,
+        cancellation.clone(),
+        backlog_rx,
+        block_snapshots,
+    ));
+
+    importer_task.await??;
 
     Ok(())
+}
+
+fn signal_handler(cancellation: CancellationToken) {
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                tracing::info!("shutting down");
+                cancellation.cancel();
+            }
+
+            Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
+        }
+    });
 }
 
 // -----------------------------------------------------------------------------
@@ -100,7 +123,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 async fn execute_block_importer(
     // services
     executor: EthExecutor,
-    stratus_storage: &StratusStorage,
+    stratus_storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
     // data
@@ -115,6 +138,10 @@ async fn execute_block_importer(
         let Some((blocks, receipts)) = backlog_rx.recv().await else {
             cancellation.cancel();
             break "block loader finished or failed";
+        };
+
+        if cancellation.is_cancelled() {
+            break "exiting block importer";
         };
 
         let block_start = blocks.first().unwrap().number();
@@ -134,7 +161,7 @@ async fn execute_block_importer(
             let mined_block = match csv {
                 Some(ref mut csv) => {
                     let mined_block = executor.import_external_to_temp(block.clone(), &receipts).await?;
-                    import_external_to_csv(stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
+                    import_external_to_csv(&stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
                     mined_block
                 }
                 None => executor.import_external_to_perm(block.clone(), &receipts).await?,
