@@ -4,7 +4,7 @@ import { JsonRpcProvider, keccak256 } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 import { Numbers } from "web3-types";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket } from "ws";
 
 import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
@@ -207,15 +207,18 @@ export async function sendGetBlockNumber(): Promise<number> {
 /// Start a subscription and returns its id
 /// Waits at the most for the specified time
 /// An error or timeout will result in undefined
-export async function subscribeAndGetId(subscription: string, waitTimeInMilliseconds: number): Promise<string | undefined> {
+export async function subscribeAndGetId(
+    subscription: string,
+    waitTimeInMilliseconds: number,
+): Promise<string | undefined> {
     const socket = new WebSocket(providerUrl.replace("http", "ws"));
     let subsId = undefined;
-    
+
     socket.addEventListener("open", function () {
         socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription] }));
     });
 
-    socket.addEventListener('message', function (event: { data: string }) {
+    socket.addEventListener("message", function (event: { data: string }) {
         //console.log('Message from server ', event.data);
         if (event.data.includes("id")) {
             subsId = JSON.parse(event.data).result;
@@ -225,7 +228,7 @@ export async function subscribeAndGetId(subscription: string, waitTimeInMillisec
 
     // Wait for the specified time, if necessary
     if (subsId === undefined && waitTimeInMilliseconds > 0)
-        await new Promise(resolve => setTimeout(resolve, waitTimeInMilliseconds));
+        await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
 
     return subsId;
 }

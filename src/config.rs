@@ -34,6 +34,7 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
@@ -48,7 +49,7 @@ pub fn load_dotenv() {
     let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
     let env_filename = format!("config/{}.env.{}", bin_name(), env);
 
-    println!("Reading ENV file: {}", env_filename);
+    println!("reading env file: {}", env_filename);
     let _ = dotenvy::from_filename(env_filename);
 }
 
@@ -61,7 +62,7 @@ pub trait WithCommonConfig {
 }
 
 /// Configuration that can be used by any binary.
-#[derive(Parser, Debug)]
+#[derive(Clone, Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
     /// Number of threads to execute global async tasks.
@@ -113,7 +114,7 @@ impl CommonConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct StratusStorageConfig {
     #[clap(flatten)]
     pub temp_storage: TemporaryStorageConfig,
@@ -170,7 +171,7 @@ impl StratusStorageConfig {
 // Config: Executor
 // -----------------------------------------------------------------------------
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone, Copy)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "chain-id", env = "CHAIN_ID")]
@@ -197,9 +198,18 @@ impl ExecutorConfig {
             let evm_rx = evm_rx.clone();
 
             // spawn thread that will run evm
+            // todo: needs a way to signal error like a cancellation token in case it fails to initialize
             let t = thread::Builder::new().name("evm".into());
             t.spawn(move || {
+                // init tokio
                 let _tokio_guard = evm_tokio.enter();
+
+                // init storage
+                if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
+                    tracing::error!(reason = ?e, "failed to allocate evm storage resources");
+                }
+
+                // init evm
                 let mut evm = Revm::new(evm_storage, evm_chain_id);
 
                 // keep executing transactions until the channel is closed
@@ -287,9 +297,6 @@ impl WithCommonConfig for RpcDownloaderConfig {
 /// Configuration for `importer-offline` binary.
 #[derive(Parser, Debug, derive_more::Deref)]
 pub struct ImporterOfflineConfig {
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
-
     /// Initial block number to be imported.
     #[arg(long = "block-start", env = "BLOCK_START")]
     pub block_start: Option<u64>,
@@ -306,11 +313,18 @@ pub struct ImporterOfflineConfig {
     #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
 
+    /// Export selected blocks to fixtures snapshots to be used in tests.
+    #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
+    pub export_snapshot: Vec<u64>,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub rpc_storage: ExternalRpcStorageConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -346,6 +360,53 @@ pub struct ImporterOnlineConfig {
 }
 
 impl WithCommonConfig for ImporterOnlineConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+#[derive(Parser, Debug, derive_more::Deref)]
+pub struct RunWithImporterConfig {
+    /// JSON-RPC binding address.
+    #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
+    pub address: SocketAddr,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    /// External RPC endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+impl RunWithImporterConfig {
+    pub fn as_importer(&self) -> ImporterOnlineConfig {
+        ImporterOnlineConfig {
+            external_rpc: self.external_rpc.clone(),
+            executor: self.executor,
+            stratus_storage: self.stratus_storage.clone(),
+            common: self.common.clone(),
+        }
+    }
+
+    pub fn as_stratus(&self) -> StratusConfig {
+        StratusConfig {
+            address: self.address,
+            executor: self.executor,
+            stratus_storage: self.stratus_storage.clone(),
+            common: self.common.clone(),
+        }
+    }
+}
+
+impl WithCommonConfig for RunWithImporterConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
@@ -476,7 +537,7 @@ impl FromStr for ExternalRpcStorageKind {
 // -----------------------------------------------------------------------------
 
 /// Temporary storage configuration.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct TemporaryStorageConfig {
     /// Temporary storage implementation.
     #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
@@ -516,7 +577,7 @@ impl FromStr for TemporaryStorageKind {
 // -----------------------------------------------------------------------------
 
 /// Permanent storage configuration.
-#[derive(Parser, Debug)]
+#[derive(Clone, Parser, Debug)]
 pub struct PermanentStorageConfig {
     /// Permamenent storage implementation.
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
@@ -534,6 +595,7 @@ pub struct PermanentStorageConfig {
 #[derive(Clone, Debug)]
 pub enum PermanentStorageKind {
     InMemory,
+    Rocks,
     Postgres { url: String },
     Hybrid { url: String },
 }
@@ -543,7 +605,7 @@ impl PermanentStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new()?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
@@ -572,6 +634,7 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s if s.starts_with("hybrid://") => {
                 let s = s.replace("hybrid", "postgres"); //TODO there is a better way to do this

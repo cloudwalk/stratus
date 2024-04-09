@@ -32,32 +32,32 @@ describe("Transaction: serial TestContractBalances", () => {
 
     it("Eth_getCode is not null for deployed contract", async () => {
         const deployedCode = await send("eth_getCode", [_contract.target, "latest"]);
-        
+
         expect(deployedCode).not.eq("0x");
     });
 
     it("Eth_call works on read function", async () => {
         // prepare transaction object
-        const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address])
+        const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address]);
         const to = _contract.target;
         const from = CHARLIE.address;
-        const transaction = {from: from, to: to, data: data};
+        const transaction = { from: from, to: to, data: data };
 
         const currentCharlieBalance = await send("eth_call", [transaction, "latest"]);
         const expectedCharlieBalance = toPaddedHex(0, 32);
-        
+
         expect(currentCharlieBalance).eq(expectedCharlieBalance);
     });
 
     it("Eth_call works on read function without from field", async () => {
         // prepare transaction object
-        const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address])
+        const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address]);
         const to = _contract.target;
-        const transaction = {to: to, data: data};
+        const transaction = { to: to, data: data };
 
         const currentCharlieBalance = await send("eth_call", [transaction, "latest"]);
         const expectedCharlieBalance = toPaddedHex(0, 32);
-        
+
         expect(currentCharlieBalance).eq(expectedCharlieBalance);
     });
 

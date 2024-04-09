@@ -1,12 +1,12 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use metrics::atomics::AtomicU64;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
@@ -73,7 +73,7 @@ impl InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     /// Dump a snapshot of an execution previous state that can be used in tests.
-    pub async fn dump_snapshot(changes: Vec<ExecutionAccountChanges>) -> InMemoryPermanentStorageState {
+    pub fn dump_snapshot(changes: Vec<ExecutionAccountChanges>) -> InMemoryPermanentStorageState {
         let mut state = InMemoryPermanentStorageState::default();
         for change in changes {
             // save account
@@ -166,6 +166,10 @@ impl Default for InMemoryPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for InMemoryPermanentStorage {
+    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------

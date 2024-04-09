@@ -1,11 +1,14 @@
 import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables (automatically set in all actions).
+export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
-# Default URLs that can be passed as argument.
-wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "1200")
+# Default values.
+wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
+build_flags := "--bin stratus --features dev"
+run_flags := "--enable-genesis --enable-test-accounts"
 
 # Project: Show available tasks
 default:
@@ -31,21 +34,19 @@ setup:
 
 # Stratus: Run main service with debug options
 run *args="":
-    #!/bin/bash
-    cargo run --bin stratus --features dev -- --enable-genesis --enable-test-accounts {{args}}
-    exit 0
+    cargo run {{ build_flags }} -- {{ run_flags }} {{args}}
 
 # Stratus: Run main service with release options
 run-release *args="":
-    cargo run --bin stratus --features dev --release -- --enable-genesis --enable-test-accounts {{args}}
+    cargo run --release {{ build_flags }} -- {{ run_flags }} {{args}}
 
 # Stratus: Compile with debug options
 build:
-    cargo build
+    cargo build {{ build_flags }}
 
 # Stratus: Compile with release options
 build-release:
-    cargo build --release
+    cargo build --release {{ build_flags }}
 
 # Stratus: Check, or compile without generating code
 check:
@@ -151,8 +152,8 @@ test-unit name="":
     cargo test --lib {{name}} -- --nocapture
 
 # Test: Execute Rust integration tests
-test-int name="":
-    cargo test --test '*' {{name}} -- --nocapture
+test-int name="'*'":
+    cargo test --test {{name}} --features metrics -- --nocapture
 
 # ------------------------------------------------------------------------------
 # E2E tasks
@@ -220,7 +221,30 @@ e2e-stratus test="":
     fi
 
     echo "-> Starting Stratus"
+    just build || exit 1
     RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Running E2E tests"
+    just e2e stratus {{test}}
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
+# E2E: Starts and execute Hardhat tests in Stratus
+e2e-stratus-rocks test="":
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+
+    echo "-> Starting Stratus"
+    just build || exit 1
+    RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -241,13 +265,14 @@ e2e-stratus-postgres test="":
     fi
 
     echo "-> Starting Postgres"
-    docker-compose down
-    docker-compose up -d
+    docker compose down
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
+    just build || exit 1
     RUST_LOG=debug just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -261,7 +286,7 @@ e2e-stratus-postgres test="":
     killport 3000
 
     echo "-> Killing Postgres"
-    docker-compose down
+    docker compose down
 
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
@@ -280,8 +305,8 @@ e2e-flamegraph:
 
     # Start PostgreSQL
     echo "Starting PostgreSQL"
-    docker-compose down -v
-    docker-compose up -d --force-recreate
+    docker compose down -v
+    docker compose up -d --force-recreate
 
     # Wait for PostgreSQL
     echo "Waiting for PostgreSQL to be ready"
@@ -306,7 +331,7 @@ e2e-flamegraph:
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
-    CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc
+    cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
@@ -353,6 +378,7 @@ contracts-remove:
 contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
+    just build || exit 1
     RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -370,13 +396,14 @@ contracts-test-stratus *args="":
 contracts-test-stratus-postgres *args="":
     #!/bin/bash
     echo "-> Starting Postgres"
-    docker-compose down
-    docker-compose up -d
+    docker compose down
+    docker compose up -d || exit 1
 
     echo "-> Waiting Postgres to start"
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
+    just build-release || exit 1
     RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -390,7 +417,25 @@ contracts-test-stratus-postgres *args="":
     killport 3000
 
     echo "-> Killing Postgres"
-    docker-compose down
+    docker compose down
+
+    exit $result_code
+
+contracts-test-stratus-rocks *args="":
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    just build-release || exit 1
+    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Running E2E tests"
+    just e2e-contracts {{ args }}
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
 
     exit $result_code
 
@@ -418,4 +463,3 @@ contracts-coverage-erase:
     #!/bin/bash
     cd e2e-contracts/repos
     rm -rf */coverage
-

@@ -1,7 +1,6 @@
 mod hybrid_state;
 mod query_executor;
-mod rocks_db;
-
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,7 +8,6 @@ use std::time::Duration;
 use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
-use metrics::atomics::AtomicU64;
 use num_traits::cast::ToPrimitive;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::Json;
@@ -25,6 +23,7 @@ use tokio::task::JoinSet;
 use tokio::time::sleep;
 
 use self::hybrid_state::HybridStorageState;
+use super::rocks_db;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -197,6 +196,10 @@ impl HybridPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for HybridPermanentStorage {
+    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -380,22 +383,18 @@ impl PermanentStorage for HybridPermanentStorage {
 
         let txs_rocks = Arc::clone(&self.state.transactions);
         let logs_rocks = Arc::clone(&self.state.logs);
-        futures.push(tokio::task::spawn_blocking(move || txs_rocks.insert_batch(txs_batch)));
-        futures.push(tokio::task::spawn_blocking(move || logs_rocks.insert_batch(logs_batch)));
+        futures.push(tokio::task::spawn_blocking(move || txs_rocks.insert_batch(txs_batch, None)));
+        futures.push(tokio::task::spawn_blocking(move || logs_rocks.insert_batch(logs_batch, None)));
 
         // save block
         let number = *block.number();
         let hash = block.hash().clone();
 
         let blocks_by_number = Arc::clone(&self.state.blocks_by_number);
-        let metadata = Arc::clone(&self.state.metadata);
         let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
         let block_clone = block.clone();
         let hash_clone = hash.clone();
         futures.push(tokio::task::spawn_blocking(move || blocks_by_number.insert(number, block_clone)));
-        futures.push(tokio::task::spawn_blocking(move || {
-            metadata.insert("current_block_number".to_string(), number.as_u64().to_string());
-        }));
         futures.push(tokio::task::spawn_blocking(move || blocks_by_hash.insert(hash_clone, number)));
 
         futures.append(

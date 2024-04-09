@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Instant;
 
 use anyhow::anyhow;
 
@@ -20,10 +19,14 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
+#[cfg(feature = "metrics")]
 const STORAGE_TEMP: &str = "temporary";
+#[cfg(feature = "metrics")]
 const STORAGE_PERM: &str = "permanent";
+#[cfg(feature = "metrics")]
 const DEFAULT_VALUE: &str = "default";
 
 pub struct StratusStorage {
@@ -32,8 +35,14 @@ pub struct StratusStorage {
 }
 
 impl StratusStorage {
+    /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
+    }
+
+    pub async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        self.perm.allocate_evm_thread_resources().await?;
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -41,42 +50,72 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     // Retrieves the active block number.
+    #[allow(clippy::let_and_return)]
     pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.temp.read_active_block_number().await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_read_active_block_number(start.elapsed(), result.is_ok());
+
         result
     }
 
     // Retrieves the last mined block number.
+    #[allow(clippy::let_and_return)]
     pub async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.read_mined_block_number().await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_read_mined_block_number(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// Atomically increments the block number, returning the new value.
+    #[allow(clippy::let_and_return)]
     pub async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.increment_block_number().await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_increment_block_number(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// Sets the active block number to a specific value.
+    #[allow(clippy::let_and_return)]
     pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.temp.set_active_block_number(number).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_set_active_block_number(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// Sets the mined block number to a specific value.
+    #[allow(clippy::let_and_return)]
     pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.set_mined_block_number(number).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_set_mined_block_number(start.elapsed(), result.is_ok());
+
         result
     }
 
@@ -86,22 +125,26 @@ impl StratusStorage {
 
     /// Retrieves an account from the storage. Returns default value when not found.
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
 
         match self.temp.maybe_read_account(address).await? {
             Some(account) => {
                 tracing::debug!("account found in the temporary storage");
+                #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
                 Ok(account)
             }
             None => match self.perm.maybe_read_account(address, point_in_time).await? {
                 Some(account) => {
                     tracing::debug!("account found in the permanent storage");
+                    #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
                     Ok(account)
                 }
                 None => {
                     tracing::debug!("account not found, assuming default value");
+                    #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
                     Ok(Account {
                         address: address.clone(),
@@ -114,22 +157,26 @@ impl StratusStorage {
 
     /// Retrieves an slot from the storage. Returns default value when not found.
     pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
 
         match self.temp.maybe_read_slot(address, slot_index).await? {
             Some(slot) => {
                 tracing::debug!("slot found in the temporary storage");
+                #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
                 Ok(slot)
             }
             None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
                 Some(slot) => {
                     tracing::debug!("slot found in the permanent storage");
+                    #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
                     Ok(slot)
                 }
                 None => {
                     tracing::debug!("slot not found, assuming default value");
+                    #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
                     Ok(Slot {
                         index: slot_index.clone(),
@@ -141,26 +188,44 @@ impl StratusStorage {
     }
 
     /// Retrieves a block from the storage.
+    #[allow(clippy::let_and_return)]
     pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.read_block(block_selection).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// Retrieves a transaction from the storage.
+    #[allow(clippy::let_and_return)]
     pub async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.read_mined_transaction(hash).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_read_mined_transaction(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// Retrieves logs from the storage.
+    #[allow(clippy::let_and_return)]
     pub async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.read_logs(filter).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_read_logs(start.elapsed(), result.is_ok());
+
         result
     }
 
@@ -169,35 +234,54 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Persists accounts like pre-genesis accounts or test accounts.
+    #[allow(clippy::let_and_return)]
     pub async fn save_accounts_to_perm(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.save_accounts(accounts).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_save_accounts(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// Temporarily saves account's changes generated during block production.
+    #[allow(clippy::let_and_return)]
     pub async fn save_account_changes_to_temp(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.temp.save_account_changes(changes).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// If necessary, flushes temporary state to durable storage.
+    #[allow(clippy::let_and_return)]
     pub async fn flush_temp(&self) -> anyhow::Result<()> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.temp.flush().await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_flush_temp(start.elapsed(), result.is_ok());
+
         result
     }
 
     /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
     pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
-        let start = Instant::now();
-
-        // compute labels
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+        #[cfg(feature = "metrics")]
         let label_size_by_tx = block.label_size_by_transactions();
+        #[cfg(feature = "metrics")]
         let label_size_by_gas = block.label_size_by_gas();
 
         // save block to permanent storage and clears temporary storage
@@ -207,23 +291,37 @@ impl StratusStorage {
         self.reset_temp().await?;
         self.set_active_block_number(next_number).await?;
 
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
+
         result
     }
 
     /// Resets temporary storage.
+    #[allow(clippy::let_and_return)]
     pub async fn reset_temp(&self) -> anyhow::Result<()> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.temp.reset().await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result.is_ok());
+
         result
     }
 
     /// Resets permanent storage down to specific block_number.
+    #[allow(clippy::let_and_return)]
     pub async fn reset_perm(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        let start = Instant::now();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let result = self.perm.reset_at(block_number).await;
+
+        #[cfg(feature = "metrics")]
         metrics::inc_storage_reset(start.elapsed(), STORAGE_PERM, result.is_ok());
+
         result
     }
 

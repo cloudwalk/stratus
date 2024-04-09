@@ -65,8 +65,8 @@ reqwest = { version = "=0.11.24", features = ["json"] }
 tower = "=0.4.13"
 
 # observability
-metrics = "=0.21.1"
-metrics-exporter-prometheus = "=0.12.2"
+metrics = { version = "=0.21.1", optional = true }
+metrics-exporter-prometheus = { version = "=0.12.2", optional = true }
 tracing = "=0.1.40"
 tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
 
@@ -116,6 +116,29 @@ path = "src/bin/importer_online.rs"
 name = "state-validator"
 path = "src/bin/state_validator.rs"
 
+[[bin]]
+name = "run-with-importer"
+path = "src/bin/run_with_importer.rs"
+
+# ------------------------------------------------------------------------------
+# Features
+# ------------------------------------------------------------------------------
+
+[features]
+default = ["rocks"]
+
+# Application is running in develoment mode.
+dev  = []
+
+# Application is running in performance test mode.
+perf = []
+
+# Enable metrics dependencies and code for metrics collection.
+metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
+
+# Enable RocksDB dependencies.
+rocks = ["rocksdb", "bincode"]
+
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------
@@ -125,13 +148,3 @@ clone_on_ref_ptr = "warn"
 disallowed_names = "warn"
 manual_let_else = "warn"
 semicolon_if_nothing_returned = "warn"
-
-# ------------------------------------------------------------------------------
-# Features
-# ------------------------------------------------------------------------------
-
-[features]
-default = ["rocks"]
-dev  = []  # Application is running in develoment mode.
-perf = []  # Application is running in performance test mode.
-rocks = ["rocksdb", "bincode"]

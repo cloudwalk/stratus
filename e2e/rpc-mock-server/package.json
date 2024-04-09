@@ -1,19 +1,18 @@
 {
-  "name": "rpc-mock-server",
-  "version": "1.0.0",
-  "description": "RPC Mock Server used in performance test.",
-  "main": "index.js",
-  "directories": {
-    "test": "tests"
-  },
-  "scripts": {
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "csv-parse": "^5.5.5",
-    "express": "^4.18.3",
-    "pg": "^8.11.3"
-  }
+    "name": "rpc-mock-server",
+    "version": "1.0.0",
+    "description": "RPC Mock Server used in performance test.",
+    "main": "index.js",
+    "directories": {
+        "test": "tests"
+    },
+    "scripts": {},
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "csv-parse": "^5.5.5",
+        "express": "^4.18.3",
+        "pg": "^8.11.3"
+    }
 }

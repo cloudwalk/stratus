@@ -16,10 +16,11 @@ where
     // parse configuration
     load_dotenv();
     let config = T::parse();
-    println!("Parsed configuration: {:?}", config);
+    println!("parsed configuration: {:?}", config);
 
     // init services
     infra::init_tracing();
+    #[cfg(feature = "metrics")]
     infra::init_metrics(config.common().metrics_histogram_kind);
 
     config

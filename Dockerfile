@@ -18,4 +18,5 @@ RUN cargo build --release
 FROM rust:1.75 as runtime
 WORKDIR /app
 COPY --from=builder /app/target/release/stratus /app/stratus
-CMD ["/app/stratus"]
+
+CMD ["sh", "-c", "/app/stratus"]
