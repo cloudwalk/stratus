@@ -1,14 +1,19 @@
+use std::cell::Cell;
 use std::collections::HashMap;
+use std::mem::ManuallyDrop;
 use std::time::Duration;
 
 // use anyhow::anyhow;
 use anyhow::Context;
 use async_trait::async_trait;
 use nonempty::nonempty;
+use sqlx::pool::PoolConnection;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::query_builder::QueryBuilder;
 use sqlx::types::BigDecimal;
+use sqlx::PgConnection;
 use sqlx::PgPool;
+use sqlx::Postgres;
 use sqlx::Row;
 
 use crate::eth::primitives::Account;
@@ -46,15 +51,21 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::log_and_err;
 
-pub struct PostgresPermanentStorage {
-    pub pool: PgPool,
-}
-
 #[derive(Debug)]
 pub struct PostgresPermanentStorageConfig {
     pub url: String,
     pub connections: u32,
     pub acquire_timeout: Duration,
+}
+
+pub struct PostgresPermanentStorage {
+    pub pool: PgPool,
+}
+
+impl Drop for PostgresPermanentStorage {
+    fn drop(&mut self) {
+        THREAD_CONN.take();
+    }
 }
 
 impl PostgresPermanentStorage {
@@ -74,7 +85,7 @@ impl PostgresPermanentStorage {
             Err(e) => return log_and_err!(reason = e, "failed to start postgres permanent storage"),
         };
 
-        let storage = Self { pool: pool.clone() };
+        let storage = Self { pool };
 
         Ok(storage)
     }
@@ -82,6 +93,11 @@ impl PostgresPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for PostgresPermanentStorage {
+    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        THREAD_CONN.set(Some(self.pool.acquire().await?));
+        Ok(())
+    }
+
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("incrementing block number");
 
@@ -104,11 +120,13 @@ impl PermanentStorage for PostgresPermanentStorage {
 
     async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
+
+        let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
         let account = match point_in_time {
             StoragePointInTime::Present => {
                 // We have to get the account information closest to the block with the given block_number
                 sqlx::query_file_as!(Account, "src/eth/storage/postgres_permanent/sql/select_account.sql", address.as_ref())
-                    .fetch_optional(&self.pool)
+                    .fetch_optional(conn.for_sqlx())
                     .await?
             }
             StoragePointInTime::Past(number) => {
@@ -120,7 +138,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                     address.as_ref(),
                     block_number as _,
                 )
-                .fetch_optional(&self.pool)
+                .fetch_optional(conn.for_sqlx())
                 .await?
             }
         };
@@ -143,6 +161,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         // TODO: improve this conversion
         let slot_index_u8: [u8; 32] = slot_index.clone().into();
 
+        let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
         let slot = match point_in_time {
             StoragePointInTime::Present =>
                 sqlx::query_file_as!(
@@ -151,7 +170,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                     address.as_ref(),
                     slot_index_u8.as_ref(),
                 )
-                .fetch_optional(&self.pool)
+                .fetch_optional(conn.for_sqlx())
                 .await?,
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
@@ -162,7 +181,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                     slot_index_u8.as_ref(),
                     block_number as _,
                 )
-                .fetch_optional(&self.pool)
+                .fetch_optional(conn.for_sqlx())
                 .await?
             }
         };
@@ -866,4 +885,51 @@ fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<
         }
     }
     partitions
+}
+
+// -----------------------------------------------------------------------------
+// TODO: move elsewhere if neeeded for other modules that uses PostgreSQL.
+// -----------------------------------------------------------------------------
+thread_local! {
+    pub static THREAD_CONN: Cell<Option<PoolConnection<Postgres>>> = const { Cell::new(None) };
+}
+
+/// A Postgres connection acquired from the pool of connections or the current thread-local storage.
+///
+/// When dropped, it will be automatically returned to the pool or to the thread-local storage according to its origin.
+struct PoolOrThreadConnection {
+    from_thread: bool,
+    conn: ManuallyDrop<PoolConnection<Postgres>>,
+}
+
+impl Drop for PoolOrThreadConnection {
+    fn drop(&mut self) {
+        let conn = unsafe { ManuallyDrop::take(&mut self.conn) };
+        if self.from_thread {
+            THREAD_CONN.set(Some(conn));
+        } else {
+            drop(conn);
+        }
+    }
+}
+
+impl PoolOrThreadConnection {
+    /// Takes ownership of a connection according to the current thread availability.
+    async fn take(pool: &PgPool) -> anyhow::Result<Self> {
+        match THREAD_CONN.take() {
+            Some(conn) => Ok(Self {
+                from_thread: true,
+                conn: ManuallyDrop::new(conn),
+            }),
+            None => Ok(Self {
+                from_thread: false,
+                conn: ManuallyDrop::new(pool.acquire().await?),
+            }),
+        }
+    }
+
+    /// Casts the current connection for SQLx usage.
+    fn for_sqlx(&mut self) -> &mut PgConnection {
+        self.conn.as_mut()
+    }
 }

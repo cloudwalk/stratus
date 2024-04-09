@@ -127,7 +127,7 @@ async fn test_import_offline_snapshot() {
                 println!("{:<64} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);
-                println!("{:<64} = {}", query, secs.fancy_duration().truncate(1));
+                println!("{:<64} = {}", query, secs.fancy_duration().truncate(2));
             }
         }
     }
