@@ -34,7 +34,7 @@ thiserror = "=1.0.56"
 url = "=2.5.0"
 
 # async
-tokio = { version = "=1.36.0", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "=1.36.0", features = ["rt-multi-thread", "macros", "signal"] }
 tokio-util = "=0.7.10"
 
 # config
