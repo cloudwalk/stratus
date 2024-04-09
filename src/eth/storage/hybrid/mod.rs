@@ -196,6 +196,10 @@ impl HybridPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for HybridPermanentStorage {
+    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
