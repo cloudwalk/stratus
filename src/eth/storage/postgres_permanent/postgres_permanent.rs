@@ -26,7 +26,6 @@ use crate::eth::primitives::ExecutionConflict;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Hash as TransactionHash;
-use crate::eth::primitives::Index as LogIndex;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -43,7 +42,6 @@ use crate::eth::storage::postgres_permanent::types::HistoricalNonceBatch;
 use crate::eth::storage::postgres_permanent::types::HistoricalSlotBatch;
 use crate::eth::storage::postgres_permanent::types::LogBatch;
 use crate::eth::storage::postgres_permanent::types::PostgresLog;
-use crate::eth::storage::postgres_permanent::types::PostgresTopic;
 use crate::eth::storage::postgres_permanent::types::PostgresTransaction;
 use crate::eth::storage::postgres_permanent::types::SlotBatch;
 use crate::eth::storage::postgres_permanent::types::TopicBatch;
@@ -236,36 +234,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
-                    block_number as _
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by latest"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -296,36 +282,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_hash.sql",
-                    hash.as_ref()
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by hash"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -358,36 +332,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
-                    block_number as _
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by number"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -419,36 +381,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
-                    block_number as _
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by earlist"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -483,19 +433,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         .fetch_all(&self.pool)
         .await?;
 
-        let topics = sqlx::query_file_as!(
-            PostgresTopic,
-            "src/eth/storage/postgres_permanent/sql/select_topics_by_transaction_hash.sql",
-            hash.as_ref()
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut topic_partitions = partition_topics(topics);
-
-        Ok(Some(
-            transaction.into_transaction_mined(logs, topic_partitions.remove(hash).unwrap_or_default()),
-        ))
+        Ok(Some(transaction.into_transaction_mined(logs)))
     }
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
@@ -523,20 +461,23 @@ impl PermanentStorage for PostgresPermanentStorage {
         for row in query_result {
             let block_hash: &[u8] = row.get("block_hash");
             let log_idx: BigDecimal = row.get("log_idx");
-            let topics = sqlx::query_file_as!(
-                PostgresTopic,
-                "src/eth/storage/postgres_permanent/sql/select_topics_by_block_hash_log_idx.sql",
+
+            let logs = sqlx::query_file_as!(
+                PostgresLog,
+                "src/eth/storage/postgres_permanent/sql/select_logs_by_block_hash_log_idx.sql",
                 block_hash,
                 log_idx as _
             )
             .fetch_all(&self.pool)
             .await?;
 
+            let topics = logs.iter().flat_map(PostgresLog::to_topics);
+
             let log = LogMined {
                 log: Log {
                     address: row.get("address"),
                     data: row.get("data"),
-                    topics: topics.into_iter().map(LogTopic::from).collect(),
+                    topics: topics.map(LogTopic::from).collect(),
                 },
                 transaction_hash: row.get("transaction_hash"),
                 transaction_index: row.get("transaction_idx"),
@@ -696,13 +637,6 @@ impl PermanentStorage for PostgresPermanentStorage {
             log_batch.log_index as _,
             log_batch.block_number as _,
             log_batch.block_hash as _,
-            topic_batch.topic as _,
-            topic_batch.transaction_hash as _,
-            topic_batch.transaction_index as _,
-            topic_batch.log_index as _,
-            topic_batch.index as _,
-            topic_batch.block_number as _,
-            topic_batch.block_hash as _,
             account_batch.address as _,
             account_batch.bytecode as _,
             account_batch.new_balance as _,
@@ -870,24 +804,6 @@ fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Transa
             part.push(log);
         } else {
             partitions.insert(log.transaction_hash.clone(), vec![log]);
-        }
-    }
-    partitions
-}
-
-fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> {
-    let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
-    for topic in topics {
-        match partitions.get_mut(&topic.transaction_hash) {
-            Some(transaction_logs) =>
-                if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
-                    part.push(topic);
-                } else {
-                    transaction_logs.insert(topic.log_idx, vec![topic]);
-                },
-            None => {
-                partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
-            }
         }
     }
     partitions

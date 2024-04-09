@@ -96,7 +96,6 @@ db-load-csv:
     echo "truncate blocks;"              >> data/psql.txt
     echo "truncate transactions;"        >> data/psql.txt
     echo "truncate logs;"                >> data/psql.txt
-    echo "truncate topics;"              >> data/psql.txt
 
     ls -tr1 data/accounts-*.csv            | xargs -I{} printf "\\\\copy accounts            from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
     ls -tr1 data/historical_nonces-*.csv   | xargs -I{} printf "\\\\copy historical_nonces   from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
@@ -105,7 +104,6 @@ db-load-csv:
     ls -tr1 data/blocks-*.csv              | xargs -I{} printf "\\\\copy blocks              from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
     ls -tr1 data/transactions-*.csv        | xargs -I{} printf "\\\\copy transactions        from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
     ls -tr1 data/logs-*.csv                | xargs -I{} printf "\\\\copy logs                from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/topics-*.csv              | xargs -I{} printf "\\\\copy topics              from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
 
     cat data/psql.txt | pgcli -h localhost -u postgres -d stratus --less-chatty
 

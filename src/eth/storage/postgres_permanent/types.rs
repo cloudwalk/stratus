@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::Context;
 
 use crate::eth::primitives::Address;
@@ -46,15 +44,11 @@ pub struct PostgresTransaction {
 }
 
 impl PostgresTransaction {
-    pub fn into_transaction_mined(self, logs: Vec<PostgresLog>, mut topics: HashMap<Index, Vec<PostgresTopic>>) -> TransactionMined {
-        let mined_logs: Vec<LogMined> = logs
-            .into_iter()
-            .map(|log| {
-                let log_idx = log.log_idx;
-                log.into_log_mined(topics.remove(&log_idx).unwrap_or_default())
-            })
-            .collect();
+    pub fn into_transaction_mined(self, logs: Vec<PostgresLog>) -> TransactionMined {
+        let mined_logs: Vec<LogMined> = logs.into_iter().map(PostgresLog::into_log_mined).collect();
+
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
+
         let execution = Execution {
             gas: self.gas.clone(),
             output: self.output,
@@ -100,15 +94,18 @@ pub struct PostgresLog {
     pub log_idx: Index,
     pub block_number: BlockNumber,
     pub block_hash: Hash,
+    pub topic0: Option<Hash>,
+    pub topic1: Option<Hash>,
+    pub topic2: Option<Hash>,
+    pub topic3: Option<Hash>,
 }
 
 impl PostgresLog {
-    pub fn into_log_mined(self, topics: Vec<PostgresTopic>) -> LogMined {
-        let topics: Vec<LogTopic> = topics.into_iter().map(LogTopic::from).collect();
+    pub fn into_log_mined(self) -> LogMined {
         let log = Log {
+            topics: self.to_topics(),
             data: self.data,
             address: self.address,
-            topics,
         };
 
         LogMined {
@@ -120,21 +117,19 @@ impl PostgresLog {
             log,
         }
     }
-}
 
-#[derive(Clone)]
-pub struct PostgresTopic {
-    pub topic: Hash,
-    pub transaction_hash: Hash,
-    pub transaction_idx: Index,
-    pub log_idx: Index,
-    pub block_number: BlockNumber,
-    pub block_hash: Hash,
-}
+    pub fn to_topics(&self) -> Vec<LogTopic> {
+        let mut filled_topics = vec![];
 
-impl From<PostgresTopic> for LogTopic {
-    fn from(value: PostgresTopic) -> Self {
-        LogTopic::new(value.topic.into())
+        for topic in [&self.topic0, &self.topic1, &self.topic2, &self.topic3] {
+            let Some(topic) = topic else {
+                continue;
+            };
+
+            filled_topics.push(LogTopic::new(topic.clone().into()));
+        }
+
+        filled_topics
     }
 }
 

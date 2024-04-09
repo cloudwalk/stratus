@@ -33,23 +33,23 @@ BEGIN
                 seq.relname as seq_name,
                 seq.oid AS seq_oid,
                 tbl.oid as table_oid
-            FROM pg_class seq 
-            JOIN pg_depend dep ON seq.relfilenode = dep.objid 
-            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode 
+            FROM pg_class seq
+            JOIN pg_depend dep ON seq.relfilenode = dep.objid
+            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode
             JOIN pg_namespace nsp ON nsp.oid = seq.relnamespace
             WHERE
                 nsp.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND seq.relkind = 'S'
                 AND tbl.relkind = 'r'
         )
-        SELECT 
+        SELECT
             u.username,
             b.schema_name,
             b.seq_name
         FROM users u
         JOIN base b ON has_table_privilege(u.role_id, b.table_oid, 'INSERT')
-        WHERE 
-            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE') 
+        WHERE
+            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE')
              OR NOT has_sequence_privilege(u.role_id, b.seq_oid, 'SELECT'))
     )
     LOOP
@@ -351,6 +351,10 @@ CREATE TABLE public.logs (
     log_idx numeric NOT NULL,
     block_number numeric NOT NULL,
     block_hash bytea NOT NULL,
+    topic0 bytea,
+    topic1 bytea,
+    topic2 bytea,
+    topic3 bytea,
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL
 );
@@ -389,50 +393,6 @@ ALTER SEQUENCE public.logs_id_seq OWNED BY public.logs.id;
 CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
-
-
---
--- Name: topics; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.topics (
-    id bigint NOT NULL,
-    topic bytea NOT NULL,
-    transaction_hash bytea NOT NULL,
-    transaction_idx numeric NOT NULL,
-    log_idx numeric NOT NULL,
-    topic_idx numeric NOT NULL,
-    block_number numeric NOT NULL,
-    block_hash bytea NOT NULL,
-    created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
-    updated_at timestamp(6) without time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: TABLE topics; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.topics IS 'Blockchain log topics';
-
-
---
--- Name: topics_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.topics_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: topics_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.topics_id_seq OWNED BY public.topics.id;
 
 
 --
@@ -539,13 +499,6 @@ ALTER TABLE ONLY public.logs ALTER COLUMN id SET DEFAULT nextval('public.logs_id
 
 
 --
--- Name: topics id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.topics ALTER COLUMN id SET DEFAULT nextval('public.topics_id_seq'::regclass);
-
-
---
 -- Name: transactions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -625,14 +578,6 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
--- Name: topics topics_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.topics
-    ADD CONSTRAINT topics_pkey PRIMARY KEY (id);
-
-
---
 -- Name: transactions transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -701,13 +646,6 @@ CREATE INDEX index_historical_slots_on_idx_and_address_and_block_number ON publi
 --
 
 CREATE INDEX index_logs_on_block_hash_and_log_idx ON public.logs USING btree (block_hash, log_idx);
-
-
---
--- Name: index_topics_on_block_hash_and_log_idx_and_topic_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_topics_on_block_hash_and_log_idx_and_topic_idx ON public.topics USING btree (block_hash, log_idx, topic_idx);
 
 
 --
@@ -842,4 +780,3 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20240229183514'),
 ('20240229183643'),
 ('20240311224030');
-

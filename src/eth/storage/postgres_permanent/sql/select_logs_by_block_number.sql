@@ -6,5 +6,9 @@ SELECT
     ,log_idx as "log_idx: _"
     ,block_number as "block_number: _"
     ,block_hash as "block_hash: _"
+    ,topic0 as "topic0: _"
+    ,topic1 as "topic1: _"
+    ,topic2 as "topic2: _"
+    ,topic3 as "topic3: _"
 FROM logs
 WHERE block_number = $1

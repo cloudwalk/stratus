@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n    address as \"address: _\"\n    ,data as \"data: _\"\n    ,transaction_hash as \"transaction_hash: _\"\n    ,transaction_idx as \"transaction_idx: _\"\n    ,log_idx as \"log_idx: _\"\n    ,block_number as \"block_number: _\"\n    ,block_hash as \"block_hash: _\"\n    ,topic0 as \"topic0: _\"\n    ,topic1 as \"topic1: _\"\n    ,topic2 as \"topic2: _\"\n    ,topic3 as \"topic3: _\"\nFROM logs\nWHERE transaction_hash = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "address: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "data: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "transaction_hash: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "transaction_idx: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "log_idx: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "block_number: _",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "block_hash: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 7,
+        "name": "topic0: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 8,
+        "name": "topic1: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 9,
+        "name": "topic2: _",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 10,
+        "name": "topic3: _",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "eea3b97c5ecd6837d0061480aa4c79d52612bb629b655b950f7fff1fb78e6fce"
+}
