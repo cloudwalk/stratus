@@ -103,7 +103,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
             tracing::info!("shutting down");
             cancellation.cancel();
             importer_task.await??;
-        },
+        }
         Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
     }
 
