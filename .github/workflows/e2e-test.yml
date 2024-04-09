@@ -44,5 +44,5 @@ jobs:
       test_command: 'PERM_STORAGE=rocks just e2e-stratus-rocks'
 
     concurrency:
-      group: ${{ github.workflow }}-hybrid-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
