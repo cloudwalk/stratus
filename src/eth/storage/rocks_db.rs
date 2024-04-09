@@ -24,23 +24,53 @@ pub struct RocksDb<K, V> {
 impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
     pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Self> {
         let mut opts = Options::default();
+        let mut block_based_options = BlockBasedOptions::default();
 
         opts.create_if_missing(true);
         opts.increase_parallelism(16);
 
         match config {
             DbConfig::LargeSSTFiles => {
-                // Adjusting for large SST files
-                opts.set_target_file_size_base(256 * 1024 * 1024); // 128MB
-                opts.set_max_write_buffer_number(4);
-                opts.set_write_buffer_size(64 * 1024 * 1024); // 64MB
-                opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // 512MB
-                opts.set_max_open_files(1000);
+                // Set the compaction style to Level Compaction
+                opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+
+                // Configure the size of SST files at each level
+                opts.set_target_file_size_base(64 * 1024 * 1024); // Starting at 64MB for L1
+
+                // Increase the file size multiplier to expand file size at upper levels
+                opts.set_target_file_size_multiplier(2); // Each level grows in file size quicker
+
+                // Reduce the number of L0 files that trigger compaction, increasing frequency
+                opts.set_level_zero_file_num_compaction_trigger(2);
+
+                // Reduce thresholds for slowing and stopping writes, which forces more frequent compaction
+                opts.set_level_zero_slowdown_writes_trigger(10);
+                opts.set_level_zero_stop_writes_trigger(20);
+
+                // Increase the max bytes for L1 to allow more data before triggering compaction
+                opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // Setting it to 512MB
+
+                // Increase the level multiplier to aggressively increase space at each level
+                opts.set_max_bytes_for_level_multiplier(8.0); // Exponential growth of levels is more pronounced
+
+                // Configure block size to optimize for larger blocks, improving sequential read performance
+                block_based_options.set_block_size(128 * 1024); // 128KB blocks
+
+                // Increase the number of write buffers to delay flushing, optimizing CPU usage for compaction
+                opts.set_max_write_buffer_number(5);
+                opts.set_write_buffer_size(128 * 1024 * 1024); // 128MB per write buffer
+
+                // Keep a higher number of open files to accommodate more files being produced by aggressive compaction
+                opts.set_max_open_files(2000);
+
+                // Apply more aggressive compression settings, if I/O and CPU permit
+                opts.set_compression_per_level(&[
+                    rocksdb::DBCompressionType::None, // No compression for L0
+                    rocksdb::DBCompressionType::Zstd, // Use Zstd for higher compression from L1 onwards
+                ]);
             }
             DbConfig::Default => {
-                let mut block_based_options = BlockBasedOptions::default();
                 block_based_options.set_ribbon_filter(15.5); // https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter
-                opts.set_block_based_table_factory(&block_based_options);
 
                 opts.set_allow_concurrent_memtable_write(true);
                 opts.set_enable_write_thread_adaptive_yield(true);
@@ -48,6 +78,18 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 let transform = rocksdb::SliceTransform::create_fixed_prefix(10);
                 opts.set_prefix_extractor(transform);
                 opts.set_memtable_prefix_bloom_ratio(0.2);
+
+                // Enable a size-tiered compaction style, which is good for workloads with a high rate of updates and overwrites
+                opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
+
+                let mut universal_compact_options = rocksdb::UniversalCompactOptions::default();
+                universal_compact_options.set_size_ratio(10);
+                universal_compact_options.set_min_merge_width(2);
+                universal_compact_options.set_max_merge_width(6);
+                universal_compact_options.set_max_size_amplification_percent(50);
+                universal_compact_options.set_compression_size_percent(-1);
+                universal_compact_options.set_stop_style(rocksdb::UniversalCompactionStopStyle::Total);
+                opts.set_universal_compaction_options(&universal_compact_options);
 
                 let pt_opts = rocksdb::PlainTableFactoryOptions {
                     user_key_length: 0,
@@ -62,6 +104,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_plain_table_factory(&pt_opts);
             }
         }
+        opts.set_block_based_table_factory(&block_based_options);
 
         let db = DB::open(&opts, db_path)?;
 
