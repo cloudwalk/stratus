@@ -16,7 +16,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
-  
+
   e2e-stratus-postgres:
     name: E2E Stratus Postgres
     uses: ./.github/workflows/_setup-e2e.yml
@@ -32,7 +32,17 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       test_command: 'PERM_STORAGE=hybrid://postgres:123@0.0.0.0:5432/stratus just e2e-stratus-postgres'
-    
+
     concurrency:
       group: ${{ github.workflow }}-hybrid-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-stratus-rocks:
+    name: E2E Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      test_command: 'PERM_STORAGE=rocks just e2e-stratus-rocks'
+
+    concurrency:
+      group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
