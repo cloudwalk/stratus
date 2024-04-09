@@ -79,7 +79,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     }
 
     // execute parallel tasks (external rpc storage loader and block importer)
-    tokio::spawn(execute_external_rpc_storage_loader(
+    let _loader_task = tokio::spawn(execute_external_rpc_storage_loader(
         rpc_storage,
         cancellation.clone(),
         config.paralellism,
@@ -98,17 +98,23 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         block_snapshots,
     ));
 
-    match tokio::signal::ctrl_c().await {
-        Ok(()) => {
-            tracing::info!("shutting down");
-            cancellation.cancel();
-            importer_task.await??;
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                tracing::info!("shutting down");
+                cancellation.cancel();
+            }
+
+            Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
         }
-        Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
-    }
+    });
+
+    importer_task.await??;
 
     Ok(())
 }
+
+
 
 // -----------------------------------------------------------------------------
 // Block importer
