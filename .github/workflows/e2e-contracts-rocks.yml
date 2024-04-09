@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  contract_test_hybrid:
+  contract_test_rocks:
     strategy:
       fail-fast: false
       matrix:
