@@ -1,0 +1,67 @@
+name: Contracts E2E Rocks tests
+
+on:
+  pull_request:
+    branches:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  contract_test_hybrid:
+    strategy:
+      fail-fast: false
+      matrix:
+        contract: [token, pix, periphery, compound, yield, multisig]
+    name: E2E Rocks on ${{ matrix.contract }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.contract }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Cache Cargo Registry and Target Directory
+        uses: actions/cache@v4.0.2
+        id: cache-cargo
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-stable-release-
+            ${{ runner.os }}-cargo-${{ github.workflow }}-
+
+      - name: Set up Rust
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - name: Set up Just
+        uses: extractions/setup-just@v1
+
+      - name: Set up ASDF Version Manager
+        uses: asdf-vm/actions/setup@v3
+
+      - name: Install Node.js
+        run: |
+          asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
+          asdf install nodejs 20.10.0
+          asdf global nodejs 20.10.0
+
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+
+      - name: Clone ${{ matrix.contract }} repository
+        run: just contracts-clone --${{ matrix.contract }}
+
+      - name: Run e2e tests
+        run: CARGO_PROFILE_RELEASE_DEBUG=0 PERM_STORAGE=rocks just contracts-test-stratus --${{ matrix.contract }}
