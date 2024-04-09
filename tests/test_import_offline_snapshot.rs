@@ -25,40 +25,50 @@ mod m {
 }
 
 #[cfg(feature = "metrics")]
-const METRIC_QUERIES: [&str; 30] = [
+const METRIC_QUERIES: [&str; 43] = [
     // EVM
-    "",
+    "* EVM",
     m::formatcp!("{}_count", m::METRIC_EVM_EXECUTION),
     m::formatcp!("{}_sum", m::METRIC_EVM_EXECUTION),
     m::formatcp!("{}{{quantile='1'}}", m::METRIC_EVM_EXECUTION),
-    // STORAGE ACCOUNTS
-    "",
+    m::formatcp!("{}{{quantile='0.95'}}", m::METRIC_EVM_EXECUTION),
+    "* ACCOUNTS (count)",
     m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    "* ACCOUNTS (cumulative)",
     m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    "* ACCOUNTS (P100)",
     m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    // STORAGE SLOTS
-    "",
+    "* ACCOUNTS (P95)",
+    m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    "* STORAGE SLOTS (count)",
     m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
+    "* STORAGE SLOTS (cumulative)",
     m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
+    "* STORAGE SLOTS (P100)",
     m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
-    // STORAGE COMMIT
-    "",
+    "* STORAGE SLOTS (P95)",
+    m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
+    "* COMMIT",
     m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_COMMIT),
 ];
 
@@ -106,8 +116,8 @@ async fn test_import_offline_snapshot() {
 
     for query in METRIC_QUERIES {
         // formatting between query groups
-        if query.is_empty() {
-            println!("\n--------------------");
+        if query.starts_with('*') {
+            println!("\n{}\n--------------------", query.replace("* ", ""));
             continue;
         }
 
@@ -124,10 +134,10 @@ async fn test_import_offline_snapshot() {
             let value: f64 = value.parse().unwrap();
 
             if query.contains("_count") {
-                println!("{:<64} = {}", query, value);
+                println!("{:<70} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);
-                println!("{:<64} = {}", query, secs.fancy_duration().truncate(2));
+                println!("{:<70} = {}", query, secs.fancy_duration().truncate(2));
             }
         }
     }

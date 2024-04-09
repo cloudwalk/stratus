@@ -34,6 +34,7 @@ use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::postgres_permanent::types::AccountBatch;
@@ -164,10 +165,9 @@ impl PermanentStorage for PostgresPermanentStorage {
         let slot_index_u8: [u8; 32] = slot_index.clone().into();
 
         let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
-        let slot = match point_in_time {
+        let slot_value_vec: Option<Vec<u8>> = match point_in_time {
             StoragePointInTime::Present =>
-                sqlx::query_file_as!(
-                    Slot,
+                sqlx::query_file_scalar!(
                     "src/eth/storage/postgres_permanent/sql/select_slot.sql",
                     address.as_ref(),
                     slot_index_u8.as_ref(),
@@ -176,8 +176,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 .await?,
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
-                sqlx::query_file_as!(
-                    Slot,
+                sqlx::query_file_scalar!(
                     "src/eth/storage/postgres_permanent/sql/select_slot_at_block.sql",
                     address.as_ref(),
                     slot_index_u8.as_ref(),
@@ -190,8 +189,13 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         // If there is no slot, we return
         // an "empty slot"
-        match slot {
-            Some(slot) => {
+        match slot_value_vec {
+            Some(slot_value_vec) => {
+                let slot_value = SlotValue::from(slot_value_vec);
+                let slot = Slot {
+                    index: slot_index.clone(),
+                    value: slot_value,
+                };
                 tracing::trace!(?address, ?slot_index, %slot, "slot found");
                 Ok(Some(slot))
             }
