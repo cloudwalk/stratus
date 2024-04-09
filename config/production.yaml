@@ -28,7 +28,7 @@ kubernetes:
         enabled: true
         provider: gcpsm
       imageRepoName: stratus
-      kind: deployment
+      kind: statefulset
       strategy:
         type: RollingUpdate
         rollingUpdate:
@@ -61,6 +61,14 @@ kubernetes:
           path: /health
           port: 3000
           timeoutSeconds: 5
+      volumeClaims:
+      - name: rocksdata
+        storageClass: premium-rwo
+        size: 1500Gi
+      volumeMounts:
+      - volumeName: rocksdata
+        mountPath: /app/data
+        storageClass: premium-rwo
     # --------------------------------------------------------------------------
     # EVM api postgres storage
     # --------------------------------------------------------------------------
