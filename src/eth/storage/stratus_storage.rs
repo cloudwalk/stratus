@@ -35,8 +35,14 @@ pub struct StratusStorage {
 }
 
 impl StratusStorage {
+    /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
+    }
+
+    pub async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        self.perm.allocate_evm_thread_resources().await?;
+        Ok(())
     }
 
     // -------------------------------------------------------------------------

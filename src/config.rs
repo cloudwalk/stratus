@@ -49,7 +49,7 @@ pub fn load_dotenv() {
     let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
     let env_filename = format!("config/{}.env.{}", bin_name(), env);
 
-    println!("Reading ENV file: {}", env_filename);
+    println!("reading env file: {}", env_filename);
     let _ = dotenvy::from_filename(env_filename);
 }
 
@@ -198,9 +198,18 @@ impl ExecutorConfig {
             let evm_rx = evm_rx.clone();
 
             // spawn thread that will run evm
+            // todo: needs a way to signal error like a cancellation token in case it fails to initialize
             let t = thread::Builder::new().name("evm".into());
             t.spawn(move || {
+                // init tokio
                 let _tokio_guard = evm_tokio.enter();
+
+                // init storage
+                if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
+                    tracing::error!(reason = ?e, "failed to allocate evm storage resources");
+                }
+
+                // init evm
                 let mut evm = Revm::new(evm_storage, evm_chain_id);
 
                 // keep executing transactions until the channel is closed

@@ -113,6 +113,10 @@ impl RocksPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for RocksPermanentStorage {
+    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -430,9 +434,12 @@ impl RocksStorageState {
         }
 
         // Insert the most recent account information from latest_accounts into the current state
+        let mut accounts_temp_vec = vec![];
         for (address, (_, account_info)) in latest_accounts {
-            self.accounts.insert(address, account_info);
+            accounts_temp_vec.push((address, account_info));
         }
+
+        self.accounts.insert_batch(accounts_temp_vec, Some(block_number.as_i64()));
 
         // Populate latest_slots with the most recent slot info up to block_number
         let slot_histories = self.account_slots_history.iter_start();
@@ -448,9 +455,12 @@ impl RocksStorageState {
         }
 
         // Insert the most recent slot information from latest_slots into the current state
+        let mut slots_temp_vec = vec![];
         for ((address, slot_index), (_, slot_value)) in latest_slots {
-            self.account_slots.insert((address, slot_index), slot_value);
+            slots_temp_vec.push(((address, slot_index), slot_value));
         }
+
+        self.account_slots.insert_batch(slots_temp_vec, Some(block_number.as_i64()));
 
         Ok(())
     }
