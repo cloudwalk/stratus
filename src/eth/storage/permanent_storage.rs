@@ -18,7 +18,7 @@ use crate::eth::storage::StorageError;
 /// Permanent (committed) storage operations
 #[async_trait]
 pub trait PermanentStorage: Send + Sync {
-    /// Hook that allows the storage to allocate dedicated resources for EVM execution.
+    /// Allows the storage to allocate dedicated resources for EVM execution.
     async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()>;
 
     /// Sets the last mined block number to a specific value.
