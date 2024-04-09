@@ -15,6 +15,7 @@ use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use stratus::log_and_err;
 
+/// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
 
 #[allow(dead_code)]
