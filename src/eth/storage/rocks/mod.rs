@@ -113,6 +113,10 @@ impl RocksPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for RocksPermanentStorage {
+    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
