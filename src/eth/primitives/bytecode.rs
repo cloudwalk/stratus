@@ -5,49 +5,16 @@ use std::collections::HashSet;
 
 use evm_disassembler::disassemble_bytes;
 use evm_disassembler::Opcode;
-use evm_disassembler::Opcode::MSTORE;
-use evm_disassembler::Opcode::PUSH0;
-use evm_disassembler::Opcode::PUSH1;
-use evm_disassembler::Opcode::PUSH10;
-use evm_disassembler::Opcode::PUSH11;
-use evm_disassembler::Opcode::PUSH12;
-use evm_disassembler::Opcode::PUSH13;
-use evm_disassembler::Opcode::PUSH14;
-use evm_disassembler::Opcode::PUSH15;
-use evm_disassembler::Opcode::PUSH16;
-use evm_disassembler::Opcode::PUSH17;
-use evm_disassembler::Opcode::PUSH18;
-use evm_disassembler::Opcode::PUSH19;
-use evm_disassembler::Opcode::PUSH2;
-use evm_disassembler::Opcode::PUSH20;
-use evm_disassembler::Opcode::PUSH21;
-use evm_disassembler::Opcode::PUSH22;
-use evm_disassembler::Opcode::PUSH23;
-use evm_disassembler::Opcode::PUSH24;
-use evm_disassembler::Opcode::PUSH25;
-use evm_disassembler::Opcode::PUSH26;
-use evm_disassembler::Opcode::PUSH27;
-use evm_disassembler::Opcode::PUSH28;
-use evm_disassembler::Opcode::PUSH29;
-use evm_disassembler::Opcode::PUSH3;
-use evm_disassembler::Opcode::PUSH30;
-use evm_disassembler::Opcode::PUSH31;
-use evm_disassembler::Opcode::PUSH32;
-use evm_disassembler::Opcode::PUSH4;
-use evm_disassembler::Opcode::PUSH5;
-use evm_disassembler::Opcode::PUSH6;
-use evm_disassembler::Opcode::PUSH7;
-use evm_disassembler::Opcode::PUSH8;
-use evm_disassembler::Opcode::PUSH9;
-use evm_disassembler::Opcode::SHA3;
-use evm_disassembler::Opcode::SLOAD;
+use evm_disassembler::Opcode::*;
 use evm_disassembler::Operation;
-use itertools::Itertools;
 
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::SlotAccess;
 use crate::eth::primitives::SlotIndex;
 
+/// Parse all accessed storage slots from bytecode.
+///
+/// TODO: Decide about return type, if we should use a tuple or some other struct.
 pub fn parse_bytecode_slots(bytecode: Bytes) -> HashSet<(SlotIndex, SlotAccess)> {
     // parse opcodes
     let opcodes = match disassemble_bytes(bytecode.0) {
@@ -60,32 +27,34 @@ pub fn parse_bytecode_slots(bytecode: Bytes) -> HashSet<(SlotIndex, SlotAccess)>
 
     // detect slots
     let mut slots = HashSet::with_capacity(16);
-    for w in opcodes.windows(7) {
-        let (op1, op2, op3, op4, _, op6, op7) = (&w[0], &w[1], &w[2], &w[3], &w[4], &w[5], &w[6]);
+    for w in opcodes.windows(4) {
+        let (op1, op2, op3, op4) = (&w[0], &w[1], &w[2], &w[3]);
 
-        // direct SLOAD
-        // PUSH (index) -> SLOAD
+        // Direct: PUSH (index) -> SLOAD
         if is_push(op1) && op2.opcode == SLOAD {
-            slots.insert((SlotIndex::from(op1.input.clone()), SlotAccess::Direct));
+            slots.insert((op1.input.clone().into(), SlotAccess::Direct));
             continue;
         }
 
-        // mapping SLOAD
-        // PUSH (index) -> MSTORE -> PUSH1 0x20 -> PUSH1 0x40 -> ? -> SHA3 -> SLOAD
-        if is_push(op1)
-            && (is_push(op2) && op2.input[0] == 32)
-            && op3.opcode == MSTORE
-            && (is_push(op4) && op4.input[0] == 64)
-            && op6.opcode == SHA3
-            && op7.opcode == SLOAD
-        {
-            slots.insert((SlotIndex::from(op1.input.clone()), SlotAccess::Mapping));
+        // Direct: PUSH1 -> DUP1 -> SLOAD
+        if op1.opcode == PUSH1 && op2.opcode == DUP1 && op3.opcode == SLOAD {
+            slots.insert((op1.input.clone().into(), SlotAccess::Direct));
             continue;
         }
-    }
 
-    for slot in slots.iter().sorted() {
-        println!("{:<10} = {:?}", format!("{:?}", slot.1), slot.0);
+        // Direct: PUSH1 -> PUSH1 -> SWAP1 -> SLOAD
+        if op1.opcode == PUSH1 && op2.opcode == PUSH1 && op3.opcode == SWAP1 && op4.opcode == SLOAD {
+            slots.insert((op1.input.clone().into(), SlotAccess::Direct));
+            continue;
+        }
+
+        // Mapping: PUSH (index) -> PUSH1 0x20 -> MSTORE -> PUSH1 0x40
+        if is_push(op1) && (is_push(op2) && op2.input[0] == 0x20) && op3.opcode == MSTORE && (is_push(op4) && op4.input[0] == 0x40) {
+            slots.insert((op1.input.clone().into(), SlotAccess::Mapping));
+            continue;
+        }
+
+        // TODO: Array?
     }
 
     slots
@@ -107,13 +76,38 @@ fn is_push(operation: &Operation) -> bool {
 // -----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use crate::eth::primitives::Bytes;
+    use std::collections::HashSet;
 
-    const BYTECODE: &str = include_str!("../../../tests/fixtures/bytecode_brlc_token.bin");
+    use itertools::Itertools;
+
+    use crate::eth::primitives::Bytes;
+    use crate::eth::primitives::SlotAccess;
+    use crate::eth::primitives::SlotIndex;
+
+    const BYTECODE_BRLC_TOKEN: &str = include_str!("../../../tests/fixtures/bytecodes/BRLCToken.bin");
+    const BYTECODE_CPP_V1: &str = include_str!("../../../tests/fixtures/bytecodes/CardPaymentProcessor.bin");
+    const BYTECODE_PIX: &str = include_str!("../../../tests/fixtures/bytecodes/PixCashier.bin");
 
     #[test]
+    // TODO: add assertions based on storage layout file generated from source code.
     fn test_parse_bytecode_slots() {
-        let bytecode = Bytes(const_hex::decode(BYTECODE).unwrap());
-        super::parse_bytecode_slots(bytecode);
+        // brlc token
+        let brlc_token = Bytes(const_hex::decode(BYTECODE_BRLC_TOKEN).unwrap());
+        print_slots("BRLC", super::parse_bytecode_slots(brlc_token));
+
+        // // cpp
+        let cpp_v1 = Bytes(const_hex::decode(BYTECODE_CPP_V1).unwrap());
+        print_slots("CPP", super::parse_bytecode_slots(cpp_v1));
+
+        // pix
+        let pix = Bytes(const_hex::decode(BYTECODE_PIX).unwrap());
+        print_slots("Pix", super::parse_bytecode_slots(pix));
+    }
+
+    fn print_slots(name: &'static str, slots: HashSet<(SlotIndex, SlotAccess)>) {
+        println!("\n{}\n--------------------", name);
+        for slot in slots.iter().sorted() {
+            println!("{:<7} = {:?}", format!("{:?}", slot.1), slot.0);
+        }
     }
 }
