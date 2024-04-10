@@ -33,6 +33,7 @@ use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
 use crate::eth::storage::RocksPermanentStorage;
+use crate::eth::storage::RocksTemporary;
 use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
@@ -546,6 +547,7 @@ pub struct TemporaryStorageConfig {
 pub enum TemporaryStorageKind {
     InMemory,
     Sled,
+    Rocks
 }
 
 impl TemporaryStorageConfig {
@@ -554,6 +556,7 @@ impl TemporaryStorageConfig {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
             TemporaryStorageKind::Sled => Ok(Arc::new(SledTemporary::new()?)),
+            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new()?))
         }
     }
 }
@@ -565,6 +568,7 @@ impl FromStr for TemporaryStorageKind {
         match s {
             "inmemory" => Ok(Self::InMemory),
             "sled" => Ok(Self::Sled),
+            "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
     }
