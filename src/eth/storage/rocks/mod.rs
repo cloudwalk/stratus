@@ -360,10 +360,17 @@ impl RocksStorageState {
     pub fn sync_data(&self) -> anyhow::Result<()> {
         let account_block_number = self.accounts.get_current_block_number();
         let slots_block_number = self.account_slots.get_current_block_number();
-        if account_block_number != slots_block_number {
-            warn!("block numbers are not in sync");
-            let min_block_number = std::cmp::min(account_block_number, slots_block_number);
-            self.reset_at(BlockNumber::from(min_block_number))?;
+        if let Some((last_block_number, _)) = self.blocks_by_number.last() {
+            if account_block_number != slots_block_number {
+                warn!("block numbers are not in sync {:?} {:?}", account_block_number, slots_block_number);
+                let min_block_number = std::cmp::min(account_block_number, slots_block_number);
+                let last_secure_block_number = last_block_number.as_i64() - 1000;
+                if last_secure_block_number > min_block_number {
+                    panic!("block numbers is too far away from the last secure block number, please resync the data from the last secure block number");
+                }
+                self.reset_at(BlockNumber::from(min_block_number))?;
+
+            }
         }
 
         Ok(())
