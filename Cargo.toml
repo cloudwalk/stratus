@@ -54,9 +54,10 @@ futures = "=0.3.30"
 ethabi = "=18.0.0"
 ethereum-types = "=0.14.1"
 ethers-core = "=2.0.13"
+evm-disassembler = "=0.5.0"
 keccak-hasher = "=0.15.3" # this version must be compatible with triehash
-rlp = "=0.5.2"
 revm = "=7.1.0"
+rlp = "=0.5.2"
 triehash = "=0.8.4"
 
 # network

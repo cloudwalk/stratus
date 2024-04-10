@@ -55,10 +55,12 @@ impl Display for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, Eq, PartialEq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
 impl SlotIndex {
+    pub const ZERO: SlotIndex = SlotIndex(U256::zero());
+
     /// Converts itself to [`U256`].
     pub fn as_u256(&self) -> U256 {
         self.0
