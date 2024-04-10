@@ -152,7 +152,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InMemoryTemporaryAccount {
     pub info: Account,
     pub slots: HashMap<SlotIndex, Slot>,

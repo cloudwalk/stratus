@@ -145,7 +145,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.put(serialized_key, serialized_value).unwrap();
     }
 
-    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<i64>) {
+    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<u64>) {
         let mut batch = WriteBatch::default();
 
         for (key, value) in changes {

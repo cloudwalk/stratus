@@ -1,3 +1,4 @@
+use std::env;
 use std::fmt::Debug;
 
 use crate::config::load_dotenv;
@@ -17,6 +18,10 @@ where
     load_dotenv();
     let config = T::parse();
     println!("parsed configuration: {:?}", config);
+
+    if env::var_os("PERM_STORAGE_CONNECTIONS").is_some_and(|value| value == "1") {
+        println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
+    }
 
     // init services
     infra::init_tracing();
