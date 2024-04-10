@@ -206,6 +206,17 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let iter = self.db.iterator(IteratorMode::From(&serialized_key, direction));
         RocksDBIterator::<K, V>::new(iter)
     }
+
+    pub fn last(&self) -> Option<(K, V)> {
+        let mut iter = self.db.iterator(IteratorMode::End);
+        if let Some(Ok((k, v))) = iter.next() {
+            let key = bincode::deserialize(&k).unwrap();
+            let value = bincode::deserialize(&v).unwrap();
+            Some((key, value))
+        } else {
+            None
+        }
+    }
 }
 
 pub struct RocksDBIterator<'a, K, V> {
