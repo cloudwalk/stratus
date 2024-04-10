@@ -95,7 +95,6 @@ impl RocksStorageState {
                     panic!("block numbers is too far away from the last secure block number, please resync the data from the last secure block number");
                 }
                 self.reset_at(BlockNumber::from(min_block_number))?;
-
             }
         }
 
