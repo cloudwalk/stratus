@@ -21,7 +21,7 @@ use crate::gen_newtype_from;
 
 #[derive(Clone, Default, Eq, PartialEq, fake::Dummy, sqlx::Type)]
 #[sqlx(transparent)]
-pub struct Bytes(Vec<u8>);
+pub struct Bytes(pub Vec<u8>);
 
 impl Display for Bytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
