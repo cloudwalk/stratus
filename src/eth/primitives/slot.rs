@@ -55,7 +55,7 @@ impl Display for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, Default, Eq, PartialEq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
 impl SlotIndex {
@@ -293,10 +293,28 @@ impl PgHasArrayType for SlotValue {
     }
 }
 
+// -----------------------------------------------------------------------------
+// SlotSample
+// -----------------------------------------------------------------------------
+
 #[derive(Debug, sqlx::Decode)]
 pub struct SlotSample {
     pub address: Address,
     pub block_number: BlockNumber,
     pub index: SlotIndex,
     pub value: SlotValue,
+}
+
+// -----------------------------------------------------------------------------
+// SlotAccess
+// -----------------------------------------------------------------------------
+
+/// How a slot is accessed.
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SlotAccess {
+    /// Slot index is accessed directly.
+    Direct,
+
+    /// Slot index is hashed according to mapping hash algorithm.
+    Mapping,
 }

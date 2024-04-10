@@ -162,6 +162,7 @@ pub use miner_nonce::MinerNonce;
 pub use nonce::Nonce;
 pub use size::Size;
 pub use slot::Slot;
+pub use slot::SlotAccess;
 pub use slot::SlotIndex;
 pub use slot::SlotSample;
 pub use slot::SlotValue;
