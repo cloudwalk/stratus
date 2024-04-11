@@ -871,27 +871,14 @@ impl PermanentStorage for PostgresPermanentStorage {
     ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         let slots = match point_in_time {
             StoragePointInTime::Present => {
-                sqlx::query_as!(
-                    Slot,
-                    r#"
-                        SELECT idx as "index: _", value as "value: _"
-                        FROM account_slots
-                        WHERE idx = ANY($1) AND account_address = $2
-                    "#,
-                    slot_indexes as _,
-                    address as _
-                )
-                .fetch_all(&self.pool)
-                .await?
+                sqlx::query_file_as!(Slot, "src/eth/storage/postgres_permanent/sql/select_slots.sql", slot_indexes as _, address as _)
+                    .fetch_all(&self.pool)
+                    .await?
             }
             StoragePointInTime::Past(block_number) => {
-                sqlx::query_as!(
+                sqlx::query_file_as!(
                     Slot,
-                    r#"
-                        SELECT idx as "index: _", value as "value: _"
-                        FROM historical_slots
-                        WHERE idx = ANY($1) AND account_address = $2 AND block_number = $3
-                    "#,
+                    "src/eth/storage/postgres_permanent/sql/select_historical_slots.sql",
                     slot_indexes as _,
                     address as _,
                     block_number as _

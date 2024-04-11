@@ -66,5 +66,10 @@ pub trait PermanentStorage: Send + Sync {
     async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
 
     /// Retrieves several slots at once
-    async fn read_slots(&self, address: &Address, slot_indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>>;
+    async fn read_slots(
+        &self,
+        address: &Address,
+        slot_indexes: &[SlotIndex],
+        point_in_time: &StoragePointInTime,
+    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>>;
 }

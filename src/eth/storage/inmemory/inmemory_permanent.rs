@@ -436,7 +436,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_slots(&self, _address: &Address, _slot_indexes: &[SlotIndex], _point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+    async fn read_slots(
+        &self,
+        _address: &Address,
+        _slot_indexes: &[SlotIndex],
+        _point_in_time: &StoragePointInTime,
+    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         todo!()
     }
 }
