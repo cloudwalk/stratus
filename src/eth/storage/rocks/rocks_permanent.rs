@@ -8,7 +8,6 @@ use std::time::Instant;
 use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
-use once_cell::sync::Lazy;
 
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
@@ -35,7 +34,6 @@ use crate::eth::storage::StorageError;
 const TRANSACTION_LOOP_THRESHOLD: usize = 210_000;
 
 static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
-static START_TIME: Lazy<Mutex<Instant>> = Lazy::new(|| Mutex::new(Instant::now()));
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -203,8 +201,6 @@ impl PermanentStorage for RocksPermanentStorage {
             x.send(()).await.unwrap();
 
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
-            let mut start_time = START_TIME.lock().unwrap();
-            *start_time = Instant::now();
         }
 
         join_all(futures).await;

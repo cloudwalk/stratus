@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use futures::future::join_all;
 use itertools::Itertools;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
@@ -269,12 +270,18 @@ impl RocksStorageState {
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode;
                 }
+
                 account_changes.push((address.clone(), account_info_entry.clone()));
                 account_history_changes.push(((address.clone(), block_number), account_info_entry));
             }
 
-            accounts.insert_batch(account_changes, Some(block_number.into()));
-            accounts_history.insert_batch(account_history_changes, None);
+            let accounts_inner_future = tokio::task::spawn_blocking(move || {
+                accounts.insert_batch(account_changes, Some(block_number.into()));
+            });
+            let accounts_history_inner_future = tokio::task::spawn_blocking(move || {
+                accounts_history.insert_batch(account_history_changes, None);
+            });
+            let _ = join_all(vec![accounts_inner_future, accounts_history_inner_future]);
         });
 
         let mut slot_changes = Vec::new();
@@ -290,8 +297,13 @@ impl RocksStorageState {
                     }
                 }
             }
-            account_slots.insert_batch(slot_changes, Some(block_number.into()));
-            account_slots_history.insert_batch(slot_history_changes, None);
+            let account_slots_inner_future = tokio::task::spawn_blocking(move || {
+                account_slots.insert_batch(slot_changes, Some(block_number.into()));
+            });
+            let account_slots_history_inner_future = tokio::task::spawn_blocking(move || {
+                account_slots_history.insert_batch(slot_history_changes, None);
+            });
+            let _ = join_all(vec![account_slots_inner_future, account_slots_history_inner_future]);
         });
 
         Ok(vec![account_changes_future, slot_changes_future])
