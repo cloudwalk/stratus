@@ -196,28 +196,18 @@ impl PermanentStorage for RocksPermanentStorage {
                 .context("failed to update state with execution changes")?,
         );
 
-        // TPS Calculation and Printing
-        futures.push(tokio::task::spawn_blocking(move || {
-            let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
-            let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
-            let elapsed_time = START_TIME.lock().unwrap().elapsed().as_secs_f64();
-            let multiple_to_print = TRANSACTION_LOOP_THRESHOLD / 8;
+        let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
+        let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
 
-            // for every multiple of transactions, print the TPS
-            if previous_count % multiple_to_print > current_count % multiple_to_print {
-                let total_transactions = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
-                let tps = total_transactions as f64 / elapsed_time;
-                //TODO replace this with metrics or do a cfg feature to enable/disable
-                println!("Transactions per second: {:.2} @ block {}", tps, block.number());
-            }
+        // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, reset the counter
+        if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
+            let x = Arc::clone(&self.state.backup_trigger);
+            x.send(()).await.unwrap();
 
-            // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, reset the counter
-            if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
-                TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
-                let mut start_time = START_TIME.lock().unwrap();
-                *start_time = Instant::now();
-            }
-        }));
+            TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
+            let mut start_time = START_TIME.lock().unwrap();
+            *start_time = Instant::now();
+        }
 
         join_all(futures).await;
         Ok(())

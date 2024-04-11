@@ -1,8 +1,13 @@
 use std::marker::PhantomData;
 
+use anyhow::anyhow;
 use anyhow::Result;
+use rocksdb::backup::BackupEngine;
+use rocksdb::backup::BackupEngineOptions;
+use rocksdb::backup::RestoreOptions;
 use rocksdb::BlockBasedOptions;
 use rocksdb::DBIteratorWithThreadMode;
+use rocksdb::Env;
 use rocksdb::IteratorMode;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
@@ -109,6 +114,30 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let db = DB::open(&opts, db_path)?;
 
         Ok(RocksDb { db, _marker: PhantomData })
+    }
+
+    pub fn backup_path(&self) -> anyhow::Result<String> {
+        Ok(format!("{}backup", self.db.path().to_str().ok_or(anyhow!("Invalid path"))?))
+    }
+
+    fn backup_engine(&self) -> anyhow::Result<BackupEngine> {
+        let backup_opts = BackupEngineOptions::new(self.backup_path()?)?;
+        let backup_env = Env::new()?;
+        Ok(BackupEngine::open(&backup_opts, &backup_env)?)
+    }
+
+    pub fn backup(&self) -> anyhow::Result<()> {
+        let mut backup_engine = self.backup_engine()?;
+        backup_engine.create_new_backup(&self.db)?;
+        Ok(())
+    }
+
+    pub fn restore(&self) -> anyhow::Result<()> {
+        let mut backup_engine = self.backup_engine()?;
+        let restore_options = RestoreOptions::default();
+        //XXX TODO panic if nothing to restore
+        backup_engine.restore_from_latest_backup(self.db.path(), self.backup_path()?, &restore_options)?;
+        Ok(())
     }
 
     // Clears the database
