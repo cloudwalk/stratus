@@ -15,7 +15,6 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
-
 pub enum DbConfig {
     LargeSSTFiles,
     Default,
@@ -122,7 +121,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     }
 
     fn backup_engine(&self) -> anyhow::Result<BackupEngine> {
-        let backup_opts = BackupEngineOptions::new(&self.backup_path()?)?;
+        let backup_opts = BackupEngineOptions::new(self.backup_path()?)?;
         let backup_env = Env::new()?;
         Ok(BackupEngine::open(&backup_opts, &backup_env)?)
     }
@@ -137,7 +136,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let mut backup_engine = self.backup_engine()?;
         let restore_options = RestoreOptions::default();
         //XXX TODO panic if nothing to restore
-        backup_engine.restore_from_latest_backup(&self.db.path(), self.backup_path()?, &restore_options)?;
+        backup_engine.restore_from_latest_backup(self.db.path(), self.backup_path()?, &restore_options)?;
         Ok(())
     }
 

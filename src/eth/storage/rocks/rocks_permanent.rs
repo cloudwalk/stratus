@@ -194,7 +194,6 @@ impl PermanentStorage for RocksPermanentStorage {
                 .context("failed to update state with execution changes")?,
         );
 
-
         let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
         let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
 

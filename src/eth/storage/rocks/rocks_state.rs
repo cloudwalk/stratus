@@ -87,14 +87,16 @@ impl RocksStorageState {
     }
 
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
-        let accounts = self.accounts.clone();
-        let accounts_history = self.accounts_history.clone();
-        let account_slots = self.account_slots.clone();
-        let account_slots_history = self.account_slots_history.clone();
-        let transactions = self.transactions.clone();
-        let blocks_by_number = self.blocks_by_number.clone();
-        let blocks_by_hash = self.blocks_by_hash.clone();
-        let logs = self.logs.clone();
+        let accounts = Arc::<RocksDb<Address, AccountInfo>>::clone(&self.accounts);
+        let accounts_history = Arc::<RocksDb<(Address, BlockNumber), AccountInfo>>::clone(&self.accounts_history);
+        let account_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
+        let account_slots_history = Arc::<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>::clone(&self.account_slots_history);
+        let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.blocks_by_hash);
+        let blocks_by_number = Arc::<RocksDb<BlockNumber, Block>>::clone(&self.blocks_by_number);
+        let transactions = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.transactions);
+        let logs = Arc::<RocksDb<(Hash, Index), BlockNumber>>::clone(&self.logs);
+
+
 
         tokio::spawn(async move {
             let mut rx = rx;
