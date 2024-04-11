@@ -1,10 +1,13 @@
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
 use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
+
+use once_cell::sync::Lazy;
 
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
@@ -26,6 +29,13 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::rocks_state::AccountInfo;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
+use std::time::Instant;
+
+/// used for multiple purposes, such as TPS counting and backup management
+const TRANSACTION_LOOP_THRESHOLD: usize = 210_000;
+
+static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
+static START_TIME: Lazy<Instant> = Lazy::new(Instant::now);
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -183,6 +193,22 @@ impl PermanentStorage for RocksPermanentStorage {
                 .update_state_with_execution_changes(&account_changes, number)
                 .context("failed to update state with execution changes")?,
         );
+
+
+        // TPS Calculation and Printing
+        futures.push(tokio::task::spawn_blocking(move || {
+            let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
+            let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
+            let elapsed_time = START_TIME.elapsed().as_secs_f64();
+
+            // for every multiple of 30k transactions, print the TPS
+            if previous_count % 30000 > current_count % 30000 {
+                let total_transactions = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
+                let tps = total_transactions as f64 / elapsed_time;
+                //TODO replace this with metrics or do a cfg feature to enable/disable
+                println!("Transactions per second: {:.2} @ block {}", tps, block.number());
+            }
+        }));
 
         join_all(futures).await;
         Ok(())
