@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 
 use crate::eth::primitives::Account;
@@ -11,6 +13,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StorageError;
@@ -59,6 +62,9 @@ pub trait PermanentStorage: Send + Sync {
     /// Resets all state to a specific block number.
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
 
-    /// TODO: document it.
+    /// Retrieves a random sample of slots, from the provided start and end blocks.
     async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
+
+    /// Retrieves several slots at once
+    async fn read_slots(&self, address: &Address, slot_indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>>;
 }
