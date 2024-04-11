@@ -211,6 +211,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
             // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, reset the counter
             if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
+
                 TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
                 let mut start_time = START_TIME.lock().unwrap();
                 *start_time = Instant::now();
