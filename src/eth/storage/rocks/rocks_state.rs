@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use itertools::Itertools;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
@@ -61,11 +62,14 @@ pub struct RocksStorageState {
     pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
     pub logs: Arc<RocksDb<(Hash, Index), BlockNumber>>,
+    pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
 impl RocksStorageState {
     pub fn new() -> Self {
-        Self {
+        let (tx, rx) = mpsc::channel::<()>(1);
+
+        let state = Self {
             accounts: Arc::new(RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap()),
             accounts_history: Arc::new(RocksDb::new("./data/accounts_history.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             account_slots: Arc::new(RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap()),
@@ -74,7 +78,39 @@ impl RocksStorageState {
             blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-        }
+            backup_trigger: Arc::new(tx),
+        };
+
+        state.listen_for_backup_trigger(rx).unwrap();
+
+        state
+    }
+
+    pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
+        let accounts = self.accounts.clone();
+        let accounts_history = self.accounts_history.clone();
+        let account_slots = self.account_slots.clone();
+        let account_slots_history = self.account_slots_history.clone();
+        let transactions = self.transactions.clone();
+        let blocks_by_number = self.blocks_by_number.clone();
+        let blocks_by_hash = self.blocks_by_hash.clone();
+        let logs = self.logs.clone();
+
+        tokio::spawn(async move {
+            let mut rx = rx;
+            while let Some(_) = rx.recv().await {
+                accounts.backup().unwrap();
+                accounts_history.backup().unwrap();
+                account_slots.backup().unwrap();
+                account_slots_history.backup().unwrap();
+                transactions.backup().unwrap();
+                blocks_by_number.backup().unwrap();
+                blocks_by_hash.backup().unwrap();
+                logs.backup().unwrap();
+            }
+        });
+
+        Ok(())
     }
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
