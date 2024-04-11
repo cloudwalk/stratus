@@ -4418,6 +4418,7 @@ dependencies = [
  "nom",
  "nonempty",
  "num-traits",
+ "once_cell",
  "paste",
  "phf",
  "phf_codegen",

@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use itertools::Itertools;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
@@ -61,11 +62,14 @@ pub struct RocksStorageState {
     pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
     pub logs: Arc<RocksDb<(Hash, Index), BlockNumber>>,
+    pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
 impl RocksStorageState {
     pub fn new() -> Self {
-        Self {
+        let (tx, rx) = mpsc::channel::<()>(1);
+
+        let state = Self {
             accounts: Arc::new(RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap()),
             accounts_history: Arc::new(RocksDb::new("./data/accounts_history.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             account_slots: Arc::new(RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap()),
@@ -74,7 +78,39 @@ impl RocksStorageState {
             blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-        }
+            backup_trigger: Arc::new(tx),
+        };
+
+        state.listen_for_backup_trigger(rx).unwrap();
+
+        state
+    }
+
+    pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
+        let accounts = Arc::<RocksDb<Address, AccountInfo>>::clone(&self.accounts);
+        let accounts_history = Arc::<RocksDb<(Address, BlockNumber), AccountInfo>>::clone(&self.accounts_history);
+        let account_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
+        let account_slots_history = Arc::<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>::clone(&self.account_slots_history);
+        let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.blocks_by_hash);
+        let blocks_by_number = Arc::<RocksDb<BlockNumber, Block>>::clone(&self.blocks_by_number);
+        let transactions = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.transactions);
+        let logs = Arc::<RocksDb<(Hash, Index), BlockNumber>>::clone(&self.logs);
+
+        tokio::spawn(async move {
+            let mut rx = rx;
+            while rx.recv().await.is_some() {
+                accounts.backup().unwrap();
+                accounts_history.backup().unwrap();
+                account_slots.backup().unwrap();
+                account_slots_history.backup().unwrap();
+                transactions.backup().unwrap();
+                blocks_by_number.backup().unwrap();
+                blocks_by_hash.backup().unwrap();
+                logs.backup().unwrap();
+            }
+        });
+
+        Ok(())
     }
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
@@ -86,10 +122,16 @@ impl RocksStorageState {
     pub fn sync_data(&self) -> anyhow::Result<()> {
         let account_block_number = self.accounts.get_current_block_number();
         let slots_block_number = self.account_slots.get_current_block_number();
-        if account_block_number != slots_block_number {
-            warn!("block numbers are not in sync");
-            let min_block_number = std::cmp::min(account_block_number, slots_block_number);
-            self.reset_at(BlockNumber::from(min_block_number))?;
+        if let Some((last_block_number, _)) = self.blocks_by_number.last() {
+            if account_block_number != slots_block_number {
+                warn!("block numbers are not in sync {:?} {:?}", account_block_number, slots_block_number);
+                let min_block_number = std::cmp::min(account_block_number, slots_block_number);
+                let last_secure_block_number = last_block_number.as_i64() - 1000;
+                if last_secure_block_number > min_block_number {
+                    panic!("block numbers is too far away from the last secure block number, please resync the data from the last secure block number");
+                }
+                self.reset_at(BlockNumber::from(min_block_number))?;
+            }
         }
 
         Ok(())

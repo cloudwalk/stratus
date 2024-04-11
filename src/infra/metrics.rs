@@ -135,7 +135,10 @@ metrics! {
     histogram_duration storage_reset{kind, success} [],
 
     "Time to execute storage commit operation."
-    histogram_duration storage_commit{size_by_tx, size_by_gas, success} []
+    histogram_duration storage_commit{size_by_tx, size_by_gas, success} [],
+
+    "Ammount of gas in the commited transactions"
+    counter   storage_gas_total{} []
 }
 
 // Importer offline metrics.
@@ -296,14 +299,29 @@ macro_rules! metrics {
 macro_rules! metrics_impl_fn_inc {
     (counter $name:ident $group:ident $($label:ident)*) => {
         paste! {
-            #[doc = "Add 1 to `" $name "` counter."]
-            pub fn [<inc_ $name>]($( $label: impl Into<LabelValue> ),+) {
+            #[doc = "Add n to `" $name "` counter."]
+            pub fn [<inc_n_ $name>](n: u64, $( $label: impl Into<LabelValue> ),*) {
                 let labels = into_labels(
                     vec![
                         ("group", stringify!($group).into()),
                         $(
                             (stringify!($label), $label.into()),
-                        )+
+                        )*
+                    ]
+                );
+                counter!(stringify!([<stratus_$name>]), n, labels);
+            }
+        }
+
+        paste! {
+            #[doc = "Add 1 to `" $name "` counter."]
+            pub fn [<inc_ $name>]($( $label: impl Into<LabelValue> ),*) {
+                let labels = into_labels(
+                    vec![
+                        ("group", stringify!($group).into()),
+                        $(
+                            (stringify!($label), $label.into()),
+                        )*
                     ]
                 );
                 counter!(stringify!([<stratus_$name>]), 1, labels);

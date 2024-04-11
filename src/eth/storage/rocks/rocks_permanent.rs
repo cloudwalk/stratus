@@ -1,10 +1,14 @@
 use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
+use once_cell::sync::Lazy;
 
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
@@ -26,6 +30,12 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::rocks_state::AccountInfo;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
+
+/// used for multiple purposes, such as TPS counting and backup management
+const TRANSACTION_LOOP_THRESHOLD: usize = 210_000;
+
+static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
+static START_TIME: Lazy<Mutex<Instant>> = Lazy::new(|| Mutex::new(Instant::now()));
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -183,6 +193,19 @@ impl PermanentStorage for RocksPermanentStorage {
                 .update_state_with_execution_changes(&account_changes, number)
                 .context("failed to update state with execution changes")?,
         );
+
+        let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
+        let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
+
+        // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, reset the counter
+        if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
+            let x = Arc::clone(&self.state.backup_trigger);
+            x.send(()).await.unwrap();
+
+            TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
+            let mut start_time = START_TIME.lock().unwrap();
+            *start_time = Instant::now();
+        }
 
         join_all(futures).await;
         Ok(())
