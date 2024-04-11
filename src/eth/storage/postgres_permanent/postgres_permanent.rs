@@ -166,15 +166,14 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
         let slot_value_vec: Option<Vec<u8>> = match point_in_time {
-            StoragePointInTime::Present => {
+            StoragePointInTime::Present =>
                 sqlx::query_file_scalar!(
                     "src/eth/storage/postgres_permanent/sql/select_slot.sql",
                     address.as_ref(),
                     slot_index_u8.as_ref(),
                 )
                 .fetch_optional(conn.for_sqlx())
-                .await?
-            }
+                .await?,
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_scalar!(
@@ -870,12 +869,11 @@ impl PermanentStorage for PostgresPermanentStorage {
         point_in_time: &StoragePointInTime,
     ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         let slots = match point_in_time {
-            StoragePointInTime::Present => {
+            StoragePointInTime::Present =>
                 sqlx::query_file_as!(Slot, "src/eth/storage/postgres_permanent/sql/select_slots.sql", slot_indexes as _, address as _)
                     .fetch_all(&self.pool)
-                    .await?
-            }
-            StoragePointInTime::Past(block_number) => {
+                    .await?,
+            StoragePointInTime::Past(block_number) =>
                 sqlx::query_file_as!(
                     Slot,
                     "src/eth/storage/postgres_permanent/sql/select_historical_slots.sql",
@@ -884,8 +882,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                     block_number as _
                 )
                 .fetch_all(&self.pool)
-                .await?
-            }
+                .await?,
         };
         Ok(slots.into_iter().map(|slot| (slot.index, slot.value)).collect())
     }
@@ -907,13 +904,12 @@ fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<
     let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
     for topic in topics {
         match partitions.get_mut(&topic.transaction_hash) {
-            Some(transaction_logs) => {
+            Some(transaction_logs) =>
                 if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
                     part.push(topic);
                 } else {
                     transaction_logs.insert(topic.log_idx, vec![topic]);
-                }
-            }
+                },
             None => {
                 partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
             }
