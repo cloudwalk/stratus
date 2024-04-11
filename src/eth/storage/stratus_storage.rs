@@ -283,6 +283,8 @@ impl StratusStorage {
         let label_size_by_tx = block.label_size_by_transactions();
         #[cfg(feature = "metrics")]
         let label_size_by_gas = block.label_size_by_gas();
+        #[cfg(feature = "metrics")]
+        let gas_used = block.header.gas_used.as_u64();
 
         // save block to permanent storage and clears temporary storage
         let next_number = block.number().next();
@@ -293,6 +295,8 @@ impl StratusStorage {
 
         #[cfg(feature = "metrics")]
         metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
+        #[cfg(feature = "metrics")]
+        metrics::inc_n_storage_gas_total(gas_used);
 
         result
     }
