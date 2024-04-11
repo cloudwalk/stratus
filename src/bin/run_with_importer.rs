@@ -5,8 +5,6 @@ use std::sync::Arc;
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
-#[cfg(feature = "metrics")]
-use stratus::infra::metrics;
 use stratus::init_global_services;
 use tokio::try_join;
 
