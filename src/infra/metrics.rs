@@ -137,8 +137,8 @@ metrics! {
     "Time to execute storage commit operation."
     histogram_duration storage_commit{size_by_tx, size_by_gas, success} [],
 
-    "Number of transactions requests that were commited"
-    counter   storage_transaction_count{} []
+    "Ammount of gas in the commited transactions"
+    counter   storage_gas_total{} []
 }
 
 // Importer offline metrics.
