@@ -96,11 +96,9 @@ impl RocksStorageState {
         let transactions = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.transactions);
         let logs = Arc::<RocksDb<(Hash, Index), BlockNumber>>::clone(&self.logs);
 
-
-
         tokio::spawn(async move {
             let mut rx = rx;
-            while let Some(_) = rx.recv().await {
+            while rx.recv().await.is_some() {
                 accounts.backup().unwrap();
                 accounts_history.backup().unwrap();
                 account_slots.backup().unwrap();
