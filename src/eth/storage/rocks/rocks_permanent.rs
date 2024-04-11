@@ -1,12 +1,13 @@
 use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
-
 use once_cell::sync::Lazy;
 
 use super::rocks_state::RocksStorageState;
@@ -29,13 +30,12 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::rocks_state::AccountInfo;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
-use std::time::Instant;
 
 /// used for multiple purposes, such as TPS counting and backup management
 const TRANSACTION_LOOP_THRESHOLD: usize = 210_000;
 
 static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
-static START_TIME: Lazy<Instant> = Lazy::new(Instant::now);
+static START_TIME: Lazy<Mutex<Instant>> = Lazy::new(|| Mutex::new(Instant::now()));
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -194,19 +194,26 @@ impl PermanentStorage for RocksPermanentStorage {
                 .context("failed to update state with execution changes")?,
         );
 
-
         // TPS Calculation and Printing
         futures.push(tokio::task::spawn_blocking(move || {
             let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
             let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
-            let elapsed_time = START_TIME.elapsed().as_secs_f64();
+            let elapsed_time = START_TIME.lock().unwrap().elapsed().as_secs_f64();
+            let multiple_to_print = TRANSACTION_LOOP_THRESHOLD / 8;
 
-            // for every multiple of 30k transactions, print the TPS
-            if previous_count % 30000 > current_count % 30000 {
+            // for every multiple of transactions, print the TPS
+            if previous_count % multiple_to_print > current_count % multiple_to_print {
                 let total_transactions = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
                 let tps = total_transactions as f64 / elapsed_time;
                 //TODO replace this with metrics or do a cfg feature to enable/disable
                 println!("Transactions per second: {:.2} @ block {}", tps, block.number());
+            }
+
+            // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, reset the counter
+            if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
+                TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
+                let mut start_time = START_TIME.lock().unwrap();
+                *start_time = Instant::now();
             }
         }));
 
