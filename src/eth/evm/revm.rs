@@ -240,7 +240,10 @@ impl Database for RevmSession {
         // load slot from cache or storage
         let slot = match self.slot_prefetch_cache.get(&index) {
             None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
-            Some(cached) => cached.clone(),
+            Some(cached) => {
+                self.metrics.slot_reads_cached += 1;
+                cached.clone()
+            }
         };
 
         // track original value, except if ignored address
