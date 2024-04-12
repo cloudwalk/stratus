@@ -277,13 +277,8 @@ impl RocksStorageState {
                 account_history_changes.push(((address.clone(), block_number), account_info_entry));
             }
 
-            let accounts_inner_future = tokio::task::spawn_blocking(move || {
-                accounts.insert_batch(account_changes, Some(block_number.into()));
-            });
-            let accounts_history_inner_future = tokio::task::spawn_blocking(move || {
-                accounts_history.insert_batch(account_history_changes, None);
-            });
-            let _ = join_all(vec![accounts_inner_future, accounts_history_inner_future]);
+            accounts.insert_batch(account_changes, Some(block_number.into()));
+            //accounts_history.insert_batch(account_history_changes, None);
         });
 
         let mut slot_changes = Vec::new();
@@ -299,13 +294,8 @@ impl RocksStorageState {
                     }
                 }
             }
-            let account_slots_inner_future = tokio::task::spawn_blocking(move || {
-                account_slots.insert_batch(slot_changes, Some(block_number.into()));
-            });
-            let account_slots_history_inner_future = tokio::task::spawn_blocking(move || {
-                account_slots_history.insert_batch(slot_history_changes, None);
-            });
-            let _ = join_all(vec![account_slots_inner_future, account_slots_history_inner_future]);
+            account_slots.insert_batch(slot_changes, Some(block_number.into()));
+          //  account_slots_history.insert_batch(slot_history_changes, None);
         });
 
         Ok(vec![account_changes_future, slot_changes_future])
