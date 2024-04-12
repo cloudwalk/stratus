@@ -121,7 +121,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         Ok(())
     }
 
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
@@ -158,11 +158,11 @@ impl PermanentStorage for PostgresPermanentStorage {
         }
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %slot_index, "reading slot");
+    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %index, "reading slot");
 
         // TODO: improve this conversion
-        let slot_index_u8: [u8; 32] = slot_index.clone().into();
+        let slot_index_u8: [u8; 32] = index.clone().into();
 
         let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
         let slot_value_vec: Option<Vec<u8>> = match point_in_time {
@@ -193,17 +193,39 @@ impl PermanentStorage for PostgresPermanentStorage {
             Some(slot_value_vec) => {
                 let slot_value = SlotValue::from(slot_value_vec);
                 let slot = Slot {
-                    index: slot_index.clone(),
+                    index: index.clone(),
                     value: slot_value,
                 };
-                tracing::trace!(?address, ?slot_index, %slot, "slot found");
+                tracing::trace!(?address, ?index, %slot, "slot found");
                 Ok(Some(slot))
             }
             None => {
-                tracing::trace!(?address, ?slot_index, ?point_in_time, "slot not found");
+                tracing::trace!(?address, ?index, ?point_in_time, "slot not found");
                 Ok(None)
             }
         }
+    }
+
+    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+        tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
+
+        let slots = match point_in_time {
+            StoragePointInTime::Present =>
+                sqlx::query_file_as!(Slot, "src/eth/storage/postgres_permanent/sql/select_slots.sql", indexes as _, address as _)
+                    .fetch_all(&self.pool)
+                    .await?,
+            StoragePointInTime::Past(block_number) =>
+                sqlx::query_file_as!(
+                    Slot,
+                    "src/eth/storage/postgres_permanent/sql/select_historical_slots.sql",
+                    indexes as _,
+                    address as _,
+                    block_number as _
+                )
+                .fetch_all(&self.pool)
+                .await?,
+        };
+        Ok(slots.into_iter().map(|slot| (slot.index, slot.value)).collect())
     }
 
     async fn read_block(&self, block: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -751,10 +773,6 @@ impl PermanentStorage for PostgresPermanentStorage {
         Ok(())
     }
 
-    async fn after_commit_hook(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading current block number");
 
@@ -776,6 +794,8 @@ impl PermanentStorage for PostgresPermanentStorage {
             let nonce = BigDecimal::try_from(acc.nonce)?;
             let bytecode = acc.bytecode.as_deref();
             let code_hash: &[u8] = acc.code_hash.as_ref();
+            let static_slot_indexes: Option<Vec<Vec<u8>>> = acc.static_slot_indexes.map(|indexes| indexes.into_iter().map(|x| x.into()).collect());
+            let mapping_slot_indexes: Option<Vec<Vec<u8>>> = acc.mapping_slot_indexes.map(|indexes| indexes.into_iter().map(|x| x.into()).collect());
 
             sqlx::query_file!(
                 "src/eth/storage/postgres_permanent/sql/insert_account.sql",
@@ -784,6 +804,8 @@ impl PermanentStorage for PostgresPermanentStorage {
                 balance,
                 bytecode,
                 code_hash,
+                static_slot_indexes.as_deref(),
+                mapping_slot_indexes.as_deref(),
                 block_number as _,
                 BigDecimal::from(0),
                 BigDecimal::from(0),
