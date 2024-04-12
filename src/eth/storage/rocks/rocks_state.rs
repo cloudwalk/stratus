@@ -348,13 +348,13 @@ impl RocksStorageState {
                 value: account_slot_value.clone(),
             }),
             StoragePointInTime::Past(number) => {
-                if let Some(((addr, index, _), value)) = self
+                if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
                     .iter_from((address.clone(), index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if index == &index && address == &addr {
-                        return Some(Slot { index, value });
+                    if index == &rocks_index && address == &rocks_address {
+                        return Some(Slot { index: rocks_index, value });
                     }
                 }
                 None
