@@ -102,6 +102,9 @@ metrics! {
     "Time to execute storage read_slot operation."
     histogram_duration storage_read_slot{found_at, point_in_time, success} [],
 
+    "Time to execute storage read_slot operation."
+    histogram_duration storage_read_slots{point_in_time, success} [],
+
     "Time to execute storage read_mined_transaction operation."
     histogram_duration storage_read_mined_transaction{success} []
 }

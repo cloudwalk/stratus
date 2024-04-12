@@ -19,6 +19,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
+use crate::ext::not;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
@@ -183,6 +184,9 @@ impl StratusStorage {
 
     /// Retrieves multiple slots from the storage. Returns default values when not found.
     pub async fn read_slots(&self, address: &Address, slot_indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let mut slots = Vec::with_capacity(slot_indexes.len());
         let mut perm_indexes = Vec::with_capacity(slot_indexes.len());
 
@@ -199,13 +203,18 @@ impl StratusStorage {
         }
 
         // read missing slots from permanent storage
-        let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
-        for index in perm_indexes.into_iter() {
-            match perm_slots.remove(&index) {
-                Some(value) => slots.push(Slot { index, value }),
-                None => slots.push(Slot::new_empty(index)),
+        if not(perm_indexes.is_empty()) {
+            let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
+            for index in perm_indexes.into_iter() {
+                match perm_slots.remove(&index) {
+                    Some(value) => slots.push(Slot { index, value }),
+                    None => slots.push(Slot::new_empty(index)),
+                }
             }
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_storage_read_slots(start.elapsed(), point_in_time, true);
 
         Ok(slots)
     }
