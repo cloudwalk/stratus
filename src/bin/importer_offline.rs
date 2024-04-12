@@ -26,9 +26,6 @@ use stratus::log_and_err;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-/// Number of blocks fetched in each query.
-const BLOCKS_BY_FETCH: usize = 10_000;
-
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 
@@ -83,6 +80,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let _loader_task = tokio::spawn(execute_external_rpc_storage_loader(
         rpc_storage,
         cancellation.clone(),
+        config.blocks_by_fetch,
         config.paralellism,
         block_start,
         block_end,
@@ -189,6 +187,7 @@ async fn execute_external_rpc_storage_loader(
     rpc_storage: Arc<dyn ExternalRpcStorage>,
     cancellation: CancellationToken,
     // data
+    blocks_by_fetch: usize,
     paralellism: usize,
     mut start: BlockNumber,
     end: BlockNumber,
@@ -199,9 +198,9 @@ async fn execute_external_rpc_storage_loader(
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();
     while start <= end {
-        let end = min(start + (BLOCKS_BY_FETCH - 1), end);
+        let end = min(start + (blocks_by_fetch - 1), end);
         tasks.push(load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end));
-        start += BLOCKS_BY_FETCH;
+        start += blocks_by_fetch;
     }
 
     // execute loads in parallel

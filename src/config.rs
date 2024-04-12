@@ -308,6 +308,10 @@ pub struct ImporterOfflineConfig {
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
 
+    /// Number of blocks by database fetch.
+    #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
+    pub blocks_by_fetch: usize,
+
     /// Write data to CSV file instead of permanent storage.
     #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
