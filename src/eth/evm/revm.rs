@@ -212,13 +212,13 @@ impl Database for RevmSession {
                 .insert(account.address.clone(), ExecutionAccountChanges::from_original_values(account.clone()));
         }
 
-        // prefetch slots (put behind feature-flag)
+        // prefetch slots
         #[cfg(feature = "evm-slot-prefetch")]
         {
             let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
             let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
             for slot in slots {
-                self.slot_prefetch_cache.entry(address.clone()).or_default().insert(slot.index.clone(), slot);
+                self.account_slots_cache.entry(address.clone()).or_default().insert(slot.index.clone(), slot);
             }
         }
 
