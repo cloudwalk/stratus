@@ -861,6 +861,31 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         Ok(slots_sample_rows)
     }
+
+    async fn read_slots(
+        &self,
+        address: &Address,
+        slot_indexes: &[SlotIndex],
+        point_in_time: &StoragePointInTime,
+    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+        let slots = match point_in_time {
+            StoragePointInTime::Present =>
+                sqlx::query_file_as!(Slot, "src/eth/storage/postgres_permanent/sql/select_slots.sql", slot_indexes as _, address as _)
+                    .fetch_all(&self.pool)
+                    .await?,
+            StoragePointInTime::Past(block_number) =>
+                sqlx::query_file_as!(
+                    Slot,
+                    "src/eth/storage/postgres_permanent/sql/select_historical_slots.sql",
+                    slot_indexes as _,
+                    address as _,
+                    block_number as _
+                )
+                .fetch_all(&self.pool)
+                .await?,
+        };
+        Ok(slots.into_iter().map(|slot| (slot.index, slot.value)).collect())
+    }
 }
 
 fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<TransactionHash, Vec<PostgresLog>> {

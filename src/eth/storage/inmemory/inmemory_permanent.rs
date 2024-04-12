@@ -31,6 +31,7 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
@@ -433,6 +434,15 @@ impl PermanentStorage for InMemoryPermanentStorage {
                 Ok(samples.choose_multiple(&mut rng, n as usize))
             }
         }
+    }
+
+    async fn read_slots(
+        &self,
+        _address: &Address,
+        _slot_indexes: &[SlotIndex],
+        _point_in_time: &StoragePointInTime,
+    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+        todo!()
     }
 }
 
