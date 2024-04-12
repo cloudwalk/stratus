@@ -154,6 +154,14 @@ impl From<SlotIndex> for ethereum_types::U256 {
     }
 }
 
+impl From<SlotIndex> for Vec<u8> {
+    fn from(value: SlotIndex) -> Self {
+        let mut vec = vec![0u8; 32];
+        value.0.to_big_endian(&mut vec);
+        vec
+    }
+}
+
 // -----------------------------------------------------------------------------
 // sqlx traits for SlotIndex
 // -----------------------------------------------------------------------------
