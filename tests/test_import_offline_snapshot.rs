@@ -23,10 +23,11 @@ mod m {
     pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
+    pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOTS;
 }
 
 #[cfg(feature = "metrics")]
-const METRIC_QUERIES: [&str; 44] = [
+const METRIC_QUERIES: [&str; 46] = [
     // EVM
     "* EVM",
     m::formatcp!("{}_count", m::METRIC_EVM_EXECUTION),
@@ -52,13 +53,15 @@ const METRIC_QUERIES: [&str; 44] = [
     m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     "* SLOTS (count)",
+    m::formatcp!("{}_sum{{}}", m::METRIC_EVM_EXECUTION_SLOT_READS_CACHED),
+    m::formatcp!("{}_count{{}}", m::METRIC_STORAGE_READ_SLOTS),
     m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
     "* SLOTS (cumulative)",
+    m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOTS),
     m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}_sum{{}}", m::METRIC_EVM_EXECUTION_SLOT_READS_CACHED),
     m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
@@ -135,7 +138,7 @@ async fn test_import_offline_snapshot() {
             let value: &str = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
             let value: f64 = value.parse().unwrap();
 
-            if query.contains("_count") {
+            if query.contains("_count") || query.contains("_cached") {
                 println!("{:<70} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);

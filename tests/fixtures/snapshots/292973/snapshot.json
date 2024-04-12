@@ -69,13 +69,13 @@
       "static_slot_indexes": [
         {
           "block_number": "0x0",
-          "value": null
+          "value": ["0x65"]
         }
       ],
       "mapping_slot_indexes": [
         {
           "block_number": "0x0",
-          "value": null
+          "value": ["0x99", "0x9a"]
         }
       ],
       "slots": {
@@ -50595,13 +50595,13 @@
       "static_slot_indexes": [
         {
           "block_number": "0x0",
-          "value": null
+          "value": ["0x65"]
         }
       ],
       "mapping_slot_indexes": [
         {
           "block_number": "0x0",
-          "value": null
+          "value": ["0x99", "0x9a"]
         }
       ],
       "slots": {
