@@ -16,5 +16,6 @@ SELECT
     ,s as "s: _"
     ,r as "r: _"
     ,result as "result: _"
+    ,chain_id as "chain_id: _"
 FROM transactions
 WHERE block_hash = $1

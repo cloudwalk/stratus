@@ -461,6 +461,7 @@ CREATE TABLE public.transactions (
     s bytea NOT NULL,
     value numeric NOT NULL,
     result text NOT NULL,
+    chain_id numeric DEFAULT NULL,
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL
 );
