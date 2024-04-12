@@ -8,17 +8,27 @@
 //! tracking account states and differentiating between standard accounts and
 //! contract accounts.
 
+use std::collections::HashSet;
+
+use itertools::Itertools;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
+use crate::eth::evm::EvmInputSlotKeys;
+use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::SlotAccess;
+use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
+use crate::ext::not;
 use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
+///
+/// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
 #[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
 pub struct Account {
     /// Immutable address of the account.
@@ -35,6 +45,12 @@ pub struct Account {
 
     /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
     pub code_hash: CodeHash,
+
+    /// Slots indexes that are accessed statically.
+    pub static_slot_indexes: Option<Vec<SlotIndex>>,
+
+    /// Slots indexes that are accessed using the mapping hash algorithm.
+    pub mapping_slot_indexes: Option<Vec<SlotIndex>>,
 }
 
 impl Account {
@@ -51,6 +67,8 @@ impl Account {
             balance,
             bytecode: None,
             code_hash: CodeHash::default(),
+            static_slot_indexes: None,
+            mapping_slot_indexes: None,
         }
     }
 
@@ -68,6 +86,26 @@ impl Account {
             None => false,
         }
     }
+
+    /// Compute slot indexes to be accessed for a give input.
+    pub fn slot_indexes(&self, input_keys: EvmInputSlotKeys) -> Vec<SlotIndex> {
+        let mut slot_indexes = Vec::new();
+
+        // calculate static indexes
+        if let Some(ref indexes) = self.static_slot_indexes {
+            slot_indexes.extend(indexes.clone());
+        }
+
+        // calculate mapping indexes
+        if let Some(ref indexes) = self.mapping_slot_indexes {
+            for (base_slot_index, input_key) in indexes.iter().cartesian_product(input_keys.into_iter()) {
+                let mapping_slot_index = base_slot_index.to_mapping_index(input_key);
+                slot_indexes.push(mapping_slot_index);
+            }
+        }
+
+        slot_indexes
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -75,12 +113,38 @@ impl Account {
 // -----------------------------------------------------------------------------
 impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
+        let (address, info) = value;
+
+        // parse bytecode
+        let slot_indexes: HashSet<SlotAccess> = match info.code {
+            Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone().into()),
+            _ => HashSet::new(),
+        };
+
+        let mut static_slot_indexes = Vec::with_capacity(slot_indexes.len());
+        let mut mapping_slot_indexes = Vec::with_capacity(slot_indexes.len());
+        for index in slot_indexes {
+            match index {
+                SlotAccess::Static(index) => static_slot_indexes.push(index),
+                SlotAccess::Mapping(index) => mapping_slot_indexes.push(index),
+                _ => {}
+            }
+        }
+
         Self {
-            address: value.0.into(),
-            nonce: value.1.nonce.into(),
-            balance: value.1.balance.into(),
-            bytecode: value.1.code.map_into(),
-            code_hash: value.1.code_hash.into(),
+            address: address.into(),
+            nonce: info.nonce.into(),
+            balance: info.balance.into(),
+            bytecode: info.code.map_into(),
+            code_hash: info.code_hash.into(),
+            static_slot_indexes: match static_slot_indexes.is_empty() {
+                true => None,
+                false => Some(static_slot_indexes),
+            },
+            mapping_slot_indexes: match mapping_slot_indexes.is_empty() {
+                true => None,
+                false => Some(mapping_slot_indexes),
+            },
         }
     }
 }

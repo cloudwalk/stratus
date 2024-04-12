@@ -25,8 +25,6 @@ use crate::eth::primitives::BlockSelection;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::ExternalRpcStorage;
-use crate::eth::storage::HybridPermanentStorage;
-use crate::eth::storage::HybridPermanentStorageConfig;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
@@ -35,6 +33,7 @@ use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
 use crate::eth::storage::RocksPermanentStorage;
+use crate::eth::storage::RocksTemporary;
 use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
@@ -309,6 +308,10 @@ pub struct ImporterOfflineConfig {
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
 
+    /// Number of blocks by database fetch.
+    #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
+    pub blocks_by_fetch: usize,
+
     /// Write data to CSV file instead of permanent storage.
     #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
     pub export_csv: bool,
@@ -548,6 +551,7 @@ pub struct TemporaryStorageConfig {
 pub enum TemporaryStorageKind {
     InMemory,
     Sled,
+    Rocks,
 }
 
 impl TemporaryStorageConfig {
@@ -556,6 +560,7 @@ impl TemporaryStorageConfig {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
             TemporaryStorageKind::Sled => Ok(Arc::new(SledTemporary::new()?)),
+            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new()?)),
         }
     }
 }
@@ -567,6 +572,7 @@ impl FromStr for TemporaryStorageKind {
         match s {
             "inmemory" => Ok(Self::InMemory),
             "sled" => Ok(Self::Sled),
+            "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
     }
@@ -597,7 +603,6 @@ pub enum PermanentStorageKind {
     InMemory,
     Rocks,
     Postgres { url: String },
-    Hybrid { url: String },
 }
 
 impl PermanentStorageConfig {
@@ -614,15 +619,6 @@ impl PermanentStorageConfig {
                 };
                 Arc::new(PostgresPermanentStorage::new(config).await?)
             }
-
-            PermanentStorageKind::Hybrid { ref url } => {
-                let config = HybridPermanentStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.perm_storage_connections,
-                    acquire_timeout: Duration::from_millis(self.perm_storage_timeout_millis),
-                };
-                Arc::new(HybridPermanentStorage::new(config).await?)
-            }
         };
         Ok(perm)
     }
@@ -636,10 +632,6 @@ impl FromStr for PermanentStorageKind {
             "inmemory" => Ok(Self::InMemory),
             "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-            s if s.starts_with("hybrid://") => {
-                let s = s.replace("hybrid", "postgres"); //TODO there is a better way to do this
-                Ok(Self::Hybrid { url: s.to_string() })
-            }
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }

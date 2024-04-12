@@ -19,46 +19,58 @@ use stratus::init_global_services;
 mod m {
     pub use const_format::formatcp;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
+    pub use stratus::infra::metrics::METRIC_EVM_EXECUTION_SLOT_READS_CACHED;
     pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
 }
 
 #[cfg(feature = "metrics")]
-const METRIC_QUERIES: [&str; 30] = [
+const METRIC_QUERIES: [&str; 44] = [
     // EVM
-    "",
+    "* EVM",
     m::formatcp!("{}_count", m::METRIC_EVM_EXECUTION),
     m::formatcp!("{}_sum", m::METRIC_EVM_EXECUTION),
     m::formatcp!("{}{{quantile='1'}}", m::METRIC_EVM_EXECUTION),
-    // STORAGE ACCOUNTS
-    "",
+    m::formatcp!("{}{{quantile='0.95'}}", m::METRIC_EVM_EXECUTION),
+    "* ACCOUNTS (count)",
     m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    "* ACCOUNTS (cumulative)",
     m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    "* ACCOUNTS (P100)",
     m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    // STORAGE SLOTS
-    "",
+    "* ACCOUNTS (P95)",
+    m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
+    "* SLOTS (count)",
     m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
+    "* SLOTS (cumulative)",
     m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_sum{{}}", m::METRIC_EVM_EXECUTION_SLOT_READS_CACHED),
     m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
+    "* SLOTS (P100)",
     m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
-    // STORAGE COMMIT
-    "",
+    "* SLOTS (P95)",
+    m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
+    "* COMMIT",
     m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_COMMIT),
 ];
 
@@ -76,15 +88,15 @@ async fn test_import_offline_snapshot() {
     let _prom_guard = docker.start_prometheus();
 
     // init block data
-    let block_json = include_str!("fixtures/block-292973/block.json");
+    let block_json = include_str!("fixtures/snapshots/292973/block.json");
     let block: ExternalBlock = serde_json::from_str(block_json).unwrap();
 
     // init receipts data
-    let receipts_json = include_str!("fixtures/block-292973/receipts.json");
+    let receipts_json = include_str!("fixtures/snapshots/292973/receipts.json");
     let receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
 
     // init snapshot data
-    let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
+    let snapshot_json = include_str!("fixtures/snapshots/292973/snapshot.json");
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
     let pg = PostgresPermanentStorage::new(PostgresPermanentStorageConfig {
         url: docker.postgres_connection_url().to_owned(),
@@ -106,8 +118,8 @@ async fn test_import_offline_snapshot() {
 
     for query in METRIC_QUERIES {
         // formatting between query groups
-        if query.is_empty() {
-            println!("\n--------------------");
+        if query.starts_with('*') {
+            println!("\n{}\n--------------------", query.replace("* ", ""));
             continue;
         }
 
@@ -124,10 +136,10 @@ async fn test_import_offline_snapshot() {
             let value: f64 = value.parse().unwrap();
 
             if query.contains("_count") {
-                println!("{:<64} = {}", query, value);
+                println!("{:<70} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);
-                println!("{:<64} = {}", query, secs.fancy_duration().truncate(2));
+                println!("{:<70} = {}", query, secs.fancy_duration().truncate(2));
             }
         }
     }

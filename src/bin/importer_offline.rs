@@ -26,9 +26,6 @@ use stratus::log_and_err;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-/// Number of blocks fetched in each query.
-const BLOCKS_BY_FETCH: usize = 10_000;
-
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 
@@ -68,6 +65,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
     let cancellation = CancellationToken::new();
+    signal_handler(cancellation.clone());
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
@@ -79,9 +77,10 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     }
 
     // execute parallel tasks (external rpc storage loader and block importer)
-    tokio::spawn(execute_external_rpc_storage_loader(
+    let _loader_task = tokio::spawn(execute_external_rpc_storage_loader(
         rpc_storage,
         cancellation.clone(),
+        config.blocks_by_fetch,
         config.paralellism,
         block_start,
         block_end,
@@ -89,9 +88,31 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     ));
 
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
-    execute_block_importer(executor, &stratus_storage, csv, cancellation, backlog_rx, block_snapshots).await?;
+    let importer_task = tokio::spawn(execute_block_importer(
+        executor,
+        stratus_storage,
+        csv,
+        cancellation.clone(),
+        backlog_rx,
+        block_snapshots,
+    ));
+
+    importer_task.await??;
 
     Ok(())
+}
+
+fn signal_handler(cancellation: CancellationToken) {
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                tracing::info!("shutting down");
+                cancellation.cancel();
+            }
+
+            Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
+        }
+    });
 }
 
 // -----------------------------------------------------------------------------
@@ -100,7 +121,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 async fn execute_block_importer(
     // services
     executor: EthExecutor,
-    stratus_storage: &StratusStorage,
+    stratus_storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
     // data
@@ -115,6 +136,10 @@ async fn execute_block_importer(
         let Some((blocks, receipts)) = backlog_rx.recv().await else {
             cancellation.cancel();
             break "block loader finished or failed";
+        };
+
+        if cancellation.is_cancelled() {
+            break "exiting block importer";
         };
 
         let block_start = blocks.first().unwrap().number();
@@ -134,7 +159,7 @@ async fn execute_block_importer(
             let mined_block = match csv {
                 Some(ref mut csv) => {
                     let mined_block = executor.import_external_to_temp(block.clone(), &receipts).await?;
-                    import_external_to_csv(stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
+                    import_external_to_csv(&stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
                     mined_block
                 }
                 None => executor.import_external_to_perm(block.clone(), &receipts).await?,
@@ -162,6 +187,7 @@ async fn execute_external_rpc_storage_loader(
     rpc_storage: Arc<dyn ExternalRpcStorage>,
     cancellation: CancellationToken,
     // data
+    blocks_by_fetch: usize,
     paralellism: usize,
     mut start: BlockNumber,
     end: BlockNumber,
@@ -172,9 +198,9 @@ async fn execute_external_rpc_storage_loader(
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();
     while start <= end {
-        let end = min(start + (BLOCKS_BY_FETCH - 1), end);
+        let end = min(start + (blocks_by_fetch - 1), end);
         tasks.push(load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end));
-        start += BLOCKS_BY_FETCH;
+        start += blocks_by_fetch;
     }
 
     // execute loads in parallel
@@ -258,16 +284,17 @@ async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyh
 // -----------------------------------------------------------------------------
 fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalReceipts, mined_block: &Block) -> anyhow::Result<()> {
     // generate snapshot
-    let snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
+    let state_snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
+    let receipts_snapshot = external_receipts.filter_block(external_block.number());
 
     // create dir
-    let dir = format!("tests/fixtures/block-{}/", mined_block.number());
+    let dir = format!("tests/fixtures/snapshots/{}/", mined_block.number());
     fs::create_dir_all(&dir)?;
 
     // write json
     fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block)?)?;
-    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(external_receipts)?)?;
-    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&snapshot)?)?;
+    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(&receipts_snapshot)?)?;
+    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&state_snapshot)?)?;
 
     Ok(())
 }

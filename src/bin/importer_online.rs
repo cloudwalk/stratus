@@ -8,6 +8,7 @@ use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
+use stratus::eth::storage::StratusStorage;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
@@ -17,6 +18,7 @@ use stratus::log_and_err;
 /// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
 
+#[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
     let config: ImporterOnlineConfig = init_global_services();
     let runtime = config.init_runtime();
@@ -24,9 +26,13 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
+    let storage = config.stratus_storage.init().await?;
+    run_importer_online(config, storage).await
+}
+
+pub async fn run_importer_online(config: ImporterOnlineConfig, storage: Arc<StratusStorage>) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let storage = Arc::new(config.stratus_storage.init().await?);
     let executor = config.executor.init(Arc::clone(&storage));
 
     // start from last imported block

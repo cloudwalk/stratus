@@ -8,9 +8,11 @@
 
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::io::Read;
 use std::str::FromStr;
 
 use ethereum_types::U256;
+use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
@@ -32,10 +34,16 @@ pub struct Slot {
 }
 
 impl Slot {
-    pub fn new(index: impl Into<SlotIndex>, value: impl Into<SlotValue>) -> Self {
+    /// Creates a new slot with the given index and value.
+    pub fn new(index: SlotIndex, value: SlotValue) -> Self {
+        Self { index, value }
+    }
+
+    /// Creates a new slot with the given index and default zero value.
+    pub fn new_empty(index: SlotIndex) -> Self {
         Self {
-            index: index.into(),
-            value: value.into(),
+            index,
+            value: SlotValue::default(),
         }
     }
 
@@ -55,13 +63,35 @@ impl Display for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
 impl SlotIndex {
+    pub const ZERO: SlotIndex = SlotIndex(U256::zero());
+    pub const ONE: SlotIndex = SlotIndex(U256::one());
+
     /// Converts itself to [`U256`].
     pub fn as_u256(&self) -> U256 {
         self.0
+    }
+
+    /// Computes the mapping index of a key.
+    pub fn to_mapping_index(&self, key: Vec<u8>) -> SlotIndex {
+        // populate self to bytes
+        let mut slot_index_bytes = [0u8; 32];
+        self.0.to_big_endian(&mut slot_index_bytes);
+
+        // populate key to bytes
+        let mut key_bytes = [0u8; 32];
+        let _ = key.take(32).read(&mut key_bytes[32usize.saturating_sub(key.len())..32]);
+
+        // populate value to be hashed to bytes
+        let mut mapping_index_bytes = [0u8; 64];
+        mapping_index_bytes[0..32].copy_from_slice(&key_bytes);
+        mapping_index_bytes[32..64].copy_from_slice(&slot_index_bytes);
+
+        let hashed_bytes = keccak256(mapping_index_bytes);
+        Self::from(hashed_bytes)
     }
 }
 
@@ -121,6 +151,14 @@ impl From<RevmU256> for SlotIndex {
 impl From<SlotIndex> for ethereum_types::U256 {
     fn from(value: SlotIndex) -> ethereum_types::U256 {
         value.0
+    }
+}
+
+impl From<SlotIndex> for Vec<u8> {
+    fn from(value: SlotIndex) -> Self {
+        let mut vec = vec![0u8; 32];
+        value.0.to_big_endian(&mut vec);
+        vec
     }
 }
 
@@ -291,10 +329,55 @@ impl PgHasArrayType for SlotValue {
     }
 }
 
+// -----------------------------------------------------------------------------
+// SlotSample
+// -----------------------------------------------------------------------------
+
 #[derive(Debug, sqlx::Decode)]
 pub struct SlotSample {
     pub address: Address,
     pub block_number: BlockNumber,
     pub index: SlotIndex,
     pub value: SlotValue,
+}
+
+// -----------------------------------------------------------------------------
+// SlotAccess
+// -----------------------------------------------------------------------------
+
+/// How a slot is accessed.
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SlotAccess {
+    /// Slot index will be accessed statically without any hashing.
+    Static(SlotIndex),
+
+    /// Index will be hashed according to mapping hash algorithm.
+    Mapping(SlotIndex),
+
+    /// Index will be hashed according to array hashing algorithm.
+    Array(SlotIndex),
+}
+
+impl Display for SlotAccess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SlotAccess::Static(index) => write!(f, "Static  = {}", index),
+            SlotAccess::Mapping(index) => write!(f, "Mapping = {}", index),
+            SlotAccess::Array(index) => write!(f, "Array   = {}", index),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hex_literal::hex;
+
+    use crate::eth::primitives::SlotIndex;
+
+    #[test]
+    fn slot_index_to_mapping_index() {
+        let address = hex!("3c44cdddb6a900fa2b585dd299e03d12fa4293bc").to_vec();
+        let hashed = SlotIndex::ZERO.to_mapping_index(address);
+        assert_eq!(hashed.to_string(), "0x215be5d23550ceb1beff54fb579a765903ba2ccc85b6f79bcf9bda4e8cb86034");
+    }
 }
