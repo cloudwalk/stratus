@@ -203,7 +203,7 @@ impl StratusStorage {
         for index in perm_indexes.into_iter() {
             match perm_slots.remove(&index) {
                 Some(value) => slots.push(Slot { index, value }),
-                None => {},
+                None => {}
             }
         }
 
