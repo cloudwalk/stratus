@@ -216,8 +216,6 @@ impl PermanentStorage for RocksPermanentStorage {
             let x = Arc::clone(&self.state.backup_trigger);
             x.send(()).await.unwrap();
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
-            let mut start_time = START_TIME.lock().unwrap();
-            *start_time = Instant::now();
         }
 
         join_all(futures).await;
