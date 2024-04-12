@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select\n    payload\nfrom\n    external_blocks\nwhere number >= $1 and number <= $2\norder by number asc;",
+  "query": "select\n    payload\nfrom\n    external_blocks\nwhere number >= $1 and number <= $2;",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       false
     ]
   },
-  "hash": "f7d015a26f34ac32b48d9997c98f178773b22463238e82b15236a43df6a1aad8"
+  "hash": "1c9395c31063f80f451facea6f4410f1e63b6b4c7f6a2836c0188972461cf298"
 }
