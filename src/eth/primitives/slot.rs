@@ -87,8 +87,8 @@ impl SlotIndex {
 
         // populate value to be hashed to bytes
         let mut mapping_index_bytes = [0u8; 64];
-        mapping_index_bytes[0..32].copy_from_slice(&slot_index_bytes);
-        mapping_index_bytes[32..64].copy_from_slice(&key_bytes);
+        mapping_index_bytes[0..32].copy_from_slice(&key_bytes);
+        mapping_index_bytes[32..64].copy_from_slice(&slot_index_bytes);
 
         let hashed_bytes = keccak256(mapping_index_bytes);
         Self::from(hashed_bytes)
@@ -370,10 +370,14 @@ impl Display for SlotAccess {
 
 #[cfg(test)]
 mod tests {
+    use hex_literal::hex;
+
     use crate::eth::primitives::SlotIndex;
 
     #[test]
     fn slot_index_to_mapping_index() {
-        SlotIndex::ONE.to_mapping_index(vec![1, 2, 3]);
+        let address = hex!("3c44cdddb6a900fa2b585dd299e03d12fa4293bc").to_vec();
+        let hashed = SlotIndex::ZERO.to_mapping_index(address);
+        assert_eq!(hashed.to_string(), "0x215be5d23550ceb1beff54fb579a765903ba2ccc85b6f79bcf9bda4e8cb86034");
     }
 }
