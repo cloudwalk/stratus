@@ -42,7 +42,8 @@ transaction_insert AS (
         r,
         s,
         value,
-        result
+        result,
+        chain_id
     )
     SELECT *
     FROM
@@ -63,7 +64,8 @@ transaction_insert AS (
             $32::bytea [],
             $33::bytea [],
             $34::numeric [],
-            $35::text []
+            $35::text [],
+            $73::numeric [] -- TODO: refactor the ordering
         )
     RETURNING 1 as res
 ),
