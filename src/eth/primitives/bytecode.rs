@@ -27,19 +27,25 @@ pub fn parse_bytecode_slots_indexes(bytecode: Bytes) -> HashSet<SlotAccess> {
     for w in opcodes.windows(4) {
         let (op1, op2, op3, op4) = (&w[0], &w[1], &w[2], &w[3]);
 
-        // Direct: PUSH (index) -> SLOAD
+        // Static: PUSH -> SLOAD
         if is_push(op1) && op2.opcode == SLOAD {
             slots.insert(SlotAccess::Static(op1.input.clone().into()));
             continue;
         }
 
-        // Direct: PUSH1 -> DUP1 -> SLOAD
+        // Static: PUSH -> JUMPDEST -> SLOAD
+        if is_push(op1) && op2.opcode == JUMPDEST && op3.opcode == SLOAD {
+            slots.insert(SlotAccess::Static(op1.input.clone().into()));
+            continue;
+        }
+
+        // Static: PUSH1 -> DUP1 -> SLOAD
         if op1.opcode == PUSH1 && op2.opcode == DUP1 && op3.opcode == SLOAD {
             slots.insert(SlotAccess::Static(op1.input.clone().into()));
             continue;
         }
 
-        // Direct: PUSH1 -> PUSH1 -> SWAP1 -> SLOAD
+        // Static: PUSH1 -> PUSH1 -> SWAP1 -> SLOAD
         if op1.opcode == PUSH1 && op2.opcode == PUSH1 && op3.opcode == SWAP1 && op4.opcode == SLOAD {
             slots.insert(SlotAccess::Static(op1.input.clone().into()));
             continue;
@@ -80,18 +86,23 @@ mod tests {
     use crate::eth::primitives::Bytes;
     use crate::eth::primitives::SlotAccess;
 
+    const BYTECODE_MAINNET_292973: &str = include_str!("../../../tests/fixtures/bytecodes/Mainnet-292973.bin");
     const BYTECODE_BRLC_TOKEN: &str = include_str!("../../../tests/fixtures/bytecodes/BRLCToken.bin");
     const BYTECODE_CPP_V1: &str = include_str!("../../../tests/fixtures/bytecodes/CardPaymentProcessor.bin");
     const BYTECODE_PIX: &str = include_str!("../../../tests/fixtures/bytecodes/PixCashier.bin");
 
     #[test]
     // TODO: add assertions based on storage layout file generated from source code.
-    fn test_parse_bytecode_slots() {
+    fn parse_bytecode_slots() {
+        // brlc snapshot
+        let brlc_token = Bytes(const_hex::decode(BYTECODE_MAINNET_292973).unwrap());
+        print_slots("Mainnet - 292973", super::parse_bytecode_slots_indexes(brlc_token));
+
         // brlc token
         let brlc_token = Bytes(const_hex::decode(BYTECODE_BRLC_TOKEN).unwrap());
         print_slots("BRLC", super::parse_bytecode_slots_indexes(brlc_token));
 
-        // // cpp
+        // cpp
         let cpp_v1 = Bytes(const_hex::decode(BYTECODE_CPP_V1).unwrap());
         print_slots("CPP", super::parse_bytecode_slots_indexes(cpp_v1));
 

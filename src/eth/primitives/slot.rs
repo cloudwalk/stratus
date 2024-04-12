@@ -8,9 +8,11 @@
 
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::io::Read;
 use std::str::FromStr;
 
 use ethereum_types::U256;
+use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
@@ -66,15 +68,30 @@ pub struct SlotIndex(U256);
 
 impl SlotIndex {
     pub const ZERO: SlotIndex = SlotIndex(U256::zero());
+    pub const ONE: SlotIndex = SlotIndex(U256::one());
 
     /// Converts itself to [`U256`].
     pub fn as_u256(&self) -> U256 {
         self.0
     }
 
-    /// Calculates the index for a key in a mapping in the current slot.
-    pub fn to_mapping_index(&self, _key: Vec<u8>) -> SlotIndex {
-        Self::ZERO
+    /// Computes the mapping index of a key.
+    pub fn to_mapping_index(&self, key: Vec<u8>) -> SlotIndex {
+        // populate self to bytes
+        let mut slot_index_bytes = [0u8; 32];
+        self.0.to_big_endian(&mut slot_index_bytes);
+
+        // populate key to bytes
+        let mut key_bytes = [0u8; 32];
+        let _ = key.take(32).read(&mut key_bytes[32usize.saturating_sub(key.len())..32]);
+
+        // populate value to be hashed to bytes
+        let mut mapping_index_bytes = [0u8; 64];
+        mapping_index_bytes[0..32].copy_from_slice(&slot_index_bytes);
+        mapping_index_bytes[32..64].copy_from_slice(&key_bytes);
+
+        let hashed_bytes = keccak256(mapping_index_bytes);
+        Self::from(hashed_bytes)
     }
 }
 
@@ -340,5 +357,15 @@ impl Display for SlotAccess {
             SlotAccess::Mapping(index) => write!(f, "Mapping = {}", index),
             SlotAccess::Array(index) => write!(f, "Array   = {}", index),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::eth::primitives::SlotIndex;
+
+    #[test]
+    fn slot_index_to_mapping_index() {
+        SlotIndex::ONE.to_mapping_index(vec![1, 2, 3]);
     }
 }
