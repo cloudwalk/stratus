@@ -25,8 +25,6 @@ mod m {
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
 }
 
-
-
 #[cfg(feature = "metrics")]
 const METRIC_QUERIES: [&str; 44] = [
     // EVM

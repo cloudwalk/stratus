@@ -78,8 +78,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                     nonce: info.nonce,
                     bytecode: info.bytecode,
                     code_hash: info.code_hash,
-                    slot_indexes_static_access: None,  // TODO: is it necessary for InMemory?
-                    slot_indexes_mapping_access: None, // TODO: is it necessary for InMemory?
+                    slot_indexes_static_access: info.slot_indexes_static_access,
+                    slot_indexes_mapping_access: info.slot_indexes_mapping_access,
                 };
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))

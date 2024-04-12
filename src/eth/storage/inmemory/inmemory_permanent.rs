@@ -447,6 +447,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 }
 
+/// TODO: group bytecode, code_hash, slot_indexes_static_access and slot_indexes_mapping_access into a single bytecode struct.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentAccount {
     #[allow(dead_code)]
@@ -454,7 +455,9 @@ pub struct InMemoryPermanentAccount {
     pub balance: InMemoryHistory<Wei>,
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
-    pub code_hash: CodeHash,
+    pub code_hash: InMemoryHistory<CodeHash>,
+    pub slot_indexes_static_access: InMemoryHistory<Option<Vec<SlotIndex>>>,
+    pub slot_indexes_mapping_access: InMemoryHistory<Option<Vec<SlotIndex>>>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
@@ -471,7 +474,9 @@ impl InMemoryPermanentAccount {
             balance: InMemoryHistory::new_at_zero(balance),
             nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
             bytecode: InMemoryHistory::new_at_zero(None),
-            code_hash: CodeHash::default(),
+            code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
+            slot_indexes_static_access: InMemoryHistory::new_at_zero(None),
+            slot_indexes_mapping_access: InMemoryHistory::new_at_zero(None),
             slots: Default::default(),
         }
     }
@@ -505,7 +510,7 @@ impl InMemoryPermanentAccount {
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-            code_hash: self.code_hash.clone(),
+            code_hash: self.code_hash.get_at_point(point_in_time).unwrap_or_default(),
             slot_indexes_static_access: None,  // TODO: is it necessary for InMemory?
             slot_indexes_mapping_access: None, // TODO: is it necessary for InMemory?
         }

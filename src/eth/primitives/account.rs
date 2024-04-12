@@ -27,6 +27,8 @@ use crate::ext::not;
 use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
+///
+/// TODO: group bytecode, code_hash, slot_indexes_static_access and slot_indexes_mapping_access into a single bytecode struct.
 #[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
 pub struct Account {
     /// Immutable address of the account.
