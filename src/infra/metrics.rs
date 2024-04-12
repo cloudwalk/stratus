@@ -173,6 +173,9 @@ metrics! {
     "Number of slot reads when importing an external block."
     histogram_counter executor_external_block_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000., 6000., 7000., 8000., 9000., 10000.],
 
+    "Number of slot reads cached when importing an external block."
+    histogram_counter executor_external_block_slot_reads_cached{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000., 6000., 7000., 8000., 9000., 10000.],
+
     "Time to execute a transaction received with eth_sendRawTransaction."
     histogram_duration executor_transact{success} [],
 
@@ -190,7 +193,10 @@ metrics! {
     histogram_counter evm_execution_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10.],
 
     "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000.]
+    histogram_counter evm_execution_slot_reads{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000.],
+
+    "Number of slots read cached in a single EVM execution."
+    histogram_counter evm_execution_slot_reads_cached{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000.]
 }
 
 // -----------------------------------------------------------------------------

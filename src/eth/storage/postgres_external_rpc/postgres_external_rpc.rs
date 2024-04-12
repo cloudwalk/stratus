@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use itertools::Itertools;
 use serde_json::Value as JsonValue;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
@@ -90,7 +91,8 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     for row in rows {
                         blocks.push(row.payload.try_into()?);
                     }
-                    return Ok(blocks);
+                    let blocks_sorted = blocks.into_iter().sorted_by_key(|x| x.number()).collect();
+                    return Ok(blocks_sorted);
                 }
                 Err(e) => {
                     if attempts < MAX_RETRIES {

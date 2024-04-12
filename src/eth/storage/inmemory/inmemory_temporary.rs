@@ -78,6 +78,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                     nonce: info.nonce,
                     bytecode: info.bytecode,
                     code_hash: info.code_hash,
+                    static_slot_indexes: info.static_slot_indexes,
+                    mapping_slot_indexes: info.mapping_slot_indexes,
                 };
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
@@ -127,8 +129,16 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
             if let Some(balance) = change.balance.take() {
                 account.info.balance = balance;
             }
+
+            // bytecode (todo: where is code_hash?)
             if let Some(Some(bytecode)) = change.bytecode.take() {
                 account.info.bytecode = Some(bytecode);
+            }
+            if let Some(indexes) = change.static_slot_indexes.take() {
+                account.info.static_slot_indexes = indexes;
+            }
+            if let Some(indexes) = change.mapping_slot_indexes.take() {
+                account.info.mapping_slot_indexes = indexes;
             }
 
             // slots

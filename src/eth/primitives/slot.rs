@@ -32,10 +32,16 @@ pub struct Slot {
 }
 
 impl Slot {
-    pub fn new(index: impl Into<SlotIndex>, value: impl Into<SlotValue>) -> Self {
+    /// Creates a new slot with the given index and value.
+    pub fn new(index: SlotIndex, value: SlotValue) -> Self {
+        Self { index, value }
+    }
+
+    /// Creates a new slot with the given index and default zero value.
+    pub fn new_empty(index: SlotIndex) -> Self {
         Self {
-            index: index.into(),
-            value: value.into(),
+            index,
+            value: SlotValue::default(),
         }
     }
 
@@ -64,6 +70,11 @@ impl SlotIndex {
     /// Converts itself to [`U256`].
     pub fn as_u256(&self) -> U256 {
         self.0
+    }
+
+    /// Calculates the index for a key in a mapping in the current slot.
+    pub fn to_mapping_index(&self, _key: Vec<u8>) -> SlotIndex {
+        Self::ZERO
     }
 }
 
@@ -312,9 +323,22 @@ pub struct SlotSample {
 /// How a slot is accessed.
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SlotAccess {
-    /// Slot index is accessed directly.
-    Direct,
+    /// Slot index will be accessed statically without any hashing.
+    Static(SlotIndex),
 
-    /// Slot index is hashed according to mapping hash algorithm.
-    Mapping,
+    /// Index will be hashed according to mapping hash algorithm.
+    Mapping(SlotIndex),
+
+    /// Index will be hashed according to array hashing algorithm.
+    Array(SlotIndex),
+}
+
+impl Display for SlotAccess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SlotAccess::Static(index) => write!(f, "Static  = {}", index),
+            SlotAccess::Mapping(index) => write!(f, "Mapping = {}", index),
+            SlotAccess::Array(index) => write!(f, "Array   = {}", index),
+        }
+    }
 }

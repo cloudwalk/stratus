@@ -351,6 +351,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
             if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
                 account.bytecode.push(*number, Some(bytecode));
             }
+            if let Some(indexes) = changes.static_slot_indexes.take() {
+                account.static_slot_indexes.push(*number, indexes);
+            }
+            if let Some(indexes) = changes.mapping_slot_indexes.take() {
+                account.mapping_slot_indexes.push(*number, indexes);
+            }
 
             // slots
             for (_, slot) in changes.slots {
@@ -447,6 +453,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 }
 
+/// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentAccount {
     #[allow(dead_code)]
@@ -454,7 +461,9 @@ pub struct InMemoryPermanentAccount {
     pub balance: InMemoryHistory<Wei>,
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
-    pub code_hash: CodeHash,
+    pub code_hash: InMemoryHistory<CodeHash>,
+    pub static_slot_indexes: InMemoryHistory<Option<Vec<SlotIndex>>>,
+    pub mapping_slot_indexes: InMemoryHistory<Option<Vec<SlotIndex>>>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
@@ -471,7 +480,9 @@ impl InMemoryPermanentAccount {
             balance: InMemoryHistory::new_at_zero(balance),
             nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
             bytecode: InMemoryHistory::new_at_zero(None),
-            code_hash: CodeHash::default(),
+            code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
+            static_slot_indexes: InMemoryHistory::new_at_zero(None),
+            mapping_slot_indexes: InMemoryHistory::new_at_zero(None),
             slots: Default::default(),
         }
     }
@@ -482,6 +493,8 @@ impl InMemoryPermanentAccount {
         self.balance = self.balance.reset_at(block_number).expect("never empty");
         self.nonce = self.nonce.reset_at(block_number).expect("never empty");
         self.bytecode = self.bytecode.reset_at(block_number).expect("never empty");
+        self.static_slot_indexes.reset_at(block_number).expect("never empty");
+        self.mapping_slot_indexes.reset_at(block_number).expect("never empty");
 
         // SAFETY: not ok to unwrap because slot value does not start at block 0
         let mut new_slots = HashMap::with_capacity(self.slots.len());
@@ -505,7 +518,9 @@ impl InMemoryPermanentAccount {
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
-            code_hash: self.code_hash.clone(),
+            code_hash: self.code_hash.get_at_point(point_in_time).unwrap_or_default(),
+            static_slot_indexes: None,  // TODO: is it necessary for InMemory?
+            mapping_slot_indexes: None, // TODO: is it necessary for InMemory?
         }
     }
 }

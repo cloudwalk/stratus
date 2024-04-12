@@ -146,10 +146,7 @@ impl StratusStorage {
                     tracing::debug!("account not found, assuming default value");
                     #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Account {
-                        address: address.clone(),
-                        ..Account::default()
-                    })
+                    Ok(Account::new_empty(address.clone()))
                 }
             },
         }
@@ -178,13 +175,39 @@ impl StratusStorage {
                     tracing::debug!("slot not found, assuming default value");
                     #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Slot {
-                        index: index.clone(),
-                        ..Default::default()
-                    })
+                    Ok(Slot::new_empty(index.clone()))
                 }
             },
         }
+    }
+
+    /// Retrieves multiple slots from the storage. Returns default values when not found.
+    pub async fn read_slots(&self, address: &Address, slot_indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+        let mut slots = Vec::with_capacity(slot_indexes.len());
+        let mut perm_indexes = Vec::with_capacity(slot_indexes.len());
+
+        // read slots from temporary storage
+        for index in slot_indexes {
+            match self.temp.read_slot(address, index).await? {
+                Some(slot) => {
+                    slots.push(slot);
+                }
+                None => {
+                    perm_indexes.push(index.clone());
+                }
+            }
+        }
+
+        // read missing slots from permanent storage
+        let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
+        for index in perm_indexes.into_iter() {
+            match perm_slots.remove(&index) {
+                Some(value) => slots.push(Slot { index, value }),
+                None => slots.push(Slot::new_empty(index)),
+            }
+        }
+
+        Ok(slots)
     }
 
     /// Retrieves a block from the storage.
