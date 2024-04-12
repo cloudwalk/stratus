@@ -5,6 +5,13 @@ on:
     branches:
       - '*'
   workflow_dispatch:
+  push: # Rebuild cache policy
+    branches:
+      - 'main'
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+
 
 jobs:
   doc_unit_tests:

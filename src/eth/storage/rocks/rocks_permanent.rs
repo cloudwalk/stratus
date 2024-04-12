@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -25,6 +26,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::rocks_state::AccountInfo;
@@ -127,13 +129,27 @@ impl PermanentStorage for RocksPermanentStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         Ok(self.state.read_account(address, point_in_time))
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
-        Ok(self.state.read_slot(address, slot_index, point_in_time))
+    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %index, ?point_in_time, "reading slot");
+        Ok(self.state.read_slot(address, index, point_in_time))
+    }
+
+    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+        tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
+
+        let mut slots = HashMap::with_capacity(indexes.len());
+        for index in indexes {
+            let slot = self.read_slot(address, index, point_in_time).await?;
+            if let Some(slot) = slot {
+                slots.insert(slot.index, slot.value);
+            }
+        }
+
+        Ok(slots)
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -208,10 +224,6 @@ impl PermanentStorage for RocksPermanentStorage {
         }
 
         join_all(futures).await;
-        Ok(())
-    }
-
-    async fn after_commit_hook(&self) -> anyhow::Result<()> {
         Ok(())
     }
 

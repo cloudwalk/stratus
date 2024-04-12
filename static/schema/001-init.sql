@@ -114,11 +114,14 @@ CREATE TABLE public.accounts (
     address bytea NOT NULL,
     bytecode bytea,
     code_hash bytea NOT NULL,
+    mapping_slot_indexes bytea[],
+    static_slot_indexes bytea[],
     latest_balance numeric NOT NULL,
     latest_nonce numeric NOT NULL,
     creation_block numeric NOT NULL,
     previous_balance numeric,
     previous_nonce numeric,
+
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL
 );
