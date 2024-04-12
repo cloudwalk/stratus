@@ -18,8 +18,11 @@ pub struct ExecutionAccountChanges {
     pub address: Address,
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
+
+    // TODO: bytecode related information should be grouped in a Bytecode struct
     pub bytecode: ExecutionValueChange<Option<Bytes>>,
-    pub code_hash: CodeHash,
+    pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
+
     pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
 }
 
@@ -46,8 +49,11 @@ impl ExecutionAccountChanges {
             address: account.address,
             nonce: ExecutionValueChange::from_modified(account.nonce),
             balance: ExecutionValueChange::from_modified(account.balance),
+
+            // bytecode
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
             code_hash: account.code_hash,
+
             slots: HashMap::new(),
         };
 

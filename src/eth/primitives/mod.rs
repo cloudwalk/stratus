@@ -127,7 +127,7 @@ pub use block::Block;
 pub use block_header::BlockHeader;
 pub use block_number::BlockNumber;
 pub use block_selection::BlockSelection;
-pub use bytecode::parse_bytecode_slots;
+pub use bytecode::parse_bytecode_slots_indexes;
 pub use bytes::Bytes;
 pub use call_input::CallInput;
 pub use chain_id::ChainId;

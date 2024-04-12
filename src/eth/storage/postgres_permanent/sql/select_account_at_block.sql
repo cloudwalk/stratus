@@ -29,7 +29,9 @@ SELECT
     closest_nonce.nonce as "nonce: _",
     closest_balance.balance as "balance: _",
     bytecode as "bytecode: _",
-    code_hash as "code_hash: _"
+    code_hash as "code_hash: _",
+    slot_indexes_static_access as "slot_indexes_static_access: _",
+    slot_indexes_static_access as "slot_indexes_mapping_access: _"
 FROM accounts
 JOIN closest_nonce ON true
 JOIN closest_balance ON true

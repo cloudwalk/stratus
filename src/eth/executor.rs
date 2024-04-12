@@ -102,7 +102,7 @@ impl EthExecutor {
             #[cfg(feature = "metrics")]
             let tx_start = metrics::now();
 
-            // re-execute transaction or create a fake execution the external transaction failed
+            // re-execute transaction or create a fake execution from the failed external transaction
             let receipt = receipts.try_get(&tx.hash())?;
             let execution = if receipt.is_success() {
                 let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), receipt)?;
@@ -175,7 +175,7 @@ impl EthExecutor {
             "executing transaction"
         );
 
-        // validates
+        // validate
         if transaction.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(anyhow!("transaction sent from zero address is not allowed."));

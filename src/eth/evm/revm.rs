@@ -51,7 +51,7 @@ use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
-    evm: RevmEvm<'static, (), RevmDatabaseSession>,
+    evm: RevmEvm<'static, (), RevmSession>,
 }
 
 impl Revm {
@@ -62,17 +62,19 @@ impl Revm {
         let mut evm = RevmEvm::builder()
             .with_handler(Handler::mainnet_with_spec(SpecId::LONDON))
             .with_external_context(())
-            .with_db(RevmDatabaseSession::new(storage))
+            .with_db(RevmSession::new(storage))
             .build();
 
-        // evm general config
+        // global general config
         let cfg_env = evm.cfg_mut();
         cfg_env.chain_id = chain_id.into();
         cfg_env.limit_contract_code_size = Some(usize::MAX);
 
+        // global block config
         let block_env = evm.block_mut();
         block_env.coinbase = Address::COINBASE.into();
 
+        // global tx config
         let tx_env = evm.tx_mut();
         tx_env.gas_priority_fee = None;
 
@@ -89,7 +91,7 @@ impl Evm for Revm {
         let evm = &mut self.evm;
         evm.db_mut().reset(input.clone());
 
-        // configure evm block
+        // configure block params
         let block_env = evm.block_mut();
         block_env.basefee = U256::ZERO;
         block_env.timestamp = input.block_timestamp.into();
@@ -109,18 +111,18 @@ impl Evm for Revm {
         tx_env.data = input.data.into();
         tx_env.value = input.value.into();
 
-        // execute evm
+        // execute transaction
         let evm_result = evm.transact();
 
-        // parse result and track metrics
+        // extract results
         let session = evm.db_mut();
         let session_input = std::mem::take(&mut session.input);
-
         let session_storage_changes = std::mem::take(&mut session.storage_changes);
         let session_metrics = std::mem::take(&mut session.metrics);
         #[cfg(feature = "metrics")]
         let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
 
+        // parse and enrich result
         let execution = match evm_result {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
             Err(e) => {
@@ -129,6 +131,7 @@ impl Evm for Revm {
             }
         };
 
+        // track metrics
         #[cfg(feature = "metrics")]
         {
             metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
@@ -136,7 +139,7 @@ impl Evm for Revm {
             metrics::inc_evm_execution_slot_reads(session_metrics.slot_reads);
         }
 
-        execution.map(|x| (x, session_metrics))
+        execution.map(|execution| (execution, session_metrics))
     }
 }
 
@@ -145,7 +148,7 @@ impl Evm for Revm {
 // -----------------------------------------------------------------------------
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
-struct RevmDatabaseSession {
+struct RevmSession {
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
 
@@ -159,7 +162,7 @@ struct RevmDatabaseSession {
     metrics: ExecutionMetrics,
 }
 
-impl RevmDatabaseSession {
+impl RevmSession {
     /// Creates the base session to be used with REVM.
     pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
@@ -178,7 +181,7 @@ impl RevmDatabaseSession {
     }
 }
 
-impl Database for RevmDatabaseSession {
+impl Database for RevmSession {
     type Error = anyhow::Error;
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {

@@ -506,6 +506,8 @@ impl InMemoryPermanentAccount {
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
             code_hash: self.code_hash.clone(),
+            slot_indexes_static_access: None,  // TODO: is it necessary for InMemory?
+            slot_indexes_mapping_access: None, // TODO: is it necessary for InMemory?
         }
     }
 }

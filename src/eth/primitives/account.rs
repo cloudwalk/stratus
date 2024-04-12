@@ -8,14 +8,20 @@
 //! tracking account states and differentiating between standard accounts and
 //! contract accounts.
 
+use std::collections::HashSet;
+
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
+use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::SlotAccess;
+use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
+use crate::ext::not;
 use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
@@ -35,6 +41,12 @@ pub struct Account {
 
     /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
     pub code_hash: CodeHash,
+
+    /// Slots indexes that are accessed statically.
+    pub slot_indexes_static_access: Option<Vec<SlotIndex>>,
+
+    /// Slots indexes that are accessed using the mapping hash algorithm.
+    pub slot_indexes_mapping_access: Option<Vec<SlotIndex>>,
 }
 
 impl Account {
@@ -51,6 +63,8 @@ impl Account {
             balance,
             bytecode: None,
             code_hash: CodeHash::default(),
+            slot_indexes_static_access: None,
+            slot_indexes_mapping_access: None,
         }
     }
 
@@ -75,12 +89,38 @@ impl Account {
 // -----------------------------------------------------------------------------
 impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
+        let (address, info) = value;
+
+        // parse bytecode
+        let slot_indexes: HashSet<SlotAccess> = match info.code {
+            Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone().into()),
+            _ => HashSet::new(),
+        };
+
+        let mut static_access = Vec::with_capacity(slot_indexes.len());
+        let mut mapping_access = Vec::with_capacity(slot_indexes.len());
+        for index in slot_indexes {
+            match index {
+                SlotAccess::Static(index) => static_access.push(index),
+                SlotAccess::Mapping(index) => mapping_access.push(index),
+                _ => {}
+            }
+        }
+
         Self {
-            address: value.0.into(),
-            nonce: value.1.nonce.into(),
-            balance: value.1.balance.into(),
-            bytecode: value.1.code.map_into(),
-            code_hash: value.1.code_hash.into(),
+            address: address.into(),
+            nonce: info.nonce.into(),
+            balance: info.balance.into(),
+            bytecode: info.code.map_into(),
+            code_hash: info.code_hash.into(),
+            slot_indexes_static_access: match static_access.is_empty() {
+                true => None,
+                false => Some(static_access),
+            },
+            slot_indexes_mapping_access: match mapping_access.is_empty() {
+                true => None,
+                false => Some(mapping_access),
+            },
         }
     }
 }
