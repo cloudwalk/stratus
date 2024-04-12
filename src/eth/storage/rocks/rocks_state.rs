@@ -49,8 +49,8 @@ impl AccountInfo {
             balance: self.balance.clone(),
             bytecode: self.bytecode.clone(),
             code_hash: self.code_hash.clone(),
-            slot_indexes_static_access: None,  // TODO: is it necessary for RocksDB?
-            slot_indexes_mapping_access: None, // TODO: is it necessary for RocksDB?
+            static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
+            mapping_slot_indexes: None, // TODO: is it necessary for RocksDB?
         }
     }
 }

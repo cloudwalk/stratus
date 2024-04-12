@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\nSELECT\n    address as \"address: _\",\n    latest_nonce as \"nonce: _\",\n    latest_balance as \"balance: _\",\n    bytecode as \"bytecode: _\",\n    code_hash as \"code_hash: _\",\n    slot_indexes_static_access as \"slot_indexes_static_access: _\",\n    slot_indexes_static_access as \"slot_indexes_mapping_access: _\"\nFROM accounts\nWHERE address = $1\n",
+  "query": "\nSELECT\n    address as \"address: _\",\n    latest_nonce as \"nonce: _\",\n    latest_balance as \"balance: _\",\n    bytecode as \"bytecode: _\",\n    code_hash as \"code_hash: _\",\n    static_slot_indexes as \"static_slot_indexes: _\",\n    mapping_slot_indexes as \"mapping_slot_indexes: _\"\nFROM accounts\nWHERE address = $1\n",
   "describe": {
     "columns": [
       {
@@ -30,12 +30,12 @@
       },
       {
         "ordinal": 5,
-        "name": "slot_indexes_static_access: _",
+        "name": "static_slot_indexes: _",
         "type_info": "ByteaArray"
       },
       {
         "ordinal": 6,
-        "name": "slot_indexes_mapping_access: _",
+        "name": "mapping_slot_indexes: _",
         "type_info": "ByteaArray"
       }
     ],
@@ -54,5 +54,5 @@
       true
     ]
   },
-  "hash": "611b297bdf8f641e5471285a7dfc58fed07bce2145c776a797d37edc83aa69f7"
+  "hash": "fa9e23c9fed1304c0a833d0f60eefeaf580af7940ea84f16f0054e6d6b506fd4"
 }

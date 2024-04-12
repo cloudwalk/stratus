@@ -28,7 +28,7 @@ use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
 ///
-/// TODO: group bytecode, code_hash, slot_indexes_static_access and slot_indexes_mapping_access into a single bytecode struct.
+/// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
 #[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
 pub struct Account {
     /// Immutable address of the account.
@@ -47,10 +47,10 @@ pub struct Account {
     pub code_hash: CodeHash,
 
     /// Slots indexes that are accessed statically.
-    pub slot_indexes_static_access: Option<Vec<SlotIndex>>,
+    pub static_slot_indexes: Option<Vec<SlotIndex>>,
 
     /// Slots indexes that are accessed using the mapping hash algorithm.
-    pub slot_indexes_mapping_access: Option<Vec<SlotIndex>>,
+    pub mapping_slot_indexes: Option<Vec<SlotIndex>>,
 }
 
 impl Account {
@@ -67,8 +67,8 @@ impl Account {
             balance,
             bytecode: None,
             code_hash: CodeHash::default(),
-            slot_indexes_static_access: None,
-            slot_indexes_mapping_access: None,
+            static_slot_indexes: None,
+            mapping_slot_indexes: None,
         }
     }
 
@@ -92,12 +92,12 @@ impl Account {
         let mut slot_indexes = Vec::new();
 
         // calculate static indexes
-        if let Some(ref indexes) = self.slot_indexes_static_access {
+        if let Some(ref indexes) = self.static_slot_indexes {
             slot_indexes.extend(indexes.clone());
         }
 
         // calculate mapping indexes
-        if let Some(ref indexes) = self.slot_indexes_mapping_access {
+        if let Some(ref indexes) = self.mapping_slot_indexes {
             for (base_slot_index, input_key) in indexes.iter().cartesian_product(input_keys.into_iter()) {
                 let mapping_slot_index = base_slot_index.to_mapping_index(input_key);
                 slot_indexes.push(mapping_slot_index);
@@ -121,12 +121,12 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             _ => HashSet::new(),
         };
 
-        let mut static_access = Vec::with_capacity(slot_indexes.len());
-        let mut mapping_access = Vec::with_capacity(slot_indexes.len());
+        let mut static_slot_indexes = Vec::with_capacity(slot_indexes.len());
+        let mut mapping_slot_indexes = Vec::with_capacity(slot_indexes.len());
         for index in slot_indexes {
             match index {
-                SlotAccess::Static(index) => static_access.push(index),
-                SlotAccess::Mapping(index) => mapping_access.push(index),
+                SlotAccess::Static(index) => static_slot_indexes.push(index),
+                SlotAccess::Mapping(index) => mapping_slot_indexes.push(index),
                 _ => {}
             }
         }
@@ -137,13 +137,13 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             balance: info.balance.into(),
             bytecode: info.code.map_into(),
             code_hash: info.code_hash.into(),
-            slot_indexes_static_access: match static_access.is_empty() {
+            static_slot_indexes: match static_slot_indexes.is_empty() {
                 true => None,
-                false => Some(static_access),
+                false => Some(static_slot_indexes),
             },
-            slot_indexes_mapping_access: match mapping_access.is_empty() {
+            mapping_slot_indexes: match mapping_slot_indexes.is_empty() {
                 true => None,
-                false => Some(mapping_access),
+                false => Some(mapping_slot_indexes),
             },
         }
     }

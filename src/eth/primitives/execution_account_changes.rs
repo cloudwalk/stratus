@@ -22,6 +22,8 @@ pub struct ExecutionAccountChanges {
     // TODO: bytecode related information should be grouped in a Bytecode struct
     pub bytecode: ExecutionValueChange<Option<Bytes>>,
     pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
+    pub static_slot_indexes: ExecutionValueChange<Option<Vec<SlotIndex>>>,
+    pub mapping_slot_indexes: ExecutionValueChange<Option<Vec<SlotIndex>>>,
 
     pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
 }
@@ -38,6 +40,8 @@ impl ExecutionAccountChanges {
             bytecode: ExecutionValueChange::from_original(account.bytecode),
             slots: HashMap::new(),
             code_hash: account.code_hash,
+            static_slot_indexes: ExecutionValueChange::from_original(account.static_slot_indexes),
+            mapping_slot_indexes: ExecutionValueChange::from_original(account.mapping_slot_indexes),
         }
     }
 
@@ -53,6 +57,8 @@ impl ExecutionAccountChanges {
             // bytecode
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
             code_hash: account.code_hash,
+            static_slot_indexes: ExecutionValueChange::from_modified(account.static_slot_indexes),
+            mapping_slot_indexes: ExecutionValueChange::from_modified(account.mapping_slot_indexes),
 
             slots: HashMap::new(),
         };
