@@ -519,8 +519,8 @@ impl InMemoryPermanentAccount {
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
             code_hash: self.code_hash.get_at_point(point_in_time).unwrap_or_default(),
-            static_slot_indexes: None,  // TODO: is it necessary for InMemory?
-            mapping_slot_indexes: None, // TODO: is it necessary for InMemory?
+            static_slot_indexes: self.static_slot_indexes.get_at_point(point_in_time).unwrap_or_default(),
+            mapping_slot_indexes: self.mapping_slot_indexes.get_at_point(point_in_time).unwrap_or_default(),
         }
     }
 }
