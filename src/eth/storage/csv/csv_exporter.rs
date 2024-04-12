@@ -55,7 +55,7 @@ const HISTORICAL_NONCES_HEADERS: [&str; 6] = ["id", "address", "nonce", "block_n
 
 const TRANSACTIONS_FILE: &str = "data/transactions";
 
-const TRANSACTIONS_HEADERS: [&str; 20] = [
+const TRANSACTIONS_HEADERS: [&str; 21] = [
     "id",
     "hash",
     "signer_address",
@@ -76,6 +76,7 @@ const TRANSACTIONS_HEADERS: [&str; 20] = [
     "result",
     "created_at",
     "updated_at",
+    "chain_id",
 ];
 
 const BLOCKS_FILE: &str = "data/blocks";
