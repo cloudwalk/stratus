@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
@@ -54,7 +55,7 @@ const HISTORICAL_NONCES_HEADERS: [&str; 6] = ["id", "address", "nonce", "block_n
 
 const TRANSACTIONS_FILE: &str = "data/transactions";
 
-const TRANSACTIONS_HEADERS: [&str; 20] = [
+const TRANSACTIONS_HEADERS: [&str; 21] = [
     "id",
     "hash",
     "signer_address",
@@ -75,6 +76,7 @@ const TRANSACTIONS_HEADERS: [&str; 20] = [
     "result",
     "created_at",
     "updated_at",
+    "chain_id",
 ];
 
 const BLOCKS_FILE: &str = "data/blocks";
@@ -343,6 +345,7 @@ impl CsvExporter {
                 tx.execution.result.to_string(),             // result
                 now.clone(),                                 // created_at
                 now,                                         // updated_at
+                from_option(tx.input.chain_id),              // chain_id
             ];
             self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -410,12 +413,12 @@ impl CsvExporter {
             if let Some(nonce) = change.nonce.take_modified() {
                 self.historical_nonces_id.value += 1;
                 let row = [
-                    self.historical_balances_id.value.to_string(), // id
-                    to_bytea(&change.address),                     // address
-                    nonce.to_string(),                             // nonce
-                    block_number.to_string(),                      // block_number
-                    now.clone(),                                   // updated_at
-                    now.clone(),                                   // created_at
+                    self.historical_nonces_id.value.to_string(), // id
+                    to_bytea(&change.address),                   // address
+                    nonce.to_string(),                           // nonce
+                    block_number.to_string(),                    // block_number
+                    now.clone(),                                 // updated_at
+                    now.clone(),                                 // created_at
                 ];
                 self.historical_nonces_csv.write_record(row).context("failed to write csv historical nonces")?;
             }
@@ -594,4 +597,9 @@ fn u256_to_bytea(integer: U256) -> String {
 /// Returns the current date formatted for the CSV file.
 fn now() -> String {
     chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f").to_string()
+}
+
+/// Builds a string from an optional displayable value.
+fn from_option(t: Option<impl Display>) -> String {
+    t.map(|x| x.to_string()).unwrap_or_default()
 }
