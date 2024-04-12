@@ -410,12 +410,12 @@ impl CsvExporter {
             if let Some(nonce) = change.nonce.take_modified() {
                 self.historical_nonces_id.value += 1;
                 let row = [
-                    self.historical_balances_id.value.to_string(), // id
-                    to_bytea(&change.address),                     // address
-                    nonce.to_string(),                             // nonce
-                    block_number.to_string(),                      // block_number
-                    now.clone(),                                   // updated_at
-                    now.clone(),                                   // created_at
+                    self.historical_nonces_id.value.to_string(), // id
+                    to_bytea(&change.address),                   // address
+                    nonce.to_string(),                           // nonce
+                    block_number.to_string(),                    // block_number
+                    now.clone(),                                 // updated_at
+                    now.clone(),                                 // created_at
                 ];
                 self.historical_nonces_csv.write_record(row).context("failed to write csv historical nonces")?;
             }
