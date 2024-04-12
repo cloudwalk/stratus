@@ -15,6 +15,7 @@ use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::CreateScheme;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
+use revm::primitives::HashMap;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
 use revm::primitives::State as RevmState;
@@ -137,6 +138,7 @@ impl Evm for Revm {
             metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
             metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
             metrics::inc_evm_execution_slot_reads(session_metrics.slot_reads);
+            metrics::inc_evm_execution_slot_reads_cached(session_metrics.slot_reads_cached);
         }
 
         execution.map(|execution| (execution, session_metrics))
@@ -158,6 +160,9 @@ struct RevmSession {
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 
+    /// Slots cached during account load.
+    slot_prefetch_cache: HashMap<SlotIndex, Slot>,
+
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
 }
@@ -169,6 +174,7 @@ impl RevmSession {
             storage,
             input: Default::default(),
             storage_changes: Default::default(),
+            slot_prefetch_cache: Default::default(),
             metrics: Default::default(),
         }
     }
@@ -177,6 +183,7 @@ impl RevmSession {
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
         self.storage_changes = Default::default();
+        self.slot_prefetch_cache = HashMap::with_capacity(256);
         self.metrics = Default::default();
     }
 }
@@ -186,10 +193,11 @@ impl Database for RevmSession {
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
         self.metrics.account_reads += 1;
+        let handle = Handle::current();
 
         // retrieve account
         let address: Address = revm_address.into();
-        let account = Handle::current().block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
+        let account = handle.block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
@@ -204,6 +212,13 @@ impl Database for RevmSession {
                 .insert(account.address.clone(), ExecutionAccountChanges::from_original_values(account.clone()));
         }
 
+        // prefetch slots (put behind feature-flag)
+        let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
+        let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
+        for slot in slots {
+            self.slot_prefetch_cache.insert(slot.index.clone(), slot);
+        }
+
         Ok(Some(account.into()))
     }
 
@@ -213,11 +228,17 @@ impl Database for RevmSession {
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
         self.metrics.slot_reads += 1;
+        let handle = Handle::current();
 
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
-        let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
+
+        // load slot from cache or storage
+        let slot = match self.slot_prefetch_cache.get(&index) {
+            None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
+            Some(cached) => cached.clone(),
+        };
 
         // track original value, except if ignored address
         if not(address.is_ignored()) {

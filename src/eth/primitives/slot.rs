@@ -71,6 +71,11 @@ impl SlotIndex {
     pub fn as_u256(&self) -> U256 {
         self.0
     }
+
+    /// Calculates the index for a key in a mapping in the current slot.
+    pub fn to_mapping_index(&self, _key: Vec<u8>) -> SlotIndex {
+        Self::ZERO
+    }
 }
 
 impl FromStr for SlotIndex {

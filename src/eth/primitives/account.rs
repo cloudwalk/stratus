@@ -10,9 +10,11 @@
 
 use std::collections::HashSet;
 
+use itertools::Itertools;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
+use crate::eth::evm::EvmInputSlotKeys;
 use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -81,6 +83,26 @@ impl Account {
             Some(ref bytecode) => !bytecode.is_empty(),
             None => false,
         }
+    }
+
+    /// Compute slot indexes to be accessed for a give input.
+    pub fn slot_indexes(&self, input_keys: EvmInputSlotKeys) -> Vec<SlotIndex> {
+        let mut slot_indexes = Vec::new();
+
+        // calculate static indexes
+        if let Some(ref indexes) = self.slot_indexes_static_access {
+            slot_indexes.extend(indexes.clone());
+        }
+
+        // calculate mapping indexes
+        if let Some(ref indexes) = self.slot_indexes_mapping_access {
+            for (base_slot_index, input_key) in indexes.iter().cartesian_product(input_keys.into_iter()) {
+                let mapping_slot_index = base_slot_index.to_mapping_index(input_key);
+                slot_indexes.push(mapping_slot_index);
+            }
+        }
+
+        slot_indexes
     }
 }
 

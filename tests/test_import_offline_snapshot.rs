@@ -19,13 +19,16 @@ use stratus::init_global_services;
 mod m {
     pub use const_format::formatcp;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
+    pub use stratus::infra::metrics::METRIC_EVM_EXECUTION_SLOT_READS_CACHED;
     pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
 }
 
+
+
 #[cfg(feature = "metrics")]
-const METRIC_QUERIES: [&str; 43] = [
+const METRIC_QUERIES: [&str; 44] = [
     // EVM
     "* EVM",
     m::formatcp!("{}_count", m::METRIC_EVM_EXECUTION),
@@ -50,21 +53,22 @@ const METRIC_QUERIES: [&str; 43] = [
     m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    "* STORAGE SLOTS (count)",
+    "* SLOTS (count)",
     m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
-    "* STORAGE SLOTS (cumulative)",
+    "* SLOTS (cumulative)",
     m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOT),
+    m::formatcp!("{}_sum{{}}", m::METRIC_EVM_EXECUTION_SLOT_READS_CACHED),
     m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
-    "* STORAGE SLOTS (P100)",
+    "* SLOTS (P100)",
     m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
-    "* STORAGE SLOTS (P95)",
+    "* SLOTS (P95)",
     m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
