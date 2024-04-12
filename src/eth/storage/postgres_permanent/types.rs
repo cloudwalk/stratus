@@ -5,6 +5,7 @@ use anyhow::Context;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::EcdsaRs;
 use crate::eth::primitives::EcdsaV;
@@ -43,6 +44,7 @@ pub struct PostgresTransaction {
     pub r: EcdsaRs,
     pub s: EcdsaRs,
     pub v: EcdsaV,
+    pub chain_id: Option<ChainId>,
 }
 
 impl PostgresTransaction {
@@ -66,7 +68,7 @@ impl PostgresTransaction {
             execution_costs_applied: true,
         };
         let input = TransactionInput {
-            chain_id: Some(2008u64.into()), // TODO: chain_id should be saved in the database instead of using hardcoded value
+            chain_id: self.chain_id,
             hash: self.hash,
             nonce: self.nonce,
             signer: self.signer_address,
@@ -157,6 +159,7 @@ pub struct TransactionBatch {
     pub s: Vec<[u8; 32]>,
     pub value: Vec<Wei>,
     pub result: Vec<String>,
+    pub chain_id: Vec<Option<ChainId>>,
 }
 
 impl TransactionBatch {
@@ -178,6 +181,7 @@ impl TransactionBatch {
         self.s.push(<[u8; 32]>::from(transaction.input.s));
         self.value.push(transaction.input.value);
         self.result.push(transaction.execution.result.to_string());
+        self.chain_id.push(transaction.input.chain_id);
     }
 }
 

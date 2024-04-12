@@ -747,7 +747,8 @@ impl PermanentStorage for PostgresPermanentStorage {
             historical_slot_batch.index as _,
             historical_slot_batch.value as _,
             historical_slot_batch.address as _,
-            historical_slot_batch.block_number as _
+            historical_slot_batch.block_number as _,
+            transaction_batch.chain_id as _, // TODO: move it up
         )
         .fetch_one(&mut *tx)
         .await
