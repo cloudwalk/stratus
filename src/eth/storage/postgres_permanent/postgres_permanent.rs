@@ -787,6 +787,7 @@ impl PermanentStorage for PostgresPermanentStorage {
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
+
         for acc in accounts {
             let mut tx = self.pool.begin().await.context("failed to init transaction")?;
             let block_number = 0;
@@ -794,6 +795,15 @@ impl PermanentStorage for PostgresPermanentStorage {
             let nonce = BigDecimal::try_from(acc.nonce)?;
             let bytecode = acc.bytecode.as_deref();
             let code_hash: &[u8] = acc.code_hash.as_ref();
+            let static_slot_indexes: Option<Vec<Vec<u8>>> = match acc.static_slot_indexes {
+                Some(indexes) => Some(indexes.into_iter().map(|x|x.into()).collect()),
+                None => None
+            };
+            let mapping_slot_indexes: Option<Vec<Vec<u8>>> = match acc.mapping_slot_indexes {
+                Some(indexes) => Some(indexes.into_iter().map(|x|x.into()).collect()),
+                None => None
+            };
+
 
             sqlx::query_file!(
                 "src/eth/storage/postgres_permanent/sql/insert_account.sql",
@@ -802,6 +812,8 @@ impl PermanentStorage for PostgresPermanentStorage {
                 balance,
                 bytecode,
                 code_hash,
+                static_slot_indexes.as_deref(),
+                mapping_slot_indexes.as_deref(),
                 block_number as _,
                 BigDecimal::from(0),
                 BigDecimal::from(0),
