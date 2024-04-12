@@ -284,7 +284,8 @@ async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyh
 // -----------------------------------------------------------------------------
 fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalReceipts, mined_block: &Block) -> anyhow::Result<()> {
     // generate snapshot
-    let snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
+    let state_snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
+    let receipts_snapshot = external_receipts.filter_block(external_block.number());
 
     // create dir
     let dir = format!("tests/fixtures/snapshots/{}/", mined_block.number());
@@ -292,8 +293,8 @@ fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalR
 
     // write json
     fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block)?)?;
-    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(external_receipts)?)?;
-    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&snapshot)?)?;
+    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(&receipts_snapshot)?)?;
+    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&state_snapshot)?)?;
 
     Ok(())
 }
