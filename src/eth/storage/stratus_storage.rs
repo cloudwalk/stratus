@@ -128,14 +128,14 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        match self.temp.maybe_read_account(address).await? {
+        match self.temp.read_account(address).await? {
             Some(account) => {
                 tracing::debug!("account found in the temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
                 Ok(account)
             }
-            None => match self.perm.maybe_read_account(address, point_in_time).await? {
+            None => match self.perm.read_account(address, point_in_time).await? {
                 Some(account) => {
                     tracing::debug!("account found in the permanent storage");
                     #[cfg(feature = "metrics")]
@@ -156,18 +156,18 @@ impl StratusStorage {
     }
 
     /// Retrieves an slot from the storage. Returns default value when not found.
-    pub async fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    pub async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        match self.temp.maybe_read_slot(address, slot_index).await? {
+        match self.temp.read_slot(address, index).await? {
             Some(slot) => {
                 tracing::debug!("slot found in the temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
                 Ok(slot)
             }
-            None => match self.perm.maybe_read_slot(address, slot_index, point_in_time).await? {
+            None => match self.perm.read_slot(address, index, point_in_time).await? {
                 Some(slot) => {
                     tracing::debug!("slot found in the permanent storage");
                     #[cfg(feature = "metrics")]
@@ -179,7 +179,7 @@ impl StratusStorage {
                     #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
                     Ok(Slot {
-                        index: slot_index.clone(),
+                        index: index.clone(),
                         ..Default::default()
                     })
                 }
@@ -289,7 +289,6 @@ impl StratusStorage {
         // save block to permanent storage and clears temporary storage
         let next_number = block.number().next();
         let result = self.perm.save_block(block).await;
-        self.perm.after_commit_hook().await?;
         self.reset_temp().await?;
         self.set_active_block_number(next_number).await?;
 

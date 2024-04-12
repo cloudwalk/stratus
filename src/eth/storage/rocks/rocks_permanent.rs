@@ -129,13 +129,22 @@ impl PermanentStorage for RocksPermanentStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         Ok(self.state.read_account(address, point_in_time))
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
-        Ok(self.state.read_slot(address, slot_index, point_in_time))
+    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %index, ?point_in_time, "reading slot");
+        Ok(self.state.read_slot(address, index, point_in_time))
+    }
+
+    async fn read_slots(
+        &self,
+        _address: &Address,
+        _indexes: &[SlotIndex],
+        _point_in_time: &StoragePointInTime,
+    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+        todo!()
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -213,10 +222,6 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(())
     }
 
-    async fn after_commit_hook(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
@@ -260,15 +265,6 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        todo!()
-    }
-
-    async fn read_slots(
-        &self,
-        _address: &Address,
-        _slot_indexes: &[SlotIndex],
-        _point_in_time: &StoragePointInTime,
-    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         todo!()
     }
 }
