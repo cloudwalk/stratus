@@ -794,14 +794,8 @@ impl PermanentStorage for PostgresPermanentStorage {
             let nonce = BigDecimal::try_from(acc.nonce)?;
             let bytecode = acc.bytecode.as_deref();
             let code_hash: &[u8] = acc.code_hash.as_ref();
-            let static_slot_indexes: Option<Vec<Vec<u8>>> = match acc.static_slot_indexes {
-                Some(indexes) => Some(indexes.into_iter().map(|x| x.into()).collect()),
-                None => None,
-            };
-            let mapping_slot_indexes: Option<Vec<Vec<u8>>> = match acc.mapping_slot_indexes {
-                Some(indexes) => Some(indexes.into_iter().map(|x| x.into()).collect()),
-                None => None,
-            };
+            let static_slot_indexes: Option<Vec<Vec<u8>>> = acc.static_slot_indexes.map(|indexes| indexes.into_iter().map(|x| x.into()).collect());
+            let mapping_slot_indexes: Option<Vec<Vec<u8>>> = acc.mapping_slot_indexes.map(|indexes| indexes.into_iter().map(|x| x.into()).collect());
 
             sqlx::query_file!(
                 "src/eth/storage/postgres_permanent/sql/insert_account.sql",
