@@ -161,7 +161,7 @@ struct RevmSession {
     storage_changes: ExecutionChanges,
 
     /// Slots cached during account load.
-    slot_prefetch_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
+    account_slots_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
 
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
@@ -174,7 +174,7 @@ impl RevmSession {
             storage,
             input: Default::default(),
             storage_changes: Default::default(),
-            slot_prefetch_cache: Default::default(),
+            account_slots_cache: Default::default(),
             metrics: Default::default(),
         }
     }
@@ -183,7 +183,7 @@ impl RevmSession {
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
         self.storage_changes = Default::default();
-        self.slot_prefetch_cache.clear();
+        self.account_slots_cache.clear();
         self.metrics = Default::default();
     }
 }
@@ -238,16 +238,16 @@ impl Database for RevmSession {
         let index: SlotIndex = revm_index.into();
 
         // load slot from cache or storage
-        let cached_slot = match self.slot_prefetch_cache.get(&address) {
-            Some(slot_cache) => slot_cache.get(&index),
-            None => None,
-        };
+        let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
         let slot = match cached_slot {
+            // not found, query storage
+            None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
+
+            // cached
             Some(slot) => {
                 self.metrics.slot_reads_cached += 1;
                 slot.clone()
-            },
-            None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?
+            }
         };
 
         // track original value, except if ignored address
