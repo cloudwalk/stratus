@@ -271,6 +271,7 @@ impl RocksStorageState {
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode;
                 }
+
                 account_changes.push((address.clone(), account_info_entry.clone()));
                 account_history_changes.push(((address.clone(), block_number), account_info_entry));
             }
