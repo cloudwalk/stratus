@@ -341,19 +341,19 @@ impl RocksStorageState {
             .collect()
     }
 
-    pub fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
+    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
-            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), slot_index.clone())).map(|account_slot_value| Slot {
-                index: slot_index.clone(),
+            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), index.clone())).map(|account_slot_value| Slot {
+                index: index.clone(),
                 value: account_slot_value.clone(),
             }),
             StoragePointInTime::Past(number) => {
                 if let Some(((addr, index, _), value)) = self
                     .account_slots_history
-                    .iter_from((address.clone(), slot_index.clone(), *number), rocksdb::Direction::Reverse)
+                    .iter_from((address.clone(), index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if slot_index == &index && address == &addr {
+                    if index == &index && address == &addr {
                         return Some(Slot { index, value });
                     }
                 }

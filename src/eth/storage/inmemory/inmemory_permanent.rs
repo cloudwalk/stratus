@@ -193,7 +193,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         let state = self.lock_read().await;
@@ -212,8 +212,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %slot_index, ?point_in_time, "reading slot");
+    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %index, ?point_in_time, "reading slot");
 
         let state = self.lock_read().await;
         let Some(account) = state.accounts.get(address) else {
@@ -221,18 +221,27 @@ impl PermanentStorage for InMemoryPermanentStorage {
             return Ok(Default::default());
         };
 
-        match account.slots.get(slot_index) {
+        match account.slots.get(index) {
             Some(slot_history) => {
                 let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %slot_index, ?point_in_time, %slot, "slot found");
+                tracing::trace!(%address, %index, ?point_in_time, %slot, "slot found");
                 Ok(Some(slot))
             }
 
             None => {
-                tracing::trace!(%address, %slot_index, ?point_in_time, "slot not found");
+                tracing::trace!(%address, %index, ?point_in_time, "slot not found");
                 Ok(None)
             }
         }
+    }
+
+    async fn read_slots(
+        &self,
+        _address: &Address,
+        _indexes: &[SlotIndex],
+        _point_in_time: &StoragePointInTime,
+    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+        todo!()
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
@@ -356,10 +365,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn after_commit_hook(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
@@ -434,15 +439,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
                 Ok(samples.choose_multiple(&mut rng, n as usize))
             }
         }
-    }
-
-    async fn read_slots(
-        &self,
-        _address: &Address,
-        _slot_indexes: &[SlotIndex],
-        _point_in_time: &StoragePointInTime,
-    ) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
-        todo!()
     }
 }
 

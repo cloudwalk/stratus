@@ -65,7 +65,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(state.active_block_number)
     }
 
-    async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         let state = self.lock_read().await;
@@ -90,8 +90,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %slot_index, "reading slot");
+    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+        tracing::debug!(%address, %index, "reading slot");
 
         let state = self.lock_read().await;
         let Some(account) = state.accounts.get(address) else {
@@ -99,14 +99,14 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
             return Ok(Default::default());
         };
 
-        match account.slots.get(slot_index) {
+        match account.slots.get(index) {
             Some(slot) => {
-                tracing::trace!(%address, %slot_index, %slot, "slot found");
+                tracing::trace!(%address, %index, %slot, "slot found");
                 Ok(Some(slot.clone()))
             }
 
             None => {
-                tracing::trace!(%address, %slot_index, "slot not found");
+                tracing::trace!(%address, %index, "slot not found");
                 Ok(None)
             }
         }
