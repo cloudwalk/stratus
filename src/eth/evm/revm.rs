@@ -161,7 +161,7 @@ struct RevmSession {
     storage_changes: ExecutionChanges,
 
     /// Slots cached during account load.
-    slot_prefetch_cache: HashMap<SlotIndex, Slot>,
+    account_slots_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
 
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
@@ -174,7 +174,7 @@ impl RevmSession {
             storage,
             input: Default::default(),
             storage_changes: Default::default(),
-            slot_prefetch_cache: Default::default(),
+            account_slots_cache: Default::default(),
             metrics: Default::default(),
         }
     }
@@ -183,7 +183,7 @@ impl RevmSession {
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
         self.storage_changes = Default::default();
-        self.slot_prefetch_cache = HashMap::with_capacity(256);
+        self.account_slots_cache.clear();
         self.metrics = Default::default();
     }
 }
@@ -218,7 +218,7 @@ impl Database for RevmSession {
             let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
             let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
             for slot in slots {
-                self.slot_prefetch_cache.insert(slot.index.clone(), slot);
+                self.slot_prefetch_cache.entry(address.clone()).or_default().insert(slot.index.clone(), slot);
             }
         }
 
@@ -238,11 +238,15 @@ impl Database for RevmSession {
         let index: SlotIndex = revm_index.into();
 
         // load slot from cache or storage
-        let slot = match self.slot_prefetch_cache.get(&index) {
+        let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
+        let slot = match cached_slot {
+            // not found, query storage
             None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
-            Some(cached) => {
+
+            // cached
+            Some(slot) => {
                 self.metrics.slot_reads_cached += 1;
-                cached.clone()
+                slot.clone()
             }
         };
 

@@ -178,7 +178,7 @@ impl EvmInput {
         }
 
         // data
-        inputs.extend(self.data.0.rchunks(32).map(|chunk| chunk.to_vec()).collect_vec());
+        inputs.extend(self.data.0.rchunks_exact(32).map(|chunk| chunk.to_vec()).unique().collect_vec());
 
         inputs
     }
