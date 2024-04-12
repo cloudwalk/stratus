@@ -308,7 +308,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
             .storage
             .into_iter()
             .filter_map(|(index, value)| match value.is_changed() {
-                true => Some(Slot::new(index, value.present_value)),
+                true => Some(Slot::new(index.into(), value.present_value.into())),
                 false => None,
             })
             .collect();

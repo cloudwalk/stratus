@@ -32,10 +32,16 @@ pub struct Slot {
 }
 
 impl Slot {
-    pub fn new(index: impl Into<SlotIndex>, value: impl Into<SlotValue>) -> Self {
+    /// Creates a new slot with the given index and value.
+    pub fn new(index: SlotIndex, value: SlotValue) -> Self {
+        Self { index, value }
+    }
+
+    /// Creates a new slot with the given index and default zero value.
+    pub fn new_empty(index: SlotIndex) -> Self {
         Self {
-            index: index.into(),
-            value: value.into(),
+            index,
+            value: SlotValue::default(),
         }
     }
 
