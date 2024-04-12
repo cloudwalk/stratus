@@ -213,10 +213,13 @@ impl Database for RevmSession {
         }
 
         // prefetch slots (put behind feature-flag)
-        let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
-        let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
-        for slot in slots {
-            self.slot_prefetch_cache.insert(slot.index.clone(), slot);
+        #[cfg(feature = "evm-slot-prefetch")]
+        {
+            let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
+            let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
+            for slot in slots {
+                self.slot_prefetch_cache.insert(slot.index.clone(), slot);
+            }
         }
 
         Ok(Some(account.into()))
