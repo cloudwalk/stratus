@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
@@ -343,6 +344,7 @@ impl CsvExporter {
                 tx.execution.result.to_string(),             // result
                 now.clone(),                                 // created_at
                 now,                                         // updated_at
+                from_option(tx.input.chain_id),              // chain_id
             ];
             self.transactions_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -594,4 +596,9 @@ fn u256_to_bytea(integer: U256) -> String {
 /// Returns the current date formatted for the CSV file.
 fn now() -> String {
     chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f").to_string()
+}
+
+/// Builds a string from an optional displayable value.
+fn from_option(t: Option<impl Display>) -> String {
+    t.map(|x| x.to_string()).unwrap_or_default()
 }
