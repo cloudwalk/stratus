@@ -88,15 +88,15 @@ async fn test_import_offline_snapshot() {
     let _prom_guard = docker.start_prometheus();
 
     // init block data
-    let block_json = include_str!("fixtures/block-292973/block.json");
+    let block_json = include_str!("fixtures/snapshots/292973/block.json");
     let block: ExternalBlock = serde_json::from_str(block_json).unwrap();
 
     // init receipts data
-    let receipts_json = include_str!("fixtures/block-292973/receipts.json");
+    let receipts_json = include_str!("fixtures/snapshots/292973/receipts.json");
     let receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
 
     // init snapshot data
-    let snapshot_json = include_str!("fixtures/block-292973/snapshot.json");
+    let snapshot_json = include_str!("fixtures/snapshots/292973/snapshot.json");
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
     let pg = PostgresPermanentStorage::new(PostgresPermanentStorageConfig {
         url: docker.postgres_connection_url().to_owned(),

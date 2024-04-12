@@ -288,7 +288,7 @@ fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalR
     let snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
 
     // create dir
-    let dir = format!("tests/fixtures/block-{}/", mined_block.number());
+    let dir = format!("tests/fixtures/snapshots/{}/", mined_block.number());
     fs::create_dir_all(&dir)?;
 
     // write json
