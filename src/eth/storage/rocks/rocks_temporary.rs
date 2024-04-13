@@ -45,11 +45,11 @@ impl TemporaryStorage for RocksTemporary {
         Ok(Some(self.current_block.load(Ordering::SeqCst).into()))
     }
 
-    async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         // try temporary data
-        let account = self.temp.maybe_read_account(address).await?;
+        let account = self.temp.read_account(address).await?;
         if let Some(account) = account {
             return Ok(Some(account));
         }
@@ -57,16 +57,16 @@ impl TemporaryStorage for RocksTemporary {
         Ok(self.db.read_account(address, &StoragePointInTime::Present))
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, "reading slot");
 
         // try temporary data
-        let slot = self.temp.maybe_read_slot(address, slot_index).await?;
+        let slot = self.temp.read_slot(address, index).await?;
         if let Some(slot) = slot {
             return Ok(Some(slot));
         }
 
-        Ok(self.db.read_slot(address, slot_index, &StoragePointInTime::Present))
+        Ok(self.db.read_slot(address, index, &StoragePointInTime::Present))
     }
 
     async fn save_account_changes(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {

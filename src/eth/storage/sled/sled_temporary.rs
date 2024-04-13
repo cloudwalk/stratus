@@ -55,11 +55,11 @@ impl TemporaryStorage for SledTemporary {
         }
     }
 
-    async fn maybe_read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
         // try temporary data
-        let account = self.temp.maybe_read_account(address).await?;
+        let account = self.temp.read_account(address).await?;
         if let Some(account) = account {
             return Ok(Some(account));
         }
@@ -75,17 +75,17 @@ impl TemporaryStorage for SledTemporary {
         }
     }
 
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, "reading slot");
 
         // try temporary data
-        let slot = self.temp.maybe_read_slot(address, slot_index).await?;
+        let slot = self.temp.read_slot(address, index).await?;
         if let Some(slot) = slot {
             return Ok(Some(slot));
         }
 
         // try durable data
-        match self.db.get(slot_key(address, slot_index)) {
+        match self.db.get(slot_key(address, index)) {
             Ok(Some(slot)) => {
                 let slot = serde_json::from_slice(&slot).unwrap();
                 Ok(Some(slot))
@@ -170,12 +170,12 @@ fn account_key(address: &Address) -> String {
     format!("address::{}", address)
 }
 
-fn slot_key_vec(address: &Address, slot_index: &SlotIndex) -> Vec<u8> {
-    slot_key(address, slot_index).into_bytes().to_vec()
+fn slot_key_vec(address: &Address, index: &SlotIndex) -> Vec<u8> {
+    slot_key(address, index).into_bytes().to_vec()
 }
 
-fn slot_key(address: &Address, slot_index: &SlotIndex) -> String {
-    format!("slot::{}::{}", address, slot_index)
+fn slot_key(address: &Address, index: &SlotIndex) -> String {
+    format!("slot::{}::{}", address, index)
 }
 
 fn block_number_key_vec() -> Vec<u8> {

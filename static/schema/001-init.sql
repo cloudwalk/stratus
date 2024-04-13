@@ -33,23 +33,23 @@ BEGIN
                 seq.relname as seq_name,
                 seq.oid AS seq_oid,
                 tbl.oid as table_oid
-            FROM pg_class seq 
-            JOIN pg_depend dep ON seq.relfilenode = dep.objid 
-            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode 
+            FROM pg_class seq
+            JOIN pg_depend dep ON seq.relfilenode = dep.objid
+            JOIN pg_class tbl  ON dep.refobjid = tbl.relfilenode
             JOIN pg_namespace nsp ON nsp.oid = seq.relnamespace
             WHERE
                 nsp.nspname NOT IN ('pg_catalog', 'information_schema')
                 AND seq.relkind = 'S'
                 AND tbl.relkind = 'r'
         )
-        SELECT 
+        SELECT
             u.username,
             b.schema_name,
             b.seq_name
         FROM users u
         JOIN base b ON has_table_privilege(u.role_id, b.table_oid, 'INSERT')
-        WHERE 
-            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE') 
+        WHERE
+            (NOT has_sequence_privilege(u.role_id, b.seq_oid, 'USAGE')
              OR NOT has_sequence_privilege(u.role_id, b.seq_oid, 'SELECT'))
     )
     LOOP
@@ -114,11 +114,14 @@ CREATE TABLE public.accounts (
     address bytea NOT NULL,
     bytecode bytea,
     code_hash bytea NOT NULL,
+    mapping_slot_indexes bytea[],
+    static_slot_indexes bytea[],
     latest_balance numeric NOT NULL,
     latest_nonce numeric NOT NULL,
     creation_block numeric NOT NULL,
     previous_balance numeric,
     previous_nonce numeric,
+
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL
 );
@@ -458,6 +461,7 @@ CREATE TABLE public.transactions (
     s bytea NOT NULL,
     value numeric NOT NULL,
     result text NOT NULL,
+    chain_id numeric DEFAULT NULL,
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL
 );

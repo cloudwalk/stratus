@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 
 use crate::eth::primitives::Account;
@@ -11,6 +13,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StorageError;
@@ -33,10 +36,13 @@ pub trait PermanentStorage: Send + Sync {
     async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    async fn maybe_read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn maybe_read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
+    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
+
+    /// Retrieves several slots at once.
+    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>>;
 
     /// Retrieves a block from the storage.
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
@@ -50,15 +56,12 @@ pub trait PermanentStorage: Send + Sync {
     /// Persists atomically all changes from a block.
     async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError>;
 
-    /// Run after block commit callbacks.
-    async fn after_commit_hook(&self) -> anyhow::Result<()>;
-
     /// Persists initial accounts (test accounts or genesis accounts).
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Resets all state to a specific block number.
     async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
 
-    /// TODO: document it.
+    /// Retrieves a random sample of slots, from the provided start and end blocks.
     async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
 }

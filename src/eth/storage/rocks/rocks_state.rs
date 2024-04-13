@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use itertools::Itertools;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
@@ -48,6 +49,8 @@ impl AccountInfo {
             balance: self.balance.clone(),
             bytecode: self.bytecode.clone(),
             code_hash: self.code_hash.clone(),
+            static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
+            mapping_slot_indexes: None, // TODO: is it necessary for RocksDB?
         }
     }
 }
@@ -61,11 +64,14 @@ pub struct RocksStorageState {
     pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
     pub logs: Arc<RocksDb<(Hash, Index), BlockNumber>>,
+    pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
 impl RocksStorageState {
     pub fn new() -> Self {
-        Self {
+        let (tx, rx) = mpsc::channel::<()>(1);
+
+        let state = Self {
             accounts: Arc::new(RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap()),
             accounts_history: Arc::new(RocksDb::new("./data/accounts_history.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             account_slots: Arc::new(RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap()),
@@ -74,7 +80,39 @@ impl RocksStorageState {
             blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
             blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-        }
+            backup_trigger: Arc::new(tx),
+        };
+
+        state.listen_for_backup_trigger(rx).unwrap();
+
+        state
+    }
+
+    pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
+        let accounts = Arc::<RocksDb<Address, AccountInfo>>::clone(&self.accounts);
+        let accounts_history = Arc::<RocksDb<(Address, BlockNumber), AccountInfo>>::clone(&self.accounts_history);
+        let account_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
+        let account_slots_history = Arc::<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>::clone(&self.account_slots_history);
+        let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.blocks_by_hash);
+        let blocks_by_number = Arc::<RocksDb<BlockNumber, Block>>::clone(&self.blocks_by_number);
+        let transactions = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.transactions);
+        let logs = Arc::<RocksDb<(Hash, Index), BlockNumber>>::clone(&self.logs);
+
+        tokio::spawn(async move {
+            let mut rx = rx;
+            while rx.recv().await.is_some() {
+                accounts.backup().unwrap();
+                accounts_history.backup().unwrap();
+                account_slots.backup().unwrap();
+                account_slots_history.backup().unwrap();
+                transactions.backup().unwrap();
+                blocks_by_number.backup().unwrap();
+                blocks_by_hash.backup().unwrap();
+                logs.backup().unwrap();
+            }
+        });
+
+        Ok(())
     }
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
@@ -233,6 +271,7 @@ impl RocksStorageState {
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode;
                 }
+
                 account_changes.push((address.clone(), account_info_entry.clone()));
                 account_history_changes.push(((address.clone(), block_number), account_info_entry));
             }
@@ -305,20 +344,20 @@ impl RocksStorageState {
             .collect()
     }
 
-    pub fn read_slot(&self, address: &Address, slot_index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
+    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
-            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), slot_index.clone())).map(|account_slot_value| Slot {
-                index: slot_index.clone(),
+            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), index.clone())).map(|account_slot_value| Slot {
+                index: index.clone(),
                 value: account_slot_value.clone(),
             }),
             StoragePointInTime::Past(number) => {
-                if let Some(((addr, index, _), value)) = self
+                if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
-                    .iter_from((address.clone(), slot_index.clone(), *number), rocksdb::Direction::Reverse)
+                    .iter_from((address.clone(), index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if slot_index == &index && address == &addr {
-                        return Some(Slot { index, value });
+                    if index == &rocks_index && address == &rocks_address {
+                        return Some(Slot { index: rocks_index, value });
                     }
                 }
                 None

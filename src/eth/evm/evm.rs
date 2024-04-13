@@ -6,6 +6,8 @@
 //! facilitates flexible EVM integrations, enabling the project to adapt to different blockchain environments
 //! or requirements while maintaining a consistent execution interface.
 
+use itertools::Itertools;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -32,6 +34,8 @@ pub trait Evm {
     /// Execute a transaction that deploys a contract or call a contract function.
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult>;
 }
+
+pub type EvmInputSlotKeys = Vec<Vec<u8>>;
 
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(Debug, Clone, Default)]
@@ -154,5 +158,28 @@ impl EvmInput {
                 None => None,
             },
         })
+    }
+
+    /// Calculates all possible 32 byte keys that can be used to access storage slots.
+    ///
+    /// Possible inputs are:
+    /// * Sender address.
+    /// * Receiver address (unlikely).
+    /// * Every 32 bytes of the data field.
+    pub fn possible_slot_keys(&self) -> EvmInputSlotKeys {
+        let mut inputs = vec![];
+
+        // from
+        inputs.push(self.from.as_bytes().to_vec());
+
+        // to
+        if let Some(ref to) = self.to {
+            inputs.push(to.as_bytes().to_vec());
+        }
+
+        // data
+        inputs.extend(self.data.0.rchunks_exact(32).map(|chunk| chunk.to_vec()).unique().collect_vec());
+
+        inputs
     }
 }

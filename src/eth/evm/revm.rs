@@ -51,7 +51,7 @@ use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
-    evm: RevmEvm<'static, (), RevmDatabaseSession>,
+    evm: RevmEvm<'static, (), RevmSession>,
 }
 
 impl Revm {
@@ -62,17 +62,19 @@ impl Revm {
         let mut evm = RevmEvm::builder()
             .with_handler(Handler::mainnet_with_spec(SpecId::LONDON))
             .with_external_context(())
-            .with_db(RevmDatabaseSession::new(storage))
+            .with_db(RevmSession::new(storage))
             .build();
 
-        // evm general config
+        // global general config
         let cfg_env = evm.cfg_mut();
         cfg_env.chain_id = chain_id.into();
         cfg_env.limit_contract_code_size = Some(usize::MAX);
 
+        // global block config
         let block_env = evm.block_mut();
         block_env.coinbase = Address::COINBASE.into();
 
+        // global tx config
         let tx_env = evm.tx_mut();
         tx_env.gas_priority_fee = None;
 
@@ -89,7 +91,7 @@ impl Evm for Revm {
         let evm = &mut self.evm;
         evm.db_mut().reset(input.clone());
 
-        // configure evm block
+        // configure block params
         let block_env = evm.block_mut();
         block_env.basefee = U256::ZERO;
         block_env.timestamp = input.block_timestamp.into();
@@ -109,18 +111,18 @@ impl Evm for Revm {
         tx_env.data = input.data.into();
         tx_env.value = input.value.into();
 
-        // execute evm
+        // execute transaction
         let evm_result = evm.transact();
 
-        // parse result and track metrics
+        // extract results
         let session = evm.db_mut();
         let session_input = std::mem::take(&mut session.input);
-
         let session_storage_changes = std::mem::take(&mut session.storage_changes);
         let session_metrics = std::mem::take(&mut session.metrics);
         #[cfg(feature = "metrics")]
         let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
 
+        // parse and enrich result
         let execution = match evm_result {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
             Err(e) => {
@@ -129,14 +131,16 @@ impl Evm for Revm {
             }
         };
 
+        // track metrics
         #[cfg(feature = "metrics")]
         {
             metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
             metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
             metrics::inc_evm_execution_slot_reads(session_metrics.slot_reads);
+            metrics::inc_evm_execution_slot_reads_cached(session_metrics.slot_reads_cached);
         }
 
-        execution.map(|x| (x, session_metrics))
+        execution.map(|execution| (execution, session_metrics))
     }
 }
 
@@ -145,7 +149,7 @@ impl Evm for Revm {
 // -----------------------------------------------------------------------------
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
-struct RevmDatabaseSession {
+struct RevmSession {
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
 
@@ -157,9 +161,13 @@ struct RevmDatabaseSession {
 
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
+
+    #[cfg(feature = "evm-slot-prefetch")]
+    /// Slots cached during account load.
+    account_slots_cache: std::collections::HashMap<Address, std::collections::HashMap<SlotIndex, Slot>>,
 }
 
-impl RevmDatabaseSession {
+impl RevmSession {
     /// Creates the base session to be used with REVM.
     pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
@@ -167,6 +175,8 @@ impl RevmDatabaseSession {
             input: Default::default(),
             storage_changes: Default::default(),
             metrics: Default::default(),
+            #[cfg(feature = "evm-slot-prefetch")]
+            account_slots_cache: Default::default(),
         }
     }
 
@@ -175,18 +185,21 @@ impl RevmDatabaseSession {
         self.input = input;
         self.storage_changes = Default::default();
         self.metrics = Default::default();
+        #[cfg(feature = "evm-slot-prefetch")]
+        self.account_slots_cache.clear();
     }
 }
 
-impl Database for RevmDatabaseSession {
+impl Database for RevmSession {
     type Error = anyhow::Error;
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
         self.metrics.account_reads += 1;
+        let handle = Handle::current();
 
         // retrieve account
         let address: Address = revm_address.into();
-        let account = Handle::current().block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
+        let account = handle.block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
@@ -201,6 +214,16 @@ impl Database for RevmDatabaseSession {
                 .insert(account.address.clone(), ExecutionAccountChanges::from_original_values(account.clone()));
         }
 
+        // prefetch slots
+        #[cfg(feature = "evm-slot-prefetch")]
+        {
+            let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
+            let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
+            for slot in slots {
+                self.account_slots_cache.entry(address.clone()).or_default().insert(slot.index.clone(), slot);
+            }
+        }
+
         Ok(Some(account.into()))
     }
 
@@ -210,11 +233,31 @@ impl Database for RevmDatabaseSession {
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
         self.metrics.slot_reads += 1;
+        let handle = Handle::current();
 
         // retrieve slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
-        let slot = Handle::current().block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
+
+        // load slot from storage
+        #[cfg(not(feature = "evm-slot-prefetch"))]
+        let slot = handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
+
+        // load slot from cache or storage
+        #[cfg(feature = "evm-slot-prefetch")]
+        let slot = {
+            let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
+            match cached_slot {
+                // not found, query storage
+                None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
+
+                // cached
+                Some(slot) => {
+                    self.metrics.slot_reads_cached += 1;
+                    slot.clone()
+                }
+            }
+        };
 
         // track original value, except if ignored address
         if not(address.is_ignored()) {
@@ -305,7 +348,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
             .storage
             .into_iter()
             .filter_map(|(index, value)| match value.is_changed() {
-                true => Some(Slot::new(index, value.present_value)),
+                true => Some(Slot::new(index.into(), value.present_value.into())),
                 false => None,
             })
             .collect();

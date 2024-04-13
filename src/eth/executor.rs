@@ -102,7 +102,7 @@ impl EthExecutor {
             #[cfg(feature = "metrics")]
             let tx_start = metrics::now();
 
-            // re-execute transaction or create a fake execution the external transaction failed
+            // re-execute transaction or create a fake execution from the failed external transaction
             let receipt = receipts.try_get(&tx.hash())?;
             let execution = if receipt.is_success() {
                 let evm_input = EvmInput::from_external_transaction(&block, tx.clone(), receipt)?;
@@ -136,8 +136,7 @@ impl EthExecutor {
                     // track metrics
                     #[cfg(feature = "metrics")]
                     metrics::inc_executor_external_transaction(tx_start.elapsed());
-                    block_metrics.account_reads += execution_metrics.account_reads;
-                    block_metrics.slot_reads += execution_metrics.slot_reads;
+                    block_metrics += execution_metrics;
                 }
                 Err(e) => {
                     let json_tx = serde_json::to_string(&tx).unwrap();
@@ -154,6 +153,7 @@ impl EthExecutor {
             metrics::inc_executor_external_block(start.elapsed());
             metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
+            metrics::inc_executor_external_block_slot_reads_cached(block_metrics.slot_reads_cached);
         }
 
         Block::from_external(block, executions)
@@ -175,7 +175,7 @@ impl EthExecutor {
             "executing transaction"
         );
 
-        // validates
+        // validate
         if transaction.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(anyhow!("transaction sent from zero address is not allowed."));

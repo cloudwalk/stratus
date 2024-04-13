@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
+use itertools::Itertools;
 
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 
@@ -10,6 +12,12 @@ use crate::eth::primitives::Hash;
 pub struct ExternalReceipts(HashMap<Hash, ExternalReceipt>);
 
 impl ExternalReceipts {
+    /// Generates a new collection of receipts only with receipts of the specified block number.
+    pub fn filter_block(&self, number: BlockNumber) -> ExternalReceipts {
+        let receipts = self.0.values().filter(|receipt| receipt.block_number() == number).cloned().collect_vec();
+        ExternalReceipts::from(receipts)
+    }
+
     /// Tries to take a receipt by its hash.
     pub fn try_get(&self, hash: &Hash) -> anyhow::Result<&ExternalReceipt> {
         match self.get(hash) {
