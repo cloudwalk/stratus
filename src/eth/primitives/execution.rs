@@ -84,7 +84,7 @@ impl Execution {
     /// When the transaction is a contract deployment, returns the address of the deployed contract.
     pub fn contract_address(&self) -> Option<Address> {
         for changes in &self.changes {
-            if changes.bytecode.is_modified() {
+            if changes.bytecode.clone().take_original().is_some() {
                 return Some(changes.address.clone());
             }
         }
