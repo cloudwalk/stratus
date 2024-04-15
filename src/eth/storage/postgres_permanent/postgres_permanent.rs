@@ -490,7 +490,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 log_idx as _
             )
             .fetch_all(&self.pool)
-            .await?;  // XXX: We should query for the logs only once
+            .await?; // XXX: We should query for the logs only once
 
             let topics = logs.iter().flat_map(PostgresLog::to_topics);
 

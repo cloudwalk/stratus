@@ -186,7 +186,7 @@ pub struct LogBatch {
     pub topic0: Vec<Option<LogTopic>>,
     pub topic1: Vec<Option<LogTopic>>,
     pub topic2: Vec<Option<LogTopic>>,
-    pub topic3: Vec<Option<LogTopic>>
+    pub topic3: Vec<Option<LogTopic>>,
 }
 
 impl LogBatch {
@@ -198,6 +198,7 @@ impl LogBatch {
         self.transaction_index.push(log.transaction_index);
         self.block_number.push(log.block_number);
         self.block_hash.push(log.block_hash);
+        #[allow(clippy::get_first)]
         self.topic0.push(log.log.topics.get(0).cloned()); // OPTIMIZE: we can consume topics, so we don't actually need to clone
         self.topic1.push(log.log.topics.get(1).cloned());
         self.topic2.push(log.log.topics.get(2).cloned());
