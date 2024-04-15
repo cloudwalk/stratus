@@ -165,6 +165,7 @@ pub use size::Size;
 pub use slot::Slot;
 pub use slot::SlotAccess;
 pub use slot::SlotIndex;
+pub use slot::SlotIndexes;
 pub use slot::SlotSample;
 pub use slot::SlotValue;
 pub use storage_point_in_time::StoragePointInTime;

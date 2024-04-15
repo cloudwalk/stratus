@@ -19,6 +19,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
@@ -252,6 +253,8 @@ pub struct AccountBatch {
     pub original_nonce: Vec<Nonce>,
     pub original_balance: Vec<Wei>,
     pub code_hash: Vec<CodeHash>,
+    pub static_slot_indexes: Vec<Option<SlotIndexes>>,
+    pub mapping_slot_indexes: Vec<Option<SlotIndexes>>,
 }
 
 impl AccountBatch {
@@ -266,6 +269,8 @@ impl AccountBatch {
         original_nonce: Nonce,
         original_balance: Wei,
         code_hash: CodeHash,
+        static_slot_indexes: Option<SlotIndexes>,
+        mapping_slot_indexes: Option<SlotIndexes>,
     ) {
         self.address.push(address);
         self.new_nonce.push(new_nonce);
@@ -275,6 +280,8 @@ impl AccountBatch {
         self.original_nonce.push(original_nonce);
         self.original_balance.push(original_balance);
         self.code_hash.push(code_hash);
+        self.static_slot_indexes.push(static_slot_indexes);
+        self.mapping_slot_indexes.push(mapping_slot_indexes);
     }
 }
 
