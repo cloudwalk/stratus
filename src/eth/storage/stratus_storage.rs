@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use itertools::Itertools;
+use revm::primitives::HashSet;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -188,7 +190,7 @@ impl StratusStorage {
         let start = metrics::now();
 
         let mut slots = Vec::with_capacity(slot_indexes.len());
-        let mut perm_indexes = Vec::with_capacity(slot_indexes.len());
+        let mut perm_indexes = HashSet::with_capacity(slot_indexes.len());
 
         // read slots from temporary storage
         for index in slot_indexes {
@@ -197,12 +199,13 @@ impl StratusStorage {
                     slots.push(slot);
                 }
                 None => {
-                    perm_indexes.push(index.clone());
+                    perm_indexes.insert(index.clone());
                 }
             }
         }
 
         // read missing slots from permanent storage
+        let perm_indexes = perm_indexes.into_iter().collect_vec();
         if not(perm_indexes.is_empty()) {
             let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
             for index in perm_indexes.into_iter() {
