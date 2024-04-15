@@ -1,10 +1,14 @@
 SELECT
-    topic as "topic: _"
+    address as "address: _"
+    ,data as "data: _"
     ,transaction_hash as "transaction_hash: _"
     ,transaction_idx as "transaction_idx: _"
     ,log_idx as "log_idx: _"
     ,block_number as "block_number: _"
     ,block_hash as "block_hash: _"
-FROM topics
+    ,topic0 as "topic0: _"
+    ,topic1 as "topic1: _"
+    ,topic2 as "topic2: _"
+    ,topic3 as "topic3: _"
+FROM logs
 WHERE block_hash = $1 AND log_idx = $2
-ORDER BY topic_idx
