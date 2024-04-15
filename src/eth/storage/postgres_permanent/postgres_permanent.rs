@@ -646,50 +646,43 @@ impl PermanentStorage for PostgresPermanentStorage {
             transaction_batch.s as _,                                                                 // $33
             transaction_batch.value as _,                                                             // $34
             &transaction_batch.result,                                                                // $35
-            log_batch.address as _,                                                                   // $36
-            log_batch.data as _,                                                                      // $37
-            log_batch.transaction_hash as _,                                                          // $38
-            log_batch.transaction_index as _,                                                         // $39
-            log_batch.log_index as _,                                                                 // $40
-            log_batch.block_number as _,                                                              // $41
-            log_batch.block_hash as _,                                                                // $42
-            topic_batch.topic as _,                                                                   // $43
-            topic_batch.transaction_hash as _,                                                        // $44
-            topic_batch.transaction_index as _,                                                       // $45
-            topic_batch.log_index as _,                                                               // $46
-            topic_batch.index as _,                                                                   // $47
-            topic_batch.block_number as _,                                                            // $48
-            topic_batch.block_hash as _,                                                              // $49
-            account_batch.address as _,                                                               // $50
-            account_batch.bytecode as _,                                                              // $51
-            account_batch.new_balance as _,                                                           // $52
-            account_batch.new_nonce as _,                                                             // $53
-            account_batch.block_number as _,                                                          // $54
-            account_batch.original_balance as _,                                                      // $55
-            account_batch.original_nonce as _,                                                        // $56
-            account_batch.code_hash as _,                                                             // $57
-            account_batch.static_slot_indexes as _,                                                   // $58
-            account_batch.mapping_slot_indexes as _,                                                  // $59
-            slot_batch.index as _,                                                                    // $60
-            slot_batch.value as _,                                                                    // $61
-            slot_batch.address as _,                                                                  // $62
-            slot_batch.block_number as _,                                                             // $63
-            slot_batch.original_value as _,                                                           // $64
-            historical_nonce_batch.address as _,                                                      // $65
-            historical_nonce_batch.nonce as _,                                                        // $66
-            historical_nonce_batch.block_number as _,                                                 // $67
-            historical_balance_batch.address as _,                                                    // $68
-            historical_balance_batch.balance as _,                                                    // $69
-            historical_balance_batch.block_number as _,                                               // $70
-            historical_slot_batch.index as _,                                                         // $71
-            historical_slot_batch.value as _,                                                         // $72
-            historical_slot_batch.address as _,                                                       // $73
-            historical_slot_batch.block_number as _,                                                  // $74
-            transaction_batch.chain_id as _,                                                          // TODO: move it up
-            log_batch.topic0 as _,
-            log_batch.topic1 as _,
-            log_batch.topic2 as _,
-            log_batch.topic3 as _,
+            transaction_batch.chain_id as _,                                                          // $36
+            log_batch.address as _,                                                                   // $37
+            log_batch.data as _,                                                                      // $38
+            log_batch.transaction_hash as _,                                                          // $39
+            log_batch.transaction_index as _,                                                         // $40
+            log_batch.log_index as _,                                                                 // $41
+            log_batch.block_number as _,                                                              // $42
+            log_batch.block_hash as _,                                                                // $43
+            log_batch.topic0 as _,                                                                    // $44
+            log_batch.topic1 as _,                                                                    // $45
+            log_batch.topic2 as _,                                                                    // $46
+            log_batch.topic3 as _,                                                                    // $47
+            account_batch.address as _,                                                               // $48
+            account_batch.bytecode as _,                                                              // $49
+            account_batch.new_balance as _,                                                           // $50
+            account_batch.new_nonce as _,                                                             // $51
+            account_batch.block_number as _,                                                          // $52
+            account_batch.original_balance as _,                                                      // $53
+            account_batch.original_nonce as _,                                                        // $54
+            account_batch.code_hash as _,                                                             // $55
+            account_batch.static_slot_indexes as _,                                                   // $56
+            account_batch.mapping_slot_indexes as _,                                                  // $57
+            slot_batch.index as _,                                                                    // $58
+            slot_batch.value as _,                                                                    // $59
+            slot_batch.address as _,                                                                  // $60
+            slot_batch.block_number as _,                                                             // $61
+            slot_batch.original_value as _,                                                           // $62
+            historical_nonce_batch.address as _,                                                      // $63
+            historical_nonce_batch.nonce as _,                                                        // $64
+            historical_nonce_batch.block_number as _,                                                 // $65
+            historical_balance_batch.address as _,                                                    // $66
+            historical_balance_batch.balance as _,                                                    // $67
+            historical_balance_batch.block_number as _,                                               // $68
+            historical_slot_batch.index as _,                                                         // $69
+            historical_slot_batch.value as _,                                                         // $70
+            historical_slot_batch.address as _,                                                       // $71
+            historical_slot_batch.block_number as _,                                                  // $72
         )
         .fetch_one(&mut *tx)
         .await
