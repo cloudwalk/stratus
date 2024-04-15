@@ -44,7 +44,6 @@ use crate::eth::storage::postgres_permanent::types::LogBatch;
 use crate::eth::storage::postgres_permanent::types::PostgresLog;
 use crate::eth::storage::postgres_permanent::types::PostgresTransaction;
 use crate::eth::storage::postgres_permanent::types::SlotBatch;
-use crate::eth::storage::postgres_permanent::types::TopicBatch;
 use crate::eth::storage::postgres_permanent::types::TransactionBatch;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
@@ -491,7 +490,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 log_idx as _
             )
             .fetch_all(&self.pool)
-            .await?;
+            .await?;  // XXX: We should query for the logs only once
 
             let topics = logs.iter().flat_map(PostgresLog::to_topics);
 
@@ -529,7 +528,6 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let mut transaction_batch = TransactionBatch::default();
         let mut log_batch = LogBatch::default();
-        let mut topic_batch = TopicBatch::default();
         let mut account_batch = AccountBatch::default();
         let mut historical_nonce_batch = HistoricalNonceBatch::default();
         let mut historical_balance_batch = HistoricalBalanceBatch::default();
@@ -542,18 +540,8 @@ impl PermanentStorage for PostgresPermanentStorage {
             transaction_batch.push(transaction);
 
             if is_success {
-                for mut log in logs {
-                    let topics = std::mem::take(&mut log.log.topics);
-                    let tx_hash = log.transaction_hash.clone();
-                    let log_index = log.log_index;
-                    let tx_index = log.transaction_index;
-                    let b_number = log.block_number;
-                    let b_hash = log.block_hash.clone();
-
+                for log in logs {
                     log_batch.push(log);
-                    for (idx, topic) in topics.into_iter().enumerate() {
-                        topic_batch.push(topic, idx, tx_hash.clone(), tx_index, log_index, b_number, b_hash.clone())?;
-                    }
                 }
             }
         }
@@ -681,7 +669,11 @@ impl PermanentStorage for PostgresPermanentStorage {
             historical_slot_batch.index as _,
             historical_slot_batch.value as _,
             historical_slot_batch.address as _,
-            historical_slot_batch.block_number as _
+            historical_slot_batch.block_number as _,
+            log_batch.topic0 as _,
+            log_batch.topic1 as _,
+            log_batch.topic2 as _,
+            log_batch.topic3 as _,
         )
         .fetch_one(&mut *tx)
         .await

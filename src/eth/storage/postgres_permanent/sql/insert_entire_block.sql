@@ -76,7 +76,11 @@ log_insert AS (
         transaction_idx,
         log_idx,
         block_number,
-        block_hash
+        block_hash,
+        topic0,
+        topic1,
+        topic2,
+        topic3
     )
     SELECT *
     FROM
@@ -87,7 +91,11 @@ log_insert AS (
             $39::numeric [],
             $40::numeric [],
             $41::numeric [],
-            $42::bytea []
+            $42::bytea [],
+            $66::bytea [],
+            $67::bytea [],
+            $68::bytea [],
+            $69::bytea [] -- TODO: reorder bind indexes
         )
     RETURNING 1 as res
 ),

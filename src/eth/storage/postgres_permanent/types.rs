@@ -1,5 +1,3 @@
-use anyhow::Context;
-
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -185,6 +183,10 @@ pub struct LogBatch {
     pub log_index: Vec<Index>,
     pub block_number: Vec<BlockNumber>,
     pub block_hash: Vec<Hash>,
+    pub topic0: Vec<Option<LogTopic>>,
+    pub topic1: Vec<Option<LogTopic>>,
+    pub topic2: Vec<Option<LogTopic>>,
+    pub topic3: Vec<Option<LogTopic>>
 }
 
 impl LogBatch {
@@ -196,40 +198,10 @@ impl LogBatch {
         self.transaction_index.push(log.transaction_index);
         self.block_number.push(log.block_number);
         self.block_hash.push(log.block_hash);
-    }
-}
-
-#[derive(Default)]
-pub struct TopicBatch {
-    pub topic: Vec<LogTopic>,
-    pub transaction_hash: Vec<Hash>,
-    pub transaction_index: Vec<Index>,
-    pub log_index: Vec<Index>,
-    pub index: Vec<i32>,
-    pub block_number: Vec<BlockNumber>,
-    pub block_hash: Vec<Hash>,
-}
-
-impl TopicBatch {
-    #[allow(clippy::too_many_arguments)]
-    pub fn push(
-        &mut self,
-        topic: LogTopic,
-        idx: usize,
-        tx_hash: Hash,
-        tx_idx: Index,
-        log_idx: Index,
-        block_number: BlockNumber,
-        block_hash: Hash,
-    ) -> anyhow::Result<()> {
-        self.topic.push(topic);
-        self.index.push(i32::try_from(idx).context("failed to convert topic idx")?);
-        self.block_hash.push(block_hash);
-        self.log_index.push(log_idx);
-        self.block_number.push(block_number);
-        self.transaction_hash.push(tx_hash);
-        self.transaction_index.push(tx_idx);
-        Ok(())
+        self.topic0.push(log.log.topics.get(0).cloned()); // OPTIMIZE: we can consume topics, so we don't actually need to clone
+        self.topic1.push(log.log.topics.get(1).cloned());
+        self.topic2.push(log.log.topics.get(2).cloned());
+        self.topic3.push(log.log.topics.get(3).cloned());
     }
 }
 
