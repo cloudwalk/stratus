@@ -193,7 +193,8 @@ impl PermanentStorage for RocksPermanentStorage {
         let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
         let mut block_without_changes = block.clone();
         for transaction in &mut block_without_changes.transactions {
-            transaction.execution.changes = vec![];
+            // checks if it has a contract address to keep
+            transaction.execution.changes.retain(|change| change.bytecode.clone().is_modified());
         }
         let hash_clone = hash.clone();
         futures.push(tokio::task::spawn_blocking(move || blocks_by_number.insert(number, block_without_changes)));

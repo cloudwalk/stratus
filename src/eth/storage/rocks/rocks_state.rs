@@ -304,7 +304,7 @@ impl RocksStorageState {
         match self.transactions.get(tx_hash) {
             Some(transaction) => match self.blocks_by_number.get(&transaction) {
                 Some(block) => {
-                    tracing::trace!(%tx_hash, "transaction found in memory");
+                    tracing::trace!(%tx_hash, "transaction found");
                     match block.transactions.into_iter().find(|tx| &tx.input.hash == tx_hash) {
                         Some(tx) => Ok(Some(tx)),
                         None => log_and_err!("transaction was not found in block"),
