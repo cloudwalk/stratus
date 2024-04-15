@@ -378,7 +378,7 @@ contracts-remove:
 contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
-    just build || exit 1
+    just build-release || exit 1
     RUST_LOG=info just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
