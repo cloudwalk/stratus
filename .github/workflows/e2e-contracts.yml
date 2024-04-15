@@ -39,9 +39,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-stable-debug-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-stable-debug-
+            ${{ runner.os }}-cargo-stable-release-
             ${{ runner.os }}-cargo-${{ github.workflow }}-
 
       - name: Set up Rust
