@@ -10,8 +10,8 @@
         "Numeric",
         "Bytea",
         "Bytea",
-        "ByteaArray",
-        "ByteaArray",
+        "Jsonb",
+        "Jsonb",
         "Numeric",
         "Numeric",
         "Numeric"
