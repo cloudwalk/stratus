@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH delete_blocks AS (\n DELETE FROM blocks WHERE number > $1\n),\ndelete_account_slots AS (\n DELETE FROM account_slots WHERE creation_block > $1\n),\ndelete_accounts AS (\n DELETE FROM accounts WHERE creation_block > $1\n),\ndelete_historical_balances AS (\n DELETE FROM historical_balances WHERE block_number > $1\n),\ndelete_historical_nonces AS (\n DELETE FROM historical_nonces WHERE block_number > $1\n),\ndelete_historical_slots AS (\n DELETE FROM historical_slots WHERE block_number > $1\n),\ndelete_logs AS (\n DELETE FROM logs WHERE block_number > $1\n)\nDELETE FROM transactions WHERE block_number > $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "af0c6ee28d1fafcc7cff0e0397c4788af57a161cf803489039c10314143702e1"
+}
