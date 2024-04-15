@@ -14,6 +14,7 @@ use itertools::Itertools;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
+use super::slot::SlotIndexes;
 use crate::eth::evm::EvmInputSlotKeys;
 use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Address;
@@ -21,7 +22,6 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotAccess;
-use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -47,10 +47,10 @@ pub struct Account {
     pub code_hash: CodeHash,
 
     /// Slots indexes that are accessed statically.
-    pub static_slot_indexes: Option<Vec<SlotIndex>>,
+    pub static_slot_indexes: Option<SlotIndexes>,
 
     /// Slots indexes that are accessed using the mapping hash algorithm.
-    pub mapping_slot_indexes: Option<Vec<SlotIndex>>,
+    pub mapping_slot_indexes: Option<SlotIndexes>,
 }
 
 impl Account {
@@ -88,12 +88,12 @@ impl Account {
     }
 
     /// Compute slot indexes to be accessed for a give input.
-    pub fn slot_indexes(&self, input_keys: EvmInputSlotKeys) -> Vec<SlotIndex> {
-        let mut slot_indexes = Vec::new();
+    pub fn slot_indexes(&self, input_keys: EvmInputSlotKeys) -> SlotIndexes {
+        let mut slot_indexes = SlotIndexes(Vec::new());
 
         // calculate static indexes
         if let Some(ref indexes) = self.static_slot_indexes {
-            slot_indexes.extend(indexes.clone());
+            slot_indexes.extend(indexes.clone().0);
         }
 
         // calculate mapping indexes
@@ -121,8 +121,8 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             _ => HashSet::new(),
         };
 
-        let mut static_slot_indexes = Vec::with_capacity(slot_indexes.len());
-        let mut mapping_slot_indexes = Vec::with_capacity(slot_indexes.len());
+        let mut static_slot_indexes = SlotIndexes(Vec::with_capacity(slot_indexes.len()));
+        let mut mapping_slot_indexes = SlotIndexes(Vec::with_capacity(slot_indexes.len()));
         for index in slot_indexes {
             match index {
                 SlotAccess::Static(index) => static_slot_indexes.push(index),
