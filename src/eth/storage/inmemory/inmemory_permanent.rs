@@ -30,6 +30,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
@@ -462,8 +463,8 @@ pub struct InMemoryPermanentAccount {
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
     pub code_hash: InMemoryHistory<CodeHash>,
-    pub static_slot_indexes: InMemoryHistory<Option<Vec<SlotIndex>>>,
-    pub mapping_slot_indexes: InMemoryHistory<Option<Vec<SlotIndex>>>,
+    pub static_slot_indexes: InMemoryHistory<Option<SlotIndexes>>,
+    pub mapping_slot_indexes: InMemoryHistory<Option<SlotIndexes>>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 

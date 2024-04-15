@@ -114,8 +114,8 @@ CREATE TABLE public.accounts (
     address bytea NOT NULL,
     bytecode bytea,
     code_hash bytea NOT NULL,
-    mapping_slot_indexes bytea[],
-    static_slot_indexes bytea[],
+    mapping_slot_indexes JSONB,
+    static_slot_indexes JSONB,
     latest_balance numeric NOT NULL,
     latest_nonce numeric NOT NULL,
     creation_block numeric NOT NULL,
@@ -846,4 +846,3 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20240229183514'),
 ('20240229183643'),
 ('20240311224030');
-

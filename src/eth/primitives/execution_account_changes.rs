@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::CodeHash;
+use crate::eth::primitives::slot::SlotIndexes;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -22,8 +23,8 @@ pub struct ExecutionAccountChanges {
     // TODO: bytecode related information should be grouped in a Bytecode struct
     pub bytecode: ExecutionValueChange<Option<Bytes>>,
     pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
-    pub static_slot_indexes: ExecutionValueChange<Option<Vec<SlotIndex>>>,
-    pub mapping_slot_indexes: ExecutionValueChange<Option<Vec<SlotIndex>>>,
+    pub static_slot_indexes: ExecutionValueChange<Option<SlotIndexes>>,
+    pub mapping_slot_indexes: ExecutionValueChange<Option<SlotIndexes>>,
 
     pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
 }
