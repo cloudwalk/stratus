@@ -18,8 +18,5 @@ delete_historical_slots AS (
 ),
 delete_logs AS (
  DELETE FROM logs WHERE block_number > $1
-),
-delete_topics AS (
- DELETE FROM topics WHERE block_number > $1
 )
 DELETE FROM transactions WHERE block_number > $1
