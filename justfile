@@ -376,8 +376,8 @@ contracts-remove:
 contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
-    just build || exit 1
-    RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
+    just build-release || exit 1
+    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo

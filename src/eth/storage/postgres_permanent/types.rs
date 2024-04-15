@@ -1,6 +1,7 @@
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::EcdsaRs;
 use crate::eth::primitives::EcdsaV;
@@ -14,6 +15,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
@@ -39,6 +41,7 @@ pub struct PostgresTransaction {
     pub r: EcdsaRs,
     pub s: EcdsaRs,
     pub v: EcdsaV,
+    pub chain_id: Option<ChainId>,
 }
 
 impl PostgresTransaction {
@@ -58,7 +61,7 @@ impl PostgresTransaction {
             execution_costs_applied: true,
         };
         let input = TransactionInput {
-            chain_id: Some(2008u64.into()), // TODO: chain_id should be saved in the database instead of using hardcoded value
+            chain_id: self.chain_id,
             hash: self.hash,
             nonce: self.nonce,
             signer: self.signer_address,
@@ -150,6 +153,7 @@ pub struct TransactionBatch {
     pub s: Vec<[u8; 32]>,
     pub value: Vec<Wei>,
     pub result: Vec<String>,
+    pub chain_id: Vec<Option<ChainId>>,
 }
 
 impl TransactionBatch {
@@ -171,6 +175,7 @@ impl TransactionBatch {
         self.s.push(<[u8; 32]>::from(transaction.input.s));
         self.value.push(transaction.input.value);
         self.result.push(transaction.execution.result.to_string());
+        self.chain_id.push(transaction.input.chain_id);
     }
 }
 
@@ -216,6 +221,8 @@ pub struct AccountBatch {
     pub original_nonce: Vec<Nonce>,
     pub original_balance: Vec<Wei>,
     pub code_hash: Vec<CodeHash>,
+    pub static_slot_indexes: Vec<Option<SlotIndexes>>,
+    pub mapping_slot_indexes: Vec<Option<SlotIndexes>>,
 }
 
 impl AccountBatch {
@@ -230,6 +237,8 @@ impl AccountBatch {
         original_nonce: Nonce,
         original_balance: Wei,
         code_hash: CodeHash,
+        static_slot_indexes: Option<SlotIndexes>,
+        mapping_slot_indexes: Option<SlotIndexes>,
     ) {
         self.address.push(address);
         self.new_nonce.push(new_nonce);
@@ -239,6 +248,8 @@ impl AccountBatch {
         self.original_nonce.push(original_nonce);
         self.original_balance.push(original_balance);
         self.code_hash.push(code_hash);
+        self.static_slot_indexes.push(static_slot_indexes);
+        self.mapping_slot_indexes.push(mapping_slot_indexes);
     }
 }
 

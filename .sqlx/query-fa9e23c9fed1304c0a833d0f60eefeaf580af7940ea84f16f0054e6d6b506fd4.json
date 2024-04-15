@@ -31,12 +31,12 @@
       {
         "ordinal": 5,
         "name": "static_slot_indexes: _",
-        "type_info": "ByteaArray"
+        "type_info": "Jsonb"
       },
       {
         "ordinal": 6,
         "name": "mapping_slot_indexes: _",
-        "type_info": "ByteaArray"
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {

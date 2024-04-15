@@ -15,7 +15,6 @@ use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::CreateScheme;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
-use revm::primitives::HashMap;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
 use revm::primitives::State as RevmState;
@@ -160,11 +159,12 @@ struct RevmSession {
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 
-    /// Slots cached during account load.
-    account_slots_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
-
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
+
+    #[cfg(feature = "evm-slot-prefetch")]
+    /// Slots cached during account load.
+    account_slots_cache: std::collections::HashMap<Address, std::collections::HashMap<SlotIndex, Slot>>,
 }
 
 impl RevmSession {
@@ -174,8 +174,9 @@ impl RevmSession {
             storage,
             input: Default::default(),
             storage_changes: Default::default(),
-            account_slots_cache: Default::default(),
             metrics: Default::default(),
+            #[cfg(feature = "evm-slot-prefetch")]
+            account_slots_cache: Default::default(),
         }
     }
 
@@ -183,8 +184,9 @@ impl RevmSession {
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
         self.storage_changes = Default::default();
-        self.account_slots_cache.clear();
         self.metrics = Default::default();
+        #[cfg(feature = "evm-slot-prefetch")]
+        self.account_slots_cache.clear();
     }
 }
 
@@ -237,16 +239,23 @@ impl Database for RevmSession {
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
 
-        // load slot from cache or storage
-        let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
-        let slot = match cached_slot {
-            // not found, query storage
-            None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
+        // load slot from storage
+        #[cfg(not(feature = "evm-slot-prefetch"))]
+        let slot = handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
 
-            // cached
-            Some(slot) => {
-                self.metrics.slot_reads_cached += 1;
-                slot.clone()
+        // load slot from cache or storage
+        #[cfg(feature = "evm-slot-prefetch")]
+        let slot = {
+            let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
+            match cached_slot {
+                // not found, query storage
+                None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
+
+                // cached
+                Some(slot) => {
+                    self.metrics.slot_reads_cached += 1;
+                    slot.clone()
+                }
             }
         };
 

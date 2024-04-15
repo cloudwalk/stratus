@@ -39,9 +39,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-stable-debug-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-stable-debug-
+            ${{ runner.os }}-cargo-stable-release-
             ${{ runner.os }}-cargo-${{ github.workflow }}-
 
       - name: Set up Rust
@@ -70,4 +70,4 @@ jobs:
         run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
-        run: just contracts-test-stratus --${{ matrix.contract }}
+        run: CARGO_PROFILE_RELEASE_DEBUG=0 just contracts-test-stratus --${{ matrix.contract }}

@@ -114,8 +114,8 @@ CREATE TABLE public.accounts (
     address bytea NOT NULL,
     bytecode bytea,
     code_hash bytea NOT NULL,
-    mapping_slot_indexes bytea[],
-    static_slot_indexes bytea[],
+    mapping_slot_indexes JSONB,
+    static_slot_indexes JSONB,
     latest_balance numeric NOT NULL,
     latest_nonce numeric NOT NULL,
     creation_block numeric NOT NULL,
@@ -421,6 +421,7 @@ CREATE TABLE public.transactions (
     s bytea NOT NULL,
     value numeric NOT NULL,
     result text NOT NULL,
+    chain_id numeric DEFAULT NULL,
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL
 );
