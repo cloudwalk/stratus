@@ -83,7 +83,7 @@ transaction_insert AS (
             $33::bytea [],
             $34::numeric [],
             $35::text [],
-            $36::numeric [] -- TODO: refactor the ordering
+            $36::numeric []
         )
     RETURNING 1 as res
 ),
