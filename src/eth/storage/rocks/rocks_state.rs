@@ -149,11 +149,11 @@ impl RocksStorageState {
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     for (block_hash, block_num) in self_blocks_by_hash_clone.iter_end() {
-                        if block_num <= block_number_clone {
-                            break;
+                        if block_num > block_number_clone {
+                            self_blocks_by_hash_clone.delete(&block_hash).unwrap();
                         }
-                        self_blocks_by_hash_clone.delete(&block_hash).unwrap();
                     }
+
                     info!(
                         "Deleted blocks by hash above block number {}. This ensures synchronization with the lowest block height across nodes.",
                         block_number_clone
@@ -166,10 +166,9 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
                     for (num, _) in blocks_by_number {
-                        if num <= block_number_clone {
-                            break;
+                        if num > block_number_clone {
+                            self_blocks_by_number_clone.delete(&num).unwrap();
                         }
-                        self_blocks_by_number_clone.delete(&num).unwrap();
                     }
                     info!(
                         "Deleted blocks by number above block number {}. Helps in reverting to a common state prior to a network fork or error.",
@@ -183,10 +182,9 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let transactions = self_transactions_clone.iter_end();
                     for (hash, tx_block_number) in transactions {
-                        if tx_block_number <= block_number_clone {
-                            break;
+                        if tx_block_number > block_number_clone {
+                            self_transactions_clone.delete(&hash).unwrap();
                         }
-                        self_transactions_clone.delete(&hash).unwrap();
                     }
                     info!(
                         "Cleared transactions above block number {}. Necessary to remove transactions not confirmed in the finalized blockchain state.",
@@ -200,10 +198,9 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let logs = self_logs_clone.iter_end();
                     for (key, log_block_number) in logs {
-                        if log_block_number <= block_number_clone {
-                            break;
+                        if log_block_number > block_number_clone {
+                            self_logs_clone.delete(&key).unwrap();
                         }
-                        self_logs_clone.delete(&key).unwrap();
                     }
                     info!(
                         "Removed logs above block number {}. Ensures log consistency with the blockchain's current confirmed state.",
@@ -217,10 +214,9 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let accounts_history = self_accounts_history_clone.iter_end();
                     for ((address, historic_block_number), _) in accounts_history {
-                        if historic_block_number <= block_number_clone {
-                            break;
+                        if historic_block_number > block_number_clone {
+                            self_accounts_history_clone.delete(&(address, historic_block_number)).unwrap();
                         }
-                        self_accounts_history_clone.delete(&(address, historic_block_number)).unwrap();
                     }
                     info!(
                         "Deleted account history records above block number {}. Important for maintaining historical accuracy in account state across nodes.",
@@ -234,10 +230,9 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let account_slots_history = self_account_slots_history_clone.iter_end();
                     for ((address, slot_index, historic_block_number), _) in account_slots_history {
-                        if historic_block_number <= block_number_clone {
-                            break;
+                        if historic_block_number > block_number_clone {
+                            self_account_slots_history_clone.delete(&(address, slot_index, historic_block_number)).unwrap();
                         }
-                        self_account_slots_history_clone.delete(&(address, slot_index, historic_block_number)).unwrap();
                     }
                     info!(
                         "Cleared account slot history above block number {}. Vital for synchronizing account slot states after discrepancies.",
@@ -248,7 +243,8 @@ impl RocksStorageState {
         ];
 
         // Wait for all tasks to complete using join_all
-        let _ = join_all(tasks);
+        let _ = join_all(tasks).await;
+        dbg!("finished joining tasks");
 
         // Clear current states
         let _ = self.accounts.clear();
@@ -278,6 +274,7 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
                 self_accounts_clone.insert_batch(accounts_temp_vec, Some(block_number_clone.into()));
                 info!("Accounts updated up to block number {}", block_number_clone);
+                dbg!("finished updating accounts");
             }
         });
 
@@ -306,15 +303,17 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
                 self_account_slots_clone.insert_batch(slots_temp_vec, Some(block_number_clone.into()));
                 info!("Slots updated up to block number {}", block_number_clone);
+                dbg!("finished updating slots");
             }
         });
 
-        let _ = join_all(vec![accounts_task, slots_task]);
+        let _ = join_all(vec![accounts_task, slots_task]).await;
 
         info!(
             "All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.",
             block_number
         );
+        dbg!("XXX finished resetting state now");
 
         Ok(())
     }
