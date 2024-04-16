@@ -12,5 +12,5 @@ async fn test_import_offline_snapshot_with_inmemory() {
     let (config, block, receipts, snapshot) = common::init_config_and_data();
     let inmemory = InMemoryPermanentStorage::from_snapshot(snapshot);
 
-    common::execute_test("InMemory", &config, &docker, inmemory, block.clone(), receipts.clone()).await;
+    common::execute_test("InMemory", &config, &docker, inmemory, block, receipts).await;
 }

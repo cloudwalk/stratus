@@ -39,5 +39,5 @@ async fn test_import_offline_snapshot_with_postgres() {
     }
     tx.commit().await.unwrap();
 
-    common::execute_test("PostgreSQL", &config, &docker, pg, block.clone(), receipts.clone()).await;
+    common::execute_test("PostgreSQL", &config, &docker, pg, block, receipts).await;
 }

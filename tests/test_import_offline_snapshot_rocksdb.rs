@@ -18,5 +18,5 @@ async fn test_import_offline_snapshot_with_rocksdb() {
     rocks.save_accounts(accounts).await.unwrap();
     rocks.state.write_slots(slots, BlockNumber::ZERO);
 
-    common::execute_test("RocksDB", &config, &docker, rocks, block.clone(), receipts.clone()).await;
+    common::execute_test("RocksDB", &config, &docker, rocks, block, receipts).await;
 }
