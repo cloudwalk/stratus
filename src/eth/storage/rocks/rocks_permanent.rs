@@ -42,11 +42,11 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> anyhow::Result<Self> {
         tracing::info!("starting rocksdb storage");
 
         let state = RocksStorageState::new();
-        state.sync_data()?;
+        state.sync_data().await?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
@@ -260,7 +260,7 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         });
 
-        self.state.reset_at(block_number)
+        self.state.reset_at(block_number).await
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {

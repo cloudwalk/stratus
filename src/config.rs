@@ -610,7 +610,7 @@ impl PermanentStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new()?),
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
