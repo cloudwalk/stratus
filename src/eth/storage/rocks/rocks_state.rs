@@ -7,11 +7,9 @@ use futures::future::join_all;
 use itertools::Itertools;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
-use tokio::join;
 use tokio::sync::mpsc;
 use tokio::task;
 use tokio::task::JoinHandle;
-use tracing::error;
 use tracing::info;
 use tracing::warn;
 
