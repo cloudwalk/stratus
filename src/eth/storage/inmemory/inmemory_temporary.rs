@@ -33,6 +33,12 @@ pub struct InMemoryTemporaryStorage {
     pub state: RwLock<InMemoryTemporaryStorageState>,
 }
 
+impl InMemoryTemporaryStorage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for InMemoryTemporaryStorage {
     fn default() -> Self {
         tracing::info!("starting inmemory temporary storage");

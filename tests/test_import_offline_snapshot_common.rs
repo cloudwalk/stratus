@@ -1,17 +1,20 @@
+#![allow(dead_code)]
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::config::IntegrationTestConfig;
+use stratus::eth::primitives::Account;
+use stratus::eth::primitives::Address;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipts;
+use stratus::eth::primitives::Slot;
 use stratus::eth::primitives::StoragePointInTime;
 use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
-use stratus::eth::storage::PostgresPermanentStorage;
-use stratus::eth::storage::PostgresPermanentStorageConfig;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::docker::Docker;
 use stratus::init_global_services;
@@ -80,15 +83,13 @@ const METRIC_QUERIES: [&str; 46] = [
 #[cfg(not(feature = "metrics"))]
 const METRIC_QUERIES: [&str; 0] = [];
 
-#[tokio::test]
-async fn test_import_offline_snapshot() {
+// -----------------------------------------------------------------------------
+// Data initialization
+// -----------------------------------------------------------------------------
+pub fn init_config_and_data() -> (IntegrationTestConfig, ExternalBlock, ExternalReceipts, InMemoryPermanentStorageState) {
+    // init config
     let mut config = init_global_services::<IntegrationTestConfig>();
     config.executor.chain_id = 2009;
-
-    // init containers
-    let docker = Docker::default();
-    let _pg_guard = docker.start_postgres();
-    let _prom_guard = docker.start_prometheus();
 
     // init block data
     let block_json = include_str!("fixtures/snapshots/292973/block.json");
@@ -101,24 +102,52 @@ async fn test_import_offline_snapshot() {
     // init snapshot data
     let snapshot_json = include_str!("fixtures/snapshots/292973/snapshot.json");
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
-    let pg = PostgresPermanentStorage::new(PostgresPermanentStorageConfig {
-        url: docker.postgres_connection_url().to_owned(),
-        connections: 5,
-        acquire_timeout: Duration::from_secs(10),
-    })
-    .await
-    .unwrap();
-    populate_postgres(&pg, snapshot).await;
+
+    (config, block, receipts, snapshot)
+}
+
+pub fn filter_accounts_and_slots(snapshot: InMemoryPermanentStorageState) -> (Vec<Account>, Vec<(Address, Slot)>) {
+    // filter and convert accounts
+    let accounts = snapshot.accounts.values().map(|a| a.to_account(&StoragePointInTime::Present)).collect_vec();
+
+    // filter and convert slots
+    let mut slots = Vec::new();
+    for account in snapshot.accounts.values() {
+        for slot_history in account.slots.values() {
+            let slot = slot_history.get_current();
+            slots.push((account.address.clone(), slot));
+        }
+    }
+
+    (accounts, slots)
+}
+
+// -----------------------------------------------------------------------------
+// Test execution
+// -----------------------------------------------------------------------------
+pub async fn execute_test(
+    test_name: &str,
+    // services
+    config: &IntegrationTestConfig,
+    docker: &Docker,
+    perm_storage: impl PermanentStorage + 'static,
+    // data
+    block: ExternalBlock,
+    receipts: ExternalReceipts,
+) {
+    println!("Executing: {}", test_name);
+
+    // restart prometheus, so the metrics are reset
 
     // init executor and execute
-    let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::default()), Arc::new(pg)));
-    let executor = config.executor.init(storage);
+    let storage = StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage));
+    let executor = config.executor.init(Arc::new(storage));
     executor.import_external_to_perm(block, &receipts).await.unwrap();
 
-    // get metrics from prometheus
-    // sleep to ensure prometheus collected
+    // get metrics from prometheus (sleep to ensure prometheus collected)
     tokio::time::sleep(Duration::from_secs(5)).await;
 
+    println!("{}\n{}\n{}", "=".repeat(80), test_name, "=".repeat(80));
     for query in METRIC_QUERIES {
         // formatting between query groups
         if query.starts_with('*') {
@@ -146,33 +175,4 @@ async fn test_import_offline_snapshot() {
             }
         }
     }
-}
-
-async fn populate_postgres(pg: &PostgresPermanentStorage, state: InMemoryPermanentStorageState) {
-    // save accounts
-    let accounts = state.accounts.values().map(|a| a.to_account(&StoragePointInTime::Present)).collect_vec();
-    pg.save_accounts(accounts).await.unwrap();
-
-    // save slots
-    let mut tx = pg.pool.begin().await.unwrap();
-    for account in state.accounts.values() {
-        for slot_history in account.slots.values() {
-            let slot = slot_history.get_current();
-
-            // we do not insert zero value slots because they were not really present in the storage when the snapshot was taken.
-            if slot.is_zero() {
-                continue;
-            }
-
-            sqlx::query("insert into account_slots(idx, value, account_address, creation_block) values($1, $2, $3, $4)")
-                .bind(slot.index)
-                .bind(slot.value)
-                .bind(&account.address)
-                .bind(0)
-                .execute(&mut *tx)
-                .await
-                .unwrap();
-        }
-    }
-    tx.commit().await.unwrap();
 }
