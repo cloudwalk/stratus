@@ -145,7 +145,7 @@ impl RocksStorageState {
     pub async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let tasks = vec![
             {
-                let self_blocks_by_hash_clone = self.blocks_by_hash.clone();
+                let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     for (block_hash, block_num) in self_blocks_by_hash_clone.iter_end() {
@@ -161,7 +161,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_blocks_by_number_clone = self.blocks_by_number.clone();
+                let self_blocks_by_number_clone = Arc::clone(&self.blocks_by_number);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
@@ -177,7 +177,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_transactions_clone = self.transactions.clone();
+                let self_transactions_clone = Arc::clone(&self.transactions);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let transactions = self_transactions_clone.iter_end();
@@ -193,7 +193,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_logs_clone = self.logs.clone();
+                let self_logs_clone = Arc::clone(&self.logs);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let logs = self_logs_clone.iter_end();
@@ -209,7 +209,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_accounts_history_clone = self.accounts_history.clone();
+                let self_accounts_history_clone = Arc::clone(&self.accounts_history);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let accounts_history = self_accounts_history_clone.iter_end();
@@ -225,7 +225,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_account_slots_history_clone = self.account_slots_history.clone();
+                let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let account_slots_history = self_account_slots_history_clone.iter_end();
@@ -252,8 +252,8 @@ impl RocksStorageState {
 
         // Spawn task for handling accounts
         let accounts_task = task::spawn_blocking({
-            let self_accounts_history_clone = self.accounts_history.clone();
-            let self_accounts_clone = self.accounts.clone();
+            let self_accounts_history_clone = Arc::clone(&self.accounts_history);
+            let self_accounts_clone = Arc::clone(&self.accounts);
             let block_number_clone = block_number;
             move || {
                 let mut latest_accounts = std::collections::HashMap::new();
@@ -280,8 +280,8 @@ impl RocksStorageState {
 
         // Spawn task for handling slots
         let slots_task = task::spawn_blocking({
-            let self_account_slots_history_clone = self.account_slots_history.clone();
-            let self_account_slots_clone = self.account_slots.clone();
+            let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
+            let self_account_slots_clone = Arc::clone(&self.account_slots);
             let block_number_clone = block_number;
             move || {
                 let mut latest_slots = std::collections::HashMap::new();
