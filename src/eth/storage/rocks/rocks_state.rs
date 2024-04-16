@@ -67,8 +67,8 @@ pub struct RocksStorageState {
     pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
-impl RocksStorageState {
-    pub fn new() -> Self {
+impl Default for RocksStorageState {
+    fn default() -> Self {
         let (tx, rx) = mpsc::channel::<()>(1);
 
         let state = Self {
@@ -86,6 +86,12 @@ impl RocksStorageState {
         state.listen_for_backup_trigger(rx).unwrap();
 
         state
+    }
+}
+
+impl RocksStorageState {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
