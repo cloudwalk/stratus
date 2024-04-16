@@ -560,7 +560,7 @@ impl TemporaryStorageConfig {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
             TemporaryStorageKind::Sled => Ok(Arc::new(SledTemporary::new()?)),
-            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new()?)),
+            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new().await?)),
         }
     }
 }

@@ -11,8 +11,8 @@ use tokio::join;
 use tokio::sync::mpsc;
 use tokio::task;
 use tokio::task::JoinHandle;
-use tracing::info;
 use tracing::error;
+use tracing::info;
 use tracing::warn;
 
 use crate::eth::primitives::Account;
@@ -156,7 +156,10 @@ impl RocksStorageState {
                         }
                         self_blocks_by_hash_clone.delete(&block_hash).unwrap();
                     }
-                    info!("Deleted blocks by hash above block number {}. This ensures synchronization with the lowest block height across nodes.", block_number_clone);
+                    info!(
+                        "Deleted blocks by hash above block number {}. This ensures synchronization with the lowest block height across nodes.",
+                        block_number_clone
+                    );
                 })
             },
             {
@@ -170,7 +173,10 @@ impl RocksStorageState {
                         }
                         self_blocks_by_number_clone.delete(&num).unwrap();
                     }
-                    info!("Deleted blocks by number above block number {}. Helps in reverting to a common state prior to a network fork or error.", block_number_clone);
+                    info!(
+                        "Deleted blocks by number above block number {}. Helps in reverting to a common state prior to a network fork or error.",
+                        block_number_clone
+                    );
                 })
             },
             {
@@ -184,7 +190,10 @@ impl RocksStorageState {
                         }
                         self_transactions_clone.delete(&hash).unwrap();
                     }
-                    info!("Cleared transactions above block number {}. Necessary to remove transactions not confirmed in the finalized blockchain state.", block_number_clone);
+                    info!(
+                        "Cleared transactions above block number {}. Necessary to remove transactions not confirmed in the finalized blockchain state.",
+                        block_number_clone
+                    );
                 })
             },
             {
@@ -198,7 +207,10 @@ impl RocksStorageState {
                         }
                         self_logs_clone.delete(&key).unwrap();
                     }
-                    info!("Removed logs above block number {}. Ensures log consistency with the blockchain's current confirmed state.", block_number_clone);
+                    info!(
+                        "Removed logs above block number {}. Ensures log consistency with the blockchain's current confirmed state.",
+                        block_number_clone
+                    );
                 })
             },
             {
@@ -212,7 +224,10 @@ impl RocksStorageState {
                         }
                         self_accounts_history_clone.delete(&(address, historic_block_number)).unwrap();
                     }
-                    info!("Deleted account history records above block number {}. Important for maintaining historical accuracy in account state across nodes.", block_number_clone);
+                    info!(
+                        "Deleted account history records above block number {}. Important for maintaining historical accuracy in account state across nodes.",
+                        block_number_clone
+                    );
                 })
             },
             {
@@ -226,9 +241,12 @@ impl RocksStorageState {
                         }
                         self_account_slots_history_clone.delete(&(address, slot_index, historic_block_number)).unwrap();
                     }
-                    info!("Cleared account slot history above block number {}. Vital for synchronizing account slot states after discrepancies.", block_number_clone);
+                    info!(
+                        "Cleared account slot history above block number {}. Vital for synchronizing account slot states after discrepancies.",
+                        block_number_clone
+                    );
                 })
-            }
+            },
         ];
 
         // Wait for all tasks to complete using join_all
@@ -239,62 +257,66 @@ impl RocksStorageState {
         let _ = self.account_slots.clear();
 
         // Spawn task for handling accounts
-         let accounts_task = task::spawn_blocking({
-             let self_accounts_history_clone = self.accounts_history.clone();
-             let self_accounts_clone = self.accounts.clone();
-             let block_number_clone = block_number;
-             move || {
-                 let mut latest_accounts = std::collections::HashMap::new();
-                 let account_histories = self_accounts_history_clone.iter_start();
-                 for ((address, historic_block_number), account_info) in account_histories {
-                     if let Some((existing_block_number, _)) = latest_accounts.get(&address) {
-                         if *existing_block_number < historic_block_number {
-                             latest_accounts.insert(address, (historic_block_number, account_info));
-                         }
-                     } else {
-                         latest_accounts.insert(address, (historic_block_number, account_info));
-                     }
-                 }
+        let accounts_task = task::spawn_blocking({
+            let self_accounts_history_clone = self.accounts_history.clone();
+            let self_accounts_clone = self.accounts.clone();
+            let block_number_clone = block_number;
+            move || {
+                let mut latest_accounts = std::collections::HashMap::new();
+                let account_histories = self_accounts_history_clone.iter_start();
+                for ((address, historic_block_number), account_info) in account_histories {
+                    if let Some((existing_block_number, _)) = latest_accounts.get(&address) {
+                        if *existing_block_number < historic_block_number {
+                            latest_accounts.insert(address, (historic_block_number, account_info));
+                        }
+                    } else {
+                        latest_accounts.insert(address, (historic_block_number, account_info));
+                    }
+                }
 
-                 let accounts_temp_vec = latest_accounts.into_iter()
-                     .map(|(address, (_, account_info))| (address, account_info))
-                     .collect::<Vec<_>>();
-                 self_accounts_clone.insert_batch(accounts_temp_vec, Some(block_number_clone.into()));
-                 info!("Accounts updated up to block number {}", block_number_clone);
-             }
-         });
+                let accounts_temp_vec = latest_accounts
+                    .into_iter()
+                    .map(|(address, (_, account_info))| (address, account_info))
+                    .collect::<Vec<_>>();
+                self_accounts_clone.insert_batch(accounts_temp_vec, Some(block_number_clone.into()));
+                info!("Accounts updated up to block number {}", block_number_clone);
+            }
+        });
 
-         // Spawn task for handling slots
-         let slots_task = task::spawn_blocking({
-             let self_account_slots_history_clone = self.account_slots_history.clone();
-             let self_account_slots_clone = self.account_slots.clone();
-             let block_number_clone = block_number;
-             move || {
-                 let mut latest_slots = std::collections::HashMap::new();
-                 let slot_histories = self_account_slots_history_clone.iter_start();
-                 for ((address, slot_index, historic_block_number), slot_value) in slot_histories {
-                     let slot_key = (address, slot_index);
-                     if let Some((existing_block_number, _)) = latest_slots.get(&slot_key) {
-                         if *existing_block_number < historic_block_number {
-                             latest_slots.insert(slot_key, (historic_block_number, slot_value));
-                         }
-                     } else {
-                         latest_slots.insert(slot_key, (historic_block_number, slot_value));
-                     }
-                 }
+        // Spawn task for handling slots
+        let slots_task = task::spawn_blocking({
+            let self_account_slots_history_clone = self.account_slots_history.clone();
+            let self_account_slots_clone = self.account_slots.clone();
+            let block_number_clone = block_number;
+            move || {
+                let mut latest_slots = std::collections::HashMap::new();
+                let slot_histories = self_account_slots_history_clone.iter_start();
+                for ((address, slot_index, historic_block_number), slot_value) in slot_histories {
+                    let slot_key = (address, slot_index);
+                    if let Some((existing_block_number, _)) = latest_slots.get(&slot_key) {
+                        if *existing_block_number < historic_block_number {
+                            latest_slots.insert(slot_key, (historic_block_number, slot_value));
+                        }
+                    } else {
+                        latest_slots.insert(slot_key, (historic_block_number, slot_value));
+                    }
+                }
 
-                 let slots_temp_vec = latest_slots.into_iter()
-                     .map(|((address, slot_index), (_, slot_value))| ((address, slot_index), slot_value))
-                     .collect::<Vec<_>>();
-                 self_account_slots_clone.insert_batch(slots_temp_vec, Some(block_number_clone.into()));
-                 info!("Slots updated up to block number {}", block_number_clone);
-             }
-         });
+                let slots_temp_vec = latest_slots
+                    .into_iter()
+                    .map(|((address, slot_index), (_, slot_value))| ((address, slot_index), slot_value))
+                    .collect::<Vec<_>>();
+                self_account_slots_clone.insert_batch(slots_temp_vec, Some(block_number_clone.into()));
+                info!("Slots updated up to block number {}", block_number_clone);
+            }
+        });
 
         let _ = join_all(vec![accounts_task, slots_task]);
 
-        info!("All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.", block_number);
-
+        info!(
+            "All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.",
+            block_number
+        );
 
         Ok(())
     }
