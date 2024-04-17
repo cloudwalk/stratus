@@ -497,3 +497,32 @@ e2e-stratus-postgres-prefetch test="":
 
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
+
+# Contracts: Start Stratus with Postgres and run contracts test
+contracts-test-stratus-postgres-prefetch *args="":
+    #!/bin/bash
+    echo "-> Starting Postgres"
+    docker compose down
+    docker compose up -d || exit 1
+
+    echo "-> Waiting Postgres to start"
+    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Starting Stratus"
+    cargo build --release {{ build_flags }},evm-slot-prefetch  || exit 1
+    RUST_LOG=debug cargo run --release {{ build_flags }},evm-slot-prefetch -- {{run_flags }} -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Running E2E tests"
+    just e2e-contracts {{ args }}
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+
+    echo "-> Killing Postgres"
+    docker compose down
+
+    exit $result_code
