@@ -496,7 +496,7 @@ e2e-stratus-postgres-prefetch test="":
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
 
-# Contracts: Start Stratus with Postgres and run contracts test
+# Contracts: Start Stratus with Postgres and run contracts test [EXPERIMENTAL]
 contracts-test-stratus-postgres-prefetch *args="":
     #!/bin/bash
     echo "-> Starting Postgres"
