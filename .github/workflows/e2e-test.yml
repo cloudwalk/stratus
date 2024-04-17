@@ -42,3 +42,13 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
+
+  e2e-stratus-postgres-prefetch:
+    name: E2E Stratus Postgres with Prefetch
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      test_command: 'PERM_STORAGE=postgres://postgres:123@0.0.0.0:5432/stratus just e2e-stratus-postgres-prefetch'
+
+    concurrency:
+      group: ${{ github.workflow }}-prefetch-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
