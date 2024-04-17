@@ -154,8 +154,11 @@ impl RocksStorageState {
                 let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    for (block_hash, block_num) in self_blocks_by_hash_clone.iter_end() {
-                        if block_num > block_number_clone {
+                    for (block_num, block_hash_vec) in self_blocks_by_hash_clone.indexed_iter_end() {
+                        if block_num <= block_number_clone.as_u64() {
+                            break;
+                        }
+                        for block_hash in block_hash_vec {
                             self_blocks_by_hash_clone.delete(&block_hash).unwrap();
                         }
                     }
@@ -187,9 +190,12 @@ impl RocksStorageState {
                 let self_transactions_clone = Arc::clone(&self.transactions);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    let transactions = self_transactions_clone.iter_end();
-                    for (hash, tx_block_number) in transactions {
-                        if tx_block_number > block_number_clone {
+                    let transactions = self_transactions_clone.indexed_iter_end();
+                    for (index_block_number, hash_vec) in transactions {
+                        if index_block_number <= block_number_clone.as_u64() {
+                            break;
+                        }
+                        for hash in hash_vec {
                             self_transactions_clone.delete(&hash).unwrap();
                         }
                     }
@@ -203,10 +209,13 @@ impl RocksStorageState {
                 let self_logs_clone = Arc::clone(&self.logs);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    let logs = self_logs_clone.iter_end();
-                    for (key, log_block_number) in logs {
-                        if log_block_number > block_number_clone {
-                            self_logs_clone.delete(&key).unwrap();
+                    let logs = self_logs_clone.indexed_iter_end();
+                    for (index_block_number, logs_vec) in logs {
+                        if index_block_number <= block_number_clone.as_u64() {
+                            break;
+                        }
+                        for (hash, index) in logs_vec {
+                            self_logs_clone.delete(&(hash, index)).unwrap();
                         }
                     }
                     info!(
