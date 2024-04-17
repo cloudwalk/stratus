@@ -11,10 +11,18 @@ use anyhow::anyhow;
 #[cfg(feature = "forward_transaction")]
 use ethers::providers::Http;
 #[cfg(feature = "forward_transaction")]
+use ethers::providers::Middleware;
+#[cfg(feature = "forward_transaction")]
 use ethers::providers::Provider;
 #[cfg(feature = "forward_transaction")]
 use ethers_core::types::Transaction;
+#[cfg(feature = "forward_transaction")]
+use tokio::fs::File;
+#[cfg(feature = "forward_transaction")]
+use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast;
+#[cfg(feature = "forward_transaction")]
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 #[cfg(not(feature = "forward_transaction"))]
 use tokio::sync::Mutex;
@@ -25,6 +33,8 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionMetrics;
+#[cfg(feature = "forward_transaction")]
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransactionExecution;
@@ -56,13 +66,16 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     #[cfg(feature = "forward_transaction")]
+    // Provider for sending rpc calls to substrate
     provider: Provider<Http>,
 
     #[cfg(feature = "forward_transaction")]
-    failed_tx_sender: Option<tokio::sync::mpsc::Sender<(TransactionInput, Execution)>>,
+    // Sender for transactions that failed on our side, and should be included in the next block
+    failed_tx_sender: Option<mpsc::Sender<(TransactionInput, Execution)>>,
 
     #[cfg(feature = "forward_transaction")]
-    failed_tx_receiver: Option<tokio::sync::mpsc::Receiver<(TransactionInput, Execution)>>,
+    // Receiver for transactions that failed on our side, and should be included in the next block
+    failed_tx_receiver: Option<mpsc::Receiver<(TransactionInput, Execution)>>,
 
     // Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -93,13 +106,13 @@ impl EthExecutor {
 
     /// Sets the failed transactions sender.
     #[cfg(feature = "forward_transaction")]
-    pub fn set_failed_tx_sender(&mut self, failed_transactions: tokio::sync::mpsc::Sender<(TransactionInput, Execution)>) {
+    pub fn set_failed_tx_sender(&mut self, failed_transactions: mpsc::Sender<(TransactionInput, Execution)>) {
         self.failed_tx_sender = Some(failed_transactions);
     }
 
     /// Sets the failed transactions receiver.
     #[cfg(feature = "forward_transaction")]
-    pub fn set_failed_tx_receiver(&mut self, failed_transactions: tokio::sync::mpsc::Receiver<(TransactionInput, Execution)>) {
+    pub fn set_failed_tx_receiver(&mut self, failed_transactions: mpsc::Receiver<(TransactionInput, Execution)>) {
         self.failed_tx_receiver = Some(failed_transactions);
     }
 
@@ -274,14 +287,9 @@ impl EthExecutor {
     }
 
     #[cfg(feature = "forward_transaction")]
-    /// Executes a transaction and sends it to substrate
+    /// Executes a transaction and sends it to substrate if successful, if it fails sends the tx
+    /// to the next block
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
-        use ethers::providers::Middleware;
-        use tokio::fs::File;
-        use tokio::io::AsyncWriteExt;
-
-        use crate::eth::primitives::ExecutionResult;
-
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -306,7 +314,6 @@ impl EthExecutor {
         let execution = self.execute_in_evm(evm_input).await?.0;
 
         if execution.result == ExecutionResult::Success {
-            //let tx: TypedTransaction = (&Transaction::try_from(transaction)?).into();
             let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction).rlp()).await?;
 
             let Some(receipt) = pending_tx.await? else {

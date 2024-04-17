@@ -18,6 +18,8 @@ use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use stratus::log_and_err;
+#[cfg(feature = "forward_transaction")]
+use tokio::sync::mpsc;
 
 /// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
@@ -43,7 +45,7 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 pub async fn run_importer_online(
     config: ImporterOnlineConfig,
     storage: Arc<StratusStorage>,
-    #[cfg(feature = "forward_transaction")] failed_tx_receiver: Option<tokio::sync::mpsc::Receiver<(TransactionInput, Execution)>>,
+    #[cfg(feature = "forward_transaction")] failed_tx_receiver: Option<mpsc::Receiver<(TransactionInput, Execution)>>,
 ) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
