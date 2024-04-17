@@ -250,7 +250,6 @@ impl RocksStorageState {
 
         // Wait for all tasks to complete using join_all
         let _ = join_all(tasks).await;
-        dbg!("finished joining tasks");
 
         // Clear current states
         let _ = self.accounts.clear();
@@ -280,7 +279,6 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
                 self_accounts_clone.insert_batch(accounts_temp_vec, Some(block_number_clone.into()));
                 info!("Accounts updated up to block number {}", block_number_clone);
-                dbg!("finished updating accounts");
             }
         });
 
@@ -309,7 +307,6 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
                 self_account_slots_clone.insert_batch(slots_temp_vec, Some(block_number_clone.into()));
                 info!("Slots updated up to block number {}", block_number_clone);
-                dbg!("finished updating slots");
             }
         });
 
@@ -319,7 +316,6 @@ impl RocksStorageState {
             "All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.",
             block_number
         );
-        dbg!("XXX finished resetting state now");
 
         Ok(())
     }
