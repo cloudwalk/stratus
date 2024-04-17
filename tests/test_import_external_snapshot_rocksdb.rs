@@ -14,7 +14,7 @@ async fn test_import_external_snapshot_with_rocksdb() {
     let (config, block, receipts, snapshot) = common::init_config_and_data();
     let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
 
-    let rocks = RocksPermanentStorage::new().unwrap();
+    let rocks = RocksPermanentStorage::new().await.unwrap();
     rocks.save_accounts(accounts).await.unwrap();
     rocks.state.write_slots(slots, BlockNumber::ZERO);
 
