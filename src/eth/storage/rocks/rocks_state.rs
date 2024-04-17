@@ -161,6 +161,7 @@ impl RocksStorageState {
                         for block_hash in block_hash_vec {
                             self_blocks_by_hash_clone.delete(&block_hash).unwrap();
                         }
+                        self_blocks_by_hash_clone.delete_index(block_num).unwrap();
                     }
 
                     info!(
@@ -198,6 +199,7 @@ impl RocksStorageState {
                         for hash in hash_vec {
                             self_transactions_clone.delete(&hash).unwrap();
                         }
+                        self_transactions_clone.delete_index(index_block_number).unwrap();
                     }
                     info!(
                         "Cleared transactions above block number {}. Necessary to remove transactions not confirmed in the finalized blockchain state.",
@@ -217,6 +219,7 @@ impl RocksStorageState {
                         for (hash, index) in logs_vec {
                             self_logs_clone.delete(&(hash, index)).unwrap();
                         }
+                        self_logs_clone.delete_index(index_block_number).unwrap();
                     }
                     info!(
                         "Removed logs above block number {}. Ensures log consistency with the blockchain's current confirmed state.",

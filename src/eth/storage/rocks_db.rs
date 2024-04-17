@@ -226,6 +226,13 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         Ok(())
     }
 
+    // Deletes an entry from the database by key
+    pub fn delete_index(&self, key: u64) -> Result<()> {
+        let serialized_key = bincode::serialize(&key)?;
+        self.db.delete(serialized_key)?;
+        Ok(())
+    }
+
     // Custom method that combines entry and or_insert_with from a HashMap
     pub fn entry_or_insert_with<F>(&self, key: K, default: F) -> V
     where
@@ -311,11 +318,8 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Ser
     /// - `Some((K, V))` if a valid key-value pair is found.
     /// - `None` if there are no more items to process, or if only special/control keys remain.
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(key_value_result) = self.iter.next() {
-            let (key, value) = match key_value_result {
-                Ok(kv) => kv,
-                Err(_) => continue, // Skip this key-value pair if there's an error retrieving it
-            };
+        for key_value_result in self.iter.by_ref() {
+            let Ok((key, value)) = key_value_result else { continue };
 
             // Check if the key is a special 'current_block' key and skip it
             if key == bincode::serialize(&"current_block").unwrap().into_boxed_slice() {
@@ -348,16 +352,12 @@ pub struct IndexedRocksDBIterator<'a, K> {
     _marker: PhantomData<Vec<K>>,
 }
 
-
 impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq> Iterator for IndexedRocksDBIterator<'a, K> {
     type Item = (u64, Vec<K>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(key_value_result) = self.iter.next() {
-            let (key, value) = match key_value_result {
-                Ok(kv) => kv,
-                Err(_) => continue,
-            };
+        for key_value_result in self.iter.by_ref() {
+            let Ok((key, value)) = key_value_result else { continue };
 
             if let Ok(index_key) = bincode::deserialize::<u64>(&key) {
                 if let Ok(index_values) = bincode::deserialize::<Vec<K>>(&value) {
