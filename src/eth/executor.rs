@@ -80,7 +80,7 @@ impl EthExecutor {
             #[cfg(not(feature = "forward_transaction"))]
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
             #[cfg(feature = "forward_transaction")]
-            provider: Provider::<Http>::try_from("http://spec.testnet.cloudwalk.network:9934").expect("could not instantiate HTTP Provider"), // todo, change to a config parameter
+            provider: Provider::<Http>::try_from("http://spec.testnet.cloudwalk.network:9934").expect("could not instantiate HTTP Provider"), // TODO: change to a config parameter
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
