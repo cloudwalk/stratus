@@ -7,6 +7,7 @@ export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-of
 
 # Default values.
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
+database_url := env("DATABASE_URL", "postgres://postgres:123@localhost/stratus")
 build_flags := "--bin stratus --features dev"
 run_flags := "--enable-genesis --enable-test-accounts"
 
@@ -82,7 +83,7 @@ update:
 
 # Database: Compile SQLx queries
 db-compile:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@localhost/stratus -- --all-targets
+    SQLX_OFFLINE=true cargo sqlx prepare --database-url {{ database_url }} -- --all-targets
 alias sqlx := db-compile
 
 # Database: Load CSV data produced by importer-offline
