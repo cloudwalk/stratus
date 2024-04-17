@@ -26,7 +26,6 @@ use crate::eth::primitives::ExecutionConflict;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Hash as TransactionHash;
-use crate::eth::primitives::Index as LogIndex;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -44,10 +43,8 @@ use crate::eth::storage::postgres_permanent::types::HistoricalNonceBatch;
 use crate::eth::storage::postgres_permanent::types::HistoricalSlotBatch;
 use crate::eth::storage::postgres_permanent::types::LogBatch;
 use crate::eth::storage::postgres_permanent::types::PostgresLog;
-use crate::eth::storage::postgres_permanent::types::PostgresTopic;
 use crate::eth::storage::postgres_permanent::types::PostgresTransaction;
 use crate::eth::storage::postgres_permanent::types::SlotBatch;
-use crate::eth::storage::postgres_permanent::types::TopicBatch;
 use crate::eth::storage::postgres_permanent::types::TransactionBatch;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
@@ -259,36 +256,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
-                    block_number as _
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by latest"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -319,36 +304,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_hash.sql",
-                    hash.as_ref()
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by hash"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -381,36 +354,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
-                    block_number as _
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by number"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap_or_default();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap_or_default();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -442,36 +403,24 @@ impl PermanentStorage for PostgresPermanentStorage {
                 )
                 .fetch_all(&self.pool);
 
-                let topics_query = sqlx::query_file_as!(
-                    PostgresTopic,
-                    "src/eth/storage/postgres_permanent/sql/select_topics_by_block_number.sql",
-                    block_number as _
-                )
-                .fetch_all(&self.pool);
-
                 // run queries concurrently, but not in parallel
                 // see https://docs.rs/tokio/latest/tokio/macro.join.html#runtime-characteristics
-                let res = tokio::join!(header_query, transactions_query, logs_query, topics_query);
+                let res = tokio::join!(header_query, transactions_query, logs_query);
                 let header = match res.0 {
                     Ok(Some(header)) => header,
                     Ok(None) => return Ok(None),
                     Err(e) => return log_and_err!(reason = e, "failed to query block by earlist"),
                 };
                 let transactions = res.1?;
-                let logs = res.2?.into_iter();
-                let topics = res.3?.into_iter();
+                let logs = res.2?;
 
-                // We're still cloning the hashes, maybe create a HashMap structure like this
-                // `HashMap<PostgresTransaction, Vec<HashMap<PostgresLog, Vec<PostgresTopic>>>>` in the future
-                // so that we don't have to clone the hashes
                 let mut log_partitions = partition_logs(logs);
-                let mut topic_partitions = partition_topics(topics);
+
                 let transactions = transactions
                     .into_iter()
                     .map(|tx| {
                         let this_tx_logs = log_partitions.remove(&tx.hash).unwrap();
-                        let this_tx_topics = topic_partitions.remove(&tx.hash).unwrap();
-                        tx.into_transaction_mined(this_tx_logs, this_tx_topics)
+                        tx.into_transaction_mined(this_tx_logs)
                     })
                     .collect();
 
@@ -506,19 +455,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         .fetch_all(&self.pool)
         .await?;
 
-        let topics = sqlx::query_file_as!(
-            PostgresTopic,
-            "src/eth/storage/postgres_permanent/sql/select_topics_by_transaction_hash.sql",
-            hash.as_ref()
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut topic_partitions = partition_topics(topics);
-
-        Ok(Some(
-            transaction.into_transaction_mined(logs, topic_partitions.remove(hash).unwrap_or_default()),
-        ))
+        Ok(Some(transaction.into_transaction_mined(logs)))
     }
 
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
@@ -546,20 +483,23 @@ impl PermanentStorage for PostgresPermanentStorage {
         for row in query_result {
             let block_hash: &[u8] = row.get("block_hash");
             let log_idx: BigDecimal = row.get("log_idx");
-            let topics = sqlx::query_file_as!(
-                PostgresTopic,
-                "src/eth/storage/postgres_permanent/sql/select_topics_by_block_hash_log_idx.sql",
+
+            let logs = sqlx::query_file_as!(
+                PostgresLog,
+                "src/eth/storage/postgres_permanent/sql/select_logs_by_block_hash_log_idx.sql",
                 block_hash,
                 log_idx as _
             )
             .fetch_all(&self.pool)
-            .await?;
+            .await?; // OPTIMIZE: We should query for the logs only once
+
+            let topics = logs.iter().flat_map(PostgresLog::to_topics);
 
             let log = LogMined {
                 log: Log {
                     address: row.get("address"),
                     data: row.get("data"),
-                    topics: topics.into_iter().map(LogTopic::from).collect(),
+                    topics: topics.map(LogTopic::from).collect(),
                 },
                 transaction_hash: row.get("transaction_hash"),
                 transaction_index: row.get("transaction_idx"),
@@ -589,7 +529,6 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let mut transaction_batch = TransactionBatch::default();
         let mut log_batch = LogBatch::default();
-        let mut topic_batch = TopicBatch::default();
         let mut account_batch = AccountBatch::default();
         let mut historical_nonce_batch = HistoricalNonceBatch::default();
         let mut historical_balance_batch = HistoricalBalanceBatch::default();
@@ -602,18 +541,8 @@ impl PermanentStorage for PostgresPermanentStorage {
             transaction_batch.push(transaction);
 
             if is_success {
-                for mut log in logs {
-                    let topics = std::mem::take(&mut log.log.topics);
-                    let tx_hash = log.transaction_hash.clone();
-                    let log_index = log.log_index;
-                    let tx_index = log.transaction_index;
-                    let b_number = log.block_number;
-                    let b_hash = log.block_hash.clone();
-
+                for log in logs {
                     log_batch.push(log);
-                    for (idx, topic) in topics.into_iter().enumerate() {
-                        topic_batch.push(topic, idx, tx_hash.clone(), tx_index, log_index, b_number, b_hash.clone())?;
-                    }
                 }
             }
         }
@@ -682,81 +611,78 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let block_result = sqlx::query_file!(
             "src/eth/storage/postgres_permanent/sql/insert_entire_block.sql",
-            block.header.number as _,                                                                 // $1
-            block.header.hash.as_ref(),                                                               // $2
-            block.header.transactions_root.as_ref(),                                                  // $3
-            block.header.gas_limit as _,                                                              // $4
-            block.header.gas_used as _,                                                               // $5
-            block.header.bloom.as_ref(),                                                              // $6
-            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")? as _, // $7
-            block.header.parent_hash.as_ref(),                                                        // $8
-            block.header.author as _,                                                                 // $9
-            block.header.extra_data as _,                                                             // $10
-            block.header.miner as _,                                                                  // $11
-            block.header.difficulty as _,                                                             // $12
-            block.header.receipts_root as _,                                                          // $13
-            block.header.uncle_hash as _,                                                             // $14
-            block.header.size as _,                                                                   // $15
-            block.header.state_root as _,                                                             // $16
-            block.header.total_difficulty as _,                                                       // $17
-            block.header.nonce as _,                                                                  // $18
-            transaction_batch.hash as _,                                                              // $19
-            transaction_batch.signer as _,                                                            // $20
-            transaction_batch.nonce as _,                                                             // $21
-            transaction_batch.from as _,                                                              // $22
-            transaction_batch.to as _,                                                                // $23
-            transaction_batch.input as _,                                                             // $24
-            transaction_batch.output as _,                                                            // $25
-            transaction_batch.gas as _,                                                               // $26
-            transaction_batch.gas_price as _,                                                         // $27
-            transaction_batch.index as _,                                                             // $28
-            transaction_batch.block_number as _,                                                      // $29
-            transaction_batch.block_hash as _,                                                        // $30
-            transaction_batch.v as _,                                                                 // $31
-            transaction_batch.r as _,                                                                 // $32
-            transaction_batch.s as _,                                                                 // $33
-            transaction_batch.value as _,                                                             // $34
-            &transaction_batch.result,                                                                // $35
-            log_batch.address as _,                                                                   // $36
-            log_batch.data as _,                                                                      // $37
-            log_batch.transaction_hash as _,                                                          // $38
-            log_batch.transaction_index as _,                                                         // $39
-            log_batch.log_index as _,                                                                 // $40
-            log_batch.block_number as _,                                                              // $41
-            log_batch.block_hash as _,                                                                // $42
-            topic_batch.topic as _,                                                                   // $43
-            topic_batch.transaction_hash as _,                                                        // $44
-            topic_batch.transaction_index as _,                                                       // $45
-            topic_batch.log_index as _,                                                               // $46
-            topic_batch.index as _,                                                                   // $47
-            topic_batch.block_number as _,                                                            // $48
-            topic_batch.block_hash as _,                                                              // $49
-            account_batch.address as _,                                                               // $50
-            account_batch.bytecode as _,                                                              // $51
-            account_batch.new_balance as _,                                                           // $52
-            account_batch.new_nonce as _,                                                             // $53
-            account_batch.block_number as _,                                                          // $54
-            account_batch.original_balance as _,                                                      // $55
-            account_batch.original_nonce as _,                                                        // $56
-            account_batch.code_hash as _,                                                             // $57
-            account_batch.static_slot_indexes as _,                                                   // $58
-            account_batch.mapping_slot_indexes as _,                                                  // $59
-            slot_batch.index as _,                                                                    // $60
-            slot_batch.value as _,                                                                    // $61
-            slot_batch.address as _,                                                                  // $62
-            slot_batch.block_number as _,                                                             // $63
-            slot_batch.original_value as _,                                                           // $64
-            historical_nonce_batch.address as _,                                                      // $65
-            historical_nonce_batch.nonce as _,                                                        // $66
-            historical_nonce_batch.block_number as _,                                                 // $67
-            historical_balance_batch.address as _,                                                    // $68
-            historical_balance_batch.balance as _,                                                    // $69
-            historical_balance_batch.block_number as _,                                               // $70
-            historical_slot_batch.index as _,                                                         // $71
-            historical_slot_batch.value as _,                                                         // $72
-            historical_slot_batch.address as _,                                                       // $73
-            historical_slot_batch.block_number as _,                                                  // $74
-            transaction_batch.chain_id as _,                                                          // TODO: move it up
+            block.header.number as _,                   // $1
+            block.header.hash.as_ref(),                 // $2
+            block.header.transactions_root.as_ref(),    // $3
+            block.header.gas_limit as _,                // $4
+            block.header.gas_used as _,                 // $5
+            block.header.bloom.as_ref(),                // $6
+            block.header.timestamp.to_i64() as _,       // $7
+            block.header.parent_hash.as_ref(),          // $8
+            block.header.author as _,                   // $9
+            block.header.extra_data as _,               // $10
+            block.header.miner as _,                    // $11
+            block.header.difficulty as _,               // $12
+            block.header.receipts_root as _,            // $13
+            block.header.uncle_hash as _,               // $14
+            block.header.size as _,                     // $15
+            block.header.state_root as _,               // $16
+            block.header.total_difficulty as _,         // $17
+            block.header.nonce as _,                    // $18
+            transaction_batch.hash as _,                // $19
+            transaction_batch.signer as _,              // $20
+            transaction_batch.nonce as _,               // $21
+            transaction_batch.from as _,                // $22
+            transaction_batch.to as _,                  // $23
+            transaction_batch.input as _,               // $24
+            transaction_batch.output as _,              // $25
+            transaction_batch.gas as _,                 // $26
+            transaction_batch.gas_price as _,           // $27
+            transaction_batch.index as _,               // $28
+            transaction_batch.block_number as _,        // $29
+            transaction_batch.block_hash as _,          // $30
+            transaction_batch.v as _,                   // $31
+            transaction_batch.r as _,                   // $32
+            transaction_batch.s as _,                   // $33
+            transaction_batch.value as _,               // $34
+            &transaction_batch.result,                  // $35
+            transaction_batch.chain_id as _,            // $36
+            log_batch.address as _,                     // $37
+            log_batch.data as _,                        // $38
+            log_batch.transaction_hash as _,            // $39
+            log_batch.transaction_index as _,           // $40
+            log_batch.log_index as _,                   // $41
+            log_batch.block_number as _,                // $42
+            log_batch.block_hash as _,                  // $43
+            log_batch.topic0 as _,                      // $44
+            log_batch.topic1 as _,                      // $45
+            log_batch.topic2 as _,                      // $46
+            log_batch.topic3 as _,                      // $47
+            account_batch.address as _,                 // $48
+            account_batch.bytecode as _,                // $49
+            account_batch.new_balance as _,             // $50
+            account_batch.new_nonce as _,               // $51
+            account_batch.block_number as _,            // $52
+            account_batch.original_balance as _,        // $53
+            account_batch.original_nonce as _,          // $54
+            account_batch.code_hash as _,               // $55
+            account_batch.static_slot_indexes as _,     // $56
+            account_batch.mapping_slot_indexes as _,    // $57
+            slot_batch.index as _,                      // $58
+            slot_batch.value as _,                      // $59
+            slot_batch.address as _,                    // $60
+            slot_batch.block_number as _,               // $61
+            slot_batch.original_value as _,             // $62
+            historical_nonce_batch.address as _,        // $63
+            historical_nonce_batch.nonce as _,          // $64
+            historical_nonce_batch.block_number as _,   // $65
+            historical_balance_batch.address as _,      // $66
+            historical_balance_batch.balance as _,      // $67
+            historical_balance_batch.block_number as _, // $68
+            historical_slot_batch.index as _,           // $69
+            historical_slot_batch.value as _,           // $70
+            historical_slot_batch.address as _,         // $71
+            historical_slot_batch.block_number as _,    // $72
         )
         .fetch_one(&mut *tx)
         .await
@@ -901,24 +827,6 @@ fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Transa
             part.push(log);
         } else {
             partitions.insert(log.transaction_hash.clone(), vec![log]);
-        }
-    }
-    partitions
-}
-
-fn partition_topics(topics: impl IntoIterator<Item = PostgresTopic>) -> HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> {
-    let mut partitions: HashMap<TransactionHash, HashMap<LogIndex, Vec<PostgresTopic>>> = HashMap::new();
-    for topic in topics {
-        match partitions.get_mut(&topic.transaction_hash) {
-            Some(transaction_logs) =>
-                if let Some(part) = transaction_logs.get_mut(&topic.log_idx) {
-                    part.push(topic);
-                } else {
-                    transaction_logs.insert(topic.log_idx, vec![topic]);
-                },
-            None => {
-                partitions.insert(topic.transaction_hash.clone(), [(topic.log_idx, vec![topic])].into_iter().collect());
-            }
         }
     }
     partitions

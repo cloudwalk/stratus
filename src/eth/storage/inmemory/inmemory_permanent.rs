@@ -40,7 +40,7 @@ use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount>,
     pub transactions: HashMap<Hash, TransactionMined>,
@@ -53,6 +53,12 @@ pub struct InMemoryPermanentStorageState {
 pub struct InMemoryPermanentStorage {
     state: RwLock<InMemoryPermanentStorageState>,
     block_number: AtomicU64,
+}
+
+impl InMemoryPermanentStorage {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 impl InMemoryPermanentStorage {
@@ -98,6 +104,7 @@ impl InMemoryPermanentStorage {
 
     /// Creates a new InMemoryPermanentStorage from a snapshot dump.
     pub fn from_snapshot(state: InMemoryPermanentStorageState) -> Self {
+        tracing::info!("starting inmemory permanent storage from snapshot");
         Self {
             state: RwLock::new(state),
             block_number: AtomicU64::new(0),
@@ -455,7 +462,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
 }
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentAccount {
     #[allow(dead_code)]
     pub address: Address,

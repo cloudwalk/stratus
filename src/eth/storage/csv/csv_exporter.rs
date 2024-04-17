@@ -107,7 +107,7 @@ const BLOCKS_HEADERS: [&str; 21] = [
 
 const LOGS_FILE: &str = "data/logs";
 
-const LOGS_HEADERS: [&str; 10] = [
+const LOGS_HEADERS: [&str; 14] = [
     "id",
     "address",
     "data",
@@ -116,21 +116,10 @@ const LOGS_HEADERS: [&str; 10] = [
     "log_idx",
     "block_number",
     "block_hash",
-    "created_at",
-    "updated_at",
-];
-
-const TOPICS_FILE: &str = "data/topics";
-
-const TOPICS_HEADERS: [&str; 10] = [
-    "id",
-    "topic",
-    "transaction_hash",
-    "transaction_idx",
-    "log_idx",
-    "topic_idx",
-    "block_number",
-    "block_hash",
+    "topic0",
+    "topic1",
+    "topic2",
+    "topic3",
     "created_at",
     "updated_at",
 ];
@@ -163,9 +152,6 @@ pub struct CsvExporter {
 
     logs_csv: csv::Writer<File>,
     logs_id: LastId,
-
-    topics_csv: csv::Writer<File>,
-    topics_id: LastId,
 }
 
 impl CsvExporter {
@@ -179,7 +165,6 @@ impl CsvExporter {
             transactions_csv,
             blocks_csv,
             logs_csv,
-            topics_csv,
         } = CsvFiles::create(number)?;
 
         Ok(Self {
@@ -205,9 +190,6 @@ impl CsvExporter {
 
             logs_csv,
             logs_id: LastId::new(LOGS_FILE)?,
-
-            topics_csv,
-            topics_id: LastId::new(TOPICS_FILE)?,
         })
     }
 
@@ -259,9 +241,6 @@ impl CsvExporter {
         self.logs_csv.flush()?;
         self.logs_id.save()?;
 
-        self.topics_csv.flush()?;
-        self.topics_id.save()?;
-
         Ok(())
     }
 
@@ -277,7 +256,6 @@ impl CsvExporter {
             transactions_csv,
             blocks_csv,
             logs_csv,
-            topics_csv,
         } = CsvFiles::create(block_number)?;
 
         self.accounts_csv = accounts_csv;
@@ -287,7 +265,6 @@ impl CsvExporter {
         self.transactions_csv = transactions_csv;
         self.blocks_csv = blocks_csv;
         self.logs_csv = logs_csv;
-        self.topics_csv = topics_csv;
 
         Ok(())
     }
@@ -461,6 +438,9 @@ impl CsvExporter {
     fn export_logs(&mut self, logs: Vec<LogMined>) -> anyhow::Result<()> {
         for log in logs {
             self.logs_id.value += 1;
+
+            let get_topic_with_index = |index| log.log.topics.get(index).map(to_bytea).unwrap_or_default();
+
             let now = now();
             let row = [
                 self.logs_id.value.to_string(),    // id
@@ -471,36 +451,22 @@ impl CsvExporter {
                 log.log_index.to_string(),         // log_idx
                 log.block_number.to_string(),      // block_number
                 to_bytea(&log.block_hash),         // block_hash
+                get_topic_with_index(0),           // topic0
+                get_topic_with_index(1),           // topic1
+                get_topic_with_index(2),           // topic2
+                get_topic_with_index(3),           // topic3
                 now.clone(),                       // created_at
                 now,                               // updated_at
             ];
             self.logs_csv.write_record(row).context("failed to write csv transaction log")?;
-
-            self.export_topics(log)?;
         }
         Ok(())
     }
+}
 
-    fn export_topics(&mut self, log: LogMined) -> anyhow::Result<()> {
-        let topics = log.log.topics;
-        for (idx, topic) in topics.into_iter().enumerate() {
-            self.topics_id.value += 1;
-            let now = now();
-            let row = [
-                self.topics_id.value.to_string(),  // id
-                to_bytea(topic),                   // topic
-                to_bytea(&log.transaction_hash),   // transaction_hash
-                log.transaction_index.to_string(), // transaction_idx
-                log.log_index.to_string(),         // log_idx
-                idx.to_string(),                   // topic_idx
-                log.block_number.to_string(),      // block_number
-                to_bytea(&log.block_hash),         // block_hash
-                now.clone(),                       // created_at
-                now,                               // updated_at
-            ];
-            self.topics_csv.write_record(row).context("failed to write csv transaction topic")?;
-        }
-        Ok(())
+impl Drop for CsvExporter {
+    fn drop(&mut self) {
+        let _ = self.flush();
     }
 }
 
@@ -548,7 +514,6 @@ struct CsvFiles {
     transactions_csv: csv::Writer<File>,
     blocks_csv: csv::Writer<File>,
     logs_csv: csv::Writer<File>,
-    topics_csv: csv::Writer<File>,
 }
 
 impl CsvFiles {
@@ -561,7 +526,6 @@ impl CsvFiles {
             transactions_csv: csv_writer(TRANSACTIONS_FILE, block_number, &TRANSACTIONS_HEADERS)?,
             blocks_csv: csv_writer(BLOCKS_FILE, block_number, &BLOCKS_HEADERS)?,
             logs_csv: csv_writer(LOGS_FILE, block_number, &LOGS_HEADERS)?,
-            topics_csv: csv_writer(TOPICS_FILE, block_number, &TOPICS_HEADERS)?,
         })
     }
 }
