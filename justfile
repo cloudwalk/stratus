@@ -479,8 +479,8 @@ e2e-stratus-postgres-prefetch test="":
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
-    cargo build --release {{ build_flags }},evm-slot-prefetch  || exit 1
-    RUST_LOG=debug cargo run --release {{ build_flags }},evm-slot-prefetch -- {{run_flags }} -a 0.0.0.0:3000 > stratus.log &
+    cargo build {{ build_flags }},evm-slot-prefetch  || exit 1
+    RUST_LOG=debug cargo run {{ build_flags }},evm-slot-prefetch -- {{run_flags }} -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
