@@ -8,7 +8,7 @@ export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-of
 # Default values.
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
-build_flags := "--bin stratus --features dev,evm-slot-prefetch"
+build_flags := "--bin stratus --features dev"
 run_flags := "--enable-genesis --enable-test-accounts"
 
 # Project: Show available tasks
