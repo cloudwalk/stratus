@@ -33,7 +33,7 @@ const BACKLOG_SIZE: usize = 50;
 const FLUSH_INTERVAL_IN_BLOCKS: u64 = 100;
 
 /// The maximum amount of blocks in each CSV chunk file.
-const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 250_000;
+const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 2_000_000;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 

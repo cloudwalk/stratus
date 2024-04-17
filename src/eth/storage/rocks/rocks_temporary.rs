@@ -18,18 +18,20 @@ use crate::log_and_err;
 pub struct RocksTemporary {
     temp: InMemoryTemporaryStorage,
     db: RocksStorageState,
-    current_block: AtomicU64,
+    active_block: AtomicU64,
 }
 
 impl RocksTemporary {
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> anyhow::Result<Self> {
         tracing::info!("starting rocks temporary storage");
         let db = RocksStorageState::new();
+        db.sync_data().await?;
         let current_block = db.preload_block_number()?;
+        current_block.fetch_add(1, Ordering::SeqCst);
         Ok(Self {
             temp: InMemoryTemporaryStorage::default(),
             db,
-            current_block,
+            active_block: current_block,
         })
     }
 }
@@ -37,12 +39,18 @@ impl RocksTemporary {
 #[async_trait]
 impl TemporaryStorage for RocksTemporary {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        self.current_block.store(number.as_u64(), Ordering::SeqCst);
+        self.active_block.store(number.as_u64(), Ordering::SeqCst);
         self.temp.set_active_block_number(number).await
     }
 
     async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
-        Ok(Some(self.current_block.load(Ordering::SeqCst).into()))
+        // try temporary data
+        let number = self.temp.read_active_block_number().await?;
+        if let Some(number) = number {
+            return Ok(Some(number));
+        }
+
+        Ok(Some(self.active_block.load(Ordering::SeqCst).into()))
     }
 
     async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
@@ -77,7 +85,7 @@ impl TemporaryStorage for RocksTemporary {
     async fn flush(&self) -> anyhow::Result<()> {
         // read before lock
         let Some(number) = self.read_active_block_number().await? else {
-            return log_and_err!("no active block number when flushing sled data");
+            return log_and_err!("no active block number when flushing rocksdb data");
         };
 
         let mut temp_lock = self.temp.lock_write().await;
@@ -99,6 +107,7 @@ impl TemporaryStorage for RocksTemporary {
 
         self.db.write_accounts(accounts, number);
         self.db.write_slots(slots.into_iter().flatten().collect(), number);
+        self.active_block.fetch_add(1, Ordering::SeqCst);
 
         // reset temporary storage state
         temp_lock.reset();
@@ -111,7 +120,7 @@ impl TemporaryStorage for RocksTemporary {
         let mut temp_lock = self.temp.lock_write().await;
         temp_lock.reset();
 
-        // reset sled
+        // reset rocksdb
         self.db.clear()?;
 
         Ok(())

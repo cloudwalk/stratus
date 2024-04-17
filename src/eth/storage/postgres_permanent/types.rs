@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-
-use anyhow::Context;
-
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -19,6 +15,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
@@ -48,15 +45,11 @@ pub struct PostgresTransaction {
 }
 
 impl PostgresTransaction {
-    pub fn into_transaction_mined(self, logs: Vec<PostgresLog>, mut topics: HashMap<Index, Vec<PostgresTopic>>) -> TransactionMined {
-        let mined_logs: Vec<LogMined> = logs
-            .into_iter()
-            .map(|log| {
-                let log_idx = log.log_idx;
-                log.into_log_mined(topics.remove(&log_idx).unwrap_or_default())
-            })
-            .collect();
+    pub fn into_transaction_mined(self, logs: Vec<PostgresLog>) -> TransactionMined {
+        let mined_logs: Vec<LogMined> = logs.into_iter().map(PostgresLog::into_log_mined).collect();
+
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
+
         let execution = Execution {
             gas: self.gas.clone(),
             output: self.output,
@@ -102,15 +95,18 @@ pub struct PostgresLog {
     pub log_idx: Index,
     pub block_number: BlockNumber,
     pub block_hash: Hash,
+    pub topic0: Option<Hash>,
+    pub topic1: Option<Hash>,
+    pub topic2: Option<Hash>,
+    pub topic3: Option<Hash>,
 }
 
 impl PostgresLog {
-    pub fn into_log_mined(self, topics: Vec<PostgresTopic>) -> LogMined {
-        let topics: Vec<LogTopic> = topics.into_iter().map(LogTopic::from).collect();
+    pub fn into_log_mined(self) -> LogMined {
         let log = Log {
+            topics: self.to_topics(),
             data: self.data,
             address: self.address,
-            topics,
         };
 
         LogMined {
@@ -122,21 +118,19 @@ impl PostgresLog {
             log,
         }
     }
-}
 
-#[derive(Clone)]
-pub struct PostgresTopic {
-    pub topic: Hash,
-    pub transaction_hash: Hash,
-    pub transaction_idx: Index,
-    pub log_idx: Index,
-    pub block_number: BlockNumber,
-    pub block_hash: Hash,
-}
+    pub fn to_topics(&self) -> Vec<LogTopic> {
+        let mut filled_topics = vec![];
 
-impl From<PostgresTopic> for LogTopic {
-    fn from(value: PostgresTopic) -> Self {
-        LogTopic::new(value.topic.into())
+        for topic in [&self.topic0, &self.topic1, &self.topic2, &self.topic3] {
+            let Some(topic) = topic else {
+                continue;
+            };
+
+            filled_topics.push(LogTopic::new(topic.clone().into()));
+        }
+
+        filled_topics
     }
 }
 
@@ -194,6 +188,10 @@ pub struct LogBatch {
     pub log_index: Vec<Index>,
     pub block_number: Vec<BlockNumber>,
     pub block_hash: Vec<Hash>,
+    pub topic0: Vec<Option<LogTopic>>,
+    pub topic1: Vec<Option<LogTopic>>,
+    pub topic2: Vec<Option<LogTopic>>,
+    pub topic3: Vec<Option<LogTopic>>,
 }
 
 impl LogBatch {
@@ -205,40 +203,11 @@ impl LogBatch {
         self.transaction_index.push(log.transaction_index);
         self.block_number.push(log.block_number);
         self.block_hash.push(log.block_hash);
-    }
-}
-
-#[derive(Default)]
-pub struct TopicBatch {
-    pub topic: Vec<LogTopic>,
-    pub transaction_hash: Vec<Hash>,
-    pub transaction_index: Vec<Index>,
-    pub log_index: Vec<Index>,
-    pub index: Vec<i32>,
-    pub block_number: Vec<BlockNumber>,
-    pub block_hash: Vec<Hash>,
-}
-
-impl TopicBatch {
-    #[allow(clippy::too_many_arguments)]
-    pub fn push(
-        &mut self,
-        topic: LogTopic,
-        idx: usize,
-        tx_hash: Hash,
-        tx_idx: Index,
-        log_idx: Index,
-        block_number: BlockNumber,
-        block_hash: Hash,
-    ) -> anyhow::Result<()> {
-        self.topic.push(topic);
-        self.index.push(i32::try_from(idx).context("failed to convert topic idx")?);
-        self.block_hash.push(block_hash);
-        self.log_index.push(log_idx);
-        self.block_number.push(block_number);
-        self.transaction_hash.push(tx_hash);
-        self.transaction_index.push(tx_idx);
-        Ok(())
+        #[allow(clippy::get_first)]
+        self.topic0.push(log.log.topics.get(0).cloned()); // OPTIMIZE: we can consume topics, so we don't actually need to clone
+        self.topic1.push(log.log.topics.get(1).cloned());
+        self.topic2.push(log.log.topics.get(2).cloned());
+        self.topic3.push(log.log.topics.get(3).cloned());
     }
 }
 
@@ -252,6 +221,8 @@ pub struct AccountBatch {
     pub original_nonce: Vec<Nonce>,
     pub original_balance: Vec<Wei>,
     pub code_hash: Vec<CodeHash>,
+    pub static_slot_indexes: Vec<Option<SlotIndexes>>,
+    pub mapping_slot_indexes: Vec<Option<SlotIndexes>>,
 }
 
 impl AccountBatch {
@@ -266,6 +237,8 @@ impl AccountBatch {
         original_nonce: Nonce,
         original_balance: Wei,
         code_hash: CodeHash,
+        static_slot_indexes: Option<SlotIndexes>,
+        mapping_slot_indexes: Option<SlotIndexes>,
     ) {
         self.address.push(address);
         self.new_nonce.push(new_nonce);
@@ -275,6 +248,8 @@ impl AccountBatch {
         self.original_nonce.push(original_nonce);
         self.original_balance.push(original_balance);
         self.code_hash.push(code_hash);
+        self.static_slot_indexes.push(static_slot_indexes);
+        self.mapping_slot_indexes.push(mapping_slot_indexes);
     }
 }
 

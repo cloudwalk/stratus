@@ -37,16 +37,16 @@ static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
-    state: RocksStorageState,
-    block_number: AtomicU64,
+    pub state: RocksStorageState,
+    pub block_number: AtomicU64,
 }
 
 impl RocksPermanentStorage {
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> anyhow::Result<Self> {
         tracing::info!("starting rocksdb storage");
 
         let state = RocksStorageState::new();
-        state.sync_data()?;
+        state.sync_data().await?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
@@ -193,7 +193,8 @@ impl PermanentStorage for RocksPermanentStorage {
         let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
         let mut block_without_changes = block.clone();
         for transaction in &mut block_without_changes.transactions {
-            transaction.execution.changes = vec![];
+            // checks if it has a contract address to keep
+            transaction.execution.changes.retain(|change| change.bytecode.clone().is_modified());
         }
         let hash_clone = hash.clone();
         futures.push(tokio::task::spawn_blocking(move || blocks_by_number.insert(number, block_without_changes)));
@@ -259,7 +260,7 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         });
 
-        self.state.reset_at(block_number)
+        self.state.reset_at(block_number).await
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {

@@ -12,7 +12,7 @@ COPY Cargo.lock /app/Cargo.lock
 RUN apt update
 RUN apt-get install -y libclang-dev cmake
 
-RUN cargo build --release
+RUN cargo build --release --features metrics
 
 # Runtime
 FROM rust:1.75 as runtime
