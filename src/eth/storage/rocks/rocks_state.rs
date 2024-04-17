@@ -151,14 +151,31 @@ impl RocksStorageState {
     pub async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let tasks = vec![
             {
+                let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
+                let block_number_clone = block_number;
+                task::spawn_blocking(move || {
+                    for (block_hash, block_num) in self_blocks_by_hash_clone.iter_end() {
+                        if block_num > block_number_clone {
+                            self_blocks_by_hash_clone.delete(&block_hash).unwrap();
+                        }
+                    }
+
+                    info!(
+                        "Deleted blocks by hash above block number {}. This ensures synchronization with the lowest block height across nodes.",
+                        block_number_clone
+                    );
+                })
+            },
+            {
                 let self_blocks_by_number_clone = Arc::clone(&self.blocks_by_number);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
                     for (num, _) in blocks_by_number {
-                        if num > block_number_clone {
-                            self_blocks_by_number_clone.delete(&num).unwrap();
+                        if num <= block_number_clone {
+                            break;
                         }
+                        self_blocks_by_number_clone.delete(&num).unwrap();
                     }
                     info!(
                         "Deleted blocks by number above block number {}. Helps in reverting to a common state prior to a network fork or error.",
@@ -204,9 +221,10 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let accounts_history = self_accounts_history_clone.iter_end();
                     for ((historic_block_number, address), _) in accounts_history {
-                        if historic_block_number > block_number_clone {
-                            self_accounts_history_clone.delete(&(historic_block_number, address)).unwrap();
+                        if historic_block_number <= block_number_clone {
+                            break;
                         }
+                        self_accounts_history_clone.delete(&(historic_block_number, address)).unwrap();
                     }
                     info!(
                         "Deleted account history records above block number {}. Important for maintaining historical accuracy in account state across nodes.",
@@ -220,9 +238,10 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let account_slots_history = self_account_slots_history_clone.iter_end();
                     for ((historic_block_number, address, slot_index), _) in account_slots_history {
-                        if historic_block_number > block_number_clone {
-                            self_account_slots_history_clone.delete(&(historic_block_number, address, slot_index)).unwrap();
+                        if historic_block_number <= block_number_clone {
+                            break;
                         }
+                        self_account_slots_history_clone.delete(&(historic_block_number, address, slot_index)).unwrap();
                     }
                     info!(
                         "Cleared account slot history above block number {}. Vital for synchronizing account slot states after discrepancies.",
@@ -234,7 +253,6 @@ impl RocksStorageState {
 
         // Wait for all tasks to complete using join_all
         let _ = join_all(tasks).await;
-        dbg!("finished joining tasks");
 
         // Clear current states
         let _ = self.accounts.clear();
@@ -264,7 +282,6 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
                 self_accounts_clone.insert_batch(accounts_temp_vec, Some(block_number_clone.into()));
                 info!("Accounts updated up to block number {}", block_number_clone);
-                dbg!("finished updating accounts");
             }
         });
 
@@ -293,7 +310,6 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
                 self_account_slots_clone.insert_batch(slots_temp_vec, Some(block_number_clone.into()));
                 info!("Slots updated up to block number {}", block_number_clone);
-                dbg!("finished updating slots");
             }
         });
 
@@ -303,7 +319,6 @@ impl RocksStorageState {
             "All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.",
             block_number
         );
-        dbg!("XXX finished resetting state now");
 
         Ok(())
     }

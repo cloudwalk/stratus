@@ -180,13 +180,13 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         }
 
-        let txs_rocks = Arc::clone(&self.state.transactions);
-        let logs_rocks = Arc::clone(&self.state.logs);
-        futures.push(tokio::task::spawn_blocking(move || txs_rocks.insert_batch(txs_batch, None)));
-        futures.push(tokio::task::spawn_blocking(move || logs_rocks.insert_batch(logs_batch, None)));
-
         // save block
         let number = *block.number();
+        let txs_rocks = Arc::clone(&self.state.transactions);
+        let logs_rocks = Arc::clone(&self.state.logs);
+        futures.push(tokio::task::spawn_blocking(move || txs_rocks.insert_batch_indexed(txs_batch, number.as_u64())));
+        futures.push(tokio::task::spawn_blocking(move || logs_rocks.insert_batch_indexed(logs_batch, number.as_u64())));
+
         let hash = block.hash().clone();
 
         let blocks_by_number = Arc::clone(&self.state.blocks_by_number);
@@ -198,7 +198,7 @@ impl PermanentStorage for RocksPermanentStorage {
         }
         let hash_clone = hash.clone();
         futures.push(tokio::task::spawn_blocking(move || blocks_by_number.insert(number, block_without_changes)));
-        futures.push(tokio::task::spawn_blocking(move || blocks_by_hash.insert(hash_clone, number)));
+        futures.push(tokio::task::spawn_blocking(move || blocks_by_hash.insert_batch_indexed(vec![(hash_clone, number)], number.as_u64())));
 
         futures.append(
             &mut self
