@@ -167,6 +167,38 @@ impl RocksStorageState {
                 })
             },
             {
+                let self_transactions_clone = Arc::clone(&self.transactions);
+                let block_number_clone = block_number;
+                task::spawn_blocking(move || {
+                    let transactions = self_transactions_clone.iter_end();
+                    for (hash, tx_block_number) in transactions {
+                        if tx_block_number > block_number_clone {
+                            self_transactions_clone.delete(&hash).unwrap();
+                        }
+                    }
+                    info!(
+                        "Cleared transactions above block number {}. Necessary to remove transactions not confirmed in the finalized blockchain state.",
+                        block_number_clone
+                    );
+                })
+            },
+            {
+                let self_logs_clone = Arc::clone(&self.logs);
+                let block_number_clone = block_number;
+                task::spawn_blocking(move || {
+                    let logs = self_logs_clone.iter_end();
+                    for (key, log_block_number) in logs {
+                        if log_block_number > block_number_clone {
+                            self_logs_clone.delete(&key).unwrap();
+                        }
+                    }
+                    info!(
+                        "Removed logs above block number {}. Ensures log consistency with the blockchain's current confirmed state.",
+                        block_number_clone
+                    );
+                })
+            },
+            {
                 let self_accounts_history_clone = Arc::clone(&self.accounts_history);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
