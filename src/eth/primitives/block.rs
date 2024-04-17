@@ -16,6 +16,9 @@ use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
+use super::Execution;
+use super::LogMined;
+use super::TransactionInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -25,10 +28,6 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
-
-use super::Execution;
-use super::LogMined;
-use super::TransactionInput;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -82,7 +81,7 @@ impl Block {
             transaction_index,
             block_number: self.header.number,
             block_hash: self.header.hash.clone(),
-        }) // TODO: update logs bloom
+        }); // TODO: update logs bloom
     }
 
     /// Calculates block size label by the number of transactions.

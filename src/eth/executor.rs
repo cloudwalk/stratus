@@ -8,6 +8,12 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+#[cfg(feature = "forward_transaction")]
+use ethers::providers::Http;
+#[cfg(feature = "forward_transaction")]
+use ethers::providers::Provider;
+#[cfg(feature = "forward_transaction")]
+use ethers_core::types::Transaction;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 #[cfg(not(feature = "forward_transaction"))]
@@ -32,9 +38,6 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-#[cfg(feature = "forward_transaction")]
-use ethers::providers::{Http, Provider};
-use ethers_core::types::Transaction;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -83,7 +86,8 @@ impl EthExecutor {
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             #[cfg(feature = "forward_transaction")]
             failed_tx_sender: None,
-            failed_tx_receiver: None
+            #[cfg(feature = "forward_transaction")]
+            failed_tx_receiver: None,
         }
     }
 
@@ -104,12 +108,13 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
-    pub async fn import_external_to_perm(
-        &mut self,
-        block: ExternalBlock,
-        receipts: &ExternalReceipts
-    ) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(&mut self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
+
+        #[cfg(not(feature = "forward_transaction"))]
+        let block = self.import_external_to_temp(block, receipts).await?;
+
+        #[cfg(feature = "forward_transaction")]
         let mut block = self.import_external_to_temp(block, receipts).await?;
 
         #[cfg(feature = "forward_transaction")]
@@ -272,7 +277,8 @@ impl EthExecutor {
     /// Executes a transaction and sends it to substrate
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         use ethers::providers::Middleware;
-        use tokio::{fs::File, io::AsyncWriteExt};
+        use tokio::fs::File;
+        use tokio::io::AsyncWriteExt;
 
         use crate::eth::primitives::ExecutionResult;
 
@@ -301,11 +307,10 @@ impl EthExecutor {
 
         if execution.result == ExecutionResult::Success {
             //let tx: TypedTransaction = (&Transaction::try_from(transaction)?).into();
-            let pending_tx = self.provider.send_raw_transaction(Transaction::try_from(transaction)?.rlp()).await?;
+            let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction).rlp()).await?;
 
-            let receipt = match pending_tx.await? {
-                Some(receipt) => receipt,
-                None => return Err(anyhow!("transaction did not produce a receipt")),
+            let Some(receipt) = pending_tx.await? else {
+                return Err(anyhow!("transaction did not produce a receipt"));
             };
 
             let status = match receipt.status {
@@ -318,10 +323,8 @@ impl EthExecutor {
                 file.write_all(serde_json::to_string(&receipt)?.as_bytes()).await?;
                 return Err(anyhow!("transaction succeeded in stratus but failed in substrate"));
             }
-        } else {
-            if let Some(failed_transactions) = &self.failed_tx_sender {
-                failed_transactions.send((transaction, execution.clone())).await?;
-            }
+        } else if let Some(failed_transactions) = &self.failed_tx_sender {
+            failed_transactions.send((transaction, execution.clone())).await?;
         }
 
         #[cfg(feature = "metrics")]

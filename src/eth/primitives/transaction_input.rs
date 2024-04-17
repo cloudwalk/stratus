@@ -135,17 +135,12 @@ impl TryFrom<EthersTransaction> for TransactionInput {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl TryFrom<TransactionInput> for EthersTransaction {
-    type Error = anyhow::Error;
-
-    fn try_from(value: TransactionInput) -> anyhow::Result<Self> {
-        Ok(Self {
-            chain_id: match value.chain_id {
-                Some(chain_id) => Some(chain_id.try_into()?),
-                None => None,
-            },
+impl From<TransactionInput> for EthersTransaction {
+    fn from(value: TransactionInput) -> Self {
+        Self {
+            chain_id: value.chain_id.map_into(),
             hash: value.hash.into(),
-            nonce: value.nonce.try_into()?,
+            nonce: value.nonce.into(),
             from: value.from.into(),
             to: value.to.map_into(),
             value: value.value.into(),
@@ -162,7 +157,7 @@ impl TryFrom<TransactionInput> for EthersTransaction {
             access_list: None,
             max_priority_fee_per_gas: None,
             max_fee_per_gas: None,
-            other: OtherFields::default()
-        })
+            other: OtherFields::default(),
+        }
     }
 }
