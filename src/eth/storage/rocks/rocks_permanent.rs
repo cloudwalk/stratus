@@ -22,6 +22,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
@@ -134,11 +135,11 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(self.state.read_slot(address, index, point_in_time))
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
 
         let mut slots = HashMap::with_capacity(indexes.len());
-        for index in indexes {
+        for index in indexes.iter() {
             let slot = self.read_slot(address, index, point_in_time).await?;
             if let Some(slot) = slot {
                 slots.insert(slot.index, slot.value);
