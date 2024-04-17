@@ -243,11 +243,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
 
         let mut slots = HashMap::with_capacity(indexes.len());
-        for index in indexes {
+        for index in indexes.iter() {
             let slot = self.read_slot(address, index, point_in_time).await?;
             if let Some(slot) = slot {
                 slots.insert(slot.index, slot.value);

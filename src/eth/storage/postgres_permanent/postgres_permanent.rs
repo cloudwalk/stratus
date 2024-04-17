@@ -6,6 +6,7 @@ use std::time::Duration;
 // use anyhow::anyhow;
 use anyhow::Context;
 use async_trait::async_trait;
+use itertools::Itertools;
 use nonempty::nonempty;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::PgPoolOptions;
@@ -204,19 +205,25 @@ impl PermanentStorage for PostgresPermanentStorage {
         }
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
 
+        let indexes_as_vec = indexes.iter().cloned().collect_vec();
         let slots = match point_in_time {
             StoragePointInTime::Present =>
-                sqlx::query_file_as!(Slot, "src/eth/storage/postgres_permanent/sql/select_slots.sql", indexes as _, address as _)
-                    .fetch_all(&self.pool)
-                    .await?,
+                sqlx::query_file_as!(
+                    Slot,
+                    "src/eth/storage/postgres_permanent/sql/select_slots.sql",
+                    indexes_as_vec as _,
+                    address as _
+                )
+                .fetch_all(&self.pool)
+                .await?,
             StoragePointInTime::Past(block_number) =>
                 sqlx::query_file_as!(
                     Slot,
                     "src/eth/storage/postgres_permanent/sql/select_historical_slots.sql",
-                    indexes as _,
+                    indexes_as_vec as _,
                     address as _,
                     block_number as _
                 )
