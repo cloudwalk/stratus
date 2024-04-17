@@ -204,7 +204,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         }
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
 
         let slots = match point_in_time {
