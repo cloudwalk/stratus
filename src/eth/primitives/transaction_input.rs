@@ -8,6 +8,7 @@
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
+use ethers::types::OtherFields;
 use ethers_core::types::Transaction as EthersTransaction;
 use fake::Dummy;
 use fake::Fake;
@@ -126,6 +127,42 @@ impl TryFrom<EthersTransaction> for TransactionInput {
             v: value.v,
             r: value.r,
             s: value.s,
+        })
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
+
+impl TryFrom<TransactionInput> for EthersTransaction {
+    type Error = anyhow::Error;
+
+    fn try_from(value: TransactionInput) -> anyhow::Result<Self> {
+        Ok(Self {
+            chain_id: match value.chain_id {
+                Some(chain_id) => Some(chain_id.try_into()?),
+                None => None,
+            },
+            hash: value.hash.into(),
+            nonce: value.nonce.try_into()?,
+            from: value.from.into(),
+            to: value.to.map_into(),
+            value: value.value.into(),
+            input: value.input.clone().into(),
+            gas: value.gas_limit.into(),
+            gas_price: Some(value.gas_price.into()),
+            v: value.v,
+            r: value.r,
+            s: value.s,
+            block_hash: None,
+            block_number: None,
+            transaction_index: None,
+            transaction_type: None,
+            access_list: None,
+            max_priority_fee_per_gas: None,
+            max_fee_per_gas: None,
+            other: OtherFields::default()
         })
     }
 }

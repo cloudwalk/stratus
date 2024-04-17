@@ -17,12 +17,14 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let stratus_config = config.as_stratus();
     let importer_config = config.as_importer();
+    let (failed_tx_sender, failed_tx_receiver) = tokio::sync::mpsc::channel(1000);
 
     let storage = stratus_config.stratus_storage.init().await?;
-    let executor = stratus_config.executor.init(Arc::clone(&storage));
+    let mut executor = stratus_config.executor.init(Arc::clone(&storage));
+    executor.set_failed_tx_sender(failed_tx_sender);
 
     let rpc_task = tokio::spawn(serve_rpc(executor, Arc::clone(&storage), stratus_config));
-    let importer_task = tokio::spawn(run_importer_online(importer_config, storage));
+    let importer_task = tokio::spawn(run_importer_online(importer_config, storage, Some(failed_tx_receiver)));
 
     let join_result = try_join!(rpc_task, importer_task)?;
     join_result.0?;

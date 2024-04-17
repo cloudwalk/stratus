@@ -4,10 +4,12 @@ use futures::StreamExt;
 use futures::TryStreamExt;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::Execution;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
+use stratus::eth::primitives::TransactionInput;
 use stratus::eth::storage::StratusStorage;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -27,13 +29,20 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
-    run_importer_online(config, storage).await
+    run_importer_online(config, storage, None).await
 }
 
-pub async fn run_importer_online(config: ImporterOnlineConfig, storage: Arc<StratusStorage>) -> anyhow::Result<()> {
+pub async fn run_importer_online(
+    config: ImporterOnlineConfig,
+    storage: Arc<StratusStorage>,
+    failed_tx_receiver: Option<tokio::sync::mpsc::Receiver<(TransactionInput, Execution)>>,
+) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let executor = config.executor.init(Arc::clone(&storage));
+    let mut executor = config.executor.init(Arc::clone(&storage));
+    if let Some(recv) = failed_tx_receiver {
+        executor.set_failed_tx_receiver(recv);
+    }
 
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;

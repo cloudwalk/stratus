@@ -26,6 +26,10 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 
+use super::Execution;
+use super::LogMined;
+use super::TransactionInput;
+
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
@@ -53,6 +57,32 @@ impl Block {
             header: block.try_into()?,
             transactions,
         })
+    }
+
+    /// Pushes a single transaction execution to the blocks transactions
+    pub fn push_execution(&mut self, input: TransactionInput, execution: Execution) {
+        let transaction_index = (self.transactions.len() as u64).into();
+        self.transactions.push(TransactionMined {
+            logs: execution
+                .logs
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(i, log)| LogMined {
+                    log_index: (i as u64).into(),
+                    log,
+                    transaction_hash: input.hash.clone(),
+                    transaction_index,
+                    block_number: self.header.number,
+                    block_hash: self.header.hash.clone(),
+                })
+                .collect(),
+            input,
+            execution,
+            transaction_index,
+            block_number: self.header.number,
+            block_hash: self.header.hash.clone(),
+        }) // TODO: update logs bloom
     }
 
     /// Calculates block size label by the number of transactions.

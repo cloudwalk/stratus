@@ -83,6 +83,7 @@ testcontainers-modules = { version = "=0.3.5", features = ["postgres"] }
 
 # test
 fake = { version = "=2.9.2", features = ["derive"] }
+ethers = "2.0.13"
 
 [dev-dependencies]
 binary_macros = "=1.0.0"
@@ -125,7 +126,7 @@ path = "src/bin/run_with_importer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["rocks"]
+default = ["rocks", "forward_transaction"]
 
 # Application is running in develoment mode.
 dev  = []
@@ -141,6 +142,8 @@ metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
 
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
+
+forward_transaction = []
 
 # ------------------------------------------------------------------------------
 # Lints

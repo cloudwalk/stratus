@@ -10,6 +10,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
+#[cfg(not(feature = "forward_transaction"))]
 use tokio::sync::Mutex;
 
 use crate::eth::evm::EvmExecutionResult;
@@ -24,11 +25,16 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+#[cfg(not(feature = "forward_transaction"))]
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
+#[cfg(not(feature = "forward_transaction"))]
 use crate::eth::BlockMiner;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+#[cfg(feature = "forward_transaction")]
+use ethers::providers::{Http, Provider};
+use ethers_core::types::Transaction;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
@@ -42,8 +48,18 @@ pub struct EthExecutor {
     // Channel to send transactions to background EVMs.
     evm_tx: crossbeam_channel::Sender<EvmTask>,
 
+    #[cfg(not(feature = "forward_transaction"))]
     // Mutex-wrapped miner for creating new blockchain blocks.
     miner: Mutex<BlockMiner>,
+
+    #[cfg(feature = "forward_transaction")]
+    provider: Provider<Http>,
+
+    #[cfg(feature = "forward_transaction")]
+    failed_tx_sender: Option<tokio::sync::mpsc::Sender<(TransactionInput, Execution)>>,
+
+    #[cfg(feature = "forward_transaction")]
+    failed_tx_receiver: Option<tokio::sync::mpsc::Receiver<(TransactionInput, Execution)>>,
 
     // Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -58,11 +74,29 @@ impl EthExecutor {
     pub fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>) -> Self {
         Self {
             evm_tx,
+            #[cfg(not(feature = "forward_transaction"))]
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
+            #[cfg(feature = "forward_transaction")]
+            provider: Provider::<Http>::try_from("http://spec.testnet.cloudwalk.network:9934").expect("could not instantiate HTTP Provider"), // todo, change to a config parameter
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
+            #[cfg(feature = "forward_transaction")]
+            failed_tx_sender: None,
+            failed_tx_receiver: None
         }
+    }
+
+    /// Sets the failed transactions sender.
+    #[cfg(feature = "forward_transaction")]
+    pub fn set_failed_tx_sender(&mut self, failed_transactions: tokio::sync::mpsc::Sender<(TransactionInput, Execution)>) {
+        self.failed_tx_sender = Some(failed_transactions);
+    }
+
+    /// Sets the failed transactions receiver.
+    #[cfg(feature = "forward_transaction")]
+    pub fn set_failed_tx_receiver(&mut self, failed_transactions: tokio::sync::mpsc::Receiver<(TransactionInput, Execution)>) {
+        self.failed_tx_receiver = Some(failed_transactions);
     }
 
     // -------------------------------------------------------------------------
@@ -70,9 +104,20 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
-    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(
+        &mut self,
+        block: ExternalBlock,
+        receipts: &ExternalReceipts
+    ) -> anyhow::Result<Block> {
         // import block
-        let block = self.import_external_to_temp(block, receipts).await?;
+        let mut block = self.import_external_to_temp(block, receipts).await?;
+
+        #[cfg(feature = "forward_transaction")]
+        if let Some(failed_tx_receiver) = &mut self.failed_tx_receiver {
+            while let Ok((transaction, execution)) = failed_tx_receiver.try_recv() {
+                block.push_execution(transaction, execution);
+            }
+        }
 
         // commit block
         self.storage.set_mined_block_number(*block.number()).await?;
@@ -86,7 +131,7 @@ impl EthExecutor {
     }
 
     /// Re-executes an external block locally and imports it to the temporary storage.
-    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_temp(&mut self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -159,6 +204,7 @@ impl EthExecutor {
         Block::from_external(block, executions)
     }
 
+    #[cfg(not(feature = "forward_transaction"))]
     /// Executes a transaction persisting state changes.
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         #[cfg(feature = "metrics")]
@@ -222,6 +268,68 @@ impl EthExecutor {
         Ok(execution)
     }
 
+    #[cfg(feature = "forward_transaction")]
+    /// Executes a transaction and sends it to substrate
+    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
+        use ethers::providers::Middleware;
+        use tokio::{fs::File, io::AsyncWriteExt};
+
+        use crate::eth::primitives::ExecutionResult;
+
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        tracing::info!(
+            hash = %transaction.hash,
+            nonce = %transaction.nonce,
+            from = ?transaction.from,
+            signer = %transaction.signer,
+            to = ?transaction.to,
+            data_len = %transaction.input.len(),
+            data = %transaction.input,
+            "executing transaction"
+        );
+
+        // validate
+        if transaction.signer.is_zero() {
+            tracing::warn!("rejecting transaction from zero address");
+            return Err(anyhow!("transaction sent from zero address is not allowed."));
+        }
+
+        let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+        let execution = self.execute_in_evm(evm_input).await?.0;
+
+        if execution.result == ExecutionResult::Success {
+            //let tx: TypedTransaction = (&Transaction::try_from(transaction)?).into();
+            let pending_tx = self.provider.send_raw_transaction(Transaction::try_from(transaction)?.rlp()).await?;
+
+            let receipt = match pending_tx.await? {
+                Some(receipt) => receipt,
+                None => return Err(anyhow!("transaction did not produce a receipt")),
+            };
+
+            let status = match receipt.status {
+                Some(status) => status.as_u32(),
+                None => return Err(anyhow!("receipt did not report the transaction status")),
+            };
+
+            if status == 0 {
+                let mut file = File::create(format!("data/mismatched_transactions/{}", receipt.transaction_hash.clone())).await?;
+                file.write_all(serde_json::to_string(&receipt)?.as_bytes()).await?;
+                return Err(anyhow!("transaction succeeded in stratus but failed in substrate"));
+            }
+        } else {
+            if let Some(failed_transactions) = &self.failed_tx_sender {
+                failed_transactions.send((transaction, execution.clone())).await?;
+            }
+        }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_transact(start.elapsed(), true);
+
+        Ok(execution)
+    }
+
     /// Executes a transaction without persisting state changes.
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
         #[cfg(feature = "metrics")]
@@ -244,7 +352,7 @@ impl EthExecutor {
         result.map(|x| x.0)
     }
 
-    #[cfg(feature = "dev")]
+    #[cfg(all(feature = "dev", not(feature = "forward_transaction")))]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;

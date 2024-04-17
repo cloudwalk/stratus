@@ -120,7 +120,7 @@ fn signal_handler(cancellation: CancellationToken) {
 // -----------------------------------------------------------------------------
 async fn execute_block_importer(
     // services
-    executor: EthExecutor,
+    mut executor: EthExecutor,
     stratus_storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
