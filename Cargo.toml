@@ -59,6 +59,8 @@ keccak-hasher = "=0.15.3" # this version must be compatible with triehash
 revm = "=7.1.0"
 rlp = "=0.5.2"
 triehash = "=0.8.4"
+ethers = { version = "=2.0.13", optional = true }
+
 
 # network
 jsonrpsee = { version = "=0.21.0", features = ["server", "client"] }
@@ -83,7 +85,6 @@ testcontainers-modules = { version = "=0.3.5", features = ["postgres"] }
 
 # test
 fake = { version = "=2.9.2", features = ["derive"] }
-ethers = "2.0.13"
 
 [dev-dependencies]
 binary_macros = "=1.0.0"
@@ -143,7 +144,7 @@ metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
 
-forward_transaction = []
+forward_transaction = ["ethers"]
 
 # ------------------------------------------------------------------------------
 # Lints
