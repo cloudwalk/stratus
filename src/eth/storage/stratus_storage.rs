@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use itertools::Itertools;
-use revm::primitives::HashSet;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -15,6 +13,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
@@ -185,15 +184,15 @@ impl StratusStorage {
     }
 
     /// Retrieves multiple slots from the storage. Returns default values when not found.
-    pub async fn read_slots(&self, address: &Address, slot_indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+    pub async fn read_slots(&self, address: &Address, slot_indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
         let mut slots = Vec::with_capacity(slot_indexes.len());
-        let mut perm_indexes = HashSet::with_capacity(slot_indexes.len());
+        let mut perm_indexes = SlotIndexes::with_capacity(slot_indexes.len());
 
         // read slots from temporary storage
-        for index in slot_indexes {
+        for index in slot_indexes.iter() {
             match self.temp.read_slot(address, index).await? {
                 Some(slot) => {
                     slots.push(slot);
@@ -205,10 +204,9 @@ impl StratusStorage {
         }
 
         // read missing slots from permanent storage
-        let perm_indexes = perm_indexes.into_iter().collect_vec();
         if not(perm_indexes.is_empty()) {
             let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
-            for index in perm_indexes.into_iter() {
+            for index in perm_indexes.0.into_iter() {
                 match perm_slots.remove(&index) {
                     Some(value) => slots.push(Slot { index, value }),
                     None => slots.push(Slot::new_empty(index)),
