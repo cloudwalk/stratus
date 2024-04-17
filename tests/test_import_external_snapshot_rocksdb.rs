@@ -1,13 +1,13 @@
-mod test_import_offline_snapshot_common;
+mod test_import_external_snapshot_common;
 
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::RocksPermanentStorage;
 use stratus::infra::docker::Docker;
-use test_import_offline_snapshot_common as common;
+use test_import_external_snapshot_common as common;
 
 #[tokio::test]
-async fn test_import_offline_snapshot_with_rocksdb() {
+async fn test_import_external_snapshot_with_rocksdb() {
     let docker = Docker::default();
     let _prom_guard = docker.start_prometheus();
 

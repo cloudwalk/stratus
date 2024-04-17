@@ -1,4 +1,4 @@
-mod test_import_offline_snapshot_common;
+mod test_import_external_snapshot_common;
 
 use std::time::Duration;
 
@@ -6,10 +6,10 @@ use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::PostgresPermanentStorage;
 use stratus::eth::storage::PostgresPermanentStorageConfig;
 use stratus::infra::docker::Docker;
-use test_import_offline_snapshot_common as common;
+use test_import_external_snapshot_common as common;
 
 #[tokio::test]
-async fn test_import_offline_snapshot_with_postgres() {
+async fn test_import_external_snapshot_with_postgres() {
     let docker = Docker::default();
     let _prom_guard = docker.start_prometheus();
     let _pg_guard = docker.start_postgres();
