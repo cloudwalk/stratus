@@ -221,7 +221,7 @@ e2e-stratus test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
+    just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -243,7 +243,7 @@ e2e-stratus-rocks test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -272,7 +272,7 @@ e2e-stratus-postgres test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -378,7 +378,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     just build-release || exit 1
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
+    just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -403,7 +403,7 @@ contracts-test-stratus-postgres *args="":
 
     echo "-> Starting Stratus"
     just build-release || exit 1
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+    just run-release -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -424,7 +424,7 @@ contracts-test-stratus-rocks *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     just build-release || exit 1
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run-release -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
