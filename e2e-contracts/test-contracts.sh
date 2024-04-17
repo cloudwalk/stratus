@@ -9,8 +9,9 @@ source $(dirname $0)/_functions.sh
 # ------------------------------------------------------------------------------
 test() {
     repo=$1
-    test=$2
-    log "Testing: $test ($repo)"
+    file=$2
+    test=$3
+    log "Testing: $file ($repo)"
 
     # configure hardhat env
     cd repos/$repo
@@ -20,7 +21,11 @@ test() {
     rm -rf .openzeppelin/
 
     # test
-    npx hardhat test --bail --network stratus test/$test.test.ts
+    if [ -z "$test" ]; then
+        npx hardhat test --bail --network stratus test/$file.test.ts
+    else
+        npx hardhat test --bail --network stratus test/$file.test.ts --grep $test
+    fi
     result_code=$?
 
     # restore original files
@@ -52,8 +57,8 @@ pix=0
 
 # Help function
 print_help() {
-    echo "Usage: $0 [OPTIONS]"
-    echo "Options:"
+    echo "Usage: $0 [ CONTRACT ] [ <TEST_NAME> ]"
+    echo "Contracts:"
     echo "  -t, --token       for brlc-token"
     echo "  -p, --periphery   for brlc-periphery"
     echo "  -m, --multisig    for brlc-multisig"
@@ -73,7 +78,7 @@ if [ "$#" == 0 ]; then
 fi
 
 # Process arguments
-while [[ "$#" -gt 0 ]]; do
+if [[ "$#" -gt 0 ]]; then
     case "$1" in
         -h|--help) print_help; exit 0 ;;
         -t|--token) token=1; shift ;;
@@ -84,36 +89,36 @@ while [[ "$#" -gt 0 ]]; do
         -x|--pix) pix=1; shift ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
-done
+fi
 
 # Execute
 if [ "$token" == 1 ]; then
-    test brlc-token BRLCToken
-    test brlc-token base/CWToken.complex
-    test brlc-token BRLCTokenBridgeable
-    test brlc-token USJimToken
+    test brlc-token BRLCToken $@
+    test brlc-token base/CWToken.complex $@
+    test brlc-token BRLCTokenBridgeable $@
+    test brlc-token USJimToken $@
 fi
 
 if [ "$pix" == 1 ]; then
-    test brlc-pix-cashier PixCashier
+    test brlc-pix-cashier PixCashier $@
 fi
 
 if [ "$yield" == 1 ]; then
-    test brlc-yield-streamer BalanceTracker
-    test brlc-yield-streamer YieldStreamer
+    test brlc-yield-streamer BalanceTracker $@
+    test brlc-yield-streamer YieldStreamer $@
 fi
 
 if [ "$periphery" == 1 ]; then
-    test brlc-periphery CardPaymentProcessor
-    test brlc-periphery CashbackDistributor
+    test brlc-periphery CardPaymentProcessor $@
+    test brlc-periphery CashbackDistributor $@
 fi
 
 if [ "$multisig" == 1 ]; then
-    test brlc-multisig MultiSigWallet
-    test brlc-multisig MultiSigWalletFactory
-    test brlc-multisig MultiSigWalletUpgradeable
+    test brlc-multisig MultiSigWallet $@
+    test brlc-multisig MultiSigWalletFactory $@
+    test brlc-multisig MultiSigWalletUpgradeable $@
 fi
 
 if [ "$compound" == 1 ]; then
-    test compound-periphery CompoundAgent
+    test compound-periphery CompoundAgent $@
 fi
