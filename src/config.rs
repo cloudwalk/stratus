@@ -32,7 +32,9 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+#[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
+#[cfg(feature = "rocks")]
 use crate::eth::storage::RocksTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
@@ -549,6 +551,7 @@ pub struct TemporaryStorageConfig {
 #[derive(Clone, Debug)]
 pub enum TemporaryStorageKind {
     InMemory,
+    #[cfg(feature = "rocks")]
     Rocks,
 }
 
@@ -557,6 +560,7 @@ impl TemporaryStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
+            #[cfg(feature = "rocks")]
             TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new().await?)),
         }
     }
@@ -568,6 +572,7 @@ impl FromStr for TemporaryStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
@@ -597,8 +602,11 @@ pub struct PermanentStorageConfig {
 #[derive(Clone, Debug)]
 pub enum PermanentStorageKind {
     InMemory,
+    #[cfg(feature = "rocks")]
     Rocks,
-    Postgres { url: String },
+    Postgres {
+        url: String,
+    },
 }
 
 impl PermanentStorageConfig {
@@ -606,6 +614,7 @@ impl PermanentStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
+            #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
@@ -626,6 +635,7 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
