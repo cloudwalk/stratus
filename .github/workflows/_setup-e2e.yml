@@ -6,7 +6,7 @@ on:
       justfile_recipe:
         required: true
         type: string
-      env:
+      justfile_env:
         required: false
         type: string
         default: ''
@@ -58,7 +58,7 @@ jobs:
           cargo install wait-service || true
 
       - name: Run e2e tests
-        run: ${{ inputs.env }} just ${{ inputs.justfile_recipe }}
+        run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}
         env:
           RUST_BACKTRACE: 1
           RUST_LOG: debug

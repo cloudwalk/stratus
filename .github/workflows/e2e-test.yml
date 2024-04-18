@@ -1,4 +1,12 @@
 name: E2E Tests
+# -------------------------------------------------------------------------
+# End to End tests for Stratus
+# Each job uses _setup-e2e.yml to run a diffent Justfile recipe
+# Check the file to see the common environment variables and dependencies
+#
+# Set specific environment variables using the `justfile_env` input
+# They must not conflict with common ones
+# -------------------------------------------------------------------------
 
 on:
   pull_request:
