@@ -6,6 +6,7 @@
 //! for interacting with slots, including reading and modifying storage data in
 //! the context of Ethereum smart contracts.
 
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::io::Read;
@@ -384,7 +385,17 @@ mod tests {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize, derive_more::Deref, derive_more::DerefMut)]
-pub struct SlotIndexes(#[deref] pub Vec<SlotIndex>);
+pub struct SlotIndexes(#[deref] pub HashSet<SlotIndex>);
+
+impl SlotIndexes {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(HashSet::with_capacity(capacity))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // sqlx traits for SlotIndexes

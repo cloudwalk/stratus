@@ -7,6 +7,7 @@ export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-of
 
 # Default values.
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
+database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 build_flags := "--bin stratus --features dev"
 run_flags := "--enable-genesis --enable-test-accounts"
 
@@ -36,17 +37,33 @@ setup:
 run *args="":
     cargo run {{ build_flags }} -- {{ run_flags }} {{args}}
 
+# Stratus: Run main service with debug options
+run-rocks *args="":
+    cargo run {{ build_flags }} --features rocks -- {{ run_flags }} {{args}}
+
 # Stratus: Run main service with release options
 run-release *args="":
-    cargo run --release {{ build_flags }} -- {{ run_flags }} {{args}}
+    cargo run --release {{ build_flags }}  -- {{ run_flags }} {{args}}
+
+# Stratus: Run main service with release options
+run-rocks-release *args="":
+    cargo run --release {{ build_flags }} --features rocks  -- {{ run_flags }} {{args}}
 
 # Stratus: Compile with debug options
 build:
     cargo build {{ build_flags }}
 
+# Stratus: Compile with debug options
+build-rocks:
+    cargo build {{ build_flags }} --features rocks
+
 # Stratus: Compile with release options
 build-release:
     cargo build --release {{ build_flags }}
+
+# Stratus: Compile with debug options
+build-rocks-release:
+    cargo build --release {{ build_flags }} --features rocks
 
 # Stratus: Check, or compile without generating code
 check:
@@ -82,7 +99,7 @@ update:
 
 # Database: Compile SQLx queries
 db-compile:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url postgres://postgres:123@localhost/stratus -- --all-targets
+    SQLX_OFFLINE=true cargo sqlx prepare --database-url {{ database_url }} -- --all-targets
 alias sqlx := db-compile
 
 # Database: Load CSV data produced by importer-offline
@@ -151,7 +168,7 @@ test-unit name="":
 
 # Test: Execute Rust integration tests
 test-int name="'*'":
-    cargo test --test {{name}} --features metrics -- --nocapture
+    cargo test --test {{name}} --features metrics,rocks -- --nocapture
 
 # ------------------------------------------------------------------------------
 # E2E tasks
@@ -220,7 +237,7 @@ e2e-stratus test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    RUST_LOG=info just run -a 0.0.0.0:3000 > stratus.log &
+    just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -241,8 +258,8 @@ e2e-stratus-rocks test="":
     fi
 
     echo "-> Starting Stratus"
-    just build || exit 1
-    RUST_LOG=debug just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just build-rocks || exit 1
+    just run-rocks -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -271,7 +288,7 @@ e2e-stratus-postgres test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    RUST_LOG=debug just run -a 0.0.0.0:3000 > stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -377,7 +394,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     just build-release || exit 1
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
+    just run-release -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -402,7 +419,7 @@ contracts-test-stratus-postgres *args="":
 
     echo "-> Starting Stratus"
     just build-release || exit 1
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
+    just run-release -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -422,8 +439,8 @@ contracts-test-stratus-postgres *args="":
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
-    just build-release || exit 1
-    RUST_LOG=debug just run-release -a 0.0.0.0:3000 > stratus.log &
+    just build-rocks-release || exit 1
+    just run-rocks-release -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo

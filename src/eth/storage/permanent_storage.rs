@@ -12,6 +12,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
@@ -42,7 +43,7 @@ pub trait PermanentStorage: Send + Sync {
     async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
 
     /// Retrieves several slots at once.
-    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>>;
+    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>>;
 
     /// Retrieves a block from the storage.
     async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
