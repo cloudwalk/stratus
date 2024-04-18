@@ -1,14 +1,17 @@
 import '.justfile_helpers' # _lint, _outdated
 
-# Environment variables (automatically set in all actions).
+# Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
-# Default values.
-wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
+# Global arguments that can be passed to receipts.
+release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
-build_flags := "--bin stratus --features dev"
+wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
+
+# Cargo flags.
+build_flags := release_flag + " --bin stratus --features dev"
 run_flags := "--enable-genesis --enable-test-accounts"
 
 # Project: Show available tasks
@@ -33,21 +36,13 @@ setup:
 # Stratus tasks
 # ------------------------------------------------------------------------------
 
-# Stratus: Run main service with debug options
+# Stratus: Run main service
 run *args="":
     cargo run {{ build_flags }} -- {{ run_flags }} {{args}}
 
-# Stratus: Run main service with debug options
+# Stratus: Run main service
 run-rocks *args="":
     cargo run {{ build_flags }} --features rocks -- {{ run_flags }} {{args}}
-
-# Stratus: Run main service with release options
-run-release *args="":
-    cargo run --release {{ build_flags }}  -- {{ run_flags }} {{args}}
-
-# Stratus: Run main service with release options
-run-rocks-release *args="":
-    cargo run --release {{ build_flags }} --features rocks  -- {{ run_flags }} {{args}}
 
 # Stratus: Compile with debug options
 build:
@@ -56,14 +51,6 @@ build:
 # Stratus: Compile with debug options
 build-rocks:
     cargo build {{ build_flags }} --features rocks
-
-# Stratus: Compile with release options
-build-release:
-    cargo build --release {{ build_flags }}
-
-# Stratus: Compile with debug options
-build-rocks-release:
-    cargo build --release {{ build_flags }} --features rocks
 
 # Stratus: Check, or compile without generating code
 check:
@@ -130,22 +117,22 @@ db-load-csv:
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 bin-rpc-downloader *args="":
-    cargo run --bin rpc-downloader   --features dev --release -- {{args}}
+    cargo run --bin rpc-downloader {{release_flag}} --features dev -- {{args}}
 alias rpc-downloader := bin-rpc-downloader
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 bin-importer-offline *args="":
-    cargo run --bin importer-offline --features dev --release -- {{args}}
+    cargo run --bin importer-offline {{release_flag}} --features dev -- {{args}}
 alias importer-offline := bin-importer-offline
 
 # Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
 bin-importer-online *args="":
-    cargo run --bin importer-online  --features dev --release -- {{args}}
+    cargo run --bin importer-online {{release_flag}} --features dev -- {{args}}
 alias importer-online := bin-importer-online
 
 # Bin: Validate Stratus storage slots matches reference slots
 bin-state-validator *args="":
-    cargo run --bin state-validator  --features dev --release -- {{args}}
+    cargo run --bin state-validator {{release_flag}} --features dev -- {{args}}
 alias state-validator := bin-state-validator
 
 # ------------------------------------------------------------------------------
@@ -393,8 +380,8 @@ contracts-remove:
 contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
-    just build-release || exit 1
-    just run-release -a 0.0.0.0:3000 > stratus.log &
+    just build || exit 1
+    just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -418,8 +405,8 @@ contracts-test-stratus-postgres *args="":
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
-    just build-release || exit 1
-    just run-release -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+    just build || exit 1
+    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -439,8 +426,8 @@ contracts-test-stratus-postgres *args="":
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
-    just build-rocks-release || exit 1
-    just run-rocks-release -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just build-rocks || exit 1
+    just run-rocks -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
