@@ -17,7 +17,7 @@ jobs:
     name: E2E Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      test_command: 'just e2e-stratus'
+      justfile_recipe: 'e2e-stratus'
 
     concurrency:
       group: ${{ github.workflow }}-inmemory-${{ github.ref || github.run_id }}
@@ -27,7 +27,7 @@ jobs:
     name: E2E Stratus Postgres
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      test_command: 'just e2e-stratus-postgres'
+      justfile_recipe: 'e2e-stratus-postgres'
 
     concurrency:
       group: ${{ github.workflow }}-postgres-${{ github.ref || github.run_id }}
@@ -37,7 +37,7 @@ jobs:
     name: E2E Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      test_command: 'just e2e-stratus-rocks'
+      justfile_recipe: 'e2e-stratus-rocks'
 
     concurrency:
       group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}

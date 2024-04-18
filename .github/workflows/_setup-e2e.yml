@@ -3,9 +3,13 @@ name: Setup E2E Environment
 on:
   workflow_call:
     inputs:
-      test_command:
+      justfile_recipe:
         required: true
         type: string
+      env:
+        required: false
+        type: string
+        default: ''
 
 jobs:
   setup_and_test:
@@ -54,7 +58,7 @@ jobs:
           cargo install wait-service || true
 
       - name: Run e2e tests
-        run: ${{ inputs.test_command }}
+        run: ${{ inputs.env }} just ${{ inputs.justfile_recipe }}
         env:
           RUST_BACKTRACE: 1
           RUST_LOG: debug
