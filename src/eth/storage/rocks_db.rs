@@ -129,6 +129,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     pub fn backup(&self) -> anyhow::Result<()> {
         let mut backup_engine = self.backup_engine()?;
         backup_engine.create_new_backup(&self.db)?;
+        backup_engine.purge_old_backups(2)?;
         Ok(())
     }
 
