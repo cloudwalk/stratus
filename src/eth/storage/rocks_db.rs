@@ -136,7 +136,6 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     pub fn restore(&self) -> anyhow::Result<()> {
         let mut backup_engine = self.backup_engine()?;
         let restore_options = RestoreOptions::default();
-        //XXX TODO panic if nothing to restore
         backup_engine.restore_from_latest_backup(self.db.path(), self.backup_path()?, &restore_options)?;
         Ok(())
     }
@@ -159,13 +158,19 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         bincode::deserialize(&value_bytes).ok()
     }
 
-    pub fn get_current_block_number(&self) -> i64 {
+    pub fn get_current_block_number(&self) -> u64 {
         let Ok(serialized_key) = bincode::serialize(&"current_block") else {
-            return -1;
+            return 0;
         };
-        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return -1 };
+        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return 0 };
 
-        bincode::deserialize(&value_bytes).ok().unwrap_or(-1)
+        bincode::deserialize(&value_bytes).ok().unwrap_or(0)
+    }
+
+    pub fn get_index_block_number(&self) -> u64 {
+        self.last_index()
+            .map(|(block_number, _)| block_number)
+            .unwrap_or(0)
     }
 
     // Mimics the 'insert' functionality of a HashMap
@@ -230,6 +235,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     // Deletes an entry from the database by key
     pub fn delete_index(&self, key: u64) -> Result<()> {
         let serialized_key = bincode::serialize(&key)?;
+        //XXX check if value is a vec that can be deserialized as a safety measure
         self.db.delete(serialized_key)?;
         Ok(())
     }
@@ -272,6 +278,11 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let serialized_key = bincode::serialize(&key_prefix).unwrap();
         let iter = self.db.iterator(IteratorMode::From(&serialized_key, direction));
         RocksDBIterator::<K, V>::new(iter)
+    }
+
+    pub fn last_index(&self) -> Option<(u64, Vec<K>)> {
+        let iter = self.db.iterator(IteratorMode::End);
+        IndexedRocksDBIterator::<K>::new(iter).next()
     }
 
     pub fn last(&self) -> Option<(K, V)> {
