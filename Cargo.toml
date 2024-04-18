@@ -125,7 +125,7 @@ path = "src/bin/run_with_importer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["rocks"]
+default = []
 
 # Application is running in develoment mode.
 dev  = []

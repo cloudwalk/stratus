@@ -1,22 +1,26 @@
 mod test_import_external_snapshot_common;
 
-use stratus::eth::primitives::BlockNumber;
-use stratus::eth::storage::PermanentStorage;
-use stratus::eth::storage::RocksPermanentStorage;
-use stratus::infra::docker::Docker;
-use test_import_external_snapshot_common as common;
+#[cfg(feature = "rocks")]
+pub mod rocks_test {
+    use stratus::eth::primitives::BlockNumber;
+    use stratus::eth::storage::PermanentStorage;
+    use stratus::eth::storage::RocksPermanentStorage;
+    use stratus::infra::docker::Docker;
 
-#[tokio::test]
-async fn test_import_external_snapshot_with_rocksdb() {
-    let docker = Docker::default();
-    let _prom_guard = docker.start_prometheus();
+    use super::test_import_external_snapshot_common as common;
 
-    let (config, block, receipts, snapshot) = common::init_config_and_data();
-    let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
+    #[tokio::test]
+    async fn test_import_external_snapshot_with_rocksdb() {
+        let docker = Docker::default();
+        let _prom_guard = docker.start_prometheus();
 
-    let rocks = RocksPermanentStorage::new().await.unwrap();
-    rocks.save_accounts(accounts).await.unwrap();
-    rocks.state.write_slots(slots, BlockNumber::ZERO);
+        let (config, block, receipts, snapshot) = common::init_config_and_data();
+        let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
 
-    common::execute_test("RocksDB", &config, &docker, rocks, block, receipts).await;
+        let rocks = RocksPermanentStorage::new().await.unwrap();
+        rocks.save_accounts(accounts).await.unwrap();
+        rocks.state.write_slots(slots, BlockNumber::ZERO);
+
+        common::execute_test("RocksDB", &config, &docker, rocks, block, receipts).await;
+    }
 }
