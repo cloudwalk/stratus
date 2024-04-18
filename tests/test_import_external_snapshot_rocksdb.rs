@@ -1,10 +1,12 @@
 mod test_import_external_snapshot_common;
+
 #[cfg(feature = "rocks")]
 pub mod rocks_test {
     use stratus::eth::primitives::BlockNumber;
+    use stratus::eth::storage::PermanentStorage;
     use stratus::eth::storage::RocksPermanentStorage;
     use stratus::infra::docker::Docker;
-    use test_import_external_snapshot_common as common;
+    use super::test_import_external_snapshot_common as common;
 
     #[tokio::test]
     async fn test_import_external_snapshot_with_rocksdb() {
