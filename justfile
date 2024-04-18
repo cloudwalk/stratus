@@ -2,7 +2,7 @@ import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables (automatically set in all actions).
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
-export RUST_BACKTRACE := "1"
+export RUST_BACKTRACE := "0"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
 # Default values.

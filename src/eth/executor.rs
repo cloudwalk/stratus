@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use futures::StreamExt;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -22,7 +23,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -89,37 +89,29 @@ impl EthExecutor {
 
     /// Re-executes an external block locally and imports it to the temporary storage.
     pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
 
-        let mut block_metrics = ExecutionMetrics::default();
-        tracing::info!(number = %block.number(), "importing external block");
-
-        // track active block number
-        self.storage.set_active_block_number(block.number()).await?;
-
-        // re-execute transactions
-        let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
+        // prepare transactions to be executed in parallel
+        let mut evm_tasks = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
             let receipt = receipts.try_get(&tx.hash())?;
-            let (execution, execution_metrics) = self.reexecute_external(tx.clone(), receipt, &block).await?;
+            evm_tasks.push(self.reexecute_external(tx.clone(), receipt, &block));
+        }
 
-            // persist execution changes and metrics
+        // execute in parallel, in case of failure, execute in sequence
+        let mut evm_tasks = futures::stream::iter(evm_tasks).buffered(8);
+        while let Some(result) = evm_tasks.next().await {
+            let (execution, _) = match result {
+                Ok(result) => result,
+                Err(e) => {
+                    tracing::error!(reason = ?e, "invalid parallel execution");
+                    todo!("error need to provide tx, receipt and block to be reexecuted");
+                },
+            };
+
             self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
-            executions.push((tx, receipt.clone(), execution.clone()));
-            block_metrics += execution_metrics;
         }
 
-        // track metrics
-        #[cfg(feature = "metrics")]
-        {
-            metrics::inc_executor_external_block(start.elapsed());
-            metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
-            metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
-            metrics::inc_executor_external_block_slot_reads_cached(block_metrics.slot_reads_cached);
-        }
-
-        Block::from_external(block, executions)
+        Block::from_external(block.clone(), vec![])
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.

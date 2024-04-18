@@ -100,26 +100,6 @@ phf_codegen = "=0.11.2"
 # Binaries
 # ------------------------------------------------------------------------------
 
-[[bin]]
-name = "rpc-downloader"
-path = "src/bin/rpc_downloader.rs"
-
-[[bin]]
-name = "importer-offline"
-path = "src/bin/importer_offline.rs"
-
-[[bin]]
-name = "importer-online"
-path = "src/bin/importer_online.rs"
-
-[[bin]]
-name = "state-validator"
-path = "src/bin/state_validator.rs"
-
-[[bin]]
-name = "run-with-importer"
-path = "src/bin/run_with_importer.rs"
-
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
