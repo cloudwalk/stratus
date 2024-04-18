@@ -90,6 +90,7 @@ pub fn init_config_and_data() -> (IntegrationTestConfig, ExternalBlock, External
     // init config
     let mut config = init_global_services::<IntegrationTestConfig>();
     config.executor.chain_id = 2009;
+    config.executor.num_evms = 8;
 
     // init block data
     let block_json = include_str!("fixtures/snapshots/292973/block.json");

@@ -9,14 +9,12 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use futures::StreamExt;
-use hex_literal::hex;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
@@ -100,21 +98,14 @@ impl EthExecutor {
 
         // execute in parallel, in case of failure, execute in sequence
         let mut tx_index = 0;
-        let mut evm_tasks = futures::stream::iter(evm_tasks).buffered(2);
+        let mut evm_tasks = futures::stream::iter(evm_tasks).buffered(8);
 
-        let address = Address::from(hex!("c73a9f38bfb89048cd0aae18d3b29292c7bc6e9a"));
         while let Some(result) = evm_tasks.next().await {
             match result {
                 Ok((execution, _)) => {
 
-                    let account = self.storage.read_account(&address, &StoragePointInTime::Present).await?;
-                    tracing::info!(%account.nonce, "before save");
-
                     tracing::info!(%tx_index, "saving original");
                     self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
-
-                    let account = self.storage.read_account(&address, &StoragePointInTime::Present).await?;
-                    tracing::info!(%account.nonce, "after save");
 
                     tx_index += 1;
                 },
@@ -122,9 +113,6 @@ impl EthExecutor {
                     tracing::warn!(reason = ?e, "invalid parallel execution");
                     let tx = block.transactions[tx_index].clone();
                     let receipt = receipts.try_get(&tx.hash())?;
-
-                    let account = self.storage.read_account(&address, &StoragePointInTime::Present).await?;
-                    tracing::info!(%account.nonce, "before reexec");
 
                     tracing::info!(%tx_index, "reexec");
                     let (execution, _) = self.reexecute_external(tx, receipt, &block).await.unwrap();
