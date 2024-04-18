@@ -37,14 +37,14 @@ use crate::eth::storage::rocks_db::RocksDb;
 use crate::log_and_err;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
-pub struct AccountInfo {
+pub struct AccountRocksdb {
     pub balance: Wei,
     pub nonce: Nonce,
     pub bytecode: Option<Bytes>,
     pub code_hash: CodeHash,
 }
 
-impl AccountInfo {
+impl AccountRocksdb {
     pub fn to_account(&self, address: &Address) -> Account {
         Account {
             address: address.clone(),
@@ -59,8 +59,8 @@ impl AccountInfo {
 }
 
 pub struct RocksStorageState {
-    pub accounts: Arc<RocksDb<Address, AccountInfo>>,
-    pub accounts_history: Arc<RocksDb<(Address, BlockNumber), AccountInfo>>,
+    pub accounts: Arc<RocksDb<Address, AccountRocksdb>>,
+    pub accounts_history: Arc<RocksDb<(Address, BlockNumber), AccountRocksdb>>,
     pub account_slots: Arc<RocksDb<(Address, SlotIndex), SlotValue>>,
     pub account_slots_history: Arc<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>,
     pub transactions: Arc<RocksDb<Hash, BlockNumber>>,
@@ -98,8 +98,8 @@ impl RocksStorageState {
     }
 
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
-        let accounts = Arc::<RocksDb<Address, AccountInfo>>::clone(&self.accounts);
-        let accounts_history = Arc::<RocksDb<(Address, BlockNumber), AccountInfo>>::clone(&self.accounts_history);
+        let accounts = Arc::<RocksDb<Address, AccountRocksdb>>::clone(&self.accounts);
+        let accounts_history = Arc::<RocksDb<(Address, BlockNumber), AccountRocksdb>>::clone(&self.accounts_history);
         let account_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
         let account_slots_history = Arc::<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>::clone(&self.account_slots_history);
         let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.blocks_by_hash);
@@ -381,7 +381,7 @@ impl RocksStorageState {
         let account_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_accounts {
                 let address = change.address.clone();
-                let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountInfo {
+                let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountRocksdb {
                     balance: Wei::ZERO, // Initialize with default values
                     nonce: Nonce::ZERO,
                     bytecode: None,
@@ -546,7 +546,7 @@ impl RocksStorageState {
         for account in accounts {
             account_batch.push((
                 account.address,
-                AccountInfo {
+                AccountRocksdb {
                     balance: account.balance,
                     nonce: account.nonce,
                     bytecode: account.bytecode,
