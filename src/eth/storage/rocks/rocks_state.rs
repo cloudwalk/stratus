@@ -240,7 +240,7 @@ impl RocksStorageState {
                             self_accounts_history_clone.delete(&(address, historic_block_number)).unwrap();
                         }
                         self_accounts_history_clone.delete_index(index_block_number).unwrap();
-                     }
+                    }
                     info!(
                         "Deleted account history records above block number {}. Important for maintaining historical accuracy in account state across nodes.",
                         block_number_clone
