@@ -72,6 +72,6 @@ jobs:
       - name: Run e2e tests
         run: just contracts-test-stratus --${{ matrix.contract }}
         env:
-          RUST_BACKTRACE: 1
-          RUST_LOG: debug
+          CARGO_PROFILE_RELEASE_DEBUG: 0 
+          RUST_LOG: debug 
           RELEASE: 1
