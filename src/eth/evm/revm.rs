@@ -297,6 +297,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
         logs,
         gas,
         changes: execution_changes.into_values().collect(),
+        override_contract_address: None,
     }
 }
 

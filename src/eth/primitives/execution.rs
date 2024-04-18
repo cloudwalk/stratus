@@ -50,6 +50,10 @@ pub struct Execution {
 
     /// Storage changes that happened during the transaction execution.
     pub changes: Vec<ExecutionAccountChanges>,
+
+    /// In case this execution was loaded from Postgres, override the contract address instead
+    /// of looking for it in the `changes` field.
+    pub override_contract_address: Option<Address>,
 }
 
 impl Execution {
@@ -76,6 +80,7 @@ impl Execution {
             logs: Vec::new(),
             gas: receipt.gas_used.unwrap_or_default().try_into()?,
             changes: vec![sender_changes],
+            override_contract_address: None,
         };
         execution.apply_execution_costs(receipt)?;
         Ok(execution)
@@ -83,6 +88,10 @@ impl Execution {
 
     /// When the transaction is a contract deployment, returns the address of the deployed contract.
     pub fn contract_address(&self) -> Option<Address> {
+        if let Some(contract_address) = &self.override_contract_address {
+            return Some(contract_address.to_owned());
+        }
+
         for changes in &self.changes {
             if changes.bytecode.is_modified() {
                 return Some(changes.address.clone());
