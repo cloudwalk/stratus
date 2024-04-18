@@ -33,7 +33,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-stable-debug-
             ${{ runner.os }}-cargo-${{ github.workflow }}-
-            
 
       - name: Set up Rust
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
