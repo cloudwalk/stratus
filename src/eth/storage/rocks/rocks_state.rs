@@ -383,7 +383,7 @@ impl RocksStorageState {
             }
 
             accounts.insert_batch(account_changes, Some(block_number.into()));
-            accounts_history.insert_batch(account_history_changes, None);
+            accounts_history.insert_batch_indexed(account_history_changes, block_number.into());
         });
 
         let mut slot_changes = Vec::new();
@@ -400,7 +400,7 @@ impl RocksStorageState {
                 }
             }
             account_slots.insert_batch(slot_changes, Some(block_number.into()));
-            account_slots_history.insert_batch(slot_history_changes, None);
+            account_slots_history.insert_batch_indexed(slot_history_changes, block_number.into());
         });
 
         Ok(vec![account_changes_future, slot_changes_future])
