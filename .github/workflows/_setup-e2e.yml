@@ -55,3 +55,7 @@ jobs:
 
       - name: Run e2e tests
         run: ${{ inputs.test_command }}
+        env:
+          RUST_BACKTRACE: 1
+          RUST_LOG: debug
+          RELEASE: 0
