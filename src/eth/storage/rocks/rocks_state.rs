@@ -7,6 +7,7 @@ use futures::future::join_all;
 use itertools::Itertools;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
+use ethereum_types::U256;
 use tokio::sync::mpsc;
 use tokio::task;
 use tokio::task::JoinHandle;
@@ -58,11 +59,32 @@ impl AccountRocksdb {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SlotValueRocksdb(U256);
+
+impl SlotValueRocksdb {
+    pub fn inner_value(&self) -> U256 {
+        self.0.clone()
+    }
+}
+
+impl From<SlotValue> for SlotValueRocksdb {
+    fn from(item: SlotValue) -> Self {
+        SlotValueRocksdb(item.inner_value())
+    }
+}
+
+impl From<SlotValueRocksdb> for SlotValue {
+    fn from(item: SlotValueRocksdb) -> Self {
+        SlotValue::new(item.inner_value())
+    }
+}
+
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<Address, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(Address, BlockNumber), AccountRocksdb>>,
-    pub account_slots: Arc<RocksDb<(Address, SlotIndex), SlotValue>>,
-    pub account_slots_history: Arc<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>,
+    pub account_slots: Arc<RocksDb<(Address, SlotIndex), SlotValueRocksdb>>,
+    pub account_slots_history: Arc<RocksDb<(Address, SlotIndex, BlockNumber), SlotValueRocksdb>>,
     pub transactions: Arc<RocksDb<Hash, BlockNumber>>,
     pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
@@ -100,8 +122,8 @@ impl RocksStorageState {
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
         let accounts = Arc::<RocksDb<Address, AccountRocksdb>>::clone(&self.accounts);
         let accounts_history = Arc::<RocksDb<(Address, BlockNumber), AccountRocksdb>>::clone(&self.accounts_history);
-        let account_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValue>>::clone(&self.account_slots);
-        let account_slots_history = Arc::<RocksDb<(Address, SlotIndex, BlockNumber), SlotValue>>::clone(&self.account_slots_history);
+        let account_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValueRocksdb>>::clone(&self.account_slots);
+        let account_slots_history = Arc::<RocksDb<(Address, SlotIndex, BlockNumber), SlotValueRocksdb>>::clone(&self.account_slots_history);
         let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.blocks_by_hash);
         let blocks_by_number = Arc::<RocksDb<BlockNumber, Block>>::clone(&self.blocks_by_number);
         let transactions = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.transactions);
@@ -413,8 +435,8 @@ impl RocksStorageState {
                 let address = change.address.clone();
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
-                        slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone()));
-                        slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value));
+                        slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone().into()));
+                        slot_history_changes.push(((address.clone(), slot_index, block_number), slot.value.into()));
                     }
                 }
             }
@@ -473,7 +495,7 @@ impl RocksStorageState {
         match point_in_time {
             StoragePointInTime::Present => self.account_slots.get(&(address.clone(), index.clone())).map(|account_slot_value| Slot {
                 index: index.clone(),
-                value: account_slot_value.clone(),
+                value: account_slot_value.clone().into(),
             }),
             StoragePointInTime::Past(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
@@ -482,7 +504,7 @@ impl RocksStorageState {
                     .next()
                 {
                     if index == &rocks_index && address == &rocks_address {
-                        return Some(Slot { index: rocks_index, value });
+                        return Some(Slot { index: rocks_index, value: value.into() });
                     }
                 }
                 None
@@ -563,7 +585,7 @@ impl RocksStorageState {
         let mut slot_batch = vec![];
 
         for (address, slot) in slots {
-            slot_batch.push(((address, slot.index), slot.value));
+            slot_batch.push(((address, slot.index), slot.value.into()));
         }
         self.account_slots.insert_batch(slot_batch, Some(block_number.into()));
     }

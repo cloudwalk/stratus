@@ -85,9 +85,9 @@ impl RocksPermanentStorage {
                 for (slot_index, slot_change) in &change.slots {
                     if let Some(value) = state.account_slots.get(&(address.clone(), slot_index.clone())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = value.clone();
-                            if original_slot.value != account_slot_value {
-                                conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
+                            let account_slot_value: SlotValue = value.clone().into();
+                            if original_slot.value != account_slot_value.clone() {
+                                conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value.clone(), original_slot.value.clone());
                             }
                         }
                     }
