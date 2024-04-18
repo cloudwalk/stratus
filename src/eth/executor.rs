@@ -9,12 +9,14 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use futures::StreamExt;
+use hex_literal::hex;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
@@ -89,7 +91,6 @@ impl EthExecutor {
 
     /// Re-executes an external block locally and imports it to the temporary storage.
     pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
-
         // prepare transactions to be executed in parallel
         let mut evm_tasks = Vec::with_capacity(block.transactions.len());
         for tx in block.transactions.clone() {
@@ -98,29 +99,48 @@ impl EthExecutor {
         }
 
         // execute in parallel, in case of failure, execute in sequence
-        let mut evm_tasks = futures::stream::iter(evm_tasks).buffered(8);
-        while let Some(result) = evm_tasks.next().await {
-            let (execution, _) = match result {
-                Ok(result) => result,
-                Err(e) => {
-                    tracing::error!(reason = ?e, "invalid parallel execution");
-                    todo!("error need to provide tx, receipt and block to be reexecuted");
-                },
-            };
+        let mut tx_index = 0;
+        let mut evm_tasks = futures::stream::iter(evm_tasks).buffered(2);
 
-            self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
+        let address = Address::from(hex!("c73a9f38bfb89048cd0aae18d3b29292c7bc6e9a"));
+        while let Some(result) = evm_tasks.next().await {
+            match result {
+                Ok((execution, _)) => {
+
+                    let account = self.storage.read_account(&address, &StoragePointInTime::Present).await?;
+                    tracing::info!(%account.nonce, "before save");
+
+                    tracing::info!(%tx_index, "saving original");
+                    self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
+
+                    let account = self.storage.read_account(&address, &StoragePointInTime::Present).await?;
+                    tracing::info!(%account.nonce, "after save");
+
+                    tx_index += 1;
+                },
+                Err(e) => {
+                    tracing::warn!(reason = ?e, "invalid parallel execution");
+                    let tx = block.transactions[tx_index].clone();
+                    let receipt = receipts.try_get(&tx.hash())?;
+
+                    let account = self.storage.read_account(&address, &StoragePointInTime::Present).await?;
+                    tracing::info!(%account.nonce, "before reexec");
+
+                    tracing::info!(%tx_index, "reexec");
+                    let (execution, _) = self.reexecute_external(tx, receipt, &block).await.unwrap();
+
+                    tracing::info!(%tx_index, "saving reexec");
+                    self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
+                    tx_index += 1;
+                }
+            };
         }
 
         Block::from_external(block.clone(), vec![])
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
-    pub async fn reexecute_external(
-        &self,
-        tx: ExternalTransaction,
-        receipt: &ExternalReceipt,
-        block: &ExternalBlock,
-    ) -> anyhow::Result<EvmExecutionResult> {
+    pub async fn reexecute_external(&self, tx: ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<EvmExecutionResult> {
         #[cfg(feature = "metrics")]
         let tx_start = metrics::now();
 
@@ -157,9 +177,9 @@ impl EthExecutor {
                 Ok((execution, execution_metrics))
             }
             Err(e) => {
-                let json_tx = serde_json::to_string(&tx).unwrap();
-                let json_receipt = serde_json::to_string(&receipt).unwrap();
-                tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
+                // let json_tx = serde_json::to_string(&tx).unwrap();
+                // let json_receipt = serde_json::to_string(&receipt).unwrap();
+                // tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
                 return Err(e);
             }
         }
