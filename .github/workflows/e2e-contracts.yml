@@ -70,4 +70,8 @@ jobs:
         run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
-        run: CARGO_PROFILE_RELEASE_DEBUG=0 RUST_LOG=debug RELEASE=1 just contracts-test-stratus --${{ matrix.contract }}
+        run: just contracts-test-stratus --${{ matrix.contract }}
+        env:
+          RUST_BACKTRACE: 1
+          RUST_LOG: debug
+          RELEASE: 1
