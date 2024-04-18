@@ -315,12 +315,12 @@ async fn import_external_to_csv(
     let number = *block.number();
     csv.add_block(block)?;
 
-    // check if should flush
     let is_last_block = block_index == block_last_index;
     let is_chunk_interval_end = number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
     let is_flush_interval_end = number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
 
-    let should_chunk_csv_files = is_chunk_interval_end && !is_last_block;
+    // check if should flush
+    let should_chunk_csv_files = is_chunk_interval_end;
     let should_flush = is_flush_interval_end || is_last_block || should_chunk_csv_files;
 
     // flush
