@@ -70,4 +70,4 @@ jobs:
         run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
-        run: CARGO_PROFILE_RELEASE_DEBUG=0 RUST_LOG=debug just contracts-test-stratus-postgres --${{ matrix.contract }}
+        run: CARGO_PROFILE_RELEASE_DEBUG=0 RUST_LOG=debug RELEASE=1 just contracts-test-stratus-postgres --${{ matrix.contract }}
