@@ -25,6 +25,11 @@ pub struct UnixTime(u64);
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
 
+    #[cfg(not(feature = "dev"))]
+    pub fn now() -> Self {
+        Self(Utc::now().timestamp() as u64)
+    }
+
     #[cfg(feature = "dev")]
     pub fn now() -> Self {
         offset::now()
@@ -35,9 +40,8 @@ impl UnixTime {
         offset::set(timestamp, latest_timestamp)
     }
 
-    #[cfg(not(feature = "dev"))]
-    pub fn now() -> Self {
-        Self(Utc::now().timestamp() as u64)
+    pub fn to_i64(&self) -> i64 {
+        self.0.try_into().expect("UNIX time is unrealistically high")
     }
 }
 

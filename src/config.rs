@@ -34,7 +34,6 @@ use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::RocksTemporary;
-use crate::eth::storage::SledTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
@@ -550,7 +549,6 @@ pub struct TemporaryStorageConfig {
 #[derive(Clone, Debug)]
 pub enum TemporaryStorageKind {
     InMemory,
-    Sled,
     Rocks,
 }
 
@@ -559,8 +557,7 @@ impl TemporaryStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
-            TemporaryStorageKind::Sled => Ok(Arc::new(SledTemporary::new()?)),
-            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new()?)),
+            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new().await?)),
         }
     }
 }
@@ -571,7 +568,6 @@ impl FromStr for TemporaryStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
-            "sled" => Ok(Self::Sled),
             "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
@@ -610,7 +606,7 @@ impl PermanentStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new()?),
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),

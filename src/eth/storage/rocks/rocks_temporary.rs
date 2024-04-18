@@ -22,10 +22,10 @@ pub struct RocksTemporary {
 }
 
 impl RocksTemporary {
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> anyhow::Result<Self> {
         tracing::info!("starting rocks temporary storage");
         let db = RocksStorageState::new();
-        db.sync_data()?;
+        db.sync_data().await?;
         let current_block = db.preload_block_number()?;
         current_block.fetch_add(1, Ordering::SeqCst);
         Ok(Self {
@@ -85,7 +85,7 @@ impl TemporaryStorage for RocksTemporary {
     async fn flush(&self) -> anyhow::Result<()> {
         // read before lock
         let Some(number) = self.read_active_block_number().await? else {
-            return log_and_err!("no active block number when flushing sled data");
+            return log_and_err!("no active block number when flushing rocksdb data");
         };
 
         let mut temp_lock = self.temp.lock_write().await;
@@ -120,7 +120,7 @@ impl TemporaryStorage for RocksTemporary {
         let mut temp_lock = self.temp.lock_write().await;
         temp_lock.reset();
 
-        // reset sled
+        // reset rocksdb
         self.db.clear()?;
 
         Ok(())

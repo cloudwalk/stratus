@@ -6,6 +6,7 @@ use std::time::Duration;
 // use anyhow::anyhow;
 use anyhow::Context;
 use async_trait::async_trait;
+use itertools::Itertools;
 use nonempty::nonempty;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::PgPoolOptions;
@@ -204,19 +205,25 @@ impl PermanentStorage for PostgresPermanentStorage {
         }
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
 
+        let indexes_as_vec = indexes.iter().cloned().collect_vec();
         let slots = match point_in_time {
             StoragePointInTime::Present =>
-                sqlx::query_file_as!(Slot, "src/eth/storage/postgres_permanent/sql/select_slots.sql", indexes as _, address as _)
-                    .fetch_all(&self.pool)
-                    .await?,
+                sqlx::query_file_as!(
+                    Slot,
+                    "src/eth/storage/postgres_permanent/sql/select_slots.sql",
+                    indexes_as_vec as _,
+                    address as _
+                )
+                .fetch_all(&self.pool)
+                .await?,
             StoragePointInTime::Past(block_number) =>
                 sqlx::query_file_as!(
                     Slot,
                     "src/eth/storage/postgres_permanent/sql/select_historical_slots.sql",
-                    indexes as _,
+                    indexes_as_vec as _,
                     address as _,
                     block_number as _
                 )
@@ -611,78 +618,78 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let block_result = sqlx::query_file!(
             "src/eth/storage/postgres_permanent/sql/insert_entire_block.sql",
-            block.header.number as _,                                                                 // $1
-            block.header.hash.as_ref(),                                                               // $2
-            block.header.transactions_root.as_ref(),                                                  // $3
-            block.header.gas_limit as _,                                                              // $4
-            block.header.gas_used as _,                                                               // $5
-            block.header.bloom.as_ref(),                                                              // $6
-            i64::try_from(block.header.timestamp).context("failed to convert block timestamp")? as _, // $7
-            block.header.parent_hash.as_ref(),                                                        // $8
-            block.header.author as _,                                                                 // $9
-            block.header.extra_data as _,                                                             // $10
-            block.header.miner as _,                                                                  // $11
-            block.header.difficulty as _,                                                             // $12
-            block.header.receipts_root as _,                                                          // $13
-            block.header.uncle_hash as _,                                                             // $14
-            block.header.size as _,                                                                   // $15
-            block.header.state_root as _,                                                             // $16
-            block.header.total_difficulty as _,                                                       // $17
-            block.header.nonce as _,                                                                  // $18
-            transaction_batch.hash as _,                                                              // $19
-            transaction_batch.signer as _,                                                            // $20
-            transaction_batch.nonce as _,                                                             // $21
-            transaction_batch.from as _,                                                              // $22
-            transaction_batch.to as _,                                                                // $23
-            transaction_batch.input as _,                                                             // $24
-            transaction_batch.output as _,                                                            // $25
-            transaction_batch.gas as _,                                                               // $26
-            transaction_batch.gas_price as _,                                                         // $27
-            transaction_batch.index as _,                                                             // $28
-            transaction_batch.block_number as _,                                                      // $29
-            transaction_batch.block_hash as _,                                                        // $30
-            transaction_batch.v as _,                                                                 // $31
-            transaction_batch.r as _,                                                                 // $32
-            transaction_batch.s as _,                                                                 // $33
-            transaction_batch.value as _,                                                             // $34
-            &transaction_batch.result,                                                                // $35
-            transaction_batch.chain_id as _,                                                          // $36
-            log_batch.address as _,                                                                   // $37
-            log_batch.data as _,                                                                      // $38
-            log_batch.transaction_hash as _,                                                          // $39
-            log_batch.transaction_index as _,                                                         // $40
-            log_batch.log_index as _,                                                                 // $41
-            log_batch.block_number as _,                                                              // $42
-            log_batch.block_hash as _,                                                                // $43
-            log_batch.topic0 as _,                                                                    // $44
-            log_batch.topic1 as _,                                                                    // $45
-            log_batch.topic2 as _,                                                                    // $46
-            log_batch.topic3 as _,                                                                    // $47
-            account_batch.address as _,                                                               // $48
-            account_batch.bytecode as _,                                                              // $49
-            account_batch.new_balance as _,                                                           // $50
-            account_batch.new_nonce as _,                                                             // $51
-            account_batch.block_number as _,                                                          // $52
-            account_batch.original_balance as _,                                                      // $53
-            account_batch.original_nonce as _,                                                        // $54
-            account_batch.code_hash as _,                                                             // $55
-            account_batch.static_slot_indexes as _,                                                   // $56
-            account_batch.mapping_slot_indexes as _,                                                  // $57
-            slot_batch.index as _,                                                                    // $58
-            slot_batch.value as _,                                                                    // $59
-            slot_batch.address as _,                                                                  // $60
-            slot_batch.block_number as _,                                                             // $61
-            slot_batch.original_value as _,                                                           // $62
-            historical_nonce_batch.address as _,                                                      // $63
-            historical_nonce_batch.nonce as _,                                                        // $64
-            historical_nonce_batch.block_number as _,                                                 // $65
-            historical_balance_batch.address as _,                                                    // $66
-            historical_balance_batch.balance as _,                                                    // $67
-            historical_balance_batch.block_number as _,                                               // $68
-            historical_slot_batch.index as _,                                                         // $69
-            historical_slot_batch.value as _,                                                         // $70
-            historical_slot_batch.address as _,                                                       // $71
-            historical_slot_batch.block_number as _,                                                  // $72
+            block.header.number as _,                   // $1
+            block.header.hash.as_ref(),                 // $2
+            block.header.transactions_root.as_ref(),    // $3
+            block.header.gas_limit as _,                // $4
+            block.header.gas_used as _,                 // $5
+            block.header.bloom.as_ref(),                // $6
+            block.header.timestamp.to_i64() as _,       // $7
+            block.header.parent_hash.as_ref(),          // $8
+            block.header.author as _,                   // $9
+            block.header.extra_data as _,               // $10
+            block.header.miner as _,                    // $11
+            block.header.difficulty as _,               // $12
+            block.header.receipts_root as _,            // $13
+            block.header.uncle_hash as _,               // $14
+            block.header.size as _,                     // $15
+            block.header.state_root as _,               // $16
+            block.header.total_difficulty as _,         // $17
+            block.header.nonce as _,                    // $18
+            transaction_batch.hash as _,                // $19
+            transaction_batch.signer as _,              // $20
+            transaction_batch.nonce as _,               // $21
+            transaction_batch.from as _,                // $22
+            transaction_batch.to as _,                  // $23
+            transaction_batch.input as _,               // $24
+            transaction_batch.output as _,              // $25
+            transaction_batch.gas as _,                 // $26
+            transaction_batch.gas_price as _,           // $27
+            transaction_batch.index as _,               // $28
+            transaction_batch.block_number as _,        // $29
+            transaction_batch.block_hash as _,          // $30
+            transaction_batch.v as _,                   // $31
+            transaction_batch.r as _,                   // $32
+            transaction_batch.s as _,                   // $33
+            transaction_batch.value as _,               // $34
+            &transaction_batch.result,                  // $35
+            transaction_batch.chain_id as _,            // $36
+            log_batch.address as _,                     // $37
+            log_batch.data as _,                        // $38
+            log_batch.transaction_hash as _,            // $39
+            log_batch.transaction_index as _,           // $40
+            log_batch.log_index as _,                   // $41
+            log_batch.block_number as _,                // $42
+            log_batch.block_hash as _,                  // $43
+            log_batch.topic0 as _,                      // $44
+            log_batch.topic1 as _,                      // $45
+            log_batch.topic2 as _,                      // $46
+            log_batch.topic3 as _,                      // $47
+            account_batch.address as _,                 // $48
+            account_batch.bytecode as _,                // $49
+            account_batch.new_balance as _,             // $50
+            account_batch.new_nonce as _,               // $51
+            account_batch.block_number as _,            // $52
+            account_batch.original_balance as _,        // $53
+            account_batch.original_nonce as _,          // $54
+            account_batch.code_hash as _,               // $55
+            account_batch.static_slot_indexes as _,     // $56
+            account_batch.mapping_slot_indexes as _,    // $57
+            slot_batch.index as _,                      // $58
+            slot_batch.value as _,                      // $59
+            slot_batch.address as _,                    // $60
+            slot_batch.block_number as _,               // $61
+            slot_batch.original_value as _,             // $62
+            historical_nonce_batch.address as _,        // $63
+            historical_nonce_batch.nonce as _,          // $64
+            historical_nonce_batch.block_number as _,   // $65
+            historical_balance_batch.address as _,      // $66
+            historical_balance_batch.balance as _,      // $67
+            historical_balance_batch.block_number as _, // $68
+            historical_slot_batch.index as _,           // $69
+            historical_slot_batch.value as _,           // $70
+            historical_slot_batch.address as _,         // $71
+            historical_slot_batch.block_number as _,    // $72
         )
         .fetch_one(&mut *tx)
         .await

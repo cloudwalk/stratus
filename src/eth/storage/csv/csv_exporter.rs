@@ -107,7 +107,7 @@ const BLOCKS_HEADERS: [&str; 21] = [
 
 const LOGS_FILE: &str = "data/logs";
 
-const LOGS_HEADERS: [&str; 10] = [
+const LOGS_HEADERS: [&str; 14] = [
     "id",
     "address",
     "data",
@@ -116,6 +116,10 @@ const LOGS_HEADERS: [&str; 10] = [
     "log_idx",
     "block_number",
     "block_hash",
+    "topic0",
+    "topic1",
+    "topic2",
+    "topic3",
     "created_at",
     "updated_at",
 ];
