@@ -46,7 +46,7 @@ run-release *args="":
     cargo run --release {{ build_flags }}  -- {{ run_flags }} {{args}}
 
 # Stratus: Run main service with release options
-run-release *args="":
+run-rocks-release *args="":
     cargo run --release {{ build_flags }} --features rocks  -- {{ run_flags }} {{args}}
 
 # Stratus: Compile with debug options
