@@ -22,6 +22,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
@@ -37,16 +38,16 @@ static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
-    state: RocksStorageState,
-    block_number: AtomicU64,
+    pub state: RocksStorageState,
+    pub block_number: AtomicU64,
 }
 
 impl RocksPermanentStorage {
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> anyhow::Result<Self> {
         tracing::info!("starting rocksdb storage");
 
         let state = RocksStorageState::new();
-        state.sync_data()?;
+        state.sync_data().await?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
@@ -134,11 +135,11 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(self.state.read_slot(address, index, point_in_time))
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &[SlotIndex], point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
+    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
 
         let mut slots = HashMap::with_capacity(indexes.len());
-        for index in indexes {
+        for index in indexes.iter() {
             let slot = self.read_slot(address, index, point_in_time).await?;
             if let Some(slot) = slot {
                 slots.insert(slot.index, slot.value);
@@ -260,7 +261,7 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         });
 
-        self.state.reset_at(block_number)
+        self.state.reset_at(block_number).await
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {

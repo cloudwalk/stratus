@@ -89,18 +89,18 @@ impl Account {
 
     /// Compute slot indexes to be accessed for a give input.
     pub fn slot_indexes(&self, input_keys: EvmInputSlotKeys) -> SlotIndexes {
-        let mut slot_indexes = SlotIndexes(Vec::new());
+        let mut slot_indexes = SlotIndexes::new();
 
         // calculate static indexes
         if let Some(ref indexes) = self.static_slot_indexes {
-            slot_indexes.extend(indexes.clone().0);
+            slot_indexes.extend(indexes.0.clone());
         }
 
         // calculate mapping indexes
         if let Some(ref indexes) = self.mapping_slot_indexes {
             for (base_slot_index, input_key) in indexes.iter().cartesian_product(input_keys.into_iter()) {
                 let mapping_slot_index = base_slot_index.to_mapping_index(input_key);
-                slot_indexes.push(mapping_slot_index);
+                slot_indexes.insert(mapping_slot_index);
             }
         }
 
@@ -121,12 +121,16 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             _ => HashSet::new(),
         };
 
-        let mut static_slot_indexes = SlotIndexes(Vec::with_capacity(slot_indexes.len()));
-        let mut mapping_slot_indexes = SlotIndexes(Vec::with_capacity(slot_indexes.len()));
+        let mut static_slot_indexes = SlotIndexes::with_capacity(slot_indexes.len());
+        let mut mapping_slot_indexes = SlotIndexes::with_capacity(slot_indexes.len());
         for index in slot_indexes {
             match index {
-                SlotAccess::Static(index) => static_slot_indexes.push(index),
-                SlotAccess::Mapping(index) => mapping_slot_indexes.push(index),
+                SlotAccess::Static(index) => {
+                    static_slot_indexes.insert(index);
+                }
+                SlotAccess::Mapping(index) => {
+                    mapping_slot_indexes.insert(index);
+                }
                 _ => {}
             }
         }
