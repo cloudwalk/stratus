@@ -32,7 +32,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
 /// used for multiple purposes, such as TPS counting and backup management
-const TRANSACTION_LOOP_THRESHOLD: usize = 210_000;
+const TRANSACTION_LOOP_THRESHOLD: usize = 420_000;
 
 static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
