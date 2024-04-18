@@ -168,9 +168,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     }
 
     pub fn get_index_block_number(&self) -> u64 {
-        self.last_index()
-            .map(|(block_number, _)| block_number)
-            .unwrap_or(0)
+        self.last_index().map(|(block_number, _)| block_number).unwrap_or(0)
     }
 
     // Mimics the 'insert' functionality of a HashMap

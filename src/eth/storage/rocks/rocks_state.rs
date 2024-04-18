@@ -139,15 +139,22 @@ impl RocksStorageState {
         let transactions_block_number = self.transactions.get_index_block_number();
         if let Some((last_block_number, _)) = self.blocks_by_number.last() {
             if account_block_number != slots_block_number {
-                warn!("block numbers are not in sync {:?} {:?} {:?} {:?} {:?} {:?}", account_block_number, slots_block_number, slots_history_block_number, accounts_history_block_number, logs_block_number, transactions_block_number);
+                warn!(
+                    "block numbers are not in sync {:?} {:?} {:?} {:?} {:?} {:?}",
+                    account_block_number,
+                    slots_block_number,
+                    slots_history_block_number,
+                    accounts_history_block_number,
+                    logs_block_number,
+                    transactions_block_number
+                );
                 let min_block_number = std::cmp::min(
                     std::cmp::min(
                         std::cmp::min(account_block_number, slots_block_number),
-                        std::cmp::min(slots_history_block_number, accounts_history_block_number)
+                        std::cmp::min(slots_history_block_number, accounts_history_block_number),
                     ),
-                    std::cmp::min(logs_block_number, transactions_block_number)
+                    std::cmp::min(logs_block_number, transactions_block_number),
                 );
-
 
                 let last_secure_block_number = last_block_number.as_u64() - 5000;
                 if last_secure_block_number > min_block_number {
