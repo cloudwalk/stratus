@@ -12,7 +12,6 @@ on:
       - 'Cargo.lock'
       - 'Cargo.toml'
 
-
 jobs:
   doc_unit_tests:
     name: Documentation Unit Tests
