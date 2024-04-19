@@ -13,7 +13,14 @@ jobs:
       checks: read
       statuses: read
     steps:
+      - name: Auto-bypass check
+        id: auto-bypass
+        run: |
+          git diff ${{ github.base_ref }}.. --name-only | grep -v ${{ env.grep-expr }} && echo "bypass=false" >> "$GITHUB_OUTPUT" || echo "bypass=true" >> "$GITHUB_OUTPUT"
+        env:
+          grep-expr: '-e "deploy.yml" -e "docs-release.yml" -e "outdated.yml" -e "CODEOWNERS" -e "README.md" -e "LICENSE" -e "CONTRIBUTING.md"'
       - name: Run Merge Gatekeeper
+        if: ${{ steps.auto-bypass.outputs.bypass == 'false' }}
         uses: upsidr/merge-gatekeeper@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

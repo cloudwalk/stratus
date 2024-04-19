@@ -8,6 +8,7 @@ on:
       - '.github/workflows/deploy.yml'
       - '.github/workflows/docs-release.yml'
       - '.github/workflows/outdated.yml'
+      - '.github/workflows/merge-gatekeeper.yml'
       - '.github/CODEOWNERS'
       - 'config/**'
       - 'README.md'
