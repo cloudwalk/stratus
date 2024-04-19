@@ -18,8 +18,6 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
-#[cfg(feature = "forward_transaction")]
-use stratus::eth::TransactionRelay;
 use stratus::ext::not;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -49,11 +47,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.stratus_storage.init().await?;
-    let executor = config.executor.init(
-        Arc::clone(&stratus_storage),
-        #[cfg(feature = "forward_transaction")]
-        Arc::new(TransactionRelay::new(&config.executor.forward_to)),
-    );
+    let executor = config.executor.init(Arc::clone(&stratus_storage), None);
 
     // init block range
     let block_start = match config.block_start {

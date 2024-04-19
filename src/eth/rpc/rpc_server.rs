@@ -103,7 +103,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     #[cfg(feature = "dev")]
     {
         module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
-        #[cfg(not(feature = "forward_transaction"))]
         module.register_async_method("evm_mine", evm_mine)?;
         module.register_async_method("debug_setHead", debug_set_head)?;
     }
@@ -160,7 +159,7 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
     Ok(serde_json::to_value(number).unwrap())
 }
 
-#[cfg(all(feature = "dev", not(feature = "forward_transaction")))]
+#[cfg(feature = "dev")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     ctx.executor.mine_empty_block().await?;
     Ok(serde_json::to_value(true).unwrap())

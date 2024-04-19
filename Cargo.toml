@@ -59,7 +59,7 @@ keccak-hasher = "=0.15.3" # this version must be compatible with triehash
 revm = "=7.1.0"
 rlp = "=0.5.2"
 triehash = "=0.8.4"
-ethers = { version = "=2.0.13", optional = true }
+ethers = "=2.0.13"
 
 
 # network
@@ -143,8 +143,6 @@ metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
 
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
-
-forward_transaction = ["ethers"]
 
 # ------------------------------------------------------------------------------
 # Lints

@@ -41,7 +41,6 @@ use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
-#[cfg(feature = "forward_transaction")]
 use crate::eth::TransactionRelay;
 #[cfg(feature = "dev")]
 use crate::ext::not;
@@ -184,14 +183,13 @@ pub struct ExecutorConfig {
     pub num_evms: usize,
 
     /// Rpc address to forward the transactions to.
-    #[cfg(feature = "forward_transaction")]
     #[arg(long = "forward-to", env = "FORWARD_TO")]
-    pub forward_to: String,
+    pub forward_to: Option<String>,
 }
 
 impl ExecutorConfig {
     /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub fn init(&self, storage: Arc<StratusStorage>, #[cfg(feature = "forward_transaction")] relay: Arc<TransactionRelay>) -> EthExecutor {
+    pub fn init(&self, storage: Arc<StratusStorage>, relay: Option<Arc<TransactionRelay>>) -> EthExecutor {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(evms = %num_evms, "starting executor and evms");
 
@@ -232,12 +230,7 @@ impl ExecutorConfig {
         }
 
         // creates an executor that can communicate with background evms
-        EthExecutor::new(
-            evm_tx,
-            Arc::clone(&storage),
-            #[cfg(feature = "forward_transaction")]
-            relay,
-        )
+        EthExecutor::new(evm_tx, Arc::clone(&storage), relay)
     }
 }
 

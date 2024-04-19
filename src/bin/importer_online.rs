@@ -9,7 +9,6 @@ use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
-#[cfg(feature = "forward_transaction")]
 use stratus::eth::TransactionRelay;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -30,30 +29,17 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
 
-    #[cfg(feature = "forward_transaction")]
-    let forward_to = config.executor.forward_to.clone();
-
-    run_importer_online(
-        config,
-        storage,
-        #[cfg(feature = "forward_transaction")]
-        Arc::new(TransactionRelay::new(&forward_to)),
-    )
-    .await
+    run_importer_online(config, storage, None).await
 }
 
 pub async fn run_importer_online(
     config: ImporterOnlineConfig,
     storage: Arc<StratusStorage>,
-    #[cfg(feature = "forward_transaction")] transaction_relay: Arc<TransactionRelay>,
+    transaction_relay: Option<Arc<TransactionRelay>>,
 ) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let executor = config.executor.init(
-        Arc::clone(&storage),
-        #[cfg(feature = "forward_transaction")]
-        transaction_relay,
-    );
+    let executor = config.executor.init(Arc::clone(&storage), transaction_relay);
 
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;

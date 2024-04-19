@@ -10,7 +10,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
-#[cfg(not(feature = "forward_transaction"))]
 use tokio::sync::Mutex;
 
 use crate::eth::evm::EvmExecutionResult;
@@ -25,12 +24,9 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-#[cfg(not(feature = "forward_transaction"))]
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
-#[cfg(not(feature = "forward_transaction"))]
 use crate::eth::BlockMiner;
-#[cfg(feature = "forward_transaction")]
 use crate::eth::TransactionRelay;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -47,13 +43,11 @@ pub struct EthExecutor {
     // Channel to send transactions to background EVMs.
     evm_tx: crossbeam_channel::Sender<EvmTask>,
 
-    #[cfg(not(feature = "forward_transaction"))]
     // Mutex-wrapped miner for creating new blockchain blocks.
     miner: Mutex<BlockMiner>,
 
-    #[cfg(feature = "forward_transaction")]
     // Provider for sending rpc calls to substrate
-    relay: Arc<TransactionRelay>,
+    relay: Option<Arc<TransactionRelay>>,
 
     // Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -65,19 +59,13 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(
-        evm_tx: crossbeam_channel::Sender<EvmTask>,
-        storage: Arc<StratusStorage>,
-        #[cfg(feature = "forward_transaction")] relay: Arc<TransactionRelay>,
-    ) -> Self {
+    pub fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>, relay: Option<Arc<TransactionRelay>>) -> Self {
         Self {
             evm_tx,
-            #[cfg(not(feature = "forward_transaction"))]
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
-            #[cfg(feature = "forward_transaction")]
             relay,
         }
     }
@@ -90,16 +78,14 @@ impl EthExecutor {
     pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
 
-        #[cfg(not(feature = "forward_transaction"))]
-        let block = self.import_external_to_temp(block, receipts).await?;
-
-        #[cfg(feature = "forward_transaction")]
-        let block = {
+        let block = if let Some(relay) = &self.relay {
             let mut block = self.import_external_to_temp(block, receipts).await?;
-            for (tx, ex) in self.relay.failed_transactions.lock().await.drain(..) {
+            for (tx, ex) in relay.failed_transactions.lock().await.drain(..) {
                 block.push_execution(tx, ex);
             }
             block
+        } else {
+            self.import_external_to_temp(block, receipts).await?
         };
 
         // commit block
@@ -209,8 +195,13 @@ impl EthExecutor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        #[cfg(not(feature = "forward_transaction"))]
-        let execution = {
+        let execution = if let Some(relay) = &self.relay {
+            // execute and check conflicts before mining block
+            let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+            let execution = self.execute_in_evm(evm_input).await?.0;
+            relay.forward_transaction(execution.clone(), transaction).await?;
+            execution
+        } else {
             // executes transaction until no more conflicts
             // TODO: must have a stop condition like timeout or max number of retries
             let (execution, block) = loop {
@@ -248,15 +239,6 @@ impl EthExecutor {
             execution
         };
 
-        #[cfg(feature = "forward_transaction")]
-        let execution = {
-            // execute and check conflicts before mining block
-            let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-            let execution = self.execute_in_evm(evm_input).await?.0;
-            self.relay.forward_transaction(execution.clone(), transaction).await?;
-            execution
-        };
-
         #[cfg(feature = "metrics")]
         metrics::inc_executor_transact(start.elapsed(), true);
 
@@ -285,7 +267,7 @@ impl EthExecutor {
         result.map(|x| x.0)
     }
 
-    #[cfg(all(feature = "dev", not(feature = "forward_transaction")))]
+    #[cfg(feature = "dev")]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
         let block = miner_lock.mine_with_no_transactions().await?;
