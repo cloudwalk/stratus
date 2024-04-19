@@ -10,6 +10,10 @@ on:
         required: false
         type: string
         default: ''
+      cache_key:
+        required: false
+        type: string
+        default: 'stable-release'
 
 jobs:
   setup_and_test:
@@ -29,8 +33,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-${{ inputs.cache_key }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
+            ${{ runner.os }}-cargo-${{ inputs.cache_key }}-
             ${{ runner.os }}-cargo-stable-release-
 
       - name: Set up Rust
