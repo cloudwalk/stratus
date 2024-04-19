@@ -11,7 +11,6 @@ use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::TransactionInput;
 
-#[cfg(feature = "forward_transaction")]
 pub struct SubstrateRelay {
     // Provider for sending rpc calls to substrate
     provider: Provider<Http>,
@@ -20,7 +19,6 @@ pub struct SubstrateRelay {
     pub failed_transactions: Mutex<Vec<(TransactionInput, Execution)>>,
 }
 
-#[cfg(feature = "forward_transaction")]
 impl SubstrateRelay {
     pub fn new(substrate_rpc_url: &str) -> Self {
         Self {

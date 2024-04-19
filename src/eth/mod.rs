@@ -26,6 +26,7 @@ mod executor;
 pub mod primitives;
 pub mod rpc;
 pub mod storage;
+#[cfg(feature = "forward_transaction")]
 pub mod substrate_relay;
 
 pub use block_miner::BlockMiner;

@@ -10,8 +10,11 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
+#[cfg(not(feature = "forward_transaction"))]
+use tokio::sync::Mutex;
 
-use super::SubstrateRelay;
+#[cfg(feature = "forward_transaction")]
+use crate::eth::SubstrateRelay;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
