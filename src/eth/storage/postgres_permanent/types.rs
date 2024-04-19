@@ -60,7 +60,7 @@ impl PostgresTransaction {
             // TODO: do this correctly
             changes: vec![],
             execution_costs_applied: true,
-            override_contract_address: self.contract_address,
+            deployed_contract_address: self.contract_address,
         };
         let input = TransactionInput {
             chain_id: self.chain_id,
