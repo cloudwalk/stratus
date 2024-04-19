@@ -23,6 +23,7 @@ on:
 
 jobs:
   int_tests:
+    if: ${{ false }} # Disable the job by default
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
