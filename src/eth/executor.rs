@@ -14,7 +14,7 @@ use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
 #[cfg(feature = "forward_transaction")]
-use crate::eth::SubstrateRelay;
+use crate::eth::TransactionRelay;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -53,7 +53,7 @@ pub struct EthExecutor {
 
     #[cfg(feature = "forward_transaction")]
     // Provider for sending rpc calls to substrate
-    relay: Arc<SubstrateRelay>,
+    relay: Arc<TransactionRelay>,
 
     // Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -68,7 +68,7 @@ impl EthExecutor {
     pub fn new(
         evm_tx: crossbeam_channel::Sender<EvmTask>,
         storage: Arc<StratusStorage>,
-        #[cfg(feature = "forward_transaction")] relay: Arc<SubstrateRelay>,
+        #[cfg(feature = "forward_transaction")] relay: Arc<TransactionRelay>,
     ) -> Self {
         Self {
             evm_tx,

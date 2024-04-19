@@ -10,7 +10,7 @@ use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
 #[cfg(feature = "forward_transaction")]
-use stratus::eth::SubstrateRelay;
+use stratus::eth::TransactionRelay;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
@@ -37,7 +37,7 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
         config,
         storage,
         #[cfg(feature = "forward_transaction")]
-        Arc::new(SubstrateRelay::new(&forward_to)),
+        Arc::new(TransactionRelay::new(&forward_to)),
     )
     .await
 }
@@ -45,7 +45,7 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 pub async fn run_importer_online(
     config: ImporterOnlineConfig,
     storage: Arc<StratusStorage>,
-    #[cfg(feature = "forward_transaction")] transaction_relay: Arc<SubstrateRelay>,
+    #[cfg(feature = "forward_transaction")] transaction_relay: Arc<TransactionRelay>,
 ) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;

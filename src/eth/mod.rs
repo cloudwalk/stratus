@@ -27,10 +27,10 @@ pub mod primitives;
 pub mod rpc;
 pub mod storage;
 #[cfg(feature = "forward_transaction")]
-pub mod substrate_relay;
+pub mod transaction_relay;
 
 pub use block_miner::BlockMiner;
 pub use executor::EthExecutor;
 pub use executor::EvmTask;
 #[cfg(feature = "forward_transaction")]
-pub use substrate_relay::SubstrateRelay;
+pub use transaction_relay::TransactionRelay;

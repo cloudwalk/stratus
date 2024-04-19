@@ -11,7 +11,7 @@ use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::TransactionInput;
 
-pub struct SubstrateRelay {
+pub struct TransactionRelay {
     // Provider for sending rpc calls to substrate
     provider: Provider<Http>,
 
@@ -19,8 +19,8 @@ pub struct SubstrateRelay {
     pub failed_transactions: Mutex<Vec<(TransactionInput, Execution)>>,
 }
 
-impl SubstrateRelay {
-    /// Creates a new relay for forwarding transactions to Substrate.
+impl TransactionRelay {
+    /// Creates a new relay for forwarding transactions to another blockchain.
     pub fn new(substrate_rpc_url: &str) -> Self {
         Self {
             failed_transactions: Mutex::new(vec![]),
@@ -28,7 +28,7 @@ impl SubstrateRelay {
         }
     }
 
-    /// Forwards the transaction to substrate if the execution was successful on our side.
+    /// Forwards the transaction to the external blockchain if the execution was successful on our side.
     pub async fn forward_transaction(&self, execution: Execution, transaction: TransactionInput) -> anyhow::Result<()> {
         if execution.result == ExecutionResult::Success {
             let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction).rlp()).await?;

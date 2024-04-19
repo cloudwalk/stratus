@@ -19,7 +19,7 @@ use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::EthExecutor;
 #[cfg(feature = "forward_transaction")]
-use stratus::eth::SubstrateRelay;
+use stratus::eth::TransactionRelay;
 use stratus::ext::not;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -52,7 +52,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(
         Arc::clone(&stratus_storage),
         #[cfg(feature = "forward_transaction")]
-        Arc::new(SubstrateRelay::new(&config.forward_to)),
+        Arc::new(TransactionRelay::new(&config.forward_to)),
     );
 
     // init block range

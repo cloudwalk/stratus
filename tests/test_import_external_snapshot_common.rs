@@ -17,7 +17,7 @@ use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StratusStorage;
 #[cfg(feature = "forward_transaction")]
-use stratus::eth::SubstrateRelay;
+use stratus::eth::TransactionRelay;
 use stratus::infra::docker::Docker;
 use stratus::init_global_services;
 #[cfg(feature = "metrics")]
@@ -146,7 +146,7 @@ pub async fn execute_test(
     let executor = config.executor.init(
         Arc::new(storage),
         #[cfg(feature = "forward_transaction")]
-        Arc::new(SubstrateRelay::new(&config.forward_to)),
+        Arc::new(TransactionRelay::new(&config.forward_to)),
     );
     executor.import_external_to_perm(block, &receipts).await.unwrap();
 

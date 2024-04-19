@@ -6,7 +6,7 @@ use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
 #[cfg(feature = "forward_transaction")]
-use stratus::eth::SubstrateRelay;
+use stratus::eth::TransactionRelay;
 use stratus::init_global_services;
 use tokio::try_join;
 
@@ -21,7 +21,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let importer_config = config.as_importer();
 
     #[cfg(feature = "forward_transaction")]
-    let transaction_relay = Arc::new(SubstrateRelay::new(&config.forward_to));
+    let transaction_relay = Arc::new(TransactionRelay::new(&config.forward_to));
 
     let storage = stratus_config.stratus_storage.init().await?;
 

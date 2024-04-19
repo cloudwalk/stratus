@@ -42,7 +42,7 @@ use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
 #[cfg(feature = "forward_transaction")]
-use crate::eth::SubstrateRelay;
+use crate::eth::TransactionRelay;
 #[cfg(feature = "dev")]
 use crate::ext::not;
 
@@ -191,7 +191,7 @@ pub struct ExecutorConfig {
 
 impl ExecutorConfig {
     /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub fn init(&self, storage: Arc<StratusStorage>, #[cfg(feature = "forward_transaction")] relay: Arc<SubstrateRelay>) -> EthExecutor {
+    pub fn init(&self, storage: Arc<StratusStorage>, #[cfg(feature = "forward_transaction")] relay: Arc<TransactionRelay>) -> EthExecutor {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(evms = %num_evms, "starting executor and evms");
 
