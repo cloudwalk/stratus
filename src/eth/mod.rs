@@ -30,3 +30,5 @@ pub mod storage;
 pub use block_miner::BlockMiner;
 pub use executor::EthExecutor;
 pub use executor::EvmTask;
+#[cfg(feature = "forward_transaction")]
+pub use executor::SubstrateRelay;

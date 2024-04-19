@@ -4,22 +4,18 @@ use futures::StreamExt;
 use futures::TryStreamExt;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
-#[cfg(feature = "forward_transaction")]
-use stratus::eth::primitives::Execution;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
-#[cfg(feature = "forward_transaction")]
-use stratus::eth::primitives::TransactionInput;
 use stratus::eth::storage::StratusStorage;
+#[cfg(feature = "forward_transaction")]
+use stratus::eth::SubstrateRelay;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
 use stratus::init_global_services;
 use stratus::log_and_err;
-#[cfg(feature = "forward_transaction")]
-use tokio::sync::mpsc;
 
 /// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
@@ -33,11 +29,15 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
+
+    #[cfg(feature = "forward_transaction")]
+    let forward_to = config.forward_to.clone();
+
     run_importer_online(
         config,
         storage,
         #[cfg(feature = "forward_transaction")]
-        None,
+        Arc::new(SubstrateRelay::new(&forward_to)),
     )
     .await
 }
@@ -45,16 +45,15 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 pub async fn run_importer_online(
     config: ImporterOnlineConfig,
     storage: Arc<StratusStorage>,
-    #[cfg(feature = "forward_transaction")] failed_tx_receiver: Option<mpsc::Receiver<(TransactionInput, Execution)>>,
+    #[cfg(feature = "forward_transaction")] transaction_relay: Arc<SubstrateRelay>,
 ) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let mut executor = config.executor.init(Arc::clone(&storage));
-
-    #[cfg(feature = "forward_transaction")]
-    if let Some(recv) = failed_tx_receiver {
-        executor.set_failed_tx_receiver(recv);
-    }
+    let mut executor = config.executor.init(
+        Arc::clone(&storage),
+        #[cfg(feature = "forward_transaction")]
+        transaction_relay,
+    );
 
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;

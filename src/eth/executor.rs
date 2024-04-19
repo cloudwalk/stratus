@@ -9,22 +9,19 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 #[cfg(feature = "forward_transaction")]
-use ethers::providers::Http;
-#[cfg(feature = "forward_transaction")]
-use ethers::providers::Middleware;
-#[cfg(feature = "forward_transaction")]
-use ethers::providers::Provider;
-#[cfg(feature = "forward_transaction")]
-use ethers_core::types::Transaction;
-#[cfg(feature = "forward_transaction")]
-use tokio::fs::File;
-#[cfg(feature = "forward_transaction")]
-use tokio::io::AsyncWriteExt;
+#[rustfmt::skip]
+use {
+    crate::eth::primitives::ExecutionResult,
+    ethers::providers::Http,
+    ethers::providers::Middleware,
+    ethers::providers::Provider,
+    ethers_core::types::Transaction,
+    tokio::fs::File,
+    tokio::io::AsyncWriteExt,
+};
+
 use tokio::sync::broadcast;
-#[cfg(feature = "forward_transaction")]
-use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-#[cfg(not(feature = "forward_transaction"))]
 use tokio::sync::Mutex;
 
 use crate::eth::evm::EvmExecutionResult;
@@ -33,8 +30,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionMetrics;
-#[cfg(feature = "forward_transaction")]
-use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransactionExecution;
@@ -67,15 +62,7 @@ pub struct EthExecutor {
 
     #[cfg(feature = "forward_transaction")]
     // Provider for sending rpc calls to substrate
-    provider: Provider<Http>,
-
-    #[cfg(feature = "forward_transaction")]
-    // Sender for transactions that failed on our side, and should be included in the next block
-    failed_tx_sender: Option<mpsc::Sender<(TransactionInput, Execution)>>,
-
-    #[cfg(feature = "forward_transaction")]
-    // Receiver for transactions that failed on our side, and should be included in the next block
-    failed_tx_receiver: Option<mpsc::Receiver<(TransactionInput, Execution)>>,
+    relay: Arc<SubstrateRelay>,
 
     // Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -87,33 +74,21 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>) -> Self {
+    pub fn new(
+        evm_tx: crossbeam_channel::Sender<EvmTask>,
+        storage: Arc<StratusStorage>,
+        #[cfg(feature = "forward_transaction")] relay: Arc<SubstrateRelay>,
+    ) -> Self {
         Self {
             evm_tx,
             #[cfg(not(feature = "forward_transaction"))]
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
-            #[cfg(feature = "forward_transaction")]
-            provider: Provider::<Http>::try_from("http://spec.testnet.cloudwalk.network:9934").expect("could not instantiate HTTP Provider"), // TODO: change to a config parameter
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             #[cfg(feature = "forward_transaction")]
-            failed_tx_sender: None,
-            #[cfg(feature = "forward_transaction")]
-            failed_tx_receiver: None,
+            relay,
         }
-    }
-
-    /// Sets the failed transactions sender.
-    #[cfg(feature = "forward_transaction")]
-    pub fn set_failed_tx_sender(&mut self, failed_transactions: mpsc::Sender<(TransactionInput, Execution)>) {
-        self.failed_tx_sender = Some(failed_transactions);
-    }
-
-    /// Sets the failed transactions receiver.
-    #[cfg(feature = "forward_transaction")]
-    pub fn set_failed_tx_receiver(&mut self, failed_transactions: mpsc::Receiver<(TransactionInput, Execution)>) {
-        self.failed_tx_receiver = Some(failed_transactions);
     }
 
     // -------------------------------------------------------------------------
@@ -128,14 +103,13 @@ impl EthExecutor {
         let block = self.import_external_to_temp(block, receipts).await?;
 
         #[cfg(feature = "forward_transaction")]
-        let mut block = self.import_external_to_temp(block, receipts).await?;
-
-        #[cfg(feature = "forward_transaction")]
-        if let Some(failed_tx_receiver) = &mut self.failed_tx_receiver {
-            while let Ok((transaction, execution)) = failed_tx_receiver.try_recv() {
-                block.push_execution(transaction, execution);
+        let block = {
+            let mut block = self.import_external_to_temp(block, receipts).await?;
+            for (tx, ex) in self.relay.failed_transactions.lock().await.drain(..) {
+                block.push_execution(tx, ex);
             }
-        }
+            block
+        };
 
         // commit block
         self.storage.set_mined_block_number(*block.number()).await?;
@@ -222,7 +196,6 @@ impl EthExecutor {
         Block::from_external(block, executions)
     }
 
-    #[cfg(not(feature = "forward_transaction"))]
     /// Executes a transaction persisting state changes.
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         #[cfg(feature = "metrics")]
@@ -245,94 +218,53 @@ impl EthExecutor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        // executes transaction until no more conflicts
-        // TODO: must have a stop condition like timeout or max number of retries
-        let (execution, block) = loop {
+        #[cfg(not(feature = "forward_transaction"))]
+        let execution = {
+            // executes transaction until no more conflicts
+            // TODO: must have a stop condition like timeout or max number of retries
+            let (execution, block) = loop {
+                // execute and check conflicts before mining block
+                let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+                let execution = self.execute_in_evm(evm_input).await?.0;
+
+                // mine and commit block
+                let mut miner_lock = self.miner.lock().await;
+                let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+                match self.storage.commit_to_perm(block.clone()).await {
+                    Ok(()) => {}
+                    Err(StorageError::Conflict(conflicts)) => {
+                        tracing::warn!(?conflicts, "storage conflict detected when saving block");
+                        continue;
+                    }
+                    Err(e) => {
+                        #[cfg(feature = "metrics")]
+                        metrics::inc_executor_transact(start.elapsed(), false);
+                        return Err(e.into());
+                    }
+                };
+                break (execution, block);
+            };
+
+            // notify new blocks
+            let _ = self.block_notifier.send(block.clone());
+
+            // notify transaction logs
+            for trx in block.transactions {
+                for log in trx.logs {
+                    let _ = self.log_notifier.send(log);
+                }
+            }
+            execution
+        };
+
+        #[cfg(feature = "forward_transaction")]
+        let execution = {
             // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?.0;
-
-            // mine and commit block
-            let mut miner_lock = self.miner.lock().await;
-            let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.storage.commit_to_perm(block.clone()).await {
-                Ok(()) => {}
-                Err(StorageError::Conflict(conflicts)) => {
-                    tracing::warn!(?conflicts, "storage conflict detected when saving block");
-                    continue;
-                }
-                Err(e) => {
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_executor_transact(start.elapsed(), false);
-                    return Err(e.into());
-                }
-            };
-            break (execution, block);
+            self.relay.forward_transaction(execution.clone(), transaction).await?;
+            execution
         };
-
-        // notify new blocks
-        let _ = self.block_notifier.send(block.clone());
-
-        // notify transaction logs
-        for trx in block.transactions {
-            for log in trx.logs {
-                let _ = self.log_notifier.send(log);
-            }
-        }
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_executor_transact(start.elapsed(), true);
-
-        Ok(execution)
-    }
-
-    #[cfg(feature = "forward_transaction")]
-    /// Executes a transaction and sends it to substrate if successful, if it fails sends the tx
-    /// to the next block
-    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        tracing::info!(
-            hash = %transaction.hash,
-            nonce = %transaction.nonce,
-            from = ?transaction.from,
-            signer = %transaction.signer,
-            to = ?transaction.to,
-            data_len = %transaction.input.len(),
-            data = %transaction.input,
-            "executing transaction"
-        );
-
-        // validate
-        if transaction.signer.is_zero() {
-            tracing::warn!("rejecting transaction from zero address");
-            return Err(anyhow!("transaction sent from zero address is not allowed."));
-        }
-
-        let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-        let execution = self.execute_in_evm(evm_input).await?.0;
-
-        if execution.result == ExecutionResult::Success {
-            let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction).rlp()).await?;
-
-            let Some(receipt) = pending_tx.await? else {
-                return Err(anyhow!("transaction did not produce a receipt"));
-            };
-
-            let status = match receipt.status {
-                Some(status) => status.as_u32(),
-                None => return Err(anyhow!("receipt did not report the transaction status")),
-            };
-
-            if status == 0 {
-                let mut file = File::create(format!("data/mismatched_transactions/{}", receipt.transaction_hash.clone())).await?;
-                file.write_all(serde_json::to_string(&receipt)?.as_bytes()).await?;
-                return Err(anyhow!("transaction succeeded in stratus but failed in substrate"));
-            }
-        } else if let Some(failed_transactions) = &self.failed_tx_sender {
-            failed_transactions.send((transaction, execution.clone())).await?;
-        }
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_transact(start.elapsed(), true);
@@ -398,5 +330,48 @@ impl EthExecutor {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
         self.evm_tx.send((evm_input, execution_tx))?;
         execution_rx.await?
+    }
+}
+#[cfg(feature = "forward_transaction")]
+pub struct SubstrateRelay {
+    // Provider for sending rpc calls to substrate
+    provider: Provider<Http>,
+
+    // Sender for transactions that failed on our side, and should be included in the next block
+    pub failed_transactions: Mutex<Vec<(TransactionInput, Execution)>>,
+}
+
+#[cfg(feature = "forward_transaction")]
+impl SubstrateRelay {
+    pub fn new(substrate_rpc_url: &str) -> Self {
+        Self {
+            failed_transactions: Mutex::new(vec![]),
+            provider: Provider::<Http>::try_from(substrate_rpc_url).expect("could not instantiate HTTP Provider"),
+        }
+    }
+
+    pub async fn forward_transaction(&self, execution: Execution, transaction: TransactionInput) -> anyhow::Result<()> {
+        if execution.result == ExecutionResult::Success {
+            let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction).rlp()).await?;
+
+            let Some(receipt) = pending_tx.await? else {
+                return Err(anyhow!("transaction did not produce a receipt"));
+            };
+
+            let status = match receipt.status {
+                Some(status) => status.as_u32(),
+                None => return Err(anyhow!("receipt did not report the transaction status")),
+            };
+
+            if status == 0 {
+                let mut file = File::create(format!("data/mismatched_transactions/{}", receipt.transaction_hash.clone())).await?;
+                file.write_all(serde_json::to_string(&receipt)?.as_bytes()).await?;
+                return Err(anyhow!("transaction succeeded in stratus but failed in substrate"));
+            }
+        } else {
+            self.failed_transactions.lock().await.push((transaction, execution));
+        }
+
+        Ok(())
     }
 }

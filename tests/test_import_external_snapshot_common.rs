@@ -16,6 +16,8 @@ use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StratusStorage;
+#[cfg(feature = "forward_transaction")]
+use stratus::eth::SubstrateRelay;
 use stratus::infra::docker::Docker;
 use stratus::init_global_services;
 #[cfg(feature = "metrics")]
@@ -141,7 +143,11 @@ pub async fn execute_test(
 
     // init executor and execute
     let storage = StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage));
-    let mut executor = config.executor.init(Arc::new(storage));
+    let mut executor = config.executor.init(
+        Arc::new(storage),
+        #[cfg(feature = "forward_transaction")]
+        Arc::new(SubstrateRelay::new(&config.forward_to)),
+    );
     executor.import_external_to_perm(block, &receipts).await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)

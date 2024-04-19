@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use stratus::config::StratusConfig;
 use stratus::eth::rpc::serve_rpc;
+#[cfg(feature = "forward_transaction")]
+use stratus::eth::SubstrateRelay;
 use stratus::init_global_services;
 
 fn main() -> anyhow::Result<()> {
@@ -12,7 +14,12 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
-    let executor = config.executor.init(Arc::clone(&storage));
+
+    let executor = config.executor.init(
+        Arc::clone(&storage),
+        #[cfg(feature = "forward_transaction")]
+        Arc::new(SubstrateRelay::new(&config.forward_to)),
+    );
     serve_rpc(executor, storage, config).await?;
     Ok(())
 }

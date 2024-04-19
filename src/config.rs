@@ -41,6 +41,8 @@ use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
+#[cfg(feature = "forward_transaction")]
+use crate::eth::SubstrateRelay;
 #[cfg(feature = "dev")]
 use crate::ext::not;
 
@@ -79,6 +81,11 @@ pub struct CommonConfig {
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,
+
+    /// Rpc address to forward the transactions to.
+    #[cfg(feature = "forward_transaction")]
+    #[arg(long = "forward-to", env = "FORWARD_TO")]
+    pub forward_to: String,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -184,7 +191,7 @@ pub struct ExecutorConfig {
 
 impl ExecutorConfig {
     /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub fn init(&self, storage: Arc<StratusStorage>) -> EthExecutor {
+    pub fn init(&self, storage: Arc<StratusStorage>, #[cfg(feature = "forward_transaction")] relay: Arc<SubstrateRelay>) -> EthExecutor {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(evms = %num_evms, "starting executor and evms");
 
@@ -225,7 +232,12 @@ impl ExecutorConfig {
         }
 
         // creates an executor that can communicate with background evms
-        EthExecutor::new(evm_tx, Arc::clone(&storage))
+        EthExecutor::new(
+            evm_tx,
+            Arc::clone(&storage),
+            #[cfg(feature = "forward_transaction")]
+            relay,
+        )
     }
 }
 
