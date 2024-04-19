@@ -24,11 +24,11 @@ kubernetes:
     # EVM api Rocksdb storage
     # --------------------------------------------------------------------------
     - name: stratus-api
-      dockerfile: Dockerfile.run_with_importer
+      dockerfile: ./docker/Dockerfile.run_with_importer
       secretsManager:
         enabled: true
         provider: gcpsm
-      imageRepoName: stratus
+      imageRepoName: stratus-rocks
       kind: statefulset
       strategy:
         type: RollingUpdate
@@ -38,8 +38,8 @@ kubernetes:
       replicas: 2
       resources:
         requests:
-          cpu: 30000m
-          memory: 60Gi
+          cpu: 16000m
+          memory: 32Gi
       envs:
         - name: ENV
           value: "production"
@@ -74,10 +74,11 @@ kubernetes:
     # EVM api postgres storage
     # --------------------------------------------------------------------------
     - name: stratus-api-postgres
+      dockerfile: ./docker/Dockerfile.run_stratus
       secretsManager:
         enabled: true
         provider: gcpsm
-      imageRepoName: stratus
+      imageRepoName: stratus-postgres
       kind: deployment
       strategy:
         type: RollingUpdate
@@ -87,8 +88,8 @@ kubernetes:
       replicas: 1
       resources:
         requests:
-          cpu: 30000m
-          memory: 60Gi
+          cpu: 8000m
+          memory: 16Gi
       envs:
         - name: ENV
           value: "production"
