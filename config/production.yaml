@@ -38,8 +38,8 @@ kubernetes:
       replicas: 2
       resources:
         requests:
-          cpu: 30000m
-          memory: 60Gi
+          cpu: 16000m
+          memory: 32Gi
       envs:
         - name: ENV
           value: "production"
@@ -88,8 +88,8 @@ kubernetes:
       replicas: 1
       resources:
         requests:
-          cpu: 30000m
-          memory: 60Gi
+          cpu: 8000m
+          memory: 16Gi
       envs:
         - name: ENV
           value: "production"
