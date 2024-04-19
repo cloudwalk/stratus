@@ -31,7 +31,7 @@ impl TransactionRelay {
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
     pub async fn forward_transaction(&self, execution: Execution, transaction: TransactionInput) -> anyhow::Result<()> {
         if execution.result == ExecutionResult::Success {
-            let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction).rlp()).await?;
+            let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction.clone()).rlp()).await?;
 
             let Some(receipt) = pending_tx.await? else {
                 return Err(anyhow!("transaction did not produce a receipt"));
@@ -44,7 +44,14 @@ impl TransactionRelay {
 
             if status == 0 {
                 let mut file = File::create(format!("data/mismatched_transactions/{}", receipt.transaction_hash.clone())).await?;
-                file.write_all(serde_json::to_string(&receipt)?.as_bytes()).await?;
+                let json = serde_json::json!(
+                    {
+                        "transaction_input": transaction,
+                        "stratus_execution": execution,
+                        "substrate_receipt": receipt
+                    }
+                );
+                file.write_all(json.to_string().as_bytes()).await?;
                 return Err(anyhow!("transaction succeeded in stratus but failed in substrate"));
             }
         } else {
