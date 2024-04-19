@@ -155,7 +155,7 @@ test-unit name="":
 
 # Test: Execute Rust integration tests
 test-int name="'*'":
-    cargo test --test {{name}} --features metrics -- --nocapture
+    cargo test --test {{name}} -- --nocapture
 
 # ------------------------------------------------------------------------------
 # E2E tasks
