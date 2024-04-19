@@ -142,7 +142,7 @@ async fn download(
                         Some(receipt) => {
                             receipts_json.push((hash, receipt));
                             break;
-                        },
+                        }
                         None => {
                             tracing::error!(%hash, payload = ?receipt, "receipt is null");
                             return Err(anyhow!(format!("transaction receipt is null for hash {}", hash)));

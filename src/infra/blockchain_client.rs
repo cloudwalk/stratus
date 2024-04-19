@@ -8,7 +8,9 @@ use ethers_core::types::Transaction;
 use futures::Future;
 use futures::Stream;
 use futures_timer::Delay;
-use futures_util::{stream, FutureExt, StreamExt};
+use futures_util::stream;
+use futures_util::FutureExt;
+use futures_util::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
@@ -272,9 +274,9 @@ impl<'a> Future for PendingTransaction<'a> {
             }
             PendingTxState::GettingReceipt(fut) => {
                 if let Ok(receipt) = futures_util::ready!(fut.as_mut().poll(ctx)) {
-                    *this.state = PendingTxState::CheckingReceipt(receipt)
+                    *this.state = PendingTxState::CheckingReceipt(receipt);
                 } else {
-                    *this.state = PendingTxState::PausedGettingReceipt
+                    *this.state = PendingTxState::PausedGettingReceipt;
                 }
                 ctx.waker().wake_by_ref();
             }
