@@ -64,5 +64,5 @@ jobs:
         run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
-          RUST_LOG: debug
+          RUST_LOG: off
           RELEASE: 0

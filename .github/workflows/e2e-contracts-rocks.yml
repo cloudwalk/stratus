@@ -73,5 +73,5 @@ jobs:
         run: just contracts-test-stratus-rocks --${{ matrix.contract }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
-          RUST_LOG: debug 
+          RUST_LOG: off 
           RELEASE: 1
