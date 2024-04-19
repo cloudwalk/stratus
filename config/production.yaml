@@ -21,7 +21,7 @@ kubernetes:
         asmRevision: asm-managed-stable
   apps:
     # --------------------------------------------------------------------------
-    # EVM api Rocksdb storage
+    # EVM api Rocksdb storage \o/
     # --------------------------------------------------------------------------
     - name: stratus-api
       dockerfile: Dockerfile.run_with_importer
