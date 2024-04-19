@@ -13,8 +13,6 @@ use tokio::sync::oneshot;
 #[cfg(not(feature = "forward_transaction"))]
 use tokio::sync::Mutex;
 
-#[cfg(feature = "forward_transaction")]
-use crate::eth::TransactionRelay;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -32,6 +30,8 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 #[cfg(not(feature = "forward_transaction"))]
 use crate::eth::BlockMiner;
+#[cfg(feature = "forward_transaction")]
+use crate::eth::TransactionRelay;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
