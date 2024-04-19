@@ -196,7 +196,6 @@ impl EthExecutor {
         }
 
         let execution = if let Some(relay) = &self.relay {
-            // execute and check conflicts before mining block
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?.0;
             relay.forward_transaction(execution.clone(), transaction).await?;

@@ -1,0 +1,120 @@
+{
+    "stratus_execution": {
+        "block_timestamp": 1713536214,
+        "changes": [
+            {
+                "address": "0xd89a3ed02dcd8310d65e68570ea17ad8e3b7b02e",
+                "balance": {
+                    "modified": {
+                        "set": "0x0"
+                    },
+                    "original": {
+                        "set": "0x0"
+                    }
+                },
+                "bytecode": {
+                    "modified": "not_set",
+                    "original": {
+                        "set": null
+                    }
+                },
+                "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "mapping_slot_indexes": {
+                    "modified": "not_set",
+                    "original": {
+                        "set": null
+                    }
+                },
+                "new_account": false,
+                "nonce": {
+                    "modified": "not_set",
+                    "original": {
+                        "set": "0x0"
+                    }
+                },
+                "slots": {},
+                "static_slot_indexes": {
+                    "modified": "not_set",
+                    "original": {
+                        "set": null
+                    }
+                }
+            },
+            {
+                "address": "0x2de5333cf64ca470a5790167e6c1d670d13e105c",
+                "balance": {
+                    "modified": {
+                        "set": "0x0"
+                    },
+                    "original": {
+                        "set": "0x0"
+                    }
+                },
+                "bytecode": {
+                    "modified": "not_set",
+                    "original": {
+                        "set": null
+                    }
+                },
+                "code_hash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "mapping_slot_indexes": {
+                    "modified": "not_set",
+                    "original": {
+                        "set": null
+                    }
+                },
+                "new_account": false,
+                "nonce": {
+                    "modified": {
+                        "set": "0x1"
+                    },
+                    "original": {
+                        "set": "0x0"
+                    }
+                },
+                "slots": {},
+                "static_slot_indexes": {
+                    "modified": "not_set",
+                    "original": {
+                        "set": null
+                    }
+                }
+            }
+        ],
+        "execution_costs_applied": false,
+        "gas": "0x5208",
+        "logs": [],
+        "output": "0x",
+        "result": "success"
+    },
+    "substrate_receipt": {
+        "blockHash": "0xebb1af3f5d59c5d7ad19be300347f9ff8411d29ab3e6af084abcb20bbdc008fa",
+        "blockNumber": "0x3a5783f",
+        "contractAddress": null,
+        "cumulativeGasUsed": "0x5208",
+        "effectiveGasPrice": "0x0",
+        "from": "0x2de5333cf64ca470a5790167e6c1d670d13e105c",
+        "gasUsed": "0x5208",
+        "logs": [],
+        "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "status": "0x1",
+        "to": "0xd89a3ed02dcd8310d65e68570ea17ad8e3b7b02e",
+        "transactionHash": "0x825e518ab1bc1512fcb0fd2217b08764cd73d793eae79c7072f44b7a8a56138a",
+        "transactionIndex": "0x0"
+    },
+    "transaction_input": {
+        "chain_id": "0x7d8",
+        "from": "0x0000000000000000000000000000000000000000",
+        "gas_limit": "0x989680",
+        "gas_price": "0x0",
+        "hash": "0x825e518ab1bc1512fcb0fd2217b08764cd73d793eae79c7072f44b7a8a56138a",
+        "input": "0x",
+        "nonce": "0x0",
+        "r": "0xd01d1a6fe8706a70b9aa42a0d7d93d18a34f89836b10254342aba620cdfd43e3",
+        "s": "0x543ebc917f63fc84ef797f9c73597ab61b37a5f8509006b62450a4f9c0e37895",
+        "signer": "0x2de5333cf64ca470a5790167e6c1d670d13e105c",
+        "to": "0xd89a3ed02dcd8310d65e68570ea17ad8e3b7b02e",
+        "v": "0xfd4",
+        "value": "0x0"
+    }
+}
