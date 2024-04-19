@@ -154,10 +154,14 @@ impl RocksStorageState {
                 let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    for (block_hash, block_num) in self_blocks_by_hash_clone.iter_end() {
-                        if block_num > block_number_clone {
+                    for (block_num, block_hash_vec) in self_blocks_by_hash_clone.indexed_iter_end() {
+                        if block_num <= block_number_clone.as_u64() {
+                            break;
+                        }
+                        for block_hash in block_hash_vec {
                             self_blocks_by_hash_clone.delete(&block_hash).unwrap();
                         }
+                        self_blocks_by_hash_clone.delete_index(block_num).unwrap();
                     }
 
                     info!(
@@ -172,9 +176,10 @@ impl RocksStorageState {
                 task::spawn_blocking(move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
                     for (num, _) in blocks_by_number {
-                        if num > block_number_clone {
-                            self_blocks_by_number_clone.delete(&num).unwrap();
+                        if num <= block_number_clone {
+                            break;
                         }
+                        self_blocks_by_number_clone.delete(&num).unwrap();
                     }
                     info!(
                         "Deleted blocks by number above block number {}. Helps in reverting to a common state prior to a network fork or error.",
@@ -186,11 +191,15 @@ impl RocksStorageState {
                 let self_transactions_clone = Arc::clone(&self.transactions);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    let transactions = self_transactions_clone.iter_end();
-                    for (hash, tx_block_number) in transactions {
-                        if tx_block_number > block_number_clone {
+                    let transactions = self_transactions_clone.indexed_iter_end();
+                    for (index_block_number, hash_vec) in transactions {
+                        if index_block_number <= block_number_clone.as_u64() {
+                            break;
+                        }
+                        for hash in hash_vec {
                             self_transactions_clone.delete(&hash).unwrap();
                         }
+                        self_transactions_clone.delete_index(index_block_number).unwrap();
                     }
                     info!(
                         "Cleared transactions above block number {}. Necessary to remove transactions not confirmed in the finalized blockchain state.",
@@ -202,11 +211,15 @@ impl RocksStorageState {
                 let self_logs_clone = Arc::clone(&self.logs);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    let logs = self_logs_clone.iter_end();
-                    for (key, log_block_number) in logs {
-                        if log_block_number > block_number_clone {
-                            self_logs_clone.delete(&key).unwrap();
+                    let logs = self_logs_clone.indexed_iter_end();
+                    for (index_block_number, logs_vec) in logs {
+                        if index_block_number <= block_number_clone.as_u64() {
+                            break;
                         }
+                        for (hash, index) in logs_vec {
+                            self_logs_clone.delete(&(hash, index)).unwrap();
+                        }
+                        self_logs_clone.delete_index(index_block_number).unwrap();
                     }
                     info!(
                         "Removed logs above block number {}. Ensures log consistency with the blockchain's current confirmed state.",
@@ -218,11 +231,15 @@ impl RocksStorageState {
                 let self_accounts_history_clone = Arc::clone(&self.accounts_history);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    let accounts_history = self_accounts_history_clone.iter_end();
-                    for ((address, historic_block_number), _) in accounts_history {
-                        if historic_block_number > block_number_clone {
+                    let accounts_history = self_accounts_history_clone.indexed_iter_end();
+                    for (index_block_number, accounts_history_vec) in accounts_history {
+                        if index_block_number <= block_number_clone.as_u64() {
+                            break;
+                        }
+                        for (address, historic_block_number) in accounts_history_vec {
                             self_accounts_history_clone.delete(&(address, historic_block_number)).unwrap();
                         }
+                        self_accounts_history_clone.delete_index(index_block_number).unwrap();
                     }
                     info!(
                         "Deleted account history records above block number {}. Important for maintaining historical accuracy in account state across nodes.",
@@ -234,11 +251,15 @@ impl RocksStorageState {
                 let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
                 let block_number_clone = block_number;
                 task::spawn_blocking(move || {
-                    let account_slots_history = self_account_slots_history_clone.iter_end();
-                    for ((address, slot_index, historic_block_number), _) in account_slots_history {
-                        if historic_block_number > block_number_clone {
+                    let account_slots_history = self_account_slots_history_clone.indexed_iter_end();
+                    for (index_block_number, account_slots_history_vec) in account_slots_history {
+                        if index_block_number <= block_number_clone.as_u64() {
+                            break;
+                        }
+                        for (address, slot_index, historic_block_number) in account_slots_history_vec {
                             self_account_slots_history_clone.delete(&(address, slot_index, historic_block_number)).unwrap();
                         }
+                        self_account_slots_history_clone.delete_index(index_block_number).unwrap();
                     }
                     info!(
                         "Cleared account slot history above block number {}. Vital for synchronizing account slot states after discrepancies.",
@@ -362,7 +383,7 @@ impl RocksStorageState {
             }
 
             accounts.insert_batch(account_changes, Some(block_number.into()));
-            accounts_history.insert_batch(account_history_changes, None);
+            accounts_history.insert_batch_indexed(account_history_changes, block_number.into());
         });
 
         let mut slot_changes = Vec::new();
@@ -379,7 +400,7 @@ impl RocksStorageState {
                 }
             }
             account_slots.insert_batch(slot_changes, Some(block_number.into()));
-            account_slots_history.insert_batch(slot_history_changes, None);
+            account_slots_history.insert_batch_indexed(slot_history_changes, block_number.into());
         });
 
         Ok(vec![account_changes_future, slot_changes_future])

@@ -195,9 +195,41 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.write(batch).unwrap();
     }
 
+    /// inserts data but keep a block as key pointing to the keys inserted in a given block
+    /// this makes for faster search based on block_number, ergo index
+    pub fn insert_batch_indexed(&self, changes: Vec<(K, V)>, current_block: u64) {
+        let mut batch = WriteBatch::default();
+
+        let mut keys = vec![];
+
+        for (key, value) in changes {
+            let serialized_key = bincode::serialize(&key).unwrap();
+            let serialized_value = bincode::serialize(&value).unwrap();
+
+            keys.push(key);
+
+            // Add each serialized key-value pair to the batch
+            batch.put(serialized_key, serialized_value);
+        }
+
+        let serialized_block_value = bincode::serialize(&current_block).unwrap();
+        let serialized_keys = bincode::serialize(&keys).unwrap();
+        batch.put(serialized_block_value, serialized_keys);
+
+        // Execute the batch operation atomically
+        self.db.write(batch).unwrap();
+    }
+
     // Deletes an entry from the database by key
     pub fn delete(&self, key: &K) -> Result<()> {
         let serialized_key = bincode::serialize(key)?;
+        self.db.delete(serialized_key)?;
+        Ok(())
+    }
+
+    // Deletes an entry from the database by key
+    pub fn delete_index(&self, key: u64) -> Result<()> {
+        let serialized_key = bincode::serialize(&key)?;
         self.db.delete(serialized_key)?;
         Ok(())
     }
@@ -225,6 +257,11 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     pub fn iter_end(&self) -> RocksDBIterator<K, V> {
         let iter = self.db.iterator(IteratorMode::End);
         RocksDBIterator::<K, V>::new(iter)
+    }
+
+    pub fn indexed_iter_end(&self) -> IndexedRocksDBIterator<K> {
+        let iter = self.db.iterator(IteratorMode::End);
+        IndexedRocksDBIterator::<K>::new(iter)
     }
 
     pub fn iter_from<P: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq>(
@@ -260,25 +297,75 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Ser
     }
 }
 
+/// Custom iterator for navigating RocksDB entries.
+///
+/// This iterator is designed to skip over specific keys used for internal control purposes, such as:
+/// - `"current_block"`: Used to indicate the current block number in the database.
+/// - Keys representing index keys (if deserialized as `u64`): Used for various indexing purposes.
+///
+/// The iterator will:
+/// - Ignore any entries where the key is `"current_block"`.
+/// - Attempt to deserialize all other keys to the generic type `K`. If deserialization fails, it assumes
+///   the key might be an index key or improperly formatted, and skips it.
 impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> Iterator
     for RocksDBIterator<'a, K, V>
 {
     type Item = (K, V);
+
+    /// Retrieves the next key-value pair from the database, skipping over special control keys and
+    /// potentially misformatted keys.
+    ///
+    /// Returns:
+    /// - `Some((K, V))` if a valid key-value pair is found.
+    /// - `None` if there are no more items to process, or if only special/control keys remain.
     fn next(&mut self) -> Option<Self::Item> {
-        let key_value = self.iter.next();
-        match key_value {
-            Some(key_value) => {
-                let (key, value) = key_value.unwrap(); // XXX deal with the result
+        for key_value_result in self.iter.by_ref() {
+            let Ok((key, value)) = key_value_result else { continue };
 
-                if key == bincode::serialize(&"current_block").unwrap().into_boxed_slice() {
-                    return self.next();
-                }
-
-                let key: K = bincode::deserialize(&key).unwrap();
-                let value: V = bincode::deserialize(&value).unwrap();
-                Some((key, value))
+            // Check if the key is a special 'current_block' key and skip it
+            if key == bincode::serialize(&"current_block").unwrap().into_boxed_slice() {
+                continue; // Move to the next key-value pair
             }
-            None => None,
+
+            // Attempt to deserialize the key to type `K`
+            if let Ok(deserialized_key) = bincode::deserialize::<K>(&key) {
+                // Attempt to deserialize the value to type `V`
+                if let Ok(deserialized_value) = bincode::deserialize::<V>(&value) {
+                    // Return the deserialized key-value pair if both are successful
+                    return Some((deserialized_key, deserialized_value));
+                }
+            }
+            // If deserialization fails, continue to the next item
         }
+        // Return None if all items are processed or if all remaining items fail conditions
+        None
+    }
+}
+
+impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq> IndexedRocksDBIterator<'a, K> {
+    pub fn new(iter: DBIteratorWithThreadMode<'a, DB>) -> Self {
+        Self { iter, _marker: PhantomData }
+    }
+}
+
+pub struct IndexedRocksDBIterator<'a, K> {
+    iter: DBIteratorWithThreadMode<'a, DB>,
+    _marker: PhantomData<Vec<K>>,
+}
+
+impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq> Iterator for IndexedRocksDBIterator<'a, K> {
+    type Item = (u64, Vec<K>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for key_value_result in self.iter.by_ref() {
+            let Ok((key, value)) = key_value_result else { continue };
+
+            if let Ok(index_key) = bincode::deserialize::<u64>(&key) {
+                if let Ok(index_values) = bincode::deserialize::<Vec<K>>(&value) {
+                    return Some((index_key, index_values));
+                }
+            }
+        }
+        None
     }
 }
