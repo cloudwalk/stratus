@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n    hash as \"hash: _\"\n    ,signer_address as \"signer_address: _\"\n    ,nonce as \"nonce: _\"\n    ,address_from as \"address_from: _\"\n    ,address_to as \"address_to: _\"\n    ,input as \"input: _\"\n    ,gas as \"gas: _\"\n    ,gas_price as \"gas_price: _\"\n    ,idx_in_block as \"idx_in_block: _\"\n    ,block_number as \"block_number: _\"\n    ,block_hash as \"block_hash: _\"\n    ,output as \"output: _\"\n    ,value as \"value: _\"\n    ,v as \"v: _\"\n    ,s as \"s: _\"\n    ,r as \"r: _\"\n    ,result as \"result: _\"\n    ,chain_id as \"chain_id: _\"\nFROM transactions\nWHERE block_hash = $1",
+  "query": "SELECT\n    hash as \"hash: _\"\n    ,signer_address as \"signer_address: _\"\n    ,nonce as \"nonce: _\"\n    ,address_from as \"address_from: _\"\n    ,address_to as \"address_to: _\"\n    ,input as \"input: _\"\n    ,gas as \"gas: _\"\n    ,gas_price as \"gas_price: _\"\n    ,idx_in_block as \"idx_in_block: _\"\n    ,block_number as \"block_number: _\"\n    ,block_hash as \"block_hash: _\"\n    ,output as \"output: _\"\n    ,value as \"value: _\"\n    ,v as \"v: _\"\n    ,s as \"s: _\"\n    ,r as \"r: _\"\n    ,result as \"result: _\"\n    ,chain_id as \"chain_id: _\"\n    ,contract_address as \"contract_address: _\"\nFROM transactions\nWHERE block_hash = $1\n",
   "describe": {
     "columns": [
       {
@@ -92,6 +92,11 @@
         "ordinal": 17,
         "name": "chain_id: _",
         "type_info": "Numeric"
+      },
+      {
+        "ordinal": 18,
+        "name": "contract_address: _",
+        "type_info": "Bytea"
       }
     ],
     "parameters": {
@@ -117,8 +122,9 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "329a8cbac593a1450431df7f08618f2ef72f0ca90713251d6378b591c42be6f0"
+  "hash": "a84b98d6797a0de7e2ef2f82ac4b1ddcbe6f08f55b301e5cb963cc74d916e366"
 }

@@ -36,18 +36,17 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(deployedCode).not.eq("0x");
     });
 
-    // TODO: Fix the code to pass this test
-    // it("Deployment receipt contains the contract address", async () => {
-    //     const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
-    //     expect(deploymentTransactionHash).not.eq(undefined);
+    it("Deployment receipt contains the contract address", async () => {
+        const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
+        expect(deploymentTransactionHash).not.eq(undefined);
         
-    //     const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
-    //     expect(receipt.contractAddress).not.eq(null);
+        const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
+        expect(receipt.contractAddress).not.eq(null);
 
-    //     const expectedContractAddress = _contract.target as string;
-    //     const actualContractAddress = receipt.contractAddress as string;
-    //     expect(expectedContractAddress.toLowerCase()).eq(actualContractAddress.toLowerCase());
-    // });
+        const expectedContractAddress = _contract.target as string;
+        const actualContractAddress = receipt.contractAddress as string;
+        expect(expectedContractAddress.toLowerCase()).eq(actualContractAddress.toLowerCase());
+    });
 
     it("Eth_call works on read function", async () => {
         // prepare transaction object
