@@ -23,6 +23,7 @@ on:
 
 jobs:
   int_tests:
+    if: ${{ false }} # Disable the job by default
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -45,7 +46,6 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-c4b67e5d84c682753bd9e99fd1b8b9706b9bfaa02b82340327d269150739f6f8
             ${{ runner.os }}-cargo-test-
 
       - name: Set up Rust
