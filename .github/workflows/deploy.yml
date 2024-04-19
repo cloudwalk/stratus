@@ -1,5 +1,5 @@
 name: GitHub Builder Production
-
+# This workflow is triggered by a manual action, which is the only way to deploy to production.
 on:
   workflow_dispatch:
 
