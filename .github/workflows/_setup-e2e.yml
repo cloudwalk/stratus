@@ -3,9 +3,17 @@ name: Setup E2E Environment
 on:
   workflow_call:
     inputs:
-      test_command:
+      justfile_recipe:
         required: true
         type: string
+      justfile_env:
+        required: false
+        type: string
+        default: ''
+      cache_key:
+        required: false
+        type: string
+        default: 'stable-release'
 
 jobs:
   setup_and_test:
@@ -25,11 +33,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-stable-debug-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ inputs.cache_key }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-stable-debug-
-            ${{ runner.os }}-cargo-${{ github.workflow }}-
-            
+            ${{ runner.os }}-cargo-${{ inputs.cache_key }}-
+            ${{ runner.os }}-cargo-stable-release-
 
       - name: Set up Rust
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
@@ -54,4 +61,8 @@ jobs:
           cargo install wait-service || true
 
       - name: Run e2e tests
-        run: ${{ inputs.test_command }}
+        run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          RUST_LOG: off
+          RELEASE: 1
