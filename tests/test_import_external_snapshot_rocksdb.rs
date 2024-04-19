@@ -10,7 +10,6 @@ pub mod rocks_test {
     use super::test_import_external_snapshot_common as common;
 
     #[tokio::test]
-    #[ignore]
     async fn test_import_external_snapshot_with_rocksdb() {
         let docker = Docker::default();
         let _prom_guard = docker.start_prometheus();

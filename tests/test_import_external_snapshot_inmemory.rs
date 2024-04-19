@@ -5,7 +5,6 @@ use stratus::infra::docker::Docker;
 use test_import_external_snapshot_common as common;
 
 #[tokio::test]
-#[ignore]
 async fn test_import_external_snapshot_with_inmemory() {
     let docker = Docker::default();
     let _prom_guard = docker.start_prometheus();
