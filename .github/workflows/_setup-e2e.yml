@@ -65,4 +65,4 @@ jobs:
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: off
-          RELEASE: 0
+          RELEASE: 1
