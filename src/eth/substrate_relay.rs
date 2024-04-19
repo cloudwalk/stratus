@@ -20,6 +20,7 @@ pub struct SubstrateRelay {
 }
 
 impl SubstrateRelay {
+    /// Creates a new relay for forwarding transactions to Substrate.
     pub fn new(substrate_rpc_url: &str) -> Self {
         Self {
             failed_transactions: Mutex::new(vec![]),
@@ -27,6 +28,7 @@ impl SubstrateRelay {
         }
     }
 
+    /// Forwards the transaction to substrate if the execution was successful on our side.
     pub async fn forward_transaction(&self, execution: Execution, transaction: TransactionInput) -> anyhow::Result<()> {
         if execution.result == ExecutionResult::Success {
             let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction).rlp()).await?;
