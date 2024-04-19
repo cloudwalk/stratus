@@ -19,7 +19,10 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let stratus_config = config.as_stratus();
     let importer_config = config.as_importer();
 
-    let transaction_relay = config.executor.forward_to.map(|rpc_url| Arc::new(TransactionRelay::new(&rpc_url)));
+    let transaction_relay = match config.executor.forward_to {
+        Some(rpc_url) => Some(Arc::new(TransactionRelay::new(&rpc_url).await?)),
+        None => None,
+    };
 
     let storage = stratus_config.stratus_storage.init().await?;
 

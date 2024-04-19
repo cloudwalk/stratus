@@ -1,7 +1,4 @@
 use anyhow::anyhow;
-use ethers::providers::Http;
-use ethers::providers::Middleware;
-use ethers::providers::Provider;
 use ethers_core::types::Transaction;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -10,10 +7,11 @@ use tokio::sync::Mutex;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::TransactionInput;
+use crate::infra::BlockchainClient;
 
 pub struct TransactionRelay {
     // Provider for sending rpc calls to substrate
-    provider: Provider<Http>,
+    provider: BlockchainClient,
 
     // Sender for transactions that failed on our side, and should be included in the next block
     pub failed_transactions: Mutex<Vec<(TransactionInput, Execution)>>,
@@ -21,11 +19,11 @@ pub struct TransactionRelay {
 
 impl TransactionRelay {
     /// Creates a new relay for forwarding transactions to another blockchain.
-    pub fn new(rpc_url: &str) -> Self {
-        Self {
+    pub async fn new(rpc_url: &str) -> anyhow::Result<Self> {
+        Ok(Self {
             failed_transactions: Mutex::new(vec![]),
-            provider: Provider::<Http>::try_from(rpc_url).expect("could not instantiate HTTP Provider"),
-        }
+            provider: BlockchainClient::new(rpc_url).await?,
+        })
     }
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.

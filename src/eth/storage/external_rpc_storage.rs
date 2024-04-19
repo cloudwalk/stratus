@@ -27,5 +27,5 @@ pub trait ExternalRpcStorage: Send + Sync {
     async fn save_initial_account(&self, address: Address, balance: Wei) -> anyhow::Result<()>;
 
     /// Save an external block and its receipts to the storage.
-    async fn save_block_and_receipts(&self, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()>;
+    async fn save_block_and_receipts(&self, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, ExternalReceipt)>) -> anyhow::Result<()>;
 }
