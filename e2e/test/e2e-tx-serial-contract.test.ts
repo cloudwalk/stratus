@@ -36,16 +36,32 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(deployedCode).not.eq("0x");
     });
 
-    it("Deployment receipt contains the contract address", async () => {
+    it("Deployment transaction receipt fields", async () => {
         const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
         expect(deploymentTransactionHash).not.eq(undefined);
         
         const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
         expect(receipt.contractAddress).not.eq(null);
+        expect(receipt.transactionHash).not.eq(null);
+        expect(receipt.transactionIndex).not.eq(null);
+        expect(receipt.blockHash).not.eq(null);
+        expect(receipt.blockNumber).not.eq(null);
+        expect(receipt.from).not.eq(null);
+        expect(receipt.to).eq(null);
+        expect(receipt.cumulativeGasUsed).not.eq(null);
+        expect(receipt.gasUsed).not.eq(null);
+        expect(receipt.logs).not.eq(null);
+        expect(receipt.logsBloom).not.eq(null);
+        expect(receipt.status).not.eq(null);
+        expect(receipt.effectiveGasPrice).not.eq(null);
 
         const expectedContractAddress = _contract.target as string;
         const actualContractAddress = receipt.contractAddress as string;
         expect(expectedContractAddress.toLowerCase()).eq(actualContractAddress.toLowerCase());
+
+        const expectedTransactionHash = deploymentTransactionHash as string;
+        const actualTransactionHash = receipt.transactionHash as string;
+        expect(expectedTransactionHash.toLowerCase()).eq(actualTransactionHash.toLowerCase());
     });
 
     it("Eth_call works on read function", async () => {
