@@ -408,7 +408,7 @@ CREATE TABLE public.transactions (
     signer_address bytea NOT NULL,
     nonce numeric NOT NULL,
     address_from bytea NOT NULL,
-    address_to bytea,
+    address_to bytea DEFAULT NULL,
     input bytea NOT NULL,
     output bytea NOT NULL,
     gas numeric NOT NULL,
