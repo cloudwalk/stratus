@@ -24,7 +24,7 @@ kubernetes:
     # EVM api Rocksdb storage
     # --------------------------------------------------------------------------
     - name: stratus-api
-      dockerfile: Dockerfile.run_with_importer
+      dockerfile: ./docker/Dockerfile.run_with_importer
       secretsManager:
         enabled: true
         provider: gcpsm
@@ -74,6 +74,7 @@ kubernetes:
     # EVM api postgres storage
     # --------------------------------------------------------------------------
     - name: stratus-api-postgres
+      dockerfile: ./docker/Dockerfile.run_stratus
       secretsManager:
         enabled: true
         provider: gcpsm
