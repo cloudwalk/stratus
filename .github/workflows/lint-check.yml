@@ -4,6 +4,15 @@ on:
   pull_request:
     branches:
       - '*'
+    paths-ignore:
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/docs-release.yml'
+      - '.github/workflows/outdated.yml'
+      - '.github/CODEOWNERS'
+      - 'config/**'
+      - 'README.md'
+      - 'LICENSE'
+      - 'CONTRIBUTING.md'
   workflow_dispatch:
   push: # Rebuild cache policy
     branches:
@@ -34,10 +43,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-nightly-debug-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-nightly-debug-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-cargo-nightly-debug-
-            ${{ runner.os }}-cargo-${{ github.workflow }}
 
       - name: Set up Rust Nightly
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01

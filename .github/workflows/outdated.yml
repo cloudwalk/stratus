@@ -25,4 +25,3 @@ jobs:
 
             - name: Check outdated
               run: just outdated
-
