@@ -76,11 +76,12 @@ describe("Transaction: serial transfer", () => {
         expect(receipt.to).eq(BOB.address, "receipt.to");
         expect(receipt.gasUsed).eq(NATIVE_TRANSFER_GAS, "receipt.gasUsed");
         expect(receipt.status).eq(ONE, "receipt.status");
-        expect(receipt.contractAddress).eq(null);
-        expect(receipt.logs.length).eq(0);
-        expect(receipt.cumulativeGasUsed).not.eq(null);
-        expect(receipt.effectiveGasPrice).not.eq(null);
-        expect(receipt.logsBloom).not.eq(null);
+        expect(receipt.contractAddress).eq(null, "receipt.contractAddress");
+        expect(receipt.logs).not.eq(null, "receipt.logs");
+        expect(receipt.logs.length).eq(0, "receipt.logs size");
+        expect(receipt.cumulativeGasUsed).not.eq(null, "receipt.cumulativeGasUsed");
+        expect(receipt.effectiveGasPrice).not.eq(null, "receipt.effectiveGasPrice");
+        expect(receipt.logsBloom).not.eq(null, "receipt.logsBloom");
     });
     it("Sender nonce increased", async () => {
         expect(await send("eth_getTransactionCount", [ALICE, "latest"])).eq(ONE);
