@@ -49,7 +49,7 @@ pub async fn run_importer_online(
 ) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let mut executor = config.executor.init(
+    let executor = config.executor.init(
         Arc::clone(&storage),
         #[cfg(feature = "forward_transaction")]
         transaction_relay,

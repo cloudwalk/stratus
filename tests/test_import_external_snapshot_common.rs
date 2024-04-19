@@ -143,7 +143,7 @@ pub async fn execute_test(
 
     // init executor and execute
     let storage = StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage));
-    let mut executor = config.executor.init(
+    let executor = config.executor.init(
         Arc::new(storage),
         #[cfg(feature = "forward_transaction")]
         Arc::new(SubstrateRelay::new(&config.forward_to)),
