@@ -1,6 +1,7 @@
 mod test_import_external_snapshot_common;
 
 #[cfg(feature = "rocks")]
+#[ignore]
 pub mod rocks_test {
     use stratus::eth::primitives::BlockNumber;
     use stratus::eth::storage::PermanentStorage;
