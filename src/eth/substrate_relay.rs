@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::anyhow;
 use ethers::providers::Http;
 use ethers::providers::Middleware;
@@ -7,28 +5,11 @@ use ethers::providers::Provider;
 use ethers_core::types::Transaction;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::broadcast;
-use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
-use crate::eth::evm::EvmExecutionResult;
-use crate::eth::evm::EvmInput;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Execution;
-use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipts;
-use crate::eth::primitives::ExternalTransactionExecution;
-use crate::eth::primitives::LogMined;
-use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::StorageError;
-use crate::eth::storage::StratusStorage;
-use crate::eth::BlockMiner;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 #[cfg(feature = "forward_transaction")]
 pub struct SubstrateRelay {
