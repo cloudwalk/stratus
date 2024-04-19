@@ -21,12 +21,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let importer_config = config.as_importer();
 
     #[cfg(feature = "forward_transaction")]
-    let transaction_relay = {
-        if config.forward_to != config.external_rpc {
-            panic!("forward-to and external-rpc addresses are not the same, forwarded transactions cannot be imported")
-        }
-        Arc::new(TransactionRelay::new(&config.forward_to))
-    };
+    let transaction_relay = Arc::new(TransactionRelay::new(&config.forward_to));
 
     let storage = stratus_config.stratus_storage.init().await?;
 
