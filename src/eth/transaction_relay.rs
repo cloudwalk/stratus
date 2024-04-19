@@ -21,10 +21,10 @@ pub struct TransactionRelay {
 
 impl TransactionRelay {
     /// Creates a new relay for forwarding transactions to another blockchain.
-    pub fn new(substrate_rpc_url: &str) -> Self {
+    pub fn new(rpc_url: &str) -> Self {
         Self {
             failed_transactions: Mutex::new(vec![]),
-            provider: Provider::<Http>::try_from(substrate_rpc_url).expect("could not instantiate HTTP Provider"),
+            provider: Provider::<Http>::try_from(rpc_url).expect("could not instantiate HTTP Provider"),
         }
     }
 
