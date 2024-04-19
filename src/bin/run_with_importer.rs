@@ -21,7 +21,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let importer_config = config.as_importer();
 
     #[cfg(feature = "forward_transaction")]
-    let transaction_relay = Arc::new(TransactionRelay::new(&config.forward_to));
+    let transaction_relay = Arc::new(TransactionRelay::new(&config.executor.forward_to));
 
     let storage = stratus_config.stratus_storage.init().await?;
 

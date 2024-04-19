@@ -31,7 +31,7 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
 
     #[cfg(feature = "forward_transaction")]
-    let forward_to = config.forward_to.clone();
+    let forward_to = config.executor.forward_to.clone();
 
     run_importer_online(
         config,

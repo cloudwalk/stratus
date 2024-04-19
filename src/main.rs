@@ -18,7 +18,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(
         Arc::clone(&storage),
         #[cfg(feature = "forward_transaction")]
-        Arc::new(TransactionRelay::new(&config.forward_to)),
+        Arc::new(TransactionRelay::new(&config.executor.forward_to)),
     );
     serve_rpc(executor, storage, config).await?;
     Ok(())

@@ -52,7 +52,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(
         Arc::clone(&stratus_storage),
         #[cfg(feature = "forward_transaction")]
-        Arc::new(TransactionRelay::new(&config.forward_to)),
+        Arc::new(TransactionRelay::new(&config.executor.forward_to)),
     );
 
     // init block range

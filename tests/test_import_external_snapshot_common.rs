@@ -146,7 +146,7 @@ pub async fn execute_test(
     let executor = config.executor.init(
         Arc::new(storage),
         #[cfg(feature = "forward_transaction")]
-        Arc::new(TransactionRelay::new(&config.forward_to)),
+        Arc::new(TransactionRelay::new(&config.executor.forward_to)),
     );
     executor.import_external_to_perm(block, &receipts).await.unwrap();
 

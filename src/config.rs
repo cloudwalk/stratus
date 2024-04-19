@@ -81,11 +81,6 @@ pub struct CommonConfig {
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,
-
-    /// Rpc address to forward the transactions to.
-    #[cfg(feature = "forward_transaction")]
-    #[arg(long = "forward-to", env = "FORWARD_TO")]
-    pub forward_to: String,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -178,7 +173,7 @@ impl StratusStorageConfig {
 // Config: Executor
 // -----------------------------------------------------------------------------
 
-#[derive(Parser, Debug, Clone, Copy)]
+#[derive(Parser, Debug, Clone)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "chain-id", env = "CHAIN_ID")]
@@ -187,6 +182,11 @@ pub struct ExecutorConfig {
     /// Number of EVM instances to run.
     #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
+
+    /// Rpc address to forward the transactions to.
+    #[cfg(feature = "forward_transaction")]
+    #[arg(long = "forward-to", env = "FORWARD_TO")]
+    pub forward_to: String,
 }
 
 impl ExecutorConfig {
@@ -406,7 +406,7 @@ impl RunWithImporterConfig {
     pub fn as_importer(&self) -> ImporterOnlineConfig {
         ImporterOnlineConfig {
             external_rpc: self.external_rpc.clone(),
-            executor: self.executor,
+            executor: self.executor.clone(),
             stratus_storage: self.stratus_storage.clone(),
             common: self.common.clone(),
         }
@@ -415,7 +415,7 @@ impl RunWithImporterConfig {
     pub fn as_stratus(&self) -> StratusConfig {
         StratusConfig {
             address: self.address,
-            executor: self.executor,
+            executor: self.executor.clone(),
             stratus_storage: self.stratus_storage.clone(),
             common: self.common.clone(),
         }
