@@ -423,7 +423,8 @@ CREATE TABLE public.transactions (
     result text NOT NULL,
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL,
-    chain_id numeric DEFAULT NULL
+    chain_id numeric DEFAULT NULL,
+    contract_address bytea DEFAULT NULL
 );
 
 
