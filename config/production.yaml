@@ -28,7 +28,7 @@ kubernetes:
       secretsManager:
         enabled: true
         provider: gcpsm
-      imageRepoName: stratus
+      imageRepoName: stratus-rocks
       kind: statefulset
       strategy:
         type: RollingUpdate
@@ -78,7 +78,7 @@ kubernetes:
       secretsManager:
         enabled: true
         provider: gcpsm
-      imageRepoName: stratus
+      imageRepoName: stratus-postgres
       kind: deployment
       strategy:
         type: RollingUpdate
