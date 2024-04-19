@@ -17,5 +17,6 @@ SELECT
     ,r as "r: _"
     ,result as "result: _"
     ,chain_id as "chain_id: _"
+    ,contract_address as "contract_address: _"
 FROM transactions
 WHERE hash = $1

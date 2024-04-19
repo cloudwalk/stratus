@@ -52,7 +52,11 @@ pub fn parse_bytecode_slots_indexes(bytecode: Bytes) -> HashSet<SlotAccess> {
         }
 
         // Mapping: PUSH (index) -> PUSH1 0x20 -> MSTORE -> PUSH1 0x40
-        if is_push(op1) && (is_push(op2) && op2.input[0] == 0x20) && op3.opcode == MSTORE && (is_push(op4) && op4.input[0] == 0x40) {
+        if is_push(op1)
+            && (is_push(op2) && op2.input.first().is_some_and(|v| *v == 0x20))
+            && op3.opcode == MSTORE
+            && (is_push(op4) && op4.input.first().is_some_and(|v| *v == 0x40))
+        {
             slots.insert(SlotAccess::Mapping(op1.input.clone().into()));
             continue;
         }
