@@ -10,6 +10,10 @@ on:
         required: false
         type: string
         default: ''
+      cache_key:
+        required: false
+        type: string
+        default: 'stable-release'
 
 jobs:
   setup_and_test:
@@ -29,10 +33,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-stable-debug-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ inputs.cache_key }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-stable-debug-
-            ${{ runner.os }}-cargo-${{ github.workflow }}-
+            ${{ runner.os }}-cargo-${{ inputs.cache_key }}-
+            ${{ runner.os }}-cargo-stable-release-
 
       - name: Set up Rust
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
@@ -59,6 +63,6 @@ jobs:
       - name: Run e2e tests
         run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}
         env:
-          RUST_BACKTRACE: 1
-          RUST_LOG: debug
-          RELEASE: 0
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          RUST_LOG: off
+          RELEASE: 1

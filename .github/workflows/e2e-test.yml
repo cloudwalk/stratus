@@ -38,6 +38,7 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: 'e2e-stratus-rocks'
+      cache_key: 'stable-release-rocks'
 
     concurrency:
       group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}

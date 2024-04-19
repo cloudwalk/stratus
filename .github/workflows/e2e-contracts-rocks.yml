@@ -39,10 +39,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-stable-release-rocks-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
+            ${{ runner.os }}-cargo-stable-release-rocks-
             ${{ runner.os }}-cargo-stable-release-
-            ${{ runner.os }}-cargo-${{ github.workflow }}-
 
       - name: Set up Rust
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
@@ -73,5 +73,5 @@ jobs:
         run: just contracts-test-stratus-rocks --${{ matrix.contract }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
-          RUST_LOG: debug 
+          RUST_LOG: off 
           RELEASE: 1
