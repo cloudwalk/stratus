@@ -36,11 +36,13 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(deployedCode).not.eq("0x");
     });
 
-    it("Deployment transaction receipt fields", async () => {
+    it("Deployment transaction receipt", async () => {
         const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
         expect(deploymentTransactionHash).not.eq(undefined);
         
         const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
+        
+        // Fields existence and null checks
         expect(receipt.contractAddress).not.eq(null);
         expect(receipt.transactionHash).not.eq(null);
         expect(receipt.transactionIndex).not.eq(null);
@@ -55,20 +57,25 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(receipt.status).not.eq(null);
         expect(receipt.effectiveGasPrice).not.eq(null);
 
+        // contract address
         const expectedContractAddress = _contract.target as string;
         const actualContractAddress = receipt.contractAddress as string;
         expect(expectedContractAddress.toLowerCase()).eq(actualContractAddress.toLowerCase());
 
+        // transaction hash
         const expectedTransactionHash = deploymentTransactionHash as string;
         const actualTransactionHash = receipt.transactionHash as string;
         expect(expectedTransactionHash.toLowerCase()).eq(actualTransactionHash.toLowerCase());
 
+        // transaction index
         const expectedTransactionIndex = '0x0';
         const actualTransactionIndex = receipt.transactionIndex as number;
         expect(expectedTransactionIndex).eq(actualTransactionIndex);
 
-        expect(CHARLIE.address.toLowerCase()).eq(receipt.from.toLowerCase());
-        
+        // from
+        expect(receipt.from.toLowerCase()).eq(CHARLIE.address.toLowerCase());
+
+        // status
         const STATUS_SUCCESS = '0x1';
         expect(receipt.status).eq(STATUS_SUCCESS);
     });
