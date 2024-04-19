@@ -26,9 +26,10 @@ mod executor;
 pub mod primitives;
 pub mod rpc;
 pub mod storage;
+pub mod substrate_relay;
 
 pub use block_miner::BlockMiner;
 pub use executor::EthExecutor;
 pub use executor::EvmTask;
 #[cfg(feature = "forward_transaction")]
-pub use executor::SubstrateRelay;
+pub use substrate_relay::SubstrateRelay;
