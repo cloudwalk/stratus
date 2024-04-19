@@ -68,6 +68,9 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(expectedTransactionIndex).eq(actualTransactionIndex);
 
         expect(CHARLIE.address.toLowerCase()).eq(receipt.from.toLowerCase());
+        
+        const STATUS_SUCCESS = '0x1';
+        expect(receipt.status).eq(STATUS_SUCCESS);
     });
 
     it("Eth_call works on read function", async () => {
