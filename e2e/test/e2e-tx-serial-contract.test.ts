@@ -36,18 +36,49 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(deployedCode).not.eq("0x");
     });
 
-    // TODO: Fix the code to pass this test
-    // it("Deployment receipt contains the contract address", async () => {
-    //     const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
-    //     expect(deploymentTransactionHash).not.eq(undefined);
+    it("Deployment transaction receipt", async () => {
+        const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
+        expect(deploymentTransactionHash).not.eq(undefined);
         
-    //     const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
-    //     expect(receipt.contractAddress).not.eq(null);
+        const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
+        
+        // Fields existence and null checks
+        expect(receipt.contractAddress).not.eq(null, "receipt.contractAddress");
+        expect(receipt.transactionHash).not.eq(null, "receipt.transactionHash");
+        expect(receipt.transactionIndex).not.eq(null, "receipt.transactionIndex");
+        expect(receipt.blockHash).not.eq(null, "receipt.blockHash");
+        expect(receipt.blockNumber).not.eq(null, "receipt.blockNumber");
+        expect(receipt.from).not.eq(null, "receipt.from");
+        expect(receipt.to).eq(null, "receipt.to");
+        expect(receipt.cumulativeGasUsed).not.eq(null, "receipt.cumulativeGasUsed");
+        expect(receipt.gasUsed).not.eq(null, "receipt.gasUsed");
+        expect(receipt.logs).not.eq(null, "receipt.logs");
+        expect(receipt.logsBloom).not.eq(null, "receipt.logsBloom");
+        expect(receipt.status).not.eq(null, "receipt.status");
+        expect(receipt.effectiveGasPrice).not.eq(null, "receipt.effectiveGasPrice");
 
-    //     const expectedContractAddress = _contract.target as string;
-    //     const actualContractAddress = receipt.contractAddress as string;
-    //     expect(expectedContractAddress.toLowerCase()).eq(actualContractAddress.toLowerCase());
-    // });
+        // contract address
+        const expectedContractAddress = _contract.target as string;
+        const actualContractAddress = receipt.contractAddress as string;
+        expect(expectedContractAddress.toLowerCase()).eq(actualContractAddress.toLowerCase(), "receipt.contractAddress");
+
+        // transaction hash
+        const expectedTransactionHash = deploymentTransactionHash as string;
+        const actualTransactionHash = receipt.transactionHash as string;
+        expect(expectedTransactionHash.toLowerCase()).eq(actualTransactionHash.toLowerCase(), "receipt.transactionHash");
+
+        // transaction index
+        const expectedTransactionIndex = '0x0';
+        const actualTransactionIndex = receipt.transactionIndex as number;
+        expect(expectedTransactionIndex).eq(actualTransactionIndex, "receipt.transactionIndex");
+
+        // from
+        expect(receipt.from.toLowerCase()).eq(CHARLIE.address.toLowerCase(), "receipt.from");
+
+        // status
+        const STATUS_SUCCESS = '0x1';
+        expect(receipt.status).eq(STATUS_SUCCESS, "receipt.status");
+    });
 
     it("Eth_call works on read function", async () => {
         // prepare transaction object

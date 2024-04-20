@@ -42,6 +42,7 @@ pub struct PostgresTransaction {
     pub s: EcdsaRs,
     pub v: EcdsaV,
     pub chain_id: Option<ChainId>,
+    pub contract_address: Option<Address>,
 }
 
 impl PostgresTransaction {
@@ -59,6 +60,7 @@ impl PostgresTransaction {
             // TODO: do this correctly
             changes: vec![],
             execution_costs_applied: true,
+            deployed_contract_address: self.contract_address,
         };
         let input = TransactionInput {
             chain_id: self.chain_id,
@@ -140,7 +142,7 @@ pub struct TransactionBatch {
     pub signer: Vec<Address>,
     pub nonce: Vec<Nonce>,
     pub from: Vec<Address>,
-    pub to: Vec<Address>,
+    pub to: Vec<Option<Address>>,
     pub input: Vec<Bytes>,
     pub output: Vec<Bytes>,
     pub gas: Vec<Gas>,
@@ -154,15 +156,17 @@ pub struct TransactionBatch {
     pub value: Vec<Wei>,
     pub result: Vec<String>,
     pub chain_id: Vec<Option<ChainId>>,
+    pub contract_address: Vec<Option<Address>>,
 }
 
 impl TransactionBatch {
     pub fn push(&mut self, transaction: TransactionMined) {
+        let contract_address = transaction.execution.contract_address();
         self.hash.push(transaction.input.hash);
         self.signer.push(transaction.input.signer.clone());
         self.nonce.push(transaction.input.nonce);
         self.from.push(transaction.input.signer);
-        self.to.push(transaction.input.to.unwrap_or_default());
+        self.to.push(transaction.input.to);
         self.input.push(transaction.input.input);
         self.output.push(transaction.execution.output);
         self.gas.push(transaction.execution.gas);
@@ -176,6 +180,7 @@ impl TransactionBatch {
         self.value.push(transaction.input.value);
         self.result.push(transaction.execution.result.to_string());
         self.chain_id.push(transaction.input.chain_id);
+        self.contract_address.push(contract_address);
     }
 }
 

@@ -17,6 +17,6 @@ RUN cargo build --release --bin run-with-importer --features metrics,rocks
 # Runtime
 FROM rust:1.75 as runtime
 WORKDIR /app
-COPY --from=builder /app/target/release/stratus /app/stratus
+COPY --from=builder /app/target/release/run-with-importer /app/run-with-importer
 
-CMD ["sh", "-c", "/app/stratus"]
+CMD ["sh", "-c", "/app/run-with-importer"]

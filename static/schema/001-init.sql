@@ -408,7 +408,7 @@ CREATE TABLE public.transactions (
     signer_address bytea NOT NULL,
     nonce numeric NOT NULL,
     address_from bytea NOT NULL,
-    address_to bytea,
+    address_to bytea DEFAULT NULL,
     input bytea NOT NULL,
     output bytea NOT NULL,
     gas numeric NOT NULL,
@@ -423,7 +423,8 @@ CREATE TABLE public.transactions (
     result text NOT NULL,
     created_at timestamp(6) without time zone DEFAULT now() NOT NULL,
     updated_at timestamp(6) without time zone DEFAULT now() NOT NULL,
-    chain_id numeric DEFAULT NULL
+    chain_id numeric DEFAULT NULL,
+    contract_address bytea DEFAULT NULL
 );
 
 
