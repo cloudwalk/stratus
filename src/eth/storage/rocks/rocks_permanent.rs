@@ -231,9 +231,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
         for account in accounts {
             self.state.accounts.insert(
-
                 account.address.clone().into(),
-
                 AccountRocksdb {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
