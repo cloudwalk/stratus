@@ -3,11 +3,11 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use ethereum_types::U256;
 use futures::future::join_all;
 use itertools::Itertools;
 use num_traits::cast::ToPrimitive;
 use revm::primitives::KECCAK_EMPTY;
-use ethereum_types::U256;
 use tokio::sync::mpsc;
 use tokio::task;
 use tokio::task::JoinHandle;
@@ -504,7 +504,10 @@ impl RocksStorageState {
                     .next()
                 {
                     if index == &rocks_index && address == &rocks_address {
-                        return Some(Slot { index: rocks_index, value: value.into() });
+                        return Some(Slot {
+                            index: rocks_index,
+                            value: value.into(),
+                        });
                     }
                 }
                 None
