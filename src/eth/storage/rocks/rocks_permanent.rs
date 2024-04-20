@@ -27,7 +27,7 @@ use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::rocks::rocks_state::AccountInfo;
+use crate::eth::storage::rocks::rocks_state::AccountRocksdb;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
@@ -85,9 +85,9 @@ impl RocksPermanentStorage {
                 for (slot_index, slot_change) in &change.slots {
                     if let Some(value) = state.account_slots.get(&(address.clone(), slot_index.clone())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = value.clone();
-                            if original_slot.value != account_slot_value {
-                                conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
+                            let account_slot_value: SlotValue = value.clone().into();
+                            if original_slot.value != account_slot_value.clone() {
+                                conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value.clone(), original_slot.value.clone());
                             }
                         }
                     }
@@ -232,7 +232,7 @@ impl PermanentStorage for RocksPermanentStorage {
         for account in accounts {
             self.state.accounts.insert(
                 account.address.clone(),
-                AccountInfo {
+                AccountRocksdb {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
@@ -242,7 +242,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
             self.state.accounts_history.insert(
                 (account.address.clone(), 0.into()),
-                AccountInfo {
+                AccountRocksdb {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
