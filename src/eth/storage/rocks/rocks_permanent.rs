@@ -67,7 +67,7 @@ impl RocksPermanentStorage {
         for change in account_changes {
             let address = &change.address;
 
-            if let Some(account) = state.accounts.get(address) {
+            if let Some(account) = state.accounts.get(&(*address).clone().into()) {
                 // check account info conflicts
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
                     let account_nonce = &account.nonce;
@@ -83,7 +83,7 @@ impl RocksPermanentStorage {
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = state.account_slots.get(&(address.clone(), slot_index.clone())) {
+                    if let Some(value) = state.account_slots.get(&(address.clone().into(), slot_index.clone())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
                             let account_slot_value: SlotValue = value.clone().into();
                             if original_slot.value != account_slot_value.clone() {
@@ -231,7 +231,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
         for account in accounts {
             self.state.accounts.insert(
-                account.address.clone(),
+                account.address.clone().into(),
                 AccountRocksdb {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
@@ -241,7 +241,7 @@ impl PermanentStorage for RocksPermanentStorage {
             );
 
             self.state.accounts_history.insert(
-                (account.address.clone(), 0.into()),
+                (account.address.clone().into(), 0.into()),
                 AccountRocksdb {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
