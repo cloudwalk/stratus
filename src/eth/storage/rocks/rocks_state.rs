@@ -102,7 +102,6 @@ impl From<AddressRocksdb> for Address {
     }
 }
 
-
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumber), AccountRocksdb>>,
