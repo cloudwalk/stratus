@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use ethereum_types::H160;
 use ethereum_types::U256;
 use futures::future::join_all;
 use itertools::Itertools;
@@ -80,11 +81,33 @@ impl From<SlotValueRocksdb> for SlotValue {
     }
 }
 
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct AddressRocksdb(H160);
+
+impl AddressRocksdb {
+    pub fn inner_value(&self) -> H160 {
+        self.0.clone()
+    }
+}
+
+impl From<Address> for AddressRocksdb {
+    fn from(item: Address) -> Self {
+        AddressRocksdb(item.inner_value())
+    }
+}
+
+impl From<AddressRocksdb> for Address {
+    fn from(item: AddressRocksdb) -> Self {
+        Address::new_from_h160(item.inner_value())
+    }
+}
+
+
 pub struct RocksStorageState {
-    pub accounts: Arc<RocksDb<Address, AccountRocksdb>>,
-    pub accounts_history: Arc<RocksDb<(Address, BlockNumber), AccountRocksdb>>,
-    pub account_slots: Arc<RocksDb<(Address, SlotIndex), SlotValueRocksdb>>,
-    pub account_slots_history: Arc<RocksDb<(Address, SlotIndex, BlockNumber), SlotValueRocksdb>>,
+    pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
+    pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumber), AccountRocksdb>>,
+    pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndex), SlotValueRocksdb>>,
+    pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndex, BlockNumber), SlotValueRocksdb>>,
     pub transactions: Arc<RocksDb<Hash, BlockNumber>>,
     pub blocks_by_number: Arc<RocksDb<BlockNumber, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumber>>,
@@ -120,10 +143,10 @@ impl RocksStorageState {
     }
 
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
-        let accounts = Arc::<RocksDb<Address, AccountRocksdb>>::clone(&self.accounts);
-        let accounts_history = Arc::<RocksDb<(Address, BlockNumber), AccountRocksdb>>::clone(&self.accounts_history);
-        let account_slots = Arc::<RocksDb<(Address, SlotIndex), SlotValueRocksdb>>::clone(&self.account_slots);
-        let account_slots_history = Arc::<RocksDb<(Address, SlotIndex, BlockNumber), SlotValueRocksdb>>::clone(&self.account_slots_history);
+        let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
+        let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumber), AccountRocksdb>>::clone(&self.accounts_history);
+        let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndex), SlotValueRocksdb>>::clone(&self.account_slots);
+        let account_slots_history = Arc::<RocksDb<(AddressRocksdb, SlotIndex, BlockNumber), SlotValueRocksdb>>::clone(&self.account_slots_history);
         let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.blocks_by_hash);
         let blocks_by_number = Arc::<RocksDb<BlockNumber, Block>>::clone(&self.blocks_by_number);
         let transactions = Arc::<RocksDb<Hash, BlockNumber>>::clone(&self.transactions);
@@ -402,7 +425,7 @@ impl RocksStorageState {
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_accounts {
-                let address = change.address.clone();
+                let address: AddressRocksdb = change.address.clone().into();
                 let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountRocksdb {
                     balance: Wei::ZERO, // Initialize with default values
                     nonce: Nonce::ZERO,
@@ -432,7 +455,7 @@ impl RocksStorageState {
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_slots {
-                let address = change.address.clone();
+                let address: AddressRocksdb = change.address.clone().into();
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
                         slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone().into()));
@@ -493,7 +516,7 @@ impl RocksStorageState {
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
-            StoragePointInTime::Present => self.account_slots.get(&(address.clone(), index.clone())).map(|account_slot_value| Slot {
+            StoragePointInTime::Present => self.account_slots.get(&(address.clone().into(), index.clone())).map(|account_slot_value| Slot {
                 index: index.clone(),
                 value: account_slot_value.clone().into(),
             }),
@@ -503,7 +526,7 @@ impl RocksStorageState {
                     .iter_from((address.clone(), index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if index == &rocks_index && address == &rocks_address {
+                    if index == &rocks_index && rocks_address == (*address).clone().into() {
                         return Some(Slot {
                             index: rocks_index,
                             value: value.into(),
@@ -517,7 +540,7 @@ impl RocksStorageState {
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
         match point_in_time {
-            StoragePointInTime::Present => match self.accounts.get(address) {
+            StoragePointInTime::Present => match self.accounts.get(&((*address).clone().into())) {
                 Some(inner_account) => {
                     let account = inner_account.to_account(address);
                     tracing::trace!(%address, ?account, "account found");
@@ -530,12 +553,13 @@ impl RocksStorageState {
                 }
             },
             StoragePointInTime::Past(block_number) => {
+                let rocks_address: AddressRocksdb = address.clone().into();
                 if let Some(((addr, _), account_info)) = self
                     .accounts_history
-                    .iter_from((address.clone(), *block_number), rocksdb::Direction::Reverse)
+                    .iter_from((rocks_address, *block_number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if address == &addr {
+                    if addr == (*address).clone().into() {
                         return Some(account_info.to_account(address));
                     }
                 }
@@ -570,7 +594,7 @@ impl RocksStorageState {
         let mut account_batch = vec![];
         for account in accounts {
             account_batch.push((
-                account.address,
+                account.address.into(),
                 AccountRocksdb {
                     balance: account.balance,
                     nonce: account.nonce,
@@ -588,7 +612,7 @@ impl RocksStorageState {
         let mut slot_batch = vec![];
 
         for (address, slot) in slots {
-            slot_batch.push(((address, slot.index), slot.value.into()));
+            slot_batch.push(((address.into(), slot.index), slot.value.into()));
         }
         self.account_slots.insert_batch(slot_batch, Some(block_number.into()));
     }
