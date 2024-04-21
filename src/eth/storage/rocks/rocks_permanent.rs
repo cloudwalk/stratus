@@ -236,7 +236,6 @@ impl PermanentStorage for RocksPermanentStorage {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
-                    code_hash: account.code_hash.clone(),
                 },
             );
 
@@ -246,7 +245,6 @@ impl PermanentStorage for RocksPermanentStorage {
                     balance: account.balance.clone(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
-                    code_hash: account.code_hash.clone(),
                 },
             );
         }

@@ -21,7 +21,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
@@ -43,7 +42,6 @@ pub struct AccountRocksdb {
     pub balance: Wei,
     pub nonce: Nonce,
     pub bytecode: Option<Bytes>,
-    pub code_hash: CodeHash,
 }
 
 impl AccountRocksdb {
@@ -53,7 +51,7 @@ impl AccountRocksdb {
             nonce: self.nonce.clone(),
             balance: self.balance.clone(),
             bytecode: self.bytecode.clone(),
-            code_hash: self.code_hash.clone(),
+            code_hash: KECCAK_EMPTY.into(),
             static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
             mapping_slot_indexes: None, // TODO: is it necessary for RocksDB?
         }
@@ -429,7 +427,6 @@ impl RocksStorageState {
                     balance: Wei::ZERO, // Initialize with default values
                     nonce: Nonce::ZERO,
                     bytecode: None,
-                    code_hash: KECCAK_EMPTY.into(),
                 });
                 if let Some(nonce) = change.nonce.clone().take_modified() {
                     account_info_entry.nonce = nonce;
@@ -598,7 +595,6 @@ impl RocksStorageState {
                     balance: account.balance,
                     nonce: account.nonce,
                     bytecode: account.bytecode,
-                    code_hash: account.code_hash,
                 },
             ));
         }
