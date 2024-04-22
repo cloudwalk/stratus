@@ -168,6 +168,27 @@ impl From<HashRocksdb> for Hash {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]
+pub struct IndexRocksdb(u64);
+
+impl IndexRocksdb {
+    pub fn inner_value(&self) -> u64 {
+        self.0.clone()
+    }
+}
+
+impl From<Index> for IndexRocksdb {
+    fn from(item: Index) -> Self {
+        IndexRocksdb(item.inner_value())
+    }
+}
+
+impl From<IndexRocksdb> for Index {
+    fn from(item: IndexRocksdb) -> Self {
+        Index::new(item.inner_value())
+    }
+}
+
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>,
@@ -176,7 +197,7 @@ pub struct RocksStorageState {
     pub transactions: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
     pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, Block>>,
     pub blocks_by_hash: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
-    pub logs: Arc<RocksDb<(HashRocksdb, Index), BlockNumberRocksdb>>,
+    pub logs: Arc<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>,
     pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
@@ -216,7 +237,7 @@ impl RocksStorageState {
         let blocks_by_hash = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
         let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, Block>>::clone(&self.blocks_by_number);
         let transactions = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.transactions);
-        let logs = Arc::<RocksDb<(HashRocksdb, Index), BlockNumberRocksdb>>::clone(&self.logs);
+        let logs = Arc::<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>::clone(&self.logs);
 
         tokio::spawn(async move {
             let mut rx = rx;

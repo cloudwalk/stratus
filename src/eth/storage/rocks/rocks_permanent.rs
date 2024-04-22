@@ -178,7 +178,7 @@ impl PermanentStorage for RocksPermanentStorage {
         for transaction in block.transactions.clone() {
             txs_batch.push((transaction.input.hash.clone().into(), transaction.block_number.into()));
             for log in transaction.logs {
-                logs_batch.push(((transaction.input.hash.clone().into(), log.log_index), transaction.block_number.into()));
+                logs_batch.push(((transaction.input.hash.clone().into(), log.log_index.into()), transaction.block_number.into()));
             }
         }
 
