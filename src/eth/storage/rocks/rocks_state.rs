@@ -9,6 +9,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use ethereum_types::H160;
 use ethereum_types::H256;
+use ethereum_types::H64;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use futures::future::join_all;
@@ -312,6 +313,23 @@ impl From<u64> for GasRocksdb {
     }
 }
 
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct MinerNonceRocksdb(H64);
+
+gen_newtype_from!(self = MinerNonceRocksdb, other = H64, [u8; 8]);
+
+impl From<MinerNonce> for MinerNonceRocksdb {
+    fn from(value: MinerNonce) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<MinerNonceRocksdb> for MinerNonce {
+    fn from(value: MinerNonceRocksdb) -> Self {
+        value.0.into()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockHeaderRocksdb {
     pub number: BlockNumberRocksdb,
@@ -331,7 +349,7 @@ pub struct BlockHeaderRocksdb {
     pub size: Size, //XXX this one is missing yet
     pub state_root: HashRocksdb,
     pub total_difficulty: Difficulty, //XXX this one is missing yet
-    pub nonce: MinerNonce,            //XXX this one is missing yet
+    pub nonce: MinerNonceRocksdb,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -361,7 +379,7 @@ impl From<Block> for BlockRocksdb {
                 size: item.header.size,
                 state_root: HashRocksdb::from(item.header.state_root),
                 total_difficulty: item.header.total_difficulty,
-                nonce: item.header.nonce,
+                nonce: item.header.nonce.into(),
             },
             transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
         }
@@ -389,7 +407,7 @@ impl From<BlockRocksdb> for Block {
                 size: item.header.size,
                 state_root: Hash::from(item.header.state_root),
                 total_difficulty: item.header.total_difficulty,
-                nonce: item.header.nonce,
+                nonce: item.header.nonce.into(),
             },
             transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
         }
