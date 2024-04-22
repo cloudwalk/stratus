@@ -104,7 +104,7 @@ async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::R
 async fn fetch_receipt(chain: &BlockchainClient, hash: Hash) -> anyhow::Result<ExternalReceipt> {
     let receipt = loop {
         tracing::info!(%hash, "fetching receipt");
-        let receipt = chain.get_transaction_receipt(hash.clone()).await?;
+        let receipt = chain.get_transaction_receipt(hash).await?;
 
         match receipt {
             Some(receipt) => break receipt,

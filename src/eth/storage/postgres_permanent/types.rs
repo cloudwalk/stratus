@@ -129,7 +129,7 @@ impl PostgresLog {
                 continue;
             };
 
-            filled_topics.push(LogTopic::new(topic.clone().into()));
+            filled_topics.push(LogTopic::new((*topic).into()));
         }
 
         filled_topics

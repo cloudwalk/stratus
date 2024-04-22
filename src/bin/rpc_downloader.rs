@@ -130,7 +130,7 @@ async fn download(
             let mut receipts_json = Vec::with_capacity(hashes.len());
             for hash in hashes {
                 loop {
-                    let receipt = match chain.get_transaction_receipt(hash.clone()).await {
+                    let receipt = match chain.get_transaction_receipt(hash).await {
                         Ok(json) => json,
                         Err(e) => {
                             tracing::warn!(reason = ?e, "retrying receipt download");

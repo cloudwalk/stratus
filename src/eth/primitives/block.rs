@@ -70,17 +70,17 @@ impl Block {
                 .map(|(i, log)| LogMined {
                     log_index: (i as u64).into(),
                     log,
-                    transaction_hash: input.hash.clone(),
+                    transaction_hash: input.hash,
                     transaction_index,
                     block_number: self.header.number,
-                    block_hash: self.header.hash.clone(),
+                    block_hash: self.header.hash,
                 })
                 .collect(),
             input,
             execution,
             transaction_index,
             block_number: self.header.number,
-            block_hash: self.header.hash.clone(),
+            block_hash: self.header.hash,
         }); // TODO: update logs bloom
     }
 
