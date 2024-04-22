@@ -56,7 +56,9 @@ pub struct Revm {
 }
 
 impl Revm {
+
     /// Creates a new instance of the Revm ready to be used.
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
         tracing::info!(%chain_id, "starting revm");
 
