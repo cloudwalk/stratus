@@ -171,7 +171,7 @@ impl StratusStorageConfig {
 // Config: Executor
 // -----------------------------------------------------------------------------
 
-#[derive(Parser, Debug, Clone, Copy)]
+#[derive(Parser, Debug, Clone)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "chain-id", env = "CHAIN_ID")]
@@ -180,11 +180,15 @@ pub struct ExecutorConfig {
     /// Number of EVM instances to run.
     #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
+
+    /// Rpc address to forward the transactions to.
+    #[arg(long = "forward-to", env = "FORWARD_TO")]
+    pub forward_to: Option<String>,
 }
 
 impl ExecutorConfig {
     /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub fn init(&self, storage: Arc<StratusStorage>) -> EthExecutor {
+    pub async fn init(&self, storage: Arc<StratusStorage>) -> Arc<EthExecutor> {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(evms = %num_evms, "starting executor and evms");
 
@@ -224,8 +228,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        // creates an executor that can communicate with background evms
-        EthExecutor::new(evm_tx, Arc::clone(&storage))
+        Arc::new(EthExecutor::new(evm_tx, Arc::clone(&storage), self.forward_to.as_ref()).await)
     }
 }
 
@@ -394,7 +397,7 @@ impl RunWithImporterConfig {
     pub fn as_importer(&self) -> ImporterOnlineConfig {
         ImporterOnlineConfig {
             external_rpc: self.external_rpc.clone(),
-            executor: self.executor,
+            executor: self.executor.clone(),
             stratus_storage: self.stratus_storage.clone(),
             common: self.common.clone(),
         }
@@ -403,7 +406,7 @@ impl RunWithImporterConfig {
     pub fn as_stratus(&self) -> StratusConfig {
         StratusConfig {
             address: self.address,
-            executor: self.executor,
+            executor: self.executor.clone(),
             stratus_storage: self.stratus_storage.clone(),
             common: self.common.clone(),
         }

@@ -27,6 +27,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
+use crate::eth::TransactionRelay;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
@@ -45,6 +46,9 @@ pub struct EthExecutor {
     // Mutex-wrapped miner for creating new blockchain blocks.
     miner: Mutex<BlockMiner>,
 
+    // Provider for sending rpc calls to substrate
+    relay: Option<TransactionRelay>,
+
     // Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
 
@@ -55,13 +59,19 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>) -> Self {
+    pub async fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>, forward_to: Option<&String>) -> Self {
+        let relay = match forward_to {
+            Some(rpc_url) => Some(TransactionRelay::new(rpc_url).await.expect("failed to instantiate the relay")),
+            None => None,
+        };
+
         Self {
             evm_tx,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
+            relay,
         }
     }
 
@@ -72,7 +82,19 @@ impl EthExecutor {
     /// Re-executes an external block locally and imports it to the permanent storage.
     pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-        let block = self.import_external_to_temp(block, receipts).await?;
+
+        let block = if let Some(relay) = &self.relay {
+            tracing::debug!("relay found, draining pending failed transactions");
+            let mut block = self.import_external_to_temp(block, receipts).await?;
+            let pending = relay.failed_transactions.lock().await.drain(..).collect::<Vec<_>>();
+            for (tx, ex) in pending {
+                tracing::debug!(?tx, ?ex, "adding tx to block");
+                block.push_execution(tx, ex);
+            }
+            block
+        } else {
+            self.import_external_to_temp(block, receipts).await?
+        };
 
         // commit block
         self.storage.set_mined_block_number(*block.number()).await?;
@@ -181,40 +203,48 @@ impl EthExecutor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        // executes transaction until no more conflicts
-        // TODO: must have a stop condition like timeout or max number of retries
-        let (execution, block) = loop {
-            // execute and check conflicts before mining block
+        let execution = if let Some(relay) = &self.relay {
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?.0;
+            relay.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+            execution
+        } else {
+            // executes transaction until no more conflicts
+            // TODO: must have a stop condition like timeout or max number of retries
+            let (execution, block) = loop {
+                // execute and check conflicts before mining block
+                let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+                let execution = self.execute_in_evm(evm_input).await?.0;
 
-            // mine and commit block
-            let mut miner_lock = self.miner.lock().await;
-            let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-            match self.storage.commit_to_perm(block.clone()).await {
-                Ok(()) => {}
-                Err(StorageError::Conflict(conflicts)) => {
-                    tracing::warn!(?conflicts, "storage conflict detected when saving block");
-                    continue;
-                }
-                Err(e) => {
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_executor_transact(start.elapsed(), false);
-                    return Err(e.into());
-                }
+                // mine and commit block
+                let mut miner_lock = self.miner.lock().await;
+                let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+                match self.storage.commit_to_perm(block.clone()).await {
+                    Ok(()) => {}
+                    Err(StorageError::Conflict(conflicts)) => {
+                        tracing::warn!(?conflicts, "storage conflict detected when saving block");
+                        continue;
+                    }
+                    Err(e) => {
+                        #[cfg(feature = "metrics")]
+                        metrics::inc_executor_transact(start.elapsed(), false);
+                        return Err(e.into());
+                    }
+                };
+                break (execution, block);
             };
-            break (execution, block);
-        };
 
-        // notify new blocks
-        let _ = self.block_notifier.send(block.clone());
+            // notify new blocks
+            let _ = self.block_notifier.send(block.clone());
 
-        // notify transaction logs
-        for trx in block.transactions {
-            for log in trx.logs {
-                let _ = self.log_notifier.send(log);
+            // notify transaction logs
+            for trx in block.transactions {
+                for log in trx.logs {
+                    let _ = self.log_notifier.send(log);
+                }
             }
-        }
+            execution
+        };
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_transact(start.elapsed(), true);

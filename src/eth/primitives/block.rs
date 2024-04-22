@@ -16,6 +16,9 @@ use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
+use super::Execution;
+use super::LogMined;
+use super::TransactionInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -53,6 +56,32 @@ impl Block {
             header: block.try_into()?,
             transactions,
         })
+    }
+
+    /// Pushes a single transaction execution to the blocks transactions
+    pub fn push_execution(&mut self, input: TransactionInput, execution: Execution) {
+        let transaction_index = (self.transactions.len() as u64).into();
+        self.transactions.push(TransactionMined {
+            logs: execution
+                .logs
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(i, log)| LogMined {
+                    log_index: (i as u64).into(),
+                    log,
+                    transaction_hash: input.hash,
+                    transaction_index,
+                    block_number: self.header.number,
+                    block_hash: self.header.hash,
+                })
+                .collect(),
+            input,
+            execution,
+            transaction_index,
+            block_number: self.header.number,
+            block_hash: self.header.hash,
+        }); // TODO: update logs bloom
     }
 
     /// Calculates block size label by the number of transactions.

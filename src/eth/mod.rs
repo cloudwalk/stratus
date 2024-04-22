@@ -26,7 +26,9 @@ mod executor;
 pub mod primitives;
 pub mod rpc;
 pub mod storage;
+pub mod transaction_relay;
 
 pub use block_miner::BlockMiner;
 pub use executor::EthExecutor;
 pub use executor::EvmTask;
+pub use transaction_relay::TransactionRelay;

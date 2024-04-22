@@ -15,7 +15,7 @@ pub struct RpcContext {
     pub gas_price: usize,
 
     // services
-    pub executor: EthExecutor,
+    pub executor: Arc<EthExecutor>,
     pub storage: Arc<StratusStorage>,
     pub subs: Arc<RpcSubscriptions>,
 }
