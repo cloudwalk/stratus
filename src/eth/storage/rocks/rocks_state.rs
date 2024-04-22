@@ -125,11 +125,32 @@ impl From<BlockNumberRocksdb> for BlockNumber {
     }
 }
 
+#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct SlotIndexRocksdb(U256);
+
+impl SlotIndexRocksdb {
+    pub fn inner_value(&self) -> U256 {
+        self.0.clone()
+    }
+}
+
+impl From<SlotIndex> for SlotIndexRocksdb {
+    fn from(item: SlotIndex) -> Self {
+        SlotIndexRocksdb(item.inner_value())
+    }
+}
+
+impl From<SlotIndexRocksdb> for SlotIndex {
+    fn from(item: SlotIndexRocksdb) -> Self {
+        SlotIndex::new(item.inner_value())
+    }
+}
+
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>,
-    pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndex), SlotValueRocksdb>>,
-    pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndex, BlockNumberRocksdb), SlotValueRocksdb>>,
+    pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>,
+    pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>,
     pub transactions: Arc<RocksDb<Hash, BlockNumberRocksdb>>,
     pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, Block>>,
     pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumberRocksdb>>,
@@ -167,8 +188,9 @@ impl RocksStorageState {
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
         let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
         let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>::clone(&self.accounts_history);
-        let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndex), SlotValueRocksdb>>::clone(&self.account_slots);
-        let account_slots_history = Arc::<RocksDb<(AddressRocksdb, SlotIndex, BlockNumberRocksdb), SlotValueRocksdb>>::clone(&self.account_slots_history);
+        let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>::clone(&self.account_slots);
+        let account_slots_history =
+            Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>::clone(&self.account_slots_history);
         let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
         let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, Block>>::clone(&self.blocks_by_number);
         let transactions = Arc::<RocksDb<Hash, BlockNumberRocksdb>>::clone(&self.transactions);
@@ -395,7 +417,7 @@ impl RocksStorageState {
             let self_account_slots_clone = Arc::clone(&self.account_slots);
             let block_number_clone = block_number;
             move || {
-                let mut latest_slots: HashMap<(AddressRocksdb, SlotIndex), (BlockNumberRocksdb, SlotValueRocksdb)> = std::collections::HashMap::new();
+                let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = std::collections::HashMap::new();
                 let slot_histories = self_account_slots_history_clone.iter_start();
                 for ((address, slot_index, historic_block_number), slot_value) in slot_histories {
                     let slot_key = (address, slot_index);
@@ -479,8 +501,8 @@ impl RocksStorageState {
                 let address: AddressRocksdb = change.address.clone().into();
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
-                        slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone().into()));
-                        slot_history_changes.push(((address.clone(), slot_index, block_number.into()), slot.value.into()));
+                        slot_changes.push(((address.clone(), slot_index.clone().into()), slot.value.clone().into()));
+                        slot_history_changes.push(((address.clone(), slot_index.into(), block_number.into()), slot.value.into()));
                     }
                 }
             }
@@ -537,19 +559,22 @@ impl RocksStorageState {
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
-            StoragePointInTime::Present => self.account_slots.get(&(address.clone().into(), index.clone())).map(|account_slot_value| Slot {
-                index: index.clone(),
-                value: account_slot_value.clone().into(),
-            }),
+            StoragePointInTime::Present => self
+                .account_slots
+                .get(&(address.clone().into(), index.clone().into()))
+                .map(|account_slot_value| Slot {
+                    index: index.clone(),
+                    value: account_slot_value.clone().into(),
+                }),
             StoragePointInTime::Past(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
                     .iter_from((address.clone(), index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if index == &rocks_index && rocks_address == (*address).clone().into() {
+                    if rocks_index == (*index).clone().into() && rocks_address == (*address).clone().into() {
                         return Some(Slot {
-                            index: rocks_index,
+                            index: rocks_index.into(),
                             value: value.into(),
                         });
                     }
@@ -632,7 +657,7 @@ impl RocksStorageState {
         let mut slot_batch = vec![];
 
         for (address, slot) in slots {
-            slot_batch.push(((address.into(), slot.index), slot.value.into()));
+            slot_batch.push(((address.into(), slot.index.into()), slot.value.into()));
         }
         self.account_slots.insert_batch(slot_batch, Some(block_number.into()));
     }
