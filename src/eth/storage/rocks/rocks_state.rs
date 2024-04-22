@@ -364,10 +364,28 @@ pub struct BlockHeaderRocksdb {
     pub difficulty: DifficultyRocksdb,
     pub receipts_root: HashRocksdb,
     pub uncle_hash: HashRocksdb,
-    pub size: Size, //XXX this one is missing yet
+    pub size: SizeRocksdb,
     pub state_root: HashRocksdb,
     pub total_difficulty: DifficultyRocksdb,
     pub nonce: MinerNonceRocksdb,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct SizeRocksdb(U64);
+
+gen_newtype_from!(self = SizeRocksdb, other = U64, u64);
+
+impl From<Size> for SizeRocksdb {
+    fn from(value: Size) -> Self {
+        u64::from(value).into()
+    }
+}
+
+impl From<SizeRocksdb> for Size {
+    fn from(value: SizeRocksdb) -> Self {
+        value.0.as_u64().into()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -394,7 +412,7 @@ impl From<Block> for BlockRocksdb {
                 difficulty: item.header.difficulty.into(),
                 receipts_root: HashRocksdb::from(item.header.receipts_root),
                 uncle_hash: HashRocksdb::from(item.header.uncle_hash),
-                size: item.header.size,
+                size: item.header.size.into(),
                 state_root: HashRocksdb::from(item.header.state_root),
                 total_difficulty: item.header.total_difficulty.into(),
                 nonce: item.header.nonce.into(),
@@ -422,7 +440,7 @@ impl From<BlockRocksdb> for Block {
                 difficulty: item.header.difficulty.into(),
                 receipts_root: Hash::from(item.header.receipts_root),
                 uncle_hash: Hash::from(item.header.uncle_hash),
-                size: item.header.size,
+                size: item.header.size.into(),
                 state_root: Hash::from(item.header.state_root),
                 total_difficulty: item.header.total_difficulty.into(),
                 nonce: item.header.nonce.into(),
