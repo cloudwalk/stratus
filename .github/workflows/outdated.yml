@@ -24,38 +24,16 @@ jobs:
               uses: extractions/setup-just@v1
 
             - name: Check outdated
-              run: just outdated | tee outdated.txt
+              run: just outdated > outdated.txt
 
-              # Loads from text file, escapes newlines and quotes and build message
-            - name: Build Message
-              id: outdated
-              run: |
-                TABLE="$(cat outdated.txt)"
-                echo "table=$(echo "$TABLE" | awk '{printf "%s\\n ", $0}' -)" >> $GITHUB_OUTPUT
+            - name: Setup Ruby
+              uses: ruby/setup-ruby@v1
+              with:
+                ruby-version: '3.2.2'
 
             - name: Notify Slack
-              id: slack
-              uses: slackapi/slack-github-action@v1.26.0
-              with:
-                payload: |
-                  {
-                    "blocks": [
-                      {
-                        "type": "header",
-                        "text": {
-                          "type": "mrkdwn",
-                          "text": "Stratus outdated dependencies"
-                        }
-                      },
-                      {
-                        "type": "section",
-                        "text": {
-                          "type": "mrkdwn",
-                          "text": "${{ steps.outdated.outputs.table }}"
-                        }
-                      }
-                    ]
-                  }
+              run: ruby utils/slack-notifiers/outdated.rb
               env:
-                SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
-                SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+                  SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
+                  OUTDATED_TABLE_FILE_NAME: outdated.txt
+                  
