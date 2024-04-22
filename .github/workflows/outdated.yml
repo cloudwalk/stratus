@@ -31,7 +31,7 @@ jobs:
               id: outdated
               run: |
                 TABLE="$(cat outdated.txt)"
-                MESSAGE="Stratus outdated crates:\\n\\n\`\`\`${TABLE}\`\`\`"
+                MESSAGE="\`\`\`${TABLE}\`\`\`"
                 echo "MESSAGE_JSON=$(echo -n "${MESSAGE}" | jq -aRs .)" >> $GITHUB_ENV
 
             - name: Notify Slack
@@ -40,7 +40,22 @@ jobs:
               with:
                 payload: |
                   {
-                    "text": ${{ env.MESSAGE_JSON }}
+                    "blocks": [
+                      {
+                        "type": "header",
+                        "text": {
+                          "type": "mrkdwn",
+                          "text": "Stratus outdated dependencies"
+                        }
+                      },
+                      {
+                        "type": "section",
+                        "text": {
+                          "type": "mrkdwn",
+                          "text": ${{ env.MESSAGE_JSON }}
+                        }
+                      }
+                    ]
                   }
               env:
                 SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
