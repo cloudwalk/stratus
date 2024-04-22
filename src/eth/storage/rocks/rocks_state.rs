@@ -290,18 +290,40 @@ impl From<IndexRocksdb> for Index {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct GasRocksdb(U64);
+
+impl From<GasRocksdb> for Gas {
+    fn from(value: GasRocksdb) -> Self {
+        value.0.as_u64().into()
+    }
+}
+
+impl From<Gas> for GasRocksdb {
+    fn from(value: Gas) -> Self {
+        u64::from(value).into()
+    }
+}
+
+impl From<u64> for GasRocksdb {
+    fn from(value: u64) -> Self {
+        Self(value.into())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockHeaderRocksdb {
     pub number: BlockNumberRocksdb,
     pub hash: HashRocksdb,
     pub transactions_root: HashRocksdb,
-    pub gas_used: Gas,       //XXX this one is missing yet
-    pub gas_limit: Gas,      //XXX this one is missing yet
+    pub gas_used: GasRocksdb,
+    pub gas_limit: GasRocksdb,
     pub bloom: LogsBloom,    //XXX this one is missing yet
     pub timestamp: UnixTime, //XXX this one is missing yet
     pub parent_hash: HashRocksdb,
     pub author: AddressRocksdb,
-    pub extra_data: crate::eth::primitives::Bytes, //XXX this one is missing yet
+    pub extra_data: BytesRocksdb,
     pub miner: AddressRocksdb,
     pub difficulty: Difficulty, //XXX this one is missing yet
     pub receipts_root: HashRocksdb,
@@ -325,13 +347,13 @@ impl From<Block> for BlockRocksdb {
                 number: BlockNumberRocksdb::from(item.header.number),
                 hash: HashRocksdb::from(item.header.hash),
                 transactions_root: HashRocksdb::from(item.header.transactions_root),
-                gas_used: item.header.gas_used,
-                gas_limit: item.header.gas_limit,
+                gas_used: item.header.gas_used.into(),
+                gas_limit: item.header.gas_limit.into(),
                 bloom: item.header.bloom,
                 timestamp: item.header.timestamp,
                 parent_hash: HashRocksdb::from(item.header.parent_hash),
                 author: AddressRocksdb::from(item.header.author),
-                extra_data: item.header.extra_data,
+                extra_data: item.header.extra_data.into(),
                 miner: AddressRocksdb::from(item.header.miner),
                 difficulty: item.header.difficulty,
                 receipts_root: HashRocksdb::from(item.header.receipts_root),
@@ -353,13 +375,13 @@ impl From<BlockRocksdb> for Block {
                 number: BlockNumber::from(item.header.number),
                 hash: Hash::from(item.header.hash),
                 transactions_root: Hash::from(item.header.transactions_root),
-                gas_used: item.header.gas_used,
-                gas_limit: item.header.gas_limit,
+                gas_used: item.header.gas_used.into(),
+                gas_limit: item.header.gas_limit.into(),
                 bloom: item.header.bloom,
                 timestamp: item.header.timestamp,
                 parent_hash: Hash::from(item.header.parent_hash),
                 author: Address::from(item.header.author),
-                extra_data: item.header.extra_data,
+                extra_data: item.header.extra_data.into(),
                 miner: Address::from(item.header.miner),
                 difficulty: item.header.difficulty,
                 receipts_root: Hash::from(item.header.receipts_root),
