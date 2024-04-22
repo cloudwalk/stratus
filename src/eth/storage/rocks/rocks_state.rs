@@ -50,7 +50,7 @@ use crate::log_and_err;
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountRocksdb {
     pub balance: WeiRocksdb,
-    pub nonce: Nonce,                                    //XXX this one is missing yet
+    pub nonce: NonceRocksdb,
     pub bytecode: Option<crate::eth::primitives::Bytes>, //XXX this one is missing yet
 }
 
@@ -80,11 +80,36 @@ impl WeiRocksdb {
     pub const ONE: WeiRocksdb = WeiRocksdb(U256::one());
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NonceRocksdb(U64);
+
+impl From<NonceRocksdb> for Nonce {
+    fn from(value: NonceRocksdb) -> Self {
+        value.0.as_u64().into()
+    }
+}
+
+impl From<Nonce> for NonceRocksdb {
+    fn from(value: Nonce) -> Self {
+        u64::from(value).into()
+    }
+}
+
+impl From<u64> for NonceRocksdb {
+    fn from(value: u64) -> Self {
+        Self(value.into())
+    }
+}
+
+impl NonceRocksdb {
+    pub const ZERO: NonceRocksdb = NonceRocksdb(U64::zero());
+}
+
 impl AccountRocksdb {
     pub fn to_account(&self, address: &Address) -> Account {
         Account {
             address: address.clone(),
-            nonce: self.nonce.clone(),
+            nonce: self.nonce.clone().into(),
             balance: self.balance.clone().into(),
             bytecode: self.bytecode.clone(),
             code_hash: KECCAK_EMPTY.into(),
@@ -99,7 +124,7 @@ pub struct SlotValueRocksdb(U256);
 
 impl SlotValueRocksdb {
     pub fn inner_value(&self) -> U256 {
-        self.0.clone()
+        self.0
     }
 }
 
@@ -120,7 +145,7 @@ pub struct AddressRocksdb(H160);
 
 impl AddressRocksdb {
     pub fn inner_value(&self) -> H160 {
-        self.0.clone()
+        self.0
     }
 }
 
@@ -142,7 +167,7 @@ pub struct BlockNumberRocksdb(U64);
 gen_newtype_from!(self = BlockNumberRocksdb, other = u8, u16, u32, u64, U64, usize, i32, i64);
 impl BlockNumberRocksdb {
     pub fn inner_value(&self) -> U64 {
-        self.0.clone()
+        self.0
     }
 }
 
@@ -163,7 +188,7 @@ pub struct SlotIndexRocksdb(U256);
 
 impl SlotIndexRocksdb {
     pub fn inner_value(&self) -> U256 {
-        self.0.clone()
+        self.0
     }
 }
 
@@ -184,7 +209,7 @@ pub struct HashRocksdb(H256);
 
 impl HashRocksdb {
     pub fn inner_value(&self) -> H256 {
-        self.0.clone()
+        self.0
     }
 }
 
@@ -205,7 +230,7 @@ pub struct IndexRocksdb(u64);
 
 impl IndexRocksdb {
     pub fn inner_value(&self) -> u64 {
-        self.0.clone()
+        self.0
     }
 }
 
@@ -631,11 +656,11 @@ impl RocksStorageState {
                 let address: AddressRocksdb = change.address.clone().into();
                 let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountRocksdb {
                     balance: WeiRocksdb::ZERO, // Initialize with default values
-                    nonce: Nonce::ZERO,
+                    nonce: NonceRocksdb::ZERO,
                     bytecode: None,
                 });
                 if let Some(nonce) = change.nonce.clone().take_modified() {
-                    account_info_entry.nonce = nonce;
+                    account_info_entry.nonce = nonce.into();
                 }
                 if let Some(balance) = change.balance.clone().take_modified() {
                     account_info_entry.balance = balance.into();
@@ -802,7 +827,7 @@ impl RocksStorageState {
                 account.address.into(),
                 AccountRocksdb {
                     balance: account.balance.into(),
-                    nonce: account.nonce,
+                    nonce: account.nonce.into(),
                     bytecode: account.bytecode,
                 },
             ));
