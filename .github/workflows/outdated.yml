@@ -31,8 +31,7 @@ jobs:
               id: outdated
               run: |
                 TABLE="$(cat outdated.txt)"
-                MESSAGE="\`\`\`${TABLE}\`\`\`"
-                echo "MESSAGE_JSON=$(echo -n "${MESSAGE}" | jq -aRs .)" >> $GITHUB_ENV
+                echo "table=$(echo "$TABLE" | awk '{printf "%s\\n ", $0}' -)" >> $GITHUB_OUTPUT
 
             - name: Notify Slack
               id: slack
@@ -52,7 +51,7 @@ jobs:
                         "type": "section",
                         "text": {
                           "type": "mrkdwn",
-                          "text": ${{ env.MESSAGE_JSON }}
+                          "text": "```${{ steps.outdated.outputs.table }}```"
                         }
                       }
                     ]
