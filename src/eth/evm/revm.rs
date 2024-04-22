@@ -63,15 +63,19 @@ impl Revm {
         // configure handler
         let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
 
-        // clear revm inner state when a failure happens validating tx against state
+        // handler custom validators
         let validate_tx_against_state = handler.validation.tx_against_state;
         handler.validation.tx_against_state = Arc::new(move |ctx| {
             let result = validate_tx_against_state(ctx);
             if result.is_err() {
-                let _ = ctx.evm.inner.journaled_state.finalize();
+                let _ = ctx.evm.inner.journaled_state.finalize(); // clear revm state on validation failure
             }
             result
         });
+
+        // handler custom instructions
+        let instructions = handler.take_instruction_table().unwrap();
+        handler.set_instruction_table(instructions);
 
         // configure revm
         let mut evm = RevmEvm::builder()
