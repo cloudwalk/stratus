@@ -8,6 +8,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
 
+use super::rocks_state::NonceRocksdb;
 use super::rocks_state::RocksStorageState;
 use super::rocks_state::WeiRocksdb;
 use crate::eth::primitives::Account;
@@ -72,8 +73,10 @@ impl RocksPermanentStorage {
                 // check account info conflicts
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
                     let account_nonce = &account.nonce;
-                    if original_nonce != account_nonce {
-                        conflicts.add_nonce(address.clone(), account_nonce.clone(), original_nonce.clone());
+                    let original_nonce: NonceRocksdb = original_nonce.clone().into();
+
+                    if &original_nonce != account_nonce {
+                        conflicts.add_nonce(address.clone(), account_nonce.clone().into(), original_nonce.into());
                     }
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
@@ -178,9 +181,9 @@ impl PermanentStorage for RocksPermanentStorage {
         let mut txs_batch = vec![];
         let mut logs_batch = vec![];
         for transaction in block.transactions.clone() {
-            txs_batch.push((transaction.input.hash.clone().into(), transaction.block_number.into()));
+            txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
             for log in transaction.logs {
-                logs_batch.push(((transaction.input.hash.clone().into(), log.log_index.into()), transaction.block_number.into()));
+                logs_batch.push(((transaction.input.hash.into(), log.log_index.into()), transaction.block_number.into()));
             }
         }
 
@@ -193,7 +196,7 @@ impl PermanentStorage for RocksPermanentStorage {
             logs_rocks.insert_batch_indexed(logs_batch, number.as_u64());
         }));
 
-        let hash = block.hash().clone();
+        let hash = *block.hash();
 
         let blocks_by_number = Arc::clone(&self.state.blocks_by_number);
         let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
@@ -202,9 +205,9 @@ impl PermanentStorage for RocksPermanentStorage {
             // checks if it has a contract address to keep
             transaction.execution.changes.retain(|change| change.bytecode.clone().is_modified());
         }
-        let hash_clone = hash.clone();
+        let hash_clone = hash;
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_number.insert(number.into(), block_without_changes.into())
+            blocks_by_number.insert(number.into(), block_without_changes.into());
         }));
         futures.push(tokio::task::spawn_blocking(move || {
             blocks_by_hash.insert_batch_indexed(vec![(hash_clone.into(), number.into())], number.as_u64());
@@ -239,7 +242,7 @@ impl PermanentStorage for RocksPermanentStorage {
                 account.address.clone().into(),
                 AccountRocksdb {
                     balance: account.balance.clone().into(),
-                    nonce: account.nonce.clone(),
+                    nonce: account.nonce.clone().into(),
                     bytecode: account.bytecode.clone(),
                 },
             );
@@ -248,7 +251,7 @@ impl PermanentStorage for RocksPermanentStorage {
                 (account.address.clone().into(), 0.into()),
                 AccountRocksdb {
                     balance: account.balance.clone().into(),
-                    nonce: account.nonce.clone(),
+                    nonce: account.nonce.clone().into(),
                     bytecode: account.bytecode.clone(),
                 },
             );
