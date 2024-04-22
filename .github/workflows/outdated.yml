@@ -31,10 +31,7 @@ jobs:
               id: outdated
               run: |
                 TABLE="$(cat outdated.txt)"
-                TABLE="${TABLE//$'\n'/\\n}"  # Escape newlines for JSON
-                TABLE="${TABLE//\"/\\\"}"  # Escape double quotes for JSON
                 MESSAGE="Stratus outdated crates:\\n\\n\`\`\`${TABLE}\`\`\`"
-                MESSAGE="${MESSAGE//\`/\\\`}"  # Escape backticks for JSON
                 echo "MESSAGE_JSON=$(echo -n "${MESSAGE}" | jq -aRs .)" >> $GITHUB_ENV
 
             - name: Notify Slack
