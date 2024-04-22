@@ -19,10 +19,11 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let importer_config = config.as_importer();
 
     let storage = stratus_config.stratus_storage.init().await?;
-    let executor = stratus_config.executor.init(Arc::clone(&storage));
 
-    let rpc_task = tokio::spawn(serve_rpc(executor, Arc::clone(&storage), stratus_config));
-    let importer_task = tokio::spawn(run_importer_online(importer_config, storage));
+    let executor = stratus_config.executor.init(Arc::clone(&storage)).await;
+
+    let rpc_task = tokio::spawn(serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config));
+    let importer_task = tokio::spawn(run_importer_online(importer_config, Arc::clone(&executor), storage));
 
     let join_result = try_join!(rpc_task, importer_task)?;
     join_result.0?;
