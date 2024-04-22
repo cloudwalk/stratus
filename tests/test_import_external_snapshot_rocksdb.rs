@@ -1,7 +1,6 @@
 mod test_import_external_snapshot_common;
 
 #[cfg(feature = "rocks")]
-#[ignore]
 pub mod rocks_test {
     use stratus::eth::primitives::BlockNumber;
     use stratus::eth::storage::PermanentStorage;
@@ -11,6 +10,7 @@ pub mod rocks_test {
     use super::test_import_external_snapshot_common as common;
 
     #[tokio::test]
+    #[ignore]
     async fn test_import_external_snapshot_with_rocksdb() {
         let docker = Docker::default();
         let _prom_guard = docker.start_prometheus();
