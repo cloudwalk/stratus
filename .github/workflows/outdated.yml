@@ -31,10 +31,11 @@ jobs:
               id: outdated
               run: |
                 TABLE="$(cat outdated.txt)"
-                TABLE="${TABLE//$'\n'/\\n}"
-                TABLE="${TABLE//\"/\\\"}"
+                TABLE="${TABLE//$'\n'/\\n}"  # Escape newlines for JSON
+                TABLE="${TABLE//\"/\\\"}"  # Escape double quotes for JSON
                 MESSAGE="Stratus outdated crates:\\n\\n\`\`\`${TABLE}\`\`\`"
-                echo "message=$MESSAGE" >> $GITHUB_ENV 
+                MESSAGE="${MESSAGE//\`/\\\`}"  # Escape backticks for JSON
+                echo "MESSAGE_JSON=$(echo -n "${MESSAGE}" | jq -aRs .)" >> $GITHUB_ENV
 
             - name: Notify Slack
               id: slack
@@ -42,7 +43,7 @@ jobs:
               with:
                 payload: |
                   {
-                    "text": "${{ env.message }}",
+                    "text": ${{ env.MESSAGE_JSON }}
                   }
               env:
                 SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
