@@ -29,7 +29,7 @@ jobs:
             - name: Load outdated table
               id: outdated
               run: |
-                TABLE = "$(cat outdated.txt)"
+                TABLE="$(cat outdated.txt)"
                 echo "table=$TABLE" >> $GITHUB_OUTPUT
 
             - name: Send custom JSON data to Slack workflow
