@@ -18,23 +18,23 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Size;
-use crate::eth::primitives::Gas;
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Size;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
@@ -49,8 +49,8 @@ use crate::log_and_err;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountRocksdb {
-    pub balance: Wei, //XXX this one is missing yet
-    pub nonce: Nonce, //XXX this one is missing yet
+    pub balance: Wei,                                    //XXX this one is missing yet
+    pub nonce: Nonce,                                    //XXX this one is missing yet
     pub bytecode: Option<crate::eth::primitives::Bytes>, //XXX this one is missing yet
 }
 
@@ -200,9 +200,9 @@ pub struct BlockHeaderRocksdb {
     pub number: BlockNumberRocksdb,
     pub hash: HashRocksdb,
     pub transactions_root: HashRocksdb,
-    pub gas_used: Gas, //XXX this one is missing yet
-    pub gas_limit: Gas, //XXX this one is missing yet
-    pub bloom: LogsBloom, //XXX this one is missing yet
+    pub gas_used: Gas,       //XXX this one is missing yet
+    pub gas_limit: Gas,      //XXX this one is missing yet
+    pub bloom: LogsBloom,    //XXX this one is missing yet
     pub timestamp: UnixTime, //XXX this one is missing yet
     pub parent_hash: HashRocksdb,
     pub author: AddressRocksdb,
@@ -214,7 +214,7 @@ pub struct BlockHeaderRocksdb {
     pub size: Size, //XXX this one is missing yet
     pub state_root: HashRocksdb,
     pub total_difficulty: Difficulty, //XXX this one is missing yet
-    pub nonce: MinerNonce,  //XXX this one is missing yet
+    pub nonce: MinerNonce,            //XXX this one is missing yet
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -278,8 +278,6 @@ impl From<BlockRocksdb> for Block {
         }
     }
 }
-
-
 
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
