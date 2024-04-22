@@ -18,23 +18,29 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Size;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::rocks_db::DbConfig;
 use crate::eth::storage::rocks_db::RocksDb;
@@ -43,9 +49,9 @@ use crate::log_and_err;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountRocksdb {
-    pub balance: Wei,
-    pub nonce: Nonce,
-    pub bytecode: Option<Bytes>,
+    pub balance: Wei,                                    //XXX this one is missing yet
+    pub nonce: Nonce,                                    //XXX this one is missing yet
+    pub bytecode: Option<crate::eth::primitives::Bytes>, //XXX this one is missing yet
 }
 
 impl AccountRocksdb {
@@ -189,13 +195,97 @@ impl From<IndexRocksdb> for Index {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BlockHeaderRocksdb {
+    pub number: BlockNumberRocksdb,
+    pub hash: HashRocksdb,
+    pub transactions_root: HashRocksdb,
+    pub gas_used: Gas,       //XXX this one is missing yet
+    pub gas_limit: Gas,      //XXX this one is missing yet
+    pub bloom: LogsBloom,    //XXX this one is missing yet
+    pub timestamp: UnixTime, //XXX this one is missing yet
+    pub parent_hash: HashRocksdb,
+    pub author: AddressRocksdb,
+    pub extra_data: crate::eth::primitives::Bytes, //XXX this one is missing yet
+    pub miner: AddressRocksdb,
+    pub difficulty: Difficulty, //XXX this one is missing yet
+    pub receipts_root: HashRocksdb,
+    pub uncle_hash: HashRocksdb,
+    pub size: Size, //XXX this one is missing yet
+    pub state_root: HashRocksdb,
+    pub total_difficulty: Difficulty, //XXX this one is missing yet
+    pub nonce: MinerNonce,            //XXX this one is missing yet
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BlockRocksdb {
+    pub header: BlockHeaderRocksdb,
+    pub transactions: Vec<TransactionMined>, //XXX this one is missing yet
+}
+
+impl From<Block> for BlockRocksdb {
+    fn from(item: Block) -> Self {
+        BlockRocksdb {
+            header: BlockHeaderRocksdb {
+                number: BlockNumberRocksdb::from(item.header.number),
+                hash: HashRocksdb::from(item.header.hash),
+                transactions_root: HashRocksdb::from(item.header.transactions_root),
+                gas_used: item.header.gas_used,
+                gas_limit: item.header.gas_limit,
+                bloom: item.header.bloom,
+                timestamp: item.header.timestamp,
+                parent_hash: HashRocksdb::from(item.header.parent_hash),
+                author: AddressRocksdb::from(item.header.author),
+                extra_data: item.header.extra_data,
+                miner: AddressRocksdb::from(item.header.miner),
+                difficulty: item.header.difficulty,
+                receipts_root: HashRocksdb::from(item.header.receipts_root),
+                uncle_hash: HashRocksdb::from(item.header.uncle_hash),
+                size: item.header.size,
+                state_root: HashRocksdb::from(item.header.state_root),
+                total_difficulty: item.header.total_difficulty,
+                nonce: item.header.nonce,
+            },
+            transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
+        }
+    }
+}
+
+impl From<BlockRocksdb> for Block {
+    fn from(item: BlockRocksdb) -> Self {
+        Block {
+            header: BlockHeader {
+                number: BlockNumber::from(item.header.number),
+                hash: Hash::from(item.header.hash),
+                transactions_root: Hash::from(item.header.transactions_root),
+                gas_used: item.header.gas_used,
+                gas_limit: item.header.gas_limit,
+                bloom: item.header.bloom,
+                timestamp: item.header.timestamp,
+                parent_hash: Hash::from(item.header.parent_hash),
+                author: Address::from(item.header.author),
+                extra_data: item.header.extra_data,
+                miner: Address::from(item.header.miner),
+                difficulty: item.header.difficulty,
+                receipts_root: Hash::from(item.header.receipts_root),
+                uncle_hash: Hash::from(item.header.uncle_hash),
+                size: item.header.size,
+                state_root: Hash::from(item.header.state_root),
+                total_difficulty: item.header.total_difficulty,
+                nonce: item.header.nonce,
+            },
+            transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
+        }
+    }
+}
+
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>,
     pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>,
     pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>,
     pub transactions: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
-    pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, Block>>,
+    pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, BlockRocksdb>>,
     pub blocks_by_hash: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
     pub logs: Arc<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>,
     pub backup_trigger: Arc<mpsc::Sender<()>>,
@@ -235,7 +325,7 @@ impl RocksStorageState {
         let account_slots_history =
             Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>::clone(&self.account_slots_history);
         let blocks_by_hash = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
-        let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, Block>>::clone(&self.blocks_by_number);
+        let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, BlockRocksdb>>::clone(&self.blocks_by_number);
         let transactions = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.transactions);
         let logs = Arc::<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>::clone(&self.logs);
 
@@ -672,7 +762,7 @@ impl RocksStorageState {
         match block {
             Some(block) => {
                 tracing::trace!(?selection, ?block, "block found");
-                Some(block)
+                Some(block.into())
             }
             None => None,
         }

@@ -202,7 +202,7 @@ impl PermanentStorage for RocksPermanentStorage {
         }
         let hash_clone = hash.clone();
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_number.insert(number.into(), block_without_changes)
+            blocks_by_number.insert(number.into(), block_without_changes.into())
         }));
         futures.push(tokio::task::spawn_blocking(move || {
             blocks_by_hash.insert_batch_indexed(vec![(hash_clone.into(), number.into())], number.as_u64());
