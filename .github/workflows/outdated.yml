@@ -39,5 +39,5 @@ jobs:
                     "text": "Stratus’ outdated crates:\n\n```${{ steps.outdated.outputs.table }}```",
                   }
               env:
-                SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+                SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
                 SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
