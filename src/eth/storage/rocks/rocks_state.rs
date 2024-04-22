@@ -1,5 +1,8 @@
 use core::fmt;
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::ops::Deref;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
@@ -25,6 +28,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Gas;
@@ -44,6 +48,7 @@ use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::rocks_db::DbConfig;
 use crate::eth::storage::rocks_db::RocksDb;
+use crate::ext::OptionExt;
 use crate::gen_newtype_from;
 use crate::log_and_err;
 
@@ -51,7 +56,46 @@ use crate::log_and_err;
 pub struct AccountRocksdb {
     pub balance: WeiRocksdb,
     pub nonce: NonceRocksdb,
-    pub bytecode: Option<crate::eth::primitives::Bytes>, //XXX this one is missing yet
+    pub bytecode: Option<BytesRocksdb>,
+}
+
+#[derive(Clone, Default, Eq, PartialEq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+pub struct BytesRocksdb(pub Vec<u8>);
+
+impl Deref for BytesRocksdb {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for BytesRocksdb {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.len() <= 256 {
+            write!(f, "{}", const_hex::encode_prefixed(&self.0))
+        } else {
+            write!(f, "too long")
+        }
+    }
+}
+
+impl Debug for BytesRocksdb {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Bytes").field(&self.to_string()).finish()
+    }
+}
+
+impl From<Bytes> for BytesRocksdb {
+    fn from(value: Bytes) -> Self {
+        Self(value.0)
+    }
+}
+
+impl From<BytesRocksdb> for Bytes {
+    fn from(value: BytesRocksdb) -> Self {
+        Self(value.0)
+    }
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
@@ -111,7 +155,7 @@ impl AccountRocksdb {
             address: address.clone(),
             nonce: self.nonce.clone().into(),
             balance: self.balance.clone().into(),
-            bytecode: self.bytecode.clone(),
+            bytecode: self.bytecode.clone().map_into(),
             code_hash: KECCAK_EMPTY.into(),
             static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
             mapping_slot_indexes: None, // TODO: is it necessary for RocksDB?
@@ -666,7 +710,7 @@ impl RocksStorageState {
                     account_info_entry.balance = balance.into();
                 }
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
-                    account_info_entry.bytecode = bytecode;
+                    account_info_entry.bytecode = bytecode.map_into();
                 }
 
                 account_changes.push((address.clone(), account_info_entry.clone()));
@@ -828,7 +872,7 @@ impl RocksStorageState {
                 AccountRocksdb {
                     balance: account.balance.into(),
                     nonce: account.nonce.into(),
-                    bytecode: account.bytecode,
+                    bytecode: account.bytecode.map_into(),
                 },
             ));
         }
