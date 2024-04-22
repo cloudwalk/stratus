@@ -24,4 +24,20 @@ jobs:
               uses: extractions/setup-just@v1
 
             - name: Check outdated
-              run: just outdated
+              run: just outdated | tee outdated.txt
+
+            - name: Load outdated table
+              id: outdated
+              run: echo "::set-output name=table::$(cat outdated.txt)"
+
+            - name: Send custom JSON data to Slack workflow
+              id: slack
+              uses: slackapi/slack-github-action@v1.26.0
+              with:
+                payload: |
+                  {
+                    "text": "Stratus’ outdated crates:\n\n```${{ steps.outdated.outputs.table }}```",
+                  }
+              env:
+                SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+                SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
