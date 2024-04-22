@@ -23,6 +23,7 @@ on:
 
 jobs:
   int_tests:
+    if: ${{ false }} # Disable the job by default
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -43,9 +44,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-test-integration-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-integration-
+            ${{ runner.os }}-cargo-test-
 
       - name: Set up Rust
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}

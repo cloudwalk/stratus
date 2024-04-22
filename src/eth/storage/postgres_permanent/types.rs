@@ -142,7 +142,7 @@ pub struct TransactionBatch {
     pub signer: Vec<Address>,
     pub nonce: Vec<Nonce>,
     pub from: Vec<Address>,
-    pub to: Vec<Address>,
+    pub to: Vec<Option<Address>>,
     pub input: Vec<Bytes>,
     pub output: Vec<Bytes>,
     pub gas: Vec<Gas>,
@@ -166,7 +166,7 @@ impl TransactionBatch {
         self.signer.push(transaction.input.signer.clone());
         self.nonce.push(transaction.input.nonce);
         self.from.push(transaction.input.signer);
-        self.to.push(transaction.input.to.unwrap_or_default());
+        self.to.push(transaction.input.to);
         self.input.push(transaction.input.input);
         self.output.push(transaction.execution.output);
         self.gas.push(transaction.execution.gas);
