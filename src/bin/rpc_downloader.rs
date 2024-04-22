@@ -131,7 +131,7 @@ async fn download(
             for hash in hashes {
                 loop {
                     let receipt = match chain.get_transaction_receipt(hash).await {
-                        Ok(json) => json,
+                        Ok(receipt) => receipt,
                         Err(e) => {
                             tracing::warn!(reason = ?e, "retrying receipt download");
                             continue;
