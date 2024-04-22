@@ -28,7 +28,9 @@ jobs:
 
             - name: Load outdated table
               id: outdated
-              run: echo "::set-output name=table::$(cat outdated.txt)"
+              run: |
+                TABLE = "$(cat outdated.txt)"
+                echo "table=$TABLE" >> $GITHUB_OUTPUT
 
             - name: Send custom JSON data to Slack workflow
               id: slack
@@ -36,7 +38,7 @@ jobs:
               with:
                 payload: |
                   {
-                    "text": "Stratus’ outdated crates:\n\n```${{ steps.outdated.outputs.table }}```",
+                    "text": "Stratus outdated crates:\n\n```${{ steps.outdated.outputs.table }}```",
                   }
               env:
                 SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
