@@ -47,7 +47,7 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     // Provider for sending rpc calls to substrate
-    relay: Option<Arc<TransactionRelay>>,
+    relay: Option<TransactionRelay>,
 
     // Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -59,7 +59,12 @@ pub struct EthExecutor {
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>, relay: Option<Arc<TransactionRelay>>) -> Self {
+    pub async fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>, forward_to: Option<&String>) -> Self {
+        let relay = match forward_to {
+            Some(rpc_url) => Some(TransactionRelay::new(rpc_url).await.expect("failed to instantiate the relay")),
+            None => None,
+        };
+
         Self {
             evm_tx,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),

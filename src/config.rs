@@ -41,7 +41,6 @@ use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
-use crate::eth::TransactionRelay;
 #[cfg(feature = "dev")]
 use crate::ext::not;
 
@@ -189,7 +188,7 @@ pub struct ExecutorConfig {
 
 impl ExecutorConfig {
     /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub fn init(&self, storage: Arc<StratusStorage>, relay: Option<Arc<TransactionRelay>>) -> EthExecutor {
+    pub async fn init(&self, storage: Arc<StratusStorage>) -> Arc<EthExecutor> {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(evms = %num_evms, "starting executor and evms");
 
@@ -229,8 +228,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        // creates an executor that can communicate with background evms
-        EthExecutor::new(evm_tx, Arc::clone(&storage), relay)
+        Arc::new(EthExecutor::new(evm_tx, Arc::clone(&storage), self.forward_to.as_ref()).await)
     }
 }
 
