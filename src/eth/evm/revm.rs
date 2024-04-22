@@ -28,6 +28,7 @@ use tokio::runtime::Handle;
 
 use crate::eth::evm::evm::EvmExecutionResult;
 use crate::eth::evm::Evm;
+use crate::eth::evm::EvmError;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -127,7 +128,7 @@ impl Evm for Revm {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
-                Err(e).context("Error executing EVM transaction.")
+                Err(EvmError::Revm(e)).context("Error executing EVM transaction.")
             }
         };
 

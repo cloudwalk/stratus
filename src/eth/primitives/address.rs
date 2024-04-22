@@ -46,6 +46,10 @@ impl Address {
         Self(H160(bytes))
     }
 
+    pub fn new_from_h160(h160: H160) -> Self {
+        Self(h160)
+    }
+
     /// Checks if current address is the zero address.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
@@ -62,6 +66,10 @@ impl Address {
     /// * Not sure if zero address should be ignored or not.
     pub fn is_ignored(&self) -> bool {
         self.is_coinbase() || self.is_zero()
+    }
+
+    pub fn inner_value(&self) -> H160 {
+        self.0
     }
 }
 

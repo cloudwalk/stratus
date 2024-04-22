@@ -227,6 +227,14 @@ impl SlotValue {
     pub fn as_u256(&self) -> U256 {
         self.0
     }
+
+    pub fn new(value: U256) -> Self {
+        SlotValue(value)
+    }
+
+    pub fn inner_value(&self) -> U256 {
+        self.0
+    }
 }
 
 impl FromStr for SlotValue {
