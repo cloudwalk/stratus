@@ -79,8 +79,11 @@ impl EthExecutor {
         // import block
 
         let block = if let Some(relay) = &self.relay {
+            tracing::debug!("relay found, draining pending failed transactions");
             let mut block = self.import_external_to_temp(block, receipts).await?;
-            for (tx, ex) in relay.failed_transactions.lock().await.drain(..) {
+            let pending = relay.failed_transactions.lock().await.drain(..).collect::<Vec<_>>();
+            for (tx, ex) in pending {
+                tracing::debug!(?tx, ?ex, "adding tx to block");
                 block.push_execution(tx, ex);
             }
             block
@@ -198,7 +201,7 @@ impl EthExecutor {
         let execution = if let Some(relay) = &self.relay {
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?.0;
-            relay.forward_transaction(execution.clone(), transaction).await?;
+            relay.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
             execution
         } else {
             // executes transaction until no more conflicts

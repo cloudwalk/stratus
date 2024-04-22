@@ -20,7 +20,7 @@ use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Hash(H256);
 

@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -28,7 +29,7 @@ use crate::eth::primitives::Wei;
 use crate::log_and_err;
 
 /// Default timeout for blockchain operations.
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct BlockchainClient {
     http: HttpClient,
@@ -62,7 +63,7 @@ impl BlockchainClient {
         let hash = serde_json::to_value(hash)?;
         Ok(self
             .http
-            .request::<Option<Transaction>, Vec<JsonValue>>("eth_getTransaction", vec![hash])
+            .request::<Option<Transaction>, Vec<JsonValue>>("eth_getTransactionByHash", vec![hash])
             .await?)
     }
 
@@ -181,6 +182,20 @@ enum PendingTxState<'a> {
     Completed,
 }
 
+impl<'a> Debug for PendingTxState<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InitialDelay(_) => "InitialDelay",
+            Self::CheckingReceipt(_) => "CheckingReceipt",
+            Self::Completed => "Completed",
+            Self::GettingReceipt(_) => "GettingReceipt",
+            Self::GettingTx(_) => "GettingTx",
+            Self::PausedGettingReceipt => "PausedGettingReceipt",
+            Self::PausedGettingTx => "PausedGettingTx"
+        }.fmt(f)
+    }
+}
+
 #[pin_project]
 pub struct PendingTransaction<'a> {
     state: PendingTxState<'a>,
@@ -208,11 +223,12 @@ impl<'a> Future for PendingTransaction<'a> {
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let this = self.project();
+        tracing::debug!(?this.state);
 
         match this.state {
             PendingTxState::InitialDelay(fut) => {
                 futures_util::ready!(fut.as_mut().poll(ctx));
-                let fut = Box::pin(this.provider.get_transaction((*this.tx_hash).clone()));
+                let fut = Box::pin(this.provider.get_transaction(*this.tx_hash));
                 *this.state = PendingTxState::GettingTx(fut);
                 ctx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -221,7 +237,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 // Wait the polling period so that we do not spam the chain when no
                 // new block has been mined
                 let _ready = futures_util::ready!(this.interval.poll_next_unpin(ctx));
-                let fut = Box::pin(this.provider.get_transaction((*this.tx_hash).clone()));
+                let fut = Box::pin(this.provider.get_transaction(*this.tx_hash));
                 *this.state = PendingTxState::GettingTx(fut);
                 ctx.waker().wake_by_ref();
             }
@@ -239,7 +255,6 @@ impl<'a> Future for PendingTransaction<'a> {
 
                 if tx_opt.is_none() {
                     if *this.retries_remaining == 0 {
-                        tracing::debug!("Dropped from mempool, pending tx {:?}", *this.tx_hash);
                         *this.state = PendingTxState::Completed;
                         return Poll::Ready(Ok(None));
                     }
@@ -259,7 +274,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 }
 
                 // Start polling for the receipt now
-                let fut = Box::pin(this.provider.get_transaction_receipt((*this.tx_hash).clone()));
+                let fut = Box::pin(this.provider.get_transaction_receipt(*this.tx_hash));
                 *this.state = PendingTxState::GettingReceipt(fut);
                 ctx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -268,7 +283,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 // Wait the polling period so that we do not spam the chain when no
                 // new block has been mined
                 let _ready = futures_util::ready!(this.interval.poll_next_unpin(ctx));
-                let fut = Box::pin(this.provider.get_transaction_receipt((*this.tx_hash).clone()));
+                let fut = Box::pin(this.provider.get_transaction_receipt(*this.tx_hash));
                 *this.state = PendingTxState::GettingReceipt(fut);
                 ctx.waker().wake_by_ref();
             }

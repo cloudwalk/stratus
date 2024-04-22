@@ -42,8 +42,8 @@ impl TransactionRelay {
             };
 
             if status == 0 {
-                tracing::warn!(?receipt.transaction_hash, "transaction result mismatch between stratus and external rpc. saving to json.");
-                let mut file = File::create(format!("data/mismatched_transactions/{}.json", receipt.transaction_hash.clone())).await?;
+                tracing::warn!(?receipt.transaction_hash, "transaction result mismatch between stratus and external rpc. saving to json");
+                let mut file = File::create(format!("data/mismatched_transactions/{}.json", receipt.transaction_hash)).await?;
                 let json = serde_json::json!(
                     {
                         "transaction_input": transaction,
@@ -55,6 +55,7 @@ impl TransactionRelay {
                 return Err(anyhow!("transaction succeeded in stratus but failed in substrate"));
             }
         } else {
+            tracing::debug!("transaction failed in substrate, pushing to failed transactions");
             self.failed_transactions.lock().await.push((transaction, execution));
         }
 
