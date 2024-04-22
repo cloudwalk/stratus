@@ -30,6 +30,7 @@ jobs:
               id: outdated
               run: |
                 TABLE="$(cat outdated.txt)"
+                TABLE="$(echo "$TABLE" | sed -z 's/\n/\\n/g')"
                 MESSAGE="Stratus outdated crates:\n\n\`\`\`$TABLE\`\`\`"
                 echo "message=$MESSAGE" >> $GITHUB_OUTPUT
 
