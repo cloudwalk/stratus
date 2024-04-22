@@ -32,6 +32,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::rocks_state::AccountRocksdb;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
+use crate::ext::OptionExt;
 
 /// used for multiple purposes, such as TPS counting and backup management
 const TRANSACTION_LOOP_THRESHOLD: usize = 420_000;
@@ -243,7 +244,7 @@ impl PermanentStorage for RocksPermanentStorage {
                 AccountRocksdb {
                     balance: account.balance.clone().into(),
                     nonce: account.nonce.clone().into(),
-                    bytecode: account.bytecode.clone(),
+                    bytecode: account.bytecode.clone().map_into(),
                 },
             );
 
@@ -252,7 +253,7 @@ impl PermanentStorage for RocksPermanentStorage {
                 AccountRocksdb {
                     balance: account.balance.clone().into(),
                     nonce: account.nonce.clone().into(),
-                    bytecode: account.bytecode.clone(),
+                    bytecode: account.bytecode.clone().map_into(),
                 },
             );
         }
