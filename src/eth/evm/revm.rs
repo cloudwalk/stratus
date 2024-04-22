@@ -60,10 +60,24 @@ impl Revm {
     pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
         tracing::info!(%chain_id, "starting revm");
 
+        // configure handler
+        let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
+
+        // clear revm inner state when a failure happens validating tx against state
+        let validate_tx_against_state = handler.validation.tx_against_state;
+        handler.validation.tx_against_state = Arc::new(move |ctx| {
+            let result = validate_tx_against_state(ctx);
+            if result.is_err() {
+                let _ = ctx.evm.inner.journaled_state.finalize();
+            }
+            result
+        });
+
+        // configure revm
         let mut evm = RevmEvm::builder()
-            .with_handler(Handler::mainnet_with_spec(SpecId::LONDON))
             .with_external_context(())
             .with_db(RevmSession::new(storage))
+            .with_handler(handler)
             .build();
 
         // global general config
