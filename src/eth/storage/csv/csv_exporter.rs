@@ -446,11 +446,11 @@ impl CsvExporter {
                 self.logs_id.value.to_string(),    // id
                 to_bytea(log.address()),           // address
                 to_bytea(&log.log.data),           // data
-                to_bytea(&log.transaction_hash),   // transaction_hash
+                to_bytea(log.transaction_hash),   // transaction_hash
                 log.transaction_index.to_string(), // transaction_idx
                 log.log_index.to_string(),         // log_idx
                 log.block_number.to_string(),      // block_number
-                to_bytea(&log.block_hash),         // block_hash
+                to_bytea(log.block_hash),         // block_hash
                 get_topic_with_index(0),           // topic0
                 get_topic_with_index(1),           // topic1
                 get_topic_with_index(2),           // topic2
