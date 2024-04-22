@@ -5,14 +5,15 @@ on:
     branches:
       - '*'
     paths-ignore:
-      - '.github/workflows/deploy.yml'
-      - '.github/workflows/docs-release.yml'
-      - '.github/workflows/outdated.yml'
-      - '.github/CODEOWNERS'
-      - 'config/**'
-      - 'README.md'
-      - 'LICENSE'
-      - 'CONTRIBUTING.md'
+      # - '.github/workflows/deploy.yml'
+      # - '.github/workflows/docs-release.yml'
+      # - '.github/workflows/outdated.yml'
+      # - '.github/CODEOWNERS'
+      # - 'config/**'
+      # - 'README.md'
+      # - 'LICENSE'
+      # - 'CONTRIBUTING.md'
+      - '*' # Temporary: by default, don't run on pull requests
   workflow_dispatch:
   push: # Rebuild cache policy
     branches:
@@ -23,7 +24,7 @@ on:
 
 jobs:
   int_tests:
-    if: ${{ false }} # Disable the job by default
+    if: ${{ github.event_name == 'workflow_dispatch' }} # Temporary: skip automatic triggers
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 25

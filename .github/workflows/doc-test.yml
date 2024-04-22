@@ -4,15 +4,10 @@ on:
   pull_request:
     branches:
       - '*'
-    paths-ignore:
-      - '.github/workflows/deploy.yml'
-      - '.github/workflows/docs-release.yml'
-      - '.github/workflows/outdated.yml'
-      - '.github/CODEOWNERS'
-      - 'config/**'
-      - 'README.md'
-      - 'LICENSE'
-      - 'CONTRIBUTING.md'
+    paths:
+      - 'src/**'
+      - '.github/workflows/doc-test.yml'
+      - 'justfile'
 
   workflow_dispatch:
   push: # Rebuild cache policy
