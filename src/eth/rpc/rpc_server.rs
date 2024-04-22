@@ -295,7 +295,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data)?;
 
-    let hash = transaction.hash.clone();
+    let hash = transaction.hash;
     match ctx.executor.transact(transaction).await {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_data(hash)),

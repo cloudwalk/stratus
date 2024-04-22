@@ -85,11 +85,11 @@ impl BlockMiner {
                 // mine log
                 let mined_log = LogMined {
                     log: mined_log,
-                    transaction_hash: input.hash.clone(),
+                    transaction_hash: input.hash,
                     transaction_index,
                     log_index,
                     block_number: block.header.number,
-                    block_hash: block.header.hash.clone(),
+                    block_hash: block.header.hash,
                 };
                 mined_logs.push(mined_log);
 
@@ -103,7 +103,7 @@ impl BlockMiner {
                 execution,
                 transaction_index,
                 block_number: block.header.number,
-                block_hash: block.header.hash.clone(),
+                block_hash: block.header.hash,
                 logs: mined_logs,
             };
 
@@ -121,9 +121,9 @@ impl BlockMiner {
 
         // replicate calculated block hash from header to transactions and logs
         for transaction in block.transactions.iter_mut() {
-            transaction.block_hash = block.header.hash.clone();
+            transaction.block_hash = block.header.hash;
             for log in transaction.logs.iter_mut() {
-                log.block_hash = block.header.hash.clone();
+                log.block_hash = block.header.hash;
             }
         }
 

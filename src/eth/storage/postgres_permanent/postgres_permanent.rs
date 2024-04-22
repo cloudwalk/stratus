@@ -834,7 +834,7 @@ fn partition_logs(logs: impl IntoIterator<Item = PostgresLog>) -> HashMap<Transa
         if let Some(part) = partitions.get_mut(&log.transaction_hash) {
             part.push(log);
         } else {
-            partitions.insert(log.transaction_hash.clone(), vec![log]);
+            partitions.insert(log.transaction_hash, vec![log]);
         }
     }
     partitions
