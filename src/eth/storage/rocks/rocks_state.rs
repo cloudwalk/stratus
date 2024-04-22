@@ -49,9 +49,35 @@ use crate::log_and_err;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountRocksdb {
-    pub balance: Wei,                                    //XXX this one is missing yet
+    pub balance: WeiRocksdb,
     pub nonce: Nonce,                                    //XXX this one is missing yet
     pub bytecode: Option<crate::eth::primitives::Bytes>, //XXX this one is missing yet
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
+pub struct WeiRocksdb(U256);
+
+impl From<WeiRocksdb> for Wei {
+    fn from(value: WeiRocksdb) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<Wei> for WeiRocksdb {
+    fn from(value: Wei) -> Self {
+        U256::from(value).into()
+    }
+}
+
+impl From<U256> for WeiRocksdb {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
+
+impl WeiRocksdb {
+    pub const ZERO: WeiRocksdb = WeiRocksdb(U256::zero());
+    pub const ONE: WeiRocksdb = WeiRocksdb(U256::one());
 }
 
 impl AccountRocksdb {
@@ -59,7 +85,7 @@ impl AccountRocksdb {
         Account {
             address: address.clone(),
             nonce: self.nonce.clone(),
-            balance: self.balance.clone(),
+            balance: self.balance.clone().into(),
             bytecode: self.bytecode.clone(),
             code_hash: KECCAK_EMPTY.into(),
             static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
@@ -604,7 +630,7 @@ impl RocksStorageState {
             for change in changes_clone_for_accounts {
                 let address: AddressRocksdb = change.address.clone().into();
                 let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountRocksdb {
-                    balance: Wei::ZERO, // Initialize with default values
+                    balance: WeiRocksdb::ZERO, // Initialize with default values
                     nonce: Nonce::ZERO,
                     bytecode: None,
                 });
@@ -612,7 +638,7 @@ impl RocksStorageState {
                     account_info_entry.nonce = nonce;
                 }
                 if let Some(balance) = change.balance.clone().take_modified() {
-                    account_info_entry.balance = balance;
+                    account_info_entry.balance = balance.into();
                 }
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode;
@@ -775,7 +801,7 @@ impl RocksStorageState {
             account_batch.push((
                 account.address.into(),
                 AccountRocksdb {
-                    balance: account.balance,
+                    balance: account.balance.into(),
                     nonce: account.nonce,
                     bytecode: account.bytecode,
                 },

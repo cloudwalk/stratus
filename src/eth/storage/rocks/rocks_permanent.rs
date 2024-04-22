@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 
 use super::rocks_state::RocksStorageState;
+use super::rocks_state::WeiRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -77,8 +78,9 @@ impl RocksPermanentStorage {
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = &account.balance;
-                    if original_balance != account_balance {
-                        conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
+                    let original_balance: WeiRocksdb = original_balance.clone().into();
+                    if &original_balance != account_balance {
+                        conflicts.add_balance(address.clone(), account_balance.clone().into(), original_balance.into());
                     }
                 }
                 // check slots conflicts
@@ -236,7 +238,7 @@ impl PermanentStorage for RocksPermanentStorage {
             self.state.accounts.insert(
                 account.address.clone().into(),
                 AccountRocksdb {
-                    balance: account.balance.clone(),
+                    balance: account.balance.clone().into(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
                 },
@@ -245,7 +247,7 @@ impl PermanentStorage for RocksPermanentStorage {
             self.state.accounts_history.insert(
                 (account.address.clone().into(), 0.into()),
                 AccountRocksdb {
-                    balance: account.balance.clone(),
+                    balance: account.balance.clone().into(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
                 },
