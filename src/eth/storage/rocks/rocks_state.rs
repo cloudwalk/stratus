@@ -357,7 +357,7 @@ pub struct BlockHeaderRocksdb {
     pub gas_used: GasRocksdb,
     pub gas_limit: GasRocksdb,
     pub bloom: LogsBloomRocksdb,
-    pub timestamp: UnixTime, //XXX this one is missing yet
+    pub timestamp: UnixTimeRocksdb,
     pub parent_hash: HashRocksdb,
     pub author: AddressRocksdb,
     pub extra_data: BytesRocksdb,
@@ -369,6 +369,23 @@ pub struct BlockHeaderRocksdb {
     pub state_root: HashRocksdb,
     pub total_difficulty: DifficultyRocksdb,
     pub nonce: MinerNonceRocksdb,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UnixTimeRocksdb(u64);
+
+gen_newtype_from!(self = UnixTimeRocksdb, other = u64);
+
+impl From<UnixTime> for UnixTimeRocksdb {
+    fn from(value: UnixTime) -> Self {
+        Self(*value)
+    }
+}
+
+impl From<UnixTimeRocksdb> for UnixTime {
+    fn from(value: UnixTimeRocksdb) -> Self {
+        value.0.into()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -423,7 +440,7 @@ impl From<Block> for BlockRocksdb {
                 gas_used: item.header.gas_used.into(),
                 gas_limit: item.header.gas_limit.into(),
                 bloom: item.header.bloom.into(),
-                timestamp: item.header.timestamp,
+                timestamp: item.header.timestamp.into(),
                 parent_hash: HashRocksdb::from(item.header.parent_hash),
                 author: AddressRocksdb::from(item.header.author),
                 extra_data: item.header.extra_data.into(),
@@ -451,7 +468,7 @@ impl From<BlockRocksdb> for Block {
                 gas_used: item.header.gas_used.into(),
                 gas_limit: item.header.gas_limit.into(),
                 bloom: item.header.bloom.into(),
-                timestamp: item.header.timestamp,
+                timestamp: item.header.timestamp.into(),
                 parent_hash: Hash::from(item.header.parent_hash),
                 author: Address::from(item.header.author),
                 extra_data: item.header.extra_data.into(),
@@ -869,13 +886,12 @@ impl RocksStorageState {
             })
             .flatten_ok()
             .filter_map(|log_res| match log_res {
-                Ok(log) => {
+                Ok(log) =>
                     if filter.matches(&log) {
                         Some(Ok(log))
                     } else {
                         None
-                    }
-                }
+                    },
                 err => Some(err),
             })
             .collect()
