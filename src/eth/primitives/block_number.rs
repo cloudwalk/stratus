@@ -71,6 +71,10 @@ impl BlockNumber {
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
     }
+
+    pub fn inner_value(&self) -> U64 {
+        self.0
+    }
 }
 
 impl Display for BlockNumber {

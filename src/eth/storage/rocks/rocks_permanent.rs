@@ -172,12 +172,13 @@ impl PermanentStorage for RocksPermanentStorage {
 
         let mut futures = Vec::with_capacity(9);
 
+        //TODO move those loops inside the spawn and check if speed improves
         let mut txs_batch = vec![];
         let mut logs_batch = vec![];
         for transaction in block.transactions.clone() {
-            txs_batch.push((transaction.input.hash.clone(), transaction.block_number));
+            txs_batch.push((transaction.input.hash.clone(), transaction.block_number.into()));
             for log in transaction.logs {
-                logs_batch.push(((transaction.input.hash.clone(), log.log_index), transaction.block_number));
+                logs_batch.push(((transaction.input.hash.clone(), log.log_index), transaction.block_number.into()));
             }
         }
 
@@ -200,9 +201,11 @@ impl PermanentStorage for RocksPermanentStorage {
             transaction.execution.changes.retain(|change| change.bytecode.clone().is_modified());
         }
         let hash_clone = hash.clone();
-        futures.push(tokio::task::spawn_blocking(move || blocks_by_number.insert(number, block_without_changes)));
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_hash.insert_batch_indexed(vec![(hash_clone, number)], number.as_u64());
+            blocks_by_number.insert(number.into(), block_without_changes)
+        }));
+        futures.push(tokio::task::spawn_blocking(move || {
+            blocks_by_hash.insert_batch_indexed(vec![(hash_clone, number.into())], number.as_u64());
         }));
 
         futures.append(
