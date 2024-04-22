@@ -201,7 +201,9 @@ impl PermanentStorage for RocksPermanentStorage {
             transaction.execution.changes.retain(|change| change.bytecode.clone().is_modified());
         }
         let hash_clone = hash.clone();
-        futures.push(tokio::task::spawn_blocking(move || blocks_by_number.insert(number.into(), block_without_changes)));
+        futures.push(tokio::task::spawn_blocking(move || {
+            blocks_by_number.insert(number.into(), block_without_changes)
+        }));
         futures.push(tokio::task::spawn_blocking(move || {
             blocks_by_hash.insert_batch_indexed(vec![(hash_clone, number.into())], number.as_u64());
         }));
