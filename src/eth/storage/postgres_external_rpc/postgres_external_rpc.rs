@@ -178,7 +178,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
         }
     }
 
-    async fn save_block_and_receipts(&self, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, JsonValue)>) -> anyhow::Result<()> {
+    async fn save_block_and_receipts(&self, number: BlockNumber, block: JsonValue, receipts: Vec<(Hash, ExternalReceipt)>) -> anyhow::Result<()> {
         tracing::debug!(?block, ?receipts, "saving external block and receipts");
 
         let mut tx = match self.pool.begin().await {
@@ -201,11 +201,12 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
         // insert receipts
         for (hash, receipt) in receipts {
+            let receipt_json = serde_json::to_value(&receipt)?;
             let result = sqlx::query_file!(
                 "src/eth/storage/postgres_external_rpc/sql/insert_external_receipt.sql",
                 hash.as_ref(),
                 number.as_i64(),
-                receipt
+                receipt_json
             )
             .execute(&mut *tx)
             .await;

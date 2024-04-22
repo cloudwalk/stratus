@@ -1,12 +1,16 @@
 use std::time::Duration;
 
+use ethers_core::types::Bytes;
+use ethers_core::types::Transaction;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use serde_json::Value as JsonValue;
 
+use super::pending_transaction::PendingTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
@@ -37,6 +41,20 @@ impl BlockchainClient {
         client.check_health().await?;
 
         Ok(client)
+    }
+
+    pub async fn send_raw_transaction(&self, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
+        let tx = serde_json::to_value(tx)?;
+        let hash = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await?;
+        Ok(PendingTransaction::new(hash, self))
+    }
+
+    pub async fn get_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
+        let hash = serde_json::to_value(hash)?;
+        Ok(self
+            .http
+            .request::<Option<Transaction>, Vec<JsonValue>>("eth_getTransactionByHash", vec![hash])
+            .await?)
     }
 
     /// Checks if the blockchain is listening.
@@ -74,11 +92,14 @@ impl BlockchainClient {
     }
 
     /// Retrieves a transaction receipt.
-    pub async fn get_transaction_receipt(&self, hash: &Hash) -> anyhow::Result<JsonValue> {
+    pub async fn get_transaction_receipt(&self, hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
         tracing::debug!(%hash, "retrieving transaction receipt");
 
         let hash = serde_json::to_value(hash)?;
-        let result = self.http.request::<JsonValue, Vec<JsonValue>>("eth_getTransactionReceipt", vec![hash]).await;
+        let result = self
+            .http
+            .request::<Option<ExternalReceipt>, Vec<JsonValue>>("eth_getTransactionReceipt", vec![hash])
+            .await;
 
         match result {
             Ok(receipt) => Ok(receipt),
