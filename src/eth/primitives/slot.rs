@@ -95,6 +95,14 @@ impl SlotIndex {
         let hashed_bytes = keccak256(mapping_index_bytes);
         Self::from(hashed_bytes)
     }
+
+    pub fn new(value: U256) -> Self {
+        Self(value)
+    }
+
+    pub fn inner_value(&self) -> U256 {
+        self.0
+    }
 }
 
 impl FromStr for SlotIndex {
