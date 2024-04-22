@@ -54,3 +54,14 @@ impl sqlx::Type<sqlx::Postgres> for LogsBloom {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = LogsBloom, other = [u8; 256], Bloom);
+
+
+// -----------------------------------------------------------------------------
+// Conversions: Self -> Other
+// -----------------------------------------------------------------------------
+
+impl From<LogsBloom> for Bloom {
+    fn from(value: LogsBloom) -> Self {
+        value.0
+    }
+}

@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use ethereum_types::Bloom;
 use ethereum_types::H160;
 use ethereum_types::H256;
 use ethereum_types::H64;
@@ -355,7 +356,7 @@ pub struct BlockHeaderRocksdb {
     pub transactions_root: HashRocksdb,
     pub gas_used: GasRocksdb,
     pub gas_limit: GasRocksdb,
-    pub bloom: LogsBloom,    //XXX this one is missing yet
+    pub bloom: LogsBloomRocksdb,
     pub timestamp: UnixTime, //XXX this one is missing yet
     pub parent_hash: HashRocksdb,
     pub author: AddressRocksdb,
@@ -368,6 +369,24 @@ pub struct BlockHeaderRocksdb {
     pub state_root: HashRocksdb,
     pub total_difficulty: DifficultyRocksdb,
     pub nonce: MinerNonceRocksdb,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(transparent)]
+pub struct LogsBloomRocksdb(Bloom);
+
+gen_newtype_from!(self = LogsBloomRocksdb, other = Bloom);
+
+impl From<LogsBloom> for LogsBloomRocksdb {
+    fn from(value: LogsBloom) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<LogsBloomRocksdb> for LogsBloom {
+    fn from(value: LogsBloomRocksdb) -> Self {
+        value.0.into()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -403,7 +422,7 @@ impl From<Block> for BlockRocksdb {
                 transactions_root: HashRocksdb::from(item.header.transactions_root),
                 gas_used: item.header.gas_used.into(),
                 gas_limit: item.header.gas_limit.into(),
-                bloom: item.header.bloom,
+                bloom: item.header.bloom.into(),
                 timestamp: item.header.timestamp,
                 parent_hash: HashRocksdb::from(item.header.parent_hash),
                 author: AddressRocksdb::from(item.header.author),
@@ -431,7 +450,7 @@ impl From<BlockRocksdb> for Block {
                 transactions_root: Hash::from(item.header.transactions_root),
                 gas_used: item.header.gas_used.into(),
                 gas_limit: item.header.gas_limit.into(),
-                bloom: item.header.bloom,
+                bloom: item.header.bloom.into(),
                 timestamp: item.header.timestamp,
                 parent_hash: Hash::from(item.header.parent_hash),
                 author: Address::from(item.header.author),
@@ -850,12 +869,13 @@ impl RocksStorageState {
             })
             .flatten_ok()
             .filter_map(|log_res| match log_res {
-                Ok(log) =>
+                Ok(log) => {
                     if filter.matches(&log) {
                         Some(Ok(log))
                     } else {
                         None
-                    },
+                    }
+                }
                 err => Some(err),
             })
             .collect()
