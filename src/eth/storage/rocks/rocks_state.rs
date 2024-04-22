@@ -49,7 +49,7 @@ use crate::log_and_err;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountRocksdb {
-    pub balance: WeiRocksdb,                                    //XXX this one is missing yet
+    pub balance: WeiRocksdb,
     pub nonce: Nonce,                                    //XXX this one is missing yet
     pub bytecode: Option<crate::eth::primitives::Bytes>, //XXX this one is missing yet
 }

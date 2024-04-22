@@ -78,7 +78,7 @@ impl RocksPermanentStorage {
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = &account.balance;
-                    let original_balance: WeiRocksdb =  original_balance.clone().into();
+                    let original_balance: WeiRocksdb = original_balance.clone().into();
                     if &original_balance != account_balance {
                         conflicts.add_balance(address.clone(), account_balance.clone().into(), original_balance.into());
                     }
