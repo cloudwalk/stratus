@@ -176,9 +176,9 @@ impl PermanentStorage for RocksPermanentStorage {
         let mut txs_batch = vec![];
         let mut logs_batch = vec![];
         for transaction in block.transactions.clone() {
-            txs_batch.push((transaction.input.hash.clone(), transaction.block_number.into()));
+            txs_batch.push((transaction.input.hash.clone().into(), transaction.block_number.into()));
             for log in transaction.logs {
-                logs_batch.push(((transaction.input.hash.clone(), log.log_index), transaction.block_number.into()));
+                logs_batch.push(((transaction.input.hash.clone().into(), log.log_index.into()), transaction.block_number.into()));
             }
         }
 
@@ -205,7 +205,7 @@ impl PermanentStorage for RocksPermanentStorage {
             blocks_by_number.insert(number.into(), block_without_changes)
         }));
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_hash.insert_batch_indexed(vec![(hash_clone, number.into())], number.as_u64());
+            blocks_by_hash.insert_batch_indexed(vec![(hash_clone.into(), number.into())], number.as_u64());
         }));
 
         futures.append(
