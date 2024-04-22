@@ -30,6 +30,10 @@ impl Hash {
         Self(H256(bytes))
     }
 
+    pub fn new_from_h256(h256: H256) -> Self {
+        Self(h256)
+    }
+
     /// Creates a new random hash.
     pub fn new_random() -> Self {
         Self(H256::random())
@@ -43,6 +47,10 @@ impl Hash {
     pub fn into_hash_partition(self) -> i16 {
         let n = self.0.to_low_u64_ne() % 10;
         n as i16
+    }
+
+    pub fn inner_value(&self) -> H256 {
+        self.0
     }
 }
 

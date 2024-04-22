@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use ethereum_types::H160;
+use ethereum_types::H256;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use futures::future::join_all;
@@ -146,15 +147,36 @@ impl From<SlotIndexRocksdb> for SlotIndex {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct HashRocksdb(H256);
+
+impl HashRocksdb {
+    pub fn inner_value(&self) -> H256 {
+        self.0.clone()
+    }
+}
+
+impl From<Hash> for HashRocksdb {
+    fn from(item: Hash) -> Self {
+        HashRocksdb(item.inner_value())
+    }
+}
+
+impl From<HashRocksdb> for Hash {
+    fn from(item: HashRocksdb) -> Self {
+        Hash::new_from_h256(item.inner_value())
+    }
+}
+
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>,
     pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>,
     pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>,
-    pub transactions: Arc<RocksDb<Hash, BlockNumberRocksdb>>,
+    pub transactions: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
     pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, Block>>,
-    pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumberRocksdb>>,
-    pub logs: Arc<RocksDb<(Hash, Index), BlockNumberRocksdb>>,
+    pub blocks_by_hash: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
+    pub logs: Arc<RocksDb<(HashRocksdb, Index), BlockNumberRocksdb>>,
     pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
@@ -191,10 +213,10 @@ impl RocksStorageState {
         let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>::clone(&self.account_slots);
         let account_slots_history =
             Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>::clone(&self.account_slots_history);
-        let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
+        let blocks_by_hash = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
         let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, Block>>::clone(&self.blocks_by_number);
-        let transactions = Arc::<RocksDb<Hash, BlockNumberRocksdb>>::clone(&self.transactions);
-        let logs = Arc::<RocksDb<(Hash, Index), BlockNumberRocksdb>>::clone(&self.logs);
+        let transactions = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.transactions);
+        let logs = Arc::<RocksDb<(HashRocksdb, Index), BlockNumberRocksdb>>::clone(&self.logs);
 
         tokio::spawn(async move {
             let mut rx = rx;
@@ -514,7 +536,7 @@ impl RocksStorageState {
     }
 
     pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        match self.transactions.get(tx_hash) {
+        match self.transactions.get(&(*tx_hash).into()) {
             Some(transaction) => match self.blocks_by_number.get(&transaction) {
                 Some(block) => {
                     tracing::trace!(%tx_hash, "transaction found");
@@ -539,7 +561,7 @@ impl RocksStorageState {
                 Some(to_block) => log_block_number <= &to_block.into(),
                 None => true,
             })
-            .map(|((tx_hash, _), _)| match self.read_transaction(&tx_hash) {
+            .map(|((tx_hash, _), _)| match self.read_transaction(&tx_hash.into()) {
                 Ok(Some(tx)) => Ok(tx.logs),
                 Ok(None) => Err(anyhow!("the transaction the log was supposed to be in was not found")),
                 Err(err) => Err(err),
@@ -622,7 +644,7 @@ impl RocksStorageState {
             BlockSelection::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
             BlockSelection::Number(number) => self.blocks_by_number.get(&(*number).into()),
             BlockSelection::Hash(hash) => {
-                let block_number = self.blocks_by_hash.get(hash).unwrap_or_default();
+                let block_number = self.blocks_by_hash.get(&(*hash).into()).unwrap_or_default();
                 self.blocks_by_number.get(&block_number)
             }
         };
