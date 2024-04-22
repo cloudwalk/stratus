@@ -9,6 +9,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use ethereum_types::H160;
 use ethereum_types::H256;
+use ethereum_types::H64;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use futures::future::join_all;
@@ -312,6 +313,41 @@ impl From<u64> for GasRocksdb {
     }
 }
 
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct MinerNonceRocksdb(H64);
+
+gen_newtype_from!(self = MinerNonceRocksdb, other = H64, [u8; 8]);
+
+impl From<MinerNonce> for MinerNonceRocksdb {
+    fn from(value: MinerNonce) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<MinerNonceRocksdb> for MinerNonce {
+    fn from(value: MinerNonceRocksdb) -> Self {
+        value.0.into()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct DifficultyRocksdb(U256);
+
+gen_newtype_from!(self = DifficultyRocksdb, other = U256);
+
+impl From<DifficultyRocksdb> for Difficulty {
+    fn from(value: DifficultyRocksdb) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<Difficulty> for DifficultyRocksdb {
+    fn from(value: Difficulty) -> Self {
+        U256::from(value).into()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockHeaderRocksdb {
     pub number: BlockNumberRocksdb,
@@ -325,13 +361,13 @@ pub struct BlockHeaderRocksdb {
     pub author: AddressRocksdb,
     pub extra_data: BytesRocksdb,
     pub miner: AddressRocksdb,
-    pub difficulty: Difficulty, //XXX this one is missing yet
+    pub difficulty: DifficultyRocksdb,
     pub receipts_root: HashRocksdb,
     pub uncle_hash: HashRocksdb,
     pub size: Size, //XXX this one is missing yet
     pub state_root: HashRocksdb,
-    pub total_difficulty: Difficulty, //XXX this one is missing yet
-    pub nonce: MinerNonce,            //XXX this one is missing yet
+    pub total_difficulty: DifficultyRocksdb,
+    pub nonce: MinerNonceRocksdb,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -355,13 +391,13 @@ impl From<Block> for BlockRocksdb {
                 author: AddressRocksdb::from(item.header.author),
                 extra_data: item.header.extra_data.into(),
                 miner: AddressRocksdb::from(item.header.miner),
-                difficulty: item.header.difficulty,
+                difficulty: item.header.difficulty.into(),
                 receipts_root: HashRocksdb::from(item.header.receipts_root),
                 uncle_hash: HashRocksdb::from(item.header.uncle_hash),
                 size: item.header.size,
                 state_root: HashRocksdb::from(item.header.state_root),
-                total_difficulty: item.header.total_difficulty,
-                nonce: item.header.nonce,
+                total_difficulty: item.header.total_difficulty.into(),
+                nonce: item.header.nonce.into(),
             },
             transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
         }
@@ -383,13 +419,13 @@ impl From<BlockRocksdb> for Block {
                 author: Address::from(item.header.author),
                 extra_data: item.header.extra_data.into(),
                 miner: Address::from(item.header.miner),
-                difficulty: item.header.difficulty,
+                difficulty: item.header.difficulty.into(),
                 receipts_root: Hash::from(item.header.receipts_root),
                 uncle_hash: Hash::from(item.header.uncle_hash),
                 size: item.header.size,
                 state_root: Hash::from(item.header.state_root),
-                total_difficulty: item.header.total_difficulty,
-                nonce: item.header.nonce,
+                total_difficulty: item.header.total_difficulty.into(),
+                nonce: item.header.nonce.into(),
             },
             transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
         }
