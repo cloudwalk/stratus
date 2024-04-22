@@ -51,7 +51,7 @@ jobs:
                         "type": "section",
                         "text": {
                           "type": "mrkdwn",
-                          "text": "```${{ steps.outdated.outputs.table }}```"
+                          "text": "${{ steps.outdated.outputs.table }}"
                         }
                       }
                     ]
