@@ -26,7 +26,7 @@ itertools = "=0.12.1"
 nonempty = { version = "=0.10.0", features = ["serialize"] }
 paste = "=1.0.14"
 phf = "=0.11.2"
-pin-project = "=1.1.4"
+pin-project = "=1.1.5"
 quote = "=1.0.35"
 rand = "=0.8.5"
 strum = "=0.25.0"
