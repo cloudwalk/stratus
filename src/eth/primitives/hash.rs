@@ -20,7 +20,7 @@ use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Hash(H256);
 
@@ -28,6 +28,10 @@ impl Hash {
     /// Creates a hash from the given bytes.
     pub const fn new(bytes: [u8; 32]) -> Self {
         Self(H256(bytes))
+    }
+
+    pub fn new_from_h256(h256: H256) -> Self {
+        Self(h256)
     }
 
     /// Creates a new random hash.
@@ -43,6 +47,10 @@ impl Hash {
     pub fn into_hash_partition(self) -> i16 {
         let n = self.0.to_low_u64_ne() % 10;
         n as i16
+    }
+
+    pub fn inner_value(&self) -> H256 {
+        self.0
     }
 }
 

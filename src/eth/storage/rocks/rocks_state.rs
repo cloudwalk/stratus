@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use ethereum_types::H160;
+use ethereum_types::H256;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use futures::future::join_all;
@@ -17,23 +18,29 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Size;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::rocks_db::DbConfig;
 use crate::eth::storage::rocks_db::RocksDb;
@@ -42,9 +49,35 @@ use crate::log_and_err;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountRocksdb {
-    pub balance: Wei,
-    pub nonce: Nonce,
-    pub bytecode: Option<Bytes>,
+    pub balance: WeiRocksdb,
+    pub nonce: Nonce,                                    //XXX this one is missing yet
+    pub bytecode: Option<crate::eth::primitives::Bytes>, //XXX this one is missing yet
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
+pub struct WeiRocksdb(U256);
+
+impl From<WeiRocksdb> for Wei {
+    fn from(value: WeiRocksdb) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<Wei> for WeiRocksdb {
+    fn from(value: Wei) -> Self {
+        U256::from(value).into()
+    }
+}
+
+impl From<U256> for WeiRocksdb {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
+
+impl WeiRocksdb {
+    pub const ZERO: WeiRocksdb = WeiRocksdb(U256::zero());
+    pub const ONE: WeiRocksdb = WeiRocksdb(U256::one());
 }
 
 impl AccountRocksdb {
@@ -52,7 +85,7 @@ impl AccountRocksdb {
         Account {
             address: address.clone(),
             nonce: self.nonce.clone(),
-            balance: self.balance.clone(),
+            balance: self.balance.clone().into(),
             bytecode: self.bytecode.clone(),
             code_hash: KECCAK_EMPTY.into(),
             static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
@@ -125,15 +158,162 @@ impl From<BlockNumberRocksdb> for BlockNumber {
     }
 }
 
+#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct SlotIndexRocksdb(U256);
+
+impl SlotIndexRocksdb {
+    pub fn inner_value(&self) -> U256 {
+        self.0.clone()
+    }
+}
+
+impl From<SlotIndex> for SlotIndexRocksdb {
+    fn from(item: SlotIndex) -> Self {
+        SlotIndexRocksdb(item.inner_value())
+    }
+}
+
+impl From<SlotIndexRocksdb> for SlotIndex {
+    fn from(item: SlotIndexRocksdb) -> Self {
+        SlotIndex::new(item.inner_value())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct HashRocksdb(H256);
+
+impl HashRocksdb {
+    pub fn inner_value(&self) -> H256 {
+        self.0.clone()
+    }
+}
+
+impl From<Hash> for HashRocksdb {
+    fn from(item: Hash) -> Self {
+        HashRocksdb(item.inner_value())
+    }
+}
+
+impl From<HashRocksdb> for Hash {
+    fn from(item: HashRocksdb) -> Self {
+        Hash::new_from_h256(item.inner_value())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]
+pub struct IndexRocksdb(u64);
+
+impl IndexRocksdb {
+    pub fn inner_value(&self) -> u64 {
+        self.0.clone()
+    }
+}
+
+impl From<Index> for IndexRocksdb {
+    fn from(item: Index) -> Self {
+        IndexRocksdb(item.inner_value())
+    }
+}
+
+impl From<IndexRocksdb> for Index {
+    fn from(item: IndexRocksdb) -> Self {
+        Index::new(item.inner_value())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BlockHeaderRocksdb {
+    pub number: BlockNumberRocksdb,
+    pub hash: HashRocksdb,
+    pub transactions_root: HashRocksdb,
+    pub gas_used: Gas,       //XXX this one is missing yet
+    pub gas_limit: Gas,      //XXX this one is missing yet
+    pub bloom: LogsBloom,    //XXX this one is missing yet
+    pub timestamp: UnixTime, //XXX this one is missing yet
+    pub parent_hash: HashRocksdb,
+    pub author: AddressRocksdb,
+    pub extra_data: crate::eth::primitives::Bytes, //XXX this one is missing yet
+    pub miner: AddressRocksdb,
+    pub difficulty: Difficulty, //XXX this one is missing yet
+    pub receipts_root: HashRocksdb,
+    pub uncle_hash: HashRocksdb,
+    pub size: Size, //XXX this one is missing yet
+    pub state_root: HashRocksdb,
+    pub total_difficulty: Difficulty, //XXX this one is missing yet
+    pub nonce: MinerNonce,            //XXX this one is missing yet
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BlockRocksdb {
+    pub header: BlockHeaderRocksdb,
+    pub transactions: Vec<TransactionMined>, //XXX this one is missing yet
+}
+
+impl From<Block> for BlockRocksdb {
+    fn from(item: Block) -> Self {
+        BlockRocksdb {
+            header: BlockHeaderRocksdb {
+                number: BlockNumberRocksdb::from(item.header.number),
+                hash: HashRocksdb::from(item.header.hash),
+                transactions_root: HashRocksdb::from(item.header.transactions_root),
+                gas_used: item.header.gas_used,
+                gas_limit: item.header.gas_limit,
+                bloom: item.header.bloom,
+                timestamp: item.header.timestamp,
+                parent_hash: HashRocksdb::from(item.header.parent_hash),
+                author: AddressRocksdb::from(item.header.author),
+                extra_data: item.header.extra_data,
+                miner: AddressRocksdb::from(item.header.miner),
+                difficulty: item.header.difficulty,
+                receipts_root: HashRocksdb::from(item.header.receipts_root),
+                uncle_hash: HashRocksdb::from(item.header.uncle_hash),
+                size: item.header.size,
+                state_root: HashRocksdb::from(item.header.state_root),
+                total_difficulty: item.header.total_difficulty,
+                nonce: item.header.nonce,
+            },
+            transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
+        }
+    }
+}
+
+impl From<BlockRocksdb> for Block {
+    fn from(item: BlockRocksdb) -> Self {
+        Block {
+            header: BlockHeader {
+                number: BlockNumber::from(item.header.number),
+                hash: Hash::from(item.header.hash),
+                transactions_root: Hash::from(item.header.transactions_root),
+                gas_used: item.header.gas_used,
+                gas_limit: item.header.gas_limit,
+                bloom: item.header.bloom,
+                timestamp: item.header.timestamp,
+                parent_hash: Hash::from(item.header.parent_hash),
+                author: Address::from(item.header.author),
+                extra_data: item.header.extra_data,
+                miner: Address::from(item.header.miner),
+                difficulty: item.header.difficulty,
+                receipts_root: Hash::from(item.header.receipts_root),
+                uncle_hash: Hash::from(item.header.uncle_hash),
+                size: item.header.size,
+                state_root: Hash::from(item.header.state_root),
+                total_difficulty: item.header.total_difficulty,
+                nonce: item.header.nonce,
+            },
+            transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
+        }
+    }
+}
+
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>,
-    pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndex), SlotValueRocksdb>>,
-    pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndex, BlockNumberRocksdb), SlotValueRocksdb>>,
-    pub transactions: Arc<RocksDb<Hash, BlockNumberRocksdb>>,
-    pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, Block>>,
-    pub blocks_by_hash: Arc<RocksDb<Hash, BlockNumberRocksdb>>,
-    pub logs: Arc<RocksDb<(Hash, Index), BlockNumberRocksdb>>,
+    pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>,
+    pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>,
+    pub transactions: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
+    pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, BlockRocksdb>>,
+    pub blocks_by_hash: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
+    pub logs: Arc<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>,
     pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
@@ -167,12 +347,13 @@ impl RocksStorageState {
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
         let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
         let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>::clone(&self.accounts_history);
-        let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndex), SlotValueRocksdb>>::clone(&self.account_slots);
-        let account_slots_history = Arc::<RocksDb<(AddressRocksdb, SlotIndex, BlockNumberRocksdb), SlotValueRocksdb>>::clone(&self.account_slots_history);
-        let blocks_by_hash = Arc::<RocksDb<Hash, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
-        let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, Block>>::clone(&self.blocks_by_number);
-        let transactions = Arc::<RocksDb<Hash, BlockNumberRocksdb>>::clone(&self.transactions);
-        let logs = Arc::<RocksDb<(Hash, Index), BlockNumberRocksdb>>::clone(&self.logs);
+        let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>::clone(&self.account_slots);
+        let account_slots_history =
+            Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>::clone(&self.account_slots_history);
+        let blocks_by_hash = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
+        let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, BlockRocksdb>>::clone(&self.blocks_by_number);
+        let transactions = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.transactions);
+        let logs = Arc::<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>::clone(&self.logs);
 
         tokio::spawn(async move {
             let mut rx = rx;
@@ -395,7 +576,7 @@ impl RocksStorageState {
             let self_account_slots_clone = Arc::clone(&self.account_slots);
             let block_number_clone = block_number;
             move || {
-                let mut latest_slots: HashMap<(AddressRocksdb, SlotIndex), (BlockNumberRocksdb, SlotValueRocksdb)> = std::collections::HashMap::new();
+                let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = std::collections::HashMap::new();
                 let slot_histories = self_account_slots_history_clone.iter_start();
                 for ((address, slot_index, historic_block_number), slot_value) in slot_histories {
                     let slot_key = (address, slot_index);
@@ -449,7 +630,7 @@ impl RocksStorageState {
             for change in changes_clone_for_accounts {
                 let address: AddressRocksdb = change.address.clone().into();
                 let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountRocksdb {
-                    balance: Wei::ZERO, // Initialize with default values
+                    balance: WeiRocksdb::ZERO, // Initialize with default values
                     nonce: Nonce::ZERO,
                     bytecode: None,
                 });
@@ -457,7 +638,7 @@ impl RocksStorageState {
                     account_info_entry.nonce = nonce;
                 }
                 if let Some(balance) = change.balance.clone().take_modified() {
-                    account_info_entry.balance = balance;
+                    account_info_entry.balance = balance.into();
                 }
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode;
@@ -479,8 +660,8 @@ impl RocksStorageState {
                 let address: AddressRocksdb = change.address.clone().into();
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
-                        slot_changes.push(((address.clone(), slot_index.clone()), slot.value.clone().into()));
-                        slot_history_changes.push(((address.clone(), slot_index, block_number.into()), slot.value.into()));
+                        slot_changes.push(((address.clone(), slot_index.clone().into()), slot.value.clone().into()));
+                        slot_history_changes.push(((address.clone(), slot_index.into(), block_number.into()), slot.value.into()));
                     }
                 }
             }
@@ -492,7 +673,7 @@ impl RocksStorageState {
     }
 
     pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        match self.transactions.get(tx_hash) {
+        match self.transactions.get(&(*tx_hash).into()) {
             Some(transaction) => match self.blocks_by_number.get(&transaction) {
                 Some(block) => {
                     tracing::trace!(%tx_hash, "transaction found");
@@ -517,7 +698,7 @@ impl RocksStorageState {
                 Some(to_block) => log_block_number <= &to_block.into(),
                 None => true,
             })
-            .map(|((tx_hash, _), _)| match self.read_transaction(&tx_hash) {
+            .map(|((tx_hash, _), _)| match self.read_transaction(&tx_hash.into()) {
                 Ok(Some(tx)) => Ok(tx.logs),
                 Ok(None) => Err(anyhow!("the transaction the log was supposed to be in was not found")),
                 Err(err) => Err(err),
@@ -537,19 +718,22 @@ impl RocksStorageState {
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
-            StoragePointInTime::Present => self.account_slots.get(&(address.clone().into(), index.clone())).map(|account_slot_value| Slot {
-                index: index.clone(),
-                value: account_slot_value.clone().into(),
-            }),
+            StoragePointInTime::Present => self
+                .account_slots
+                .get(&(address.clone().into(), index.clone().into()))
+                .map(|account_slot_value| Slot {
+                    index: index.clone(),
+                    value: account_slot_value.clone().into(),
+                }),
             StoragePointInTime::Past(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
                     .iter_from((address.clone(), index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if index == &rocks_index && rocks_address == (*address).clone().into() {
+                    if rocks_index == (*index).clone().into() && rocks_address == (*address).clone().into() {
                         return Some(Slot {
-                            index: rocks_index,
+                            index: rocks_index.into(),
                             value: value.into(),
                         });
                     }
@@ -597,14 +781,14 @@ impl RocksStorageState {
             BlockSelection::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
             BlockSelection::Number(number) => self.blocks_by_number.get(&(*number).into()),
             BlockSelection::Hash(hash) => {
-                let block_number = self.blocks_by_hash.get(hash).unwrap_or_default();
+                let block_number = self.blocks_by_hash.get(&(*hash).into()).unwrap_or_default();
                 self.blocks_by_number.get(&block_number)
             }
         };
         match block {
             Some(block) => {
                 tracing::trace!(?selection, ?block, "block found");
-                Some(block)
+                Some(block.into())
             }
             None => None,
         }
@@ -617,7 +801,7 @@ impl RocksStorageState {
             account_batch.push((
                 account.address.into(),
                 AccountRocksdb {
-                    balance: account.balance,
+                    balance: account.balance.into(),
                     nonce: account.nonce,
                     bytecode: account.bytecode,
                 },
@@ -632,7 +816,7 @@ impl RocksStorageState {
         let mut slot_batch = vec![];
 
         for (address, slot) in slots {
-            slot_batch.push(((address.into(), slot.index), slot.value.into()));
+            slot_batch.push(((address.into(), slot.index.into()), slot.value.into()));
         }
         self.account_slots.insert_batch(slot_batch, Some(block_number.into()));
     }

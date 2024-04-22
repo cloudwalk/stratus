@@ -47,7 +47,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.stratus_storage.init().await?;
-    let executor = config.executor.init(Arc::clone(&stratus_storage));
+    let executor = config.executor.init(Arc::clone(&stratus_storage)).await;
 
     // init block range
     let block_start = match config.block_start {
@@ -120,7 +120,7 @@ fn signal_handler(cancellation: CancellationToken) {
 // -----------------------------------------------------------------------------
 async fn execute_block_importer(
     // services
-    executor: EthExecutor,
+    executor: Arc<EthExecutor>,
     stratus_storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,

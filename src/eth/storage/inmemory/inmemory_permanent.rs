@@ -327,12 +327,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let block = Arc::new(block);
         let number = block.number();
         state.blocks_by_number.insert(*number, Arc::clone(&block));
-        state.blocks_by_hash.insert(block.hash().clone(), Arc::clone(&block));
+        state.blocks_by_hash.insert(*block.hash(), Arc::clone(&block));
 
         // save transactions
         for transaction in block.transactions.clone() {
             tracing::debug!(hash = %transaction.input.hash, "saving transaction");
-            state.transactions.insert(transaction.input.hash.clone(), transaction.clone());
+            state.transactions.insert(transaction.input.hash, transaction.clone());
             if transaction.is_success() {
                 for log in transaction.logs {
                     state.logs.push(log);

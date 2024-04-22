@@ -9,6 +9,7 @@ use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
+use stratus::eth::EthExecutor;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
@@ -27,13 +28,13 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
-    run_importer_online(config, storage).await
+    let executor = config.executor.init(Arc::clone(&storage)).await;
+    run_importer_online(config, executor, storage).await
 }
 
-pub async fn run_importer_online(config: ImporterOnlineConfig, storage: Arc<StratusStorage>) -> anyhow::Result<()> {
+pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<EthExecutor>, storage: Arc<StratusStorage>) -> anyhow::Result<()> {
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
-    let executor = config.executor.init(Arc::clone(&storage));
 
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
@@ -98,24 +99,16 @@ async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::R
 async fn fetch_receipt(chain: &BlockchainClient, hash: Hash) -> anyhow::Result<ExternalReceipt> {
     let receipt = loop {
         tracing::info!(%hash, "fetching receipt");
-        let receipt = match chain.get_transaction_receipt(&hash).await {
-            Ok(json) => json,
-            Err(e) => {
-                tracing::warn!(reason = ?e, "retrying receipt download because error");
+        let receipt = chain.get_transaction_receipt(hash).await?;
+
+        match receipt {
+            Some(receipt) => break receipt,
+            None => {
+                tracing::warn!(reason = %"null", "retrying receipt download because block is not mined yet");
                 continue;
             }
-        };
-
-        if receipt.is_null() {
-            tracing::warn!(reason = %"null", "retrying receipt download because block is not mined yet");
-            continue;
         }
-
-        break receipt;
     };
 
-    match serde_json::from_value(receipt.clone()) {
-        Ok(receipt) => Ok(receipt),
-        Err(e) => log_and_err!(reason = e, payload = receipt, "failed to deserialize external receipt"),
-    }
+    Ok(receipt)
 }

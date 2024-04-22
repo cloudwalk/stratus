@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 
 use super::rocks_state::RocksStorageState;
+use super::rocks_state::WeiRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -77,13 +78,14 @@ impl RocksPermanentStorage {
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = &account.balance;
-                    if original_balance != account_balance {
-                        conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
+                    let original_balance: WeiRocksdb = original_balance.clone().into();
+                    if &original_balance != account_balance {
+                        conflicts.add_balance(address.clone(), account_balance.clone().into(), original_balance.into());
                     }
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = state.account_slots.get(&(address.clone().into(), slot_index.clone())) {
+                    if let Some(value) = state.account_slots.get(&(address.clone().into(), slot_index.clone().into())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
                             let account_slot_value: SlotValue = value.clone().into();
                             if original_slot.value != account_slot_value.clone() {
@@ -176,9 +178,9 @@ impl PermanentStorage for RocksPermanentStorage {
         let mut txs_batch = vec![];
         let mut logs_batch = vec![];
         for transaction in block.transactions.clone() {
-            txs_batch.push((transaction.input.hash.clone(), transaction.block_number.into()));
+            txs_batch.push((transaction.input.hash.clone().into(), transaction.block_number.into()));
             for log in transaction.logs {
-                logs_batch.push(((transaction.input.hash.clone(), log.log_index), transaction.block_number.into()));
+                logs_batch.push(((transaction.input.hash.clone().into(), log.log_index.into()), transaction.block_number.into()));
             }
         }
 
@@ -202,10 +204,10 @@ impl PermanentStorage for RocksPermanentStorage {
         }
         let hash_clone = hash.clone();
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_number.insert(number.into(), block_without_changes)
+            blocks_by_number.insert(number.into(), block_without_changes.into())
         }));
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_hash.insert_batch_indexed(vec![(hash_clone, number.into())], number.as_u64());
+            blocks_by_hash.insert_batch_indexed(vec![(hash_clone.into(), number.into())], number.as_u64());
         }));
 
         futures.append(
@@ -236,7 +238,7 @@ impl PermanentStorage for RocksPermanentStorage {
             self.state.accounts.insert(
                 account.address.clone().into(),
                 AccountRocksdb {
-                    balance: account.balance.clone(),
+                    balance: account.balance.clone().into(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
                 },
@@ -245,7 +247,7 @@ impl PermanentStorage for RocksPermanentStorage {
             self.state.accounts_history.insert(
                 (account.address.clone().into(), 0.into()),
                 AccountRocksdb {
-                    balance: account.balance.clone(),
+                    balance: account.balance.clone().into(),
                     nonce: account.nonce.clone(),
                     bytecode: account.bytecode.clone(),
                 },

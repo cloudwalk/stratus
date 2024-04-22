@@ -35,6 +35,10 @@ impl Index {
     pub fn new(inner: u64) -> Self {
         Index(inner)
     }
+
+    pub fn inner_value(&self) -> u64 {
+        self.0
+    }
 }
 
 impl Display for Index {
