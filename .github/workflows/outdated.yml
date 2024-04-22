@@ -26,13 +26,14 @@ jobs:
             - name: Check outdated
               run: just outdated | tee outdated.txt
 
-            - name: Load outdated table
+            - name: Escape new lines
               id: outdated
               run: |
                 TABLE="$(cat outdated.txt)"
+                TABLE="$(echo "$TABLE" | sed -z 's/\n/\\n/g')"
                 echo "table=$TABLE" >> $GITHUB_OUTPUT
 
-            - name: Send custom JSON data to Slack workflow
+            - name: Notify Slack
               id: slack
               uses: slackapi/slack-github-action@v1.26.0
               with:
