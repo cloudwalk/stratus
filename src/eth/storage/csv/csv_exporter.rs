@@ -304,9 +304,9 @@ impl CsvExporter {
             let row = [
                 self.transactions_id.value.to_string(),      // id
                 to_bytea(tx.input.hash),                     // hash
-                to_bytea(&tx.input.from),                    // signer_address
+                to_bytea(tx.input.from),                     // signer_address
                 tx.input.nonce.to_string(),                  // nonce
-                to_bytea(&tx.input.from),                    // address_from
+                to_bytea(tx.input.from),                     // address_from
                 to_bytea(tx.input.to.unwrap_or_default()),   // address_to
                 to_bytea(tx.input.input),                    // input
                 to_bytea(tx.execution.output),               // output
@@ -372,7 +372,7 @@ impl CsvExporter {
                 let change_bytecode = change.bytecode.take_ref().and_then(|x| x.clone().map(to_bytea)).unwrap_or(NULL.to_string());
                 let row = [
                     self.accounts_id.value.to_string(),                                                           // id
-                    to_bytea(&change.address),                                                                    // address
+                    to_bytea(change.address),                                                                     // address
                     change_bytecode,                                                                              // bytecode
                     to_bytea(change.code_hash),                                                                   // code_hash
                     change.balance.take_ref().map(|x| x.to_string()).unwrap_or_default(),                         // latest_balance
@@ -391,7 +391,7 @@ impl CsvExporter {
                 self.historical_nonces_id.value += 1;
                 let row = [
                     self.historical_nonces_id.value.to_string(), // id
-                    to_bytea(&change.address),                   // address
+                    to_bytea(change.address),                    // address
                     nonce.to_string(),                           // nonce
                     block_number.to_string(),                    // block_number
                     now.clone(),                                 // updated_at
@@ -404,7 +404,7 @@ impl CsvExporter {
                 self.historical_balances_id.value += 1;
                 let row = [
                     self.historical_balances_id.value.to_string(), // id
-                    to_bytea(&change.address),                     // address
+                    to_bytea(change.address),                      // address
                     balance.to_string(),                           // balance
                     block_number.to_string(),                      // block_number
                     now.clone(),                                   // updated_at
@@ -424,7 +424,7 @@ impl CsvExporter {
                         u256_to_bytea(slot.index.as_u256()),        // idx
                         u256_to_bytea(slot.value.as_u256()),        // value
                         block_number.to_string(),                   // block_number
-                        to_bytea(&change.address),                  // account_address
+                        to_bytea(change.address),                   // account_address
                         now.clone(),                                // updated_at
                         now.clone(),                                // created_at
                     ];

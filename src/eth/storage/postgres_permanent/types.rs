@@ -163,7 +163,7 @@ impl TransactionBatch {
     pub fn push(&mut self, transaction: TransactionMined) {
         let contract_address = transaction.execution.contract_address();
         self.hash.push(transaction.input.hash);
-        self.signer.push(transaction.input.signer.clone());
+        self.signer.push(transaction.input.signer);
         self.nonce.push(transaction.input.nonce);
         self.from.push(transaction.input.signer);
         self.to.push(transaction.input.to);

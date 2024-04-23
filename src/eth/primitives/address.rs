@@ -31,7 +31,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Address(H160);
 
 impl Address {
@@ -188,6 +188,6 @@ impl From<Address> for Token {
 
 impl From<Address> for [u8; 20] {
     fn from(value: Address) -> Self {
-        H160::from(value.clone()).0
+        H160::from(value).0
     }
 }

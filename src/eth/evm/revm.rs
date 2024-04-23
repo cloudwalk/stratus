@@ -231,7 +231,7 @@ impl Database for RevmSession {
         // track original value, except if ignored address
         if not(account.address.is_ignored()) {
             self.storage_changes
-                .insert(account.address.clone(), ExecutionAccountChanges::from_original_values(account.clone()));
+                .insert(account.address, ExecutionAccountChanges::from_original_values(account.clone()));
         }
 
         // prefetch slots
@@ -376,10 +376,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
 
         // status: created
         if account_created {
-            execution_changes.insert(
-                account.address.clone(),
-                ExecutionAccountChanges::from_modified_values(account, account_modified_slots),
-            );
+            execution_changes.insert(account.address, ExecutionAccountChanges::from_modified_values(account, account_modified_slots));
         }
         // status: touched
         else if account_touched {

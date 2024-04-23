@@ -142,7 +142,7 @@ impl Block {
         for transaction in &self.transactions {
             for transaction_changes in transaction.execution.changes.clone().into_iter() {
                 let account_compacted_changes = block_compacted_changes
-                    .entry(transaction_changes.address.clone())
+                    .entry(transaction_changes.address)
                     .or_insert(transaction_changes.clone());
                 if let Some(nonce) = transaction_changes.nonce.take_modified() {
                     account_compacted_changes.nonce.set_modified(nonce);

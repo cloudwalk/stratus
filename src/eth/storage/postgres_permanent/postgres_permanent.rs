@@ -572,7 +572,7 @@ impl PermanentStorage for PostgresPermanentStorage {
             let mapping_slot_indexes = change.mapping_slot_indexes.take().unwrap_or_default();
 
             account_batch.push(
-                change.address.clone(),
+                change.address,
                 new_nonce.clone().unwrap_or(original_nonce.clone()),
                 new_balance.clone().unwrap_or(original_balance.clone()),
                 bytecode,
@@ -585,11 +585,11 @@ impl PermanentStorage for PostgresPermanentStorage {
             );
 
             if let Some(balance) = new_balance {
-                historical_balance_batch.push(change.address.clone(), balance, block.header.number);
+                historical_balance_batch.push(change.address, balance, block.header.number);
             }
 
             if let Some(nonce) = new_nonce {
-                historical_nonce_batch.push(change.address.clone(), nonce, block.header.number);
+                historical_nonce_batch.push(change.address, nonce, block.header.number);
             }
 
             for (slot_idx, value) in change.slots {
@@ -604,10 +604,10 @@ impl PermanentStorage for PostgresPermanentStorage {
                 };
                 let original_value = original_value.unwrap_or_default().value;
 
-                slot_batch.push(change.address.clone(), slot_idx.clone(), new_value.clone(), block.header.number, original_value);
-                historical_slot_batch.push(change.address.clone(), slot_idx.clone(), new_value.clone(), block.header.number);
+                slot_batch.push(change.address, slot_idx.clone(), new_value.clone(), block.header.number, original_value);
+                historical_slot_batch.push(change.address, slot_idx.clone(), new_value.clone(), block.header.number);
 
-                sload_batch.push((change.address.clone(), slot_idx.clone(), new_value.clone(), block.header.number));
+                sload_batch.push((change.address, slot_idx.clone(), new_value.clone(), block.header.number));
             }
         }
 
