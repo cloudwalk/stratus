@@ -486,17 +486,40 @@ impl From<TransactionInputRocksdb> for TransactionInput {
     }
 }
 
-// ExecutionResultRocksdb
-// Log
+pub enum ExecutionResultRocksdb {
+    Success,
+    Reverted,
+    Halted { reason: String },
+}
+
+impl From<ExecutionResult> for ExecutionResultRocksdb {
+    fn from(item: ExecutionResult) -> Self {
+        match item {
+            ExecutionResult::Success => ExecutionResultRocksdb::Success,
+            ExecutionResult::Reverted => ExecutionResultRocksdb::Reverted,
+            ExecutionResult::Halted { reason } => ExecutionResultRocksdb::Halted { reason },
+        }
+    }
+}
+
+impl From<ExecutionResultRocksdb> for ExecutionResult {
+    fn from(item: ExecutionResultRocksdb) -> Self {
+        match item {
+            ExecutionResultRocksdb::Success => ExecutionResult::Success,
+            ExecutionResultRocksdb::Reverted => ExecutionResult::Reverted,
+            ExecutionResultRocksdb::Halted { reason } => ExecutionResult::Halted { reason },
+        }
+    }
+}
 
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,
     pub execution_costs_applied: bool,
-    pub result: ExecutionResult,
+    pub result: ExecutionResultRocksdb,
     pub output: BytesRocksdb,
     pub logs: Vec<Log>,
     pub gas: GasRocksdb,
-    pub deployed_contract_address: Option<AddressRocksdb>, //XXX use this instead of changes
+    pub deployed_contract_address: Option<AddressRocksdb>,
 }
 
 impl From<Execution> for ExecutionRocksdb {
@@ -504,7 +527,7 @@ impl From<Execution> for ExecutionRocksdb {
         Self {
             block_timestamp: UnixTimeRocksdb::from(item.block_timestamp),
             execution_costs_applied: item.execution_costs_applied,
-            result: item.result,
+            result: item.result.into(),
             output: BytesRocksdb::from(item.output),
             logs: item.logs,
             gas: GasRocksdb::from(item.gas),
@@ -518,7 +541,7 @@ impl From<ExecutionRocksdb> for Execution {
         Self {
             block_timestamp: item.block_timestamp.into(),
             execution_costs_applied: item.execution_costs_applied,
-            result: item.result,
+            result: item.result.into(),
             output: item.output.into(),
             logs: item.logs,
             gas: item.gas.into(),
@@ -532,7 +555,7 @@ impl From<ExecutionRocksdb> for Execution {
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: Execution,
-    pub logs: Vec<LogMined>,
+    pub logs: Vec<LogMined>, //XXX
     pub transaction_index: IndexRocksdb,
     pub block_number: BlockNumberRocksdb,
     pub block_hash: HashRocksdb,
