@@ -12,6 +12,8 @@ use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::B256 as RevmB256;
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
@@ -41,7 +43,7 @@ impl Dummy<Faker> for LogTopic {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = LogTopic, other = H256);
+gen_newtype_from!(self = LogTopic, other = H256, [u8; 32]);
 
 impl AsRef<[u8]> for LogTopic {
     fn as_ref(&self) -> &[u8] {
@@ -78,6 +80,13 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for LogTopic {
 
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull {
         <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for LogTopic {
+    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+        let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        Ok(value.into())
     }
 }
 
