@@ -22,6 +22,12 @@ jobs:
               with:
                 ruby-version: '3.2.2'
 
+            - name: Install fd-find
+              run: sudo apt install fd-find
+
+            - name: Install ripgrep
+              run: sudo apt install ripgrep
+
             - name: Notify Slack
               run: ruby utils/slack-notifiers/comments.rb
               env:
