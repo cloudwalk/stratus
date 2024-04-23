@@ -8,9 +8,9 @@ use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
 
-use super::rocks_state::NonceRocksdb;
 use super::rocks_state::RocksStorageState;
-use super::rocks_state::WeiRocksdb;
+use super::types::NonceRocksdb;
+use super::types::WeiRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -29,10 +29,8 @@ use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::rocks::rocks_state::AccountRocksdb;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
-use crate::ext::OptionExt;
 
 /// used for multiple purposes, such as TPS counting and backup management
 const TRANSACTION_LOOP_THRESHOLD: usize = 420_000;
@@ -239,23 +237,9 @@ impl PermanentStorage for RocksPermanentStorage {
         tracing::debug!(?accounts, "saving initial accounts");
 
         for account in accounts {
-            self.state.accounts.insert(
-                account.address.clone().into(),
-                AccountRocksdb {
-                    balance: account.balance.clone().into(),
-                    nonce: account.nonce.clone().into(),
-                    bytecode: account.bytecode.clone().map_into(),
-                },
-            );
-
-            self.state.accounts_history.insert(
-                (account.address.clone().into(), 0.into()),
-                AccountRocksdb {
-                    balance: account.balance.clone().into(),
-                    nonce: account.nonce.clone().into(),
-                    bytecode: account.bytecode.clone().map_into(),
-                },
-            );
+            let (key, value) = account.into();
+            self.state.accounts.insert(key, value.clone());
+            self.state.accounts_history.insert((key, 0.into()), value);
         }
 
         Ok(())
