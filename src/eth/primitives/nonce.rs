@@ -24,7 +24,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U64);
 
 impl Nonce {

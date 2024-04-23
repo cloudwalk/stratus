@@ -25,8 +25,7 @@ use sqlx::types::BigDecimal;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
-// XXX: we should use U64
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Gas(U64);
 
@@ -92,7 +91,7 @@ impl sqlx::Type<sqlx::Postgres> for Gas {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Gas {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        BigDecimal::from(self.clone()).encode(buf)
+        BigDecimal::from(*self).encode(buf)
     }
 }
 

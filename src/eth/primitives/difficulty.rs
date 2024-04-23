@@ -13,7 +13,7 @@ use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Difficulty(U256);
 
@@ -61,7 +61,7 @@ impl sqlx::Type<sqlx::Postgres> for Difficulty {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Difficulty {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
+        match BigDecimal::try_from(*self) {
             Ok(res) => res.encode(buf),
             Err(err) => {
                 tracing::error!(?err, "failed to encode gas");

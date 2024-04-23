@@ -51,7 +51,7 @@ impl LogFilterInput {
         let (from, to) = match self.block_hash {
             Some(hash) => {
                 let from_to = storage.translate_to_point_in_time(&BlockSelection::Hash(hash)).await?;
-                (from_to.clone(), from_to)
+                (from_to, from_to)
             }
             None => {
                 let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest)).await?;

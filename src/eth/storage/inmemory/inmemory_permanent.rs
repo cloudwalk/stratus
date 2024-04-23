@@ -136,13 +136,13 @@ impl InMemoryPermanentStorage {
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
                     let account_nonce = account.nonce.get_current_ref();
                     if original_nonce != account_nonce {
-                        conflicts.add_nonce(*address, account_nonce.clone(), original_nonce.clone());
+                        conflicts.add_nonce(*address, *account_nonce, *original_nonce);
                     }
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = account.balance.get_current_ref();
                     if original_balance != account_balance {
-                        conflicts.add_balance(*address, account_balance.clone(), original_balance.clone());
+                        conflicts.add_balance(*address, *account_balance, *original_balance);
                     }
                 }
 
@@ -150,9 +150,9 @@ impl InMemoryPermanentStorage {
                 for (slot_index, slot_change) in &change.slots {
                     if let Some(account_slot) = account.slots.get(slot_index).map(|value| value.get_current_ref()) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = account_slot.value.clone();
+                            let account_slot_value = account_slot.value;
                             if original_slot.value != account_slot_value {
-                                conflicts.add_slot(*address, slot_index.clone(), account_slot_value, original_slot.value.clone());
+                                conflicts.add_slot(*address, *slot_index, account_slot_value, original_slot.value);
                             }
                         }
                     }
@@ -374,7 +374,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
                             slot_history.push(*number, slot);
                         }
                         None => {
-                            account.slots.insert(slot.index.clone(), InMemoryHistory::new(*number, slot));
+                            account.slots.insert(slot.index, InMemoryHistory::new(*number, slot));
                         }
                     }
                 }
@@ -507,7 +507,7 @@ impl InMemoryPermanentAccount {
         let mut new_slots = HashMap::with_capacity(self.slots.len());
         for (slot_index, slot_history) in self.slots.iter() {
             if let Some(new_slot_history) = slot_history.reset_at(block_number) {
-                new_slots.insert(slot_index.clone(), new_slot_history);
+                new_slots.insert(*slot_index, new_slot_history);
             }
         }
         self.slots = new_slots;

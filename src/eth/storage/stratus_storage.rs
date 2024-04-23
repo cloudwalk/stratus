@@ -177,7 +177,7 @@ impl StratusStorage {
                     tracing::debug!("slot not found, assuming default value");
                     #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Slot::new_empty(index.clone()))
+                    Ok(Slot::new_empty(*index))
                 }
             },
         }
@@ -198,7 +198,7 @@ impl StratusStorage {
                     slots.push(slot);
                 }
                 None => {
-                    perm_indexes.insert(index.clone());
+                    perm_indexes.insert(*index);
                 }
             }
         }

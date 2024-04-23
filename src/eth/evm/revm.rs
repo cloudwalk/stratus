@@ -283,7 +283,7 @@ impl Database for RevmSession {
         if not(address.is_ignored()) {
             match self.storage_changes.get_mut(&address) {
                 Some(account) => {
-                    account.slots.insert(index, ExecutionValueChange::from_original(slot.clone()));
+                    account.slots.insert(index, ExecutionValueChange::from_original(slot));
                 }
                 None => {
                     tracing::error!(reason = "reading slot without account loaded", %address, %index);

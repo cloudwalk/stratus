@@ -390,7 +390,7 @@ impl RocksStorageState {
                 let address: AddressRocksdb = change.address.into();
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
-                        slot_changes.push(((address, slot_index.clone().into()), slot.value.clone().into()));
+                        slot_changes.push(((address, slot_index.into()), slot.value.into()));
                         slot_history_changes.push(((address, slot_index.into(), block_number.into()), slot.value.into()));
                     }
                 }
@@ -448,20 +448,17 @@ impl RocksStorageState {
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
         match point_in_time {
-            StoragePointInTime::Present => self
-                .account_slots
-                .get(&((*address).into(), index.clone().into()))
-                .map(|account_slot_value| Slot {
-                    index: index.clone(),
-                    value: account_slot_value.clone().into(),
-                }),
+            StoragePointInTime::Present => self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
+                index: *index,
+                value: account_slot_value.clone().into(),
+            }),
             StoragePointInTime::Past(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
-                    .iter_from((*address, index.clone(), *number), rocksdb::Direction::Reverse)
+                    .iter_from((*address, *index, *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if rocks_index == (*index).clone().into() && rocks_address == (*address).into() {
+                    if rocks_index == (*index).into() && rocks_address == (*address).into() {
                         return Some(Slot {
                             index: rocks_index.into(),
                             value: value.into(),

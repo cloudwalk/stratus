@@ -29,7 +29,7 @@ use super::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
     pub index: SlotIndex,
     pub value: SlotValue,
@@ -65,7 +65,7 @@ impl Display for Slot {
 // SlotIndex
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
 impl SlotIndex {
@@ -190,7 +190,7 @@ impl sqlx::Type<sqlx::Postgres> for SlotIndex {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotIndex {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.clone().into(), buf)
+        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode((*self).into(), buf)
     }
 
     fn encode(self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull
@@ -222,7 +222,7 @@ impl From<SlotIndex> for [u8; 32] {
 // SlotValue
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(U256);
 
 impl SlotValue {
@@ -330,7 +330,7 @@ impl sqlx::Type<sqlx::Postgres> for SlotValue {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotValue {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.clone().into(), buf)
+        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode((*self).into(), buf)
     }
 
     fn encode(self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull

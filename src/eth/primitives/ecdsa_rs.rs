@@ -6,6 +6,7 @@ use crate::gen_newtype_from;
 
 // Type representing `r` and `s` variables
 // from the ECDSA signature
+#[derive(Clone, Copy)]
 pub struct EcdsaRs(U256);
 
 impl From<EcdsaRs> for U256 {

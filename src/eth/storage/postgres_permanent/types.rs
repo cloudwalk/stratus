@@ -52,7 +52,7 @@ impl PostgresTransaction {
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
 
         let execution = Execution {
-            gas: self.gas.clone(),
+            gas: self.gas,
             output: self.output,
             block_timestamp: UnixTime::ZERO, //*self.block_timestamp,
             result: self.result,

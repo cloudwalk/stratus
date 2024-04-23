@@ -72,7 +72,7 @@ impl RocksPermanentStorage {
                 // check account info conflicts
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
                     let account_nonce = &account.nonce;
-                    let original_nonce: NonceRocksdb = original_nonce.clone().into();
+                    let original_nonce: NonceRocksdb = (*original_nonce).into();
 
                     if &original_nonce != account_nonce {
                         conflicts.add_nonce(*address, account_nonce.clone().into(), original_nonce.into());
@@ -80,18 +80,18 @@ impl RocksPermanentStorage {
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = &account.balance;
-                    let original_balance: WeiRocksdb = original_balance.clone().into();
+                    let original_balance: WeiRocksdb = (*original_balance).into();
                     if &original_balance != account_balance {
                         conflicts.add_balance(*address, account_balance.clone().into(), original_balance.into());
                     }
                 }
                 // check slots conflicts
                 for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = state.account_slots.get(&((*address).into(), slot_index.clone().into())) {
+                    if let Some(value) = state.account_slots.get(&((*address).into(), (*slot_index).into())) {
                         if let Some(original_slot) = slot_change.take_original_ref() {
                             let account_slot_value: SlotValue = value.clone().into();
-                            if original_slot.value != account_slot_value.clone() {
-                                conflicts.add_slot(*address, slot_index.clone(), account_slot_value.clone(), original_slot.value.clone());
+                            if original_slot.value != account_slot_value {
+                                conflicts.add_slot(*address, *slot_index, account_slot_value, original_slot.value);
                             }
                         }
                     }

@@ -14,7 +14,7 @@ use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Size(U64);
 
@@ -70,7 +70,7 @@ impl sqlx::Type<sqlx::Postgres> for Size {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Size {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        BigDecimal::from(self.clone()).encode(buf)
+        BigDecimal::from(*self).encode(buf)
     }
 }
 

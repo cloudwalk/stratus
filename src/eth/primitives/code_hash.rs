@@ -14,7 +14,7 @@ use crate::gen_newtype_from;
 /// Digest of the bytecode of a contract.
 /// In the case of an externally-owned account (EOA), bytecode is null
 /// and the code hash is fixed as the keccak256 hash of an empty string
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CodeHash(H256);
 
 impl Dummy<Faker> for CodeHash {
