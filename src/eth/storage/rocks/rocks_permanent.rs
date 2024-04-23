@@ -201,7 +201,7 @@ impl PermanentStorage for RocksPermanentStorage {
         let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
         let mut block_without_changes = block.clone();
         for transaction in &mut block_without_changes.transactions {
-            // checks if it has a contract address to keep
+            // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
             transaction.execution.changes.retain(|_, change| change.bytecode.clone().is_modified());
         }
         let hash_clone = hash;

@@ -27,6 +27,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Size;
@@ -486,17 +487,75 @@ impl From<TransactionInputRocksdb> for TransactionInput {
     }
 }
 
-// ExecutionResultRocksdb
-// Log
+pub enum ExecutionResultRocksdb {
+    Success,
+    Reverted,
+    Halted { reason: String },
+}
+
+impl From<ExecutionResult> for ExecutionResultRocksdb {
+    fn from(item: ExecutionResult) -> Self {
+        match item {
+            ExecutionResult::Success => ExecutionResultRocksdb::Success,
+            ExecutionResult::Reverted => ExecutionResultRocksdb::Reverted,
+            ExecutionResult::Halted { reason } => ExecutionResultRocksdb::Halted { reason },
+        }
+    }
+}
+
+impl From<ExecutionResultRocksdb> for ExecutionResult {
+    fn from(item: ExecutionResultRocksdb) -> Self {
+        match item {
+            ExecutionResultRocksdb::Success => ExecutionResult::Success,
+            ExecutionResultRocksdb::Reverted => ExecutionResult::Reverted,
+            ExecutionResultRocksdb::Halted { reason } => ExecutionResult::Halted { reason },
+        }
+    }
+}
+
+pub struct LogRocksdb {
+    pub address: AddressRocksdb,
+    pub topic0: Option<LogTopic>, //XXX
+    pub topic1: Option<LogTopic>,
+    pub topic2: Option<LogTopic>,
+    pub topic3: Option<LogTopic>,
+    pub data: BytesRocksdb,
+}
+
+impl From<Log> for LogRocksdb {
+    fn from(item: Log) -> Self {
+        Self {
+            address: AddressRocksdb::from(item.address),
+            topic0: item.topic0,
+            topic1: item.topic1,
+            topic2: item.topic2,
+            topic3: item.topic3,
+            data: BytesRocksdb::from(item.data),
+        }
+    }
+}
+
+impl From<LogRocksdb> for Log {
+    fn from(item: LogRocksdb) -> Self {
+        Self {
+            address: item.address.into(),
+            topic0: item.topic0,
+            topic1: item.topic1,
+            topic2: item.topic2,
+            topic3: item.topic3,
+            data: item.data.into(),
+        }
+    }
+}
 
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,
     pub execution_costs_applied: bool,
-    pub result: ExecutionResult,
+    pub result: ExecutionResultRocksdb,
     pub output: BytesRocksdb,
-    pub logs: Vec<Log>,
+    pub logs: Vec<LogRocksdb>,
     pub gas: GasRocksdb,
-    pub deployed_contract_address: Option<AddressRocksdb>, //XXX use this instead of changes
+    pub deployed_contract_address: Option<AddressRocksdb>,
 }
 
 impl From<Execution> for ExecutionRocksdb {
@@ -504,9 +563,9 @@ impl From<Execution> for ExecutionRocksdb {
         Self {
             block_timestamp: UnixTimeRocksdb::from(item.block_timestamp),
             execution_costs_applied: item.execution_costs_applied,
-            result: item.result,
+            result: item.result.into(),
             output: BytesRocksdb::from(item.output),
-            logs: item.logs,
+            logs: item.logs.into_iter().map(LogRocksdb::from).collect(),
             gas: GasRocksdb::from(item.gas),
             deployed_contract_address: item.deployed_contract_address.map_into(),
         }
@@ -518,9 +577,9 @@ impl From<ExecutionRocksdb> for Execution {
         Self {
             block_timestamp: item.block_timestamp.into(),
             execution_costs_applied: item.execution_costs_applied,
-            result: item.result,
+            result: item.result.into(),
             output: item.output.into(),
-            logs: item.logs,
+            logs: item.logs.into_iter().map(Log::from).collect(),
             gas: item.gas.into(),
             changes: HashMap::new(),
             deployed_contract_address: item.deployed_contract_address.map_into(),
@@ -532,7 +591,7 @@ impl From<ExecutionRocksdb> for Execution {
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: Execution,
-    pub logs: Vec<LogMined>,
+    pub logs: Vec<LogMined>, //XXX
     pub transaction_index: IndexRocksdb,
     pub block_number: BlockNumberRocksdb,
     pub block_hash: HashRocksdb,
