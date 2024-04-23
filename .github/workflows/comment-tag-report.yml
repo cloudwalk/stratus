@@ -1,0 +1,42 @@
+name: Report Comment Tags
+
+on:
+    schedule:
+        - cron: "0 7 * * *"
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}
+    cancel-in-progress: true
+
+jobs:
+    report_comment_tags:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+
+            - name: Set up Rust
+              run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+            - name: Setup Ruby
+              uses: ruby/setup-ruby@v1
+              with:
+                ruby-version: '3.2.2'
+
+            - name: Install fd-find
+              run: |
+                cargo install fd-find
+                command -v fd
+
+            - name: Install ripgrep
+              run: |
+                cargo install ripgrep
+                command -v rg
+
+            - name: Notify Slack
+              run: ruby utils/slack-notifiers/comments.rb
+              env:
+                  SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
+                  
