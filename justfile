@@ -125,6 +125,11 @@ bin-importer-offline *args="":
     cargo run --bin importer-offline {{release_flag}} --features dev -- {{args}}
 alias importer-offline := bin-importer-offline
 
+# Bin: Import external RPC blocks from temporary storage to Stratus storage - with rocksdb
+bin-importer-offline-rocks *args="":
+    cargo run --bin importer-offline {{release_flag}} --features rocks -- {{args}}
+alias importer-offline-rocks := bin-importer-offline-rocks
+
 # Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
 bin-importer-online *args="":
     cargo run --bin importer-online {{release_flag}} --features dev -- {{args}}
