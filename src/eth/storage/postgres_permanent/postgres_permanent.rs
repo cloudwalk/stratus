@@ -30,7 +30,6 @@ use crate::eth::primitives::Hash as TransactionHash;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
-use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotIndexes;
@@ -488,25 +487,14 @@ impl PermanentStorage for PostgresPermanentStorage {
         let mut result = vec![];
 
         for row in query_result {
-            let block_hash: &[u8] = row.get("block_hash");
-            let log_idx: BigDecimal = row.get("log_idx");
-
-            let logs = sqlx::query_file_as!(
-                PostgresLog,
-                "src/eth/storage/postgres_permanent/sql/select_logs_by_block_hash_log_idx.sql",
-                block_hash,
-                log_idx as _
-            )
-            .fetch_all(&self.pool)
-            .await?; // OPTIMIZE: We should query for the logs only once
-
-            let topics = logs.iter().flat_map(PostgresLog::to_topics);
-
             let log = LogMined {
                 log: Log {
                     address: row.get("address"),
                     data: row.get("data"),
-                    topics: topics.map(LogTopic::from).collect(),
+                    topic0: row.get("topic0"),
+                    topic1: row.get("topic1"),
+                    topic2: row.get("topic2"),
+                    topic3: row.get("topic3"),
                 },
                 transaction_hash: row.get("transaction_hash"),
                 transaction_index: row.get("transaction_idx"),

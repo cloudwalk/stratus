@@ -41,7 +41,7 @@ impl LogFilter {
         let log_topics = log.topics();
         let mut found_matching_combination = self.topics_combinations.is_empty();
         for combination in self.topics_combinations.iter() {
-            if combination.matches(log_topics) {
+            if combination.matches(&log_topics) {
                 found_matching_combination = true;
                 break;
             }

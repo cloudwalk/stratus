@@ -78,7 +78,7 @@ impl BlockMiner {
             for mined_log in execution.logs.clone() {
                 // calculate bloom
                 block.header.bloom.accrue(BloomInput::Raw(mined_log.address.as_ref()));
-                for topic in &mined_log.topics {
+                for topic in mined_log.topics().into_iter() {
                     block.header.bloom.accrue(BloomInput::Raw(topic.as_ref()));
                 }
 

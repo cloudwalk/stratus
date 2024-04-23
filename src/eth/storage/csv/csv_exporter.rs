@@ -439,7 +439,7 @@ impl CsvExporter {
         for log in logs {
             self.logs_id.value += 1;
 
-            let get_topic_with_index = |index| log.log.topics.get(index).map(to_bytea).unwrap_or_default();
+            let get_topic_with_index = |index| log.log.topics().get(index).map(to_bytea).unwrap_or_default();
 
             let now = now();
             let row = [

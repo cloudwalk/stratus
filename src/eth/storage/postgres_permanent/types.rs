@@ -97,16 +97,19 @@ pub struct PostgresLog {
     pub log_idx: Index,
     pub block_number: BlockNumber,
     pub block_hash: Hash,
-    pub topic0: Option<Hash>,
-    pub topic1: Option<Hash>,
-    pub topic2: Option<Hash>,
-    pub topic3: Option<Hash>,
+    pub topic0: Option<LogTopic>,
+    pub topic1: Option<LogTopic>,
+    pub topic2: Option<LogTopic>,
+    pub topic3: Option<LogTopic>,
 }
 
 impl PostgresLog {
     pub fn into_log_mined(self) -> LogMined {
         let log = Log {
-            topics: self.to_topics(),
+            topic0: self.topic0,
+            topic1: self.topic1,
+            topic2: self.topic2,
+            topic3: self.topic3,
             data: self.data,
             address: self.address,
         };
@@ -119,20 +122,6 @@ impl PostgresLog {
             block_number: self.block_number,
             log,
         }
-    }
-
-    pub fn to_topics(&self) -> Vec<LogTopic> {
-        let mut filled_topics = vec![];
-
-        for topic in [&self.topic0, &self.topic1, &self.topic2, &self.topic3] {
-            let Some(topic) = topic else {
-                continue;
-            };
-
-            filled_topics.push(LogTopic::new((*topic).into()));
-        }
-
-        filled_topics
     }
 }
 
@@ -209,10 +198,10 @@ impl LogBatch {
         self.block_number.push(log.block_number);
         self.block_hash.push(log.block_hash);
         #[allow(clippy::get_first)]
-        self.topic0.push(log.log.topics.get(0).cloned()); // OPTIMIZE: we can consume topics, so we don't actually need to clone
-        self.topic1.push(log.log.topics.get(1).cloned());
-        self.topic2.push(log.log.topics.get(2).cloned());
-        self.topic3.push(log.log.topics.get(3).cloned());
+        self.topic0.push(log.log.topic0);
+        self.topic1.push(log.log.topic1);
+        self.topic2.push(log.log.topic2);
+        self.topic3.push(log.log.topic3);
     }
 }
 
