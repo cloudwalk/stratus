@@ -49,7 +49,7 @@ pub struct Execution {
     pub gas: Gas,
 
     /// Storage changes that happened during the transaction execution.
-    pub changes: Vec<ExecutionAccountChanges>,
+    pub changes: HashMap<Address, ExecutionAccountChanges>,
 
     /// The contract address if the executed transaction deploys a contract.
     pub deployed_contract_address: Option<Address>,
@@ -78,11 +78,16 @@ impl Execution {
             output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: receipt.gas_used.unwrap_or_default().try_into()?,
-            changes: vec![sender_changes],
+            changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
         execution.apply_execution_costs(receipt)?;
         Ok(execution)
+    }
+
+    /// Checks if the current transaction was completed normally.
+    pub fn is_success(&self) -> bool {
+        matches!(self.result, ExecutionResult::Success { .. })
     }
 
     /// When the transaction is a contract deployment, returns the address of the deployed contract.
@@ -91,17 +96,12 @@ impl Execution {
             return Some(contract_address.to_owned());
         }
 
-        for changes in &self.changes {
+        for changes in self.changes.values() {
             if changes.bytecode.is_modified() {
                 return Some(changes.address);
             }
         }
         None
-    }
-
-    /// Checks if the current transaction was completed normally.
-    pub fn is_success(&self) -> bool {
-        matches!(self.result, ExecutionResult::Success { .. })
     }
 
     /// Checks if current execution state matches the information present in the external receipt.
@@ -188,7 +188,7 @@ impl Execution {
 
         // find sender changes (this can be improved if changes is HashMap)
         let sender_address: Address = receipt.0.from.into();
-        let sender_changes = self.changes.iter_mut().find(|c| c.address == sender_address);
+        let sender_changes = self.changes.get_mut(&sender_address);
         let Some(sender_changes) = sender_changes else {
             return log_and_err!("sender changes not present in execution when applying execution costs");
         };
