@@ -107,7 +107,7 @@ mod log_filter;
 mod log_filter_input;
 mod log_mined;
 mod log_topic;
-mod logs_bloom;
+pub mod logs_bloom;
 mod miner_nonce;
 mod nonce;
 mod size;

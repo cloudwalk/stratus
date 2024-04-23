@@ -24,4 +24,16 @@ jobs:
               uses: extractions/setup-just@v1
 
             - name: Check outdated
-              run: just outdated
+              run: just outdated > outdated.txt
+
+            - name: Setup Ruby
+              uses: ruby/setup-ruby@v1
+              with:
+                ruby-version: '3.2.2'
+
+            - name: Notify Slack
+              run: ruby utils/slack-notifiers/outdated.rb
+              env:
+                  SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
+                  OUTDATED_TABLE_FILE_NAME: outdated.txt
+                  

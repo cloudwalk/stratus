@@ -57,13 +57,32 @@ pub struct Revm {
 
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
         tracing::info!(%chain_id, "starting revm");
 
+        // configure handler
+        let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
+
+        // handler custom validators
+        let validate_tx_against_state = handler.validation.tx_against_state;
+        handler.validation.tx_against_state = Arc::new(move |ctx| {
+            let result = validate_tx_against_state(ctx);
+            if result.is_err() {
+                let _ = ctx.evm.inner.journaled_state.finalize(); // clear revm state on validation failure
+            }
+            result
+        });
+
+        // handler custom instructions
+        let instructions = handler.take_instruction_table().unwrap();
+        handler.set_instruction_table(instructions);
+
+        // configure revm
         let mut evm = RevmEvm::builder()
-            .with_handler(Handler::mainnet_with_spec(SpecId::LONDON))
             .with_external_context(())
             .with_db(RevmSession::new(storage))
+            .with_handler(handler)
             .build();
 
         // global general config
