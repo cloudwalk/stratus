@@ -13,6 +13,7 @@ on:
   #     - 'README.md'
   #     - 'LICENSE'
   #     - 'CONTRIBUTING.md'
+  #     - 'utils/slack-notifiers/**'
   workflow_dispatch:
   # push: # Rebuild cache policy
   #   branches:
