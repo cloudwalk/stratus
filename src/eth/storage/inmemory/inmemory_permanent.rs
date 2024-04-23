@@ -85,7 +85,7 @@ impl InMemoryPermanentStorage {
         let mut state = InMemoryPermanentStorageState::default();
         for change in changes {
             // save account
-            let mut account = InMemoryPermanentAccount::new_empty(change.address.clone());
+            let mut account = InMemoryPermanentAccount::new_empty(change.address);
             account.balance = InMemoryHistory::new_at_zero(change.balance.take_original().unwrap_or_default());
             account.nonce = InMemoryHistory::new_at_zero(change.nonce.take_original().unwrap_or_default());
             account.bytecode = InMemoryHistory::new_at_zero(change.bytecode.take_original().unwrap_or_default());
@@ -136,13 +136,13 @@ impl InMemoryPermanentStorage {
                 if let Some(original_nonce) = change.nonce.take_original_ref() {
                     let account_nonce = account.nonce.get_current_ref();
                     if original_nonce != account_nonce {
-                        conflicts.add_nonce(address.clone(), account_nonce.clone(), original_nonce.clone());
+                        conflicts.add_nonce(*address, account_nonce.clone(), original_nonce.clone());
                     }
                 }
                 if let Some(original_balance) = change.balance.take_original_ref() {
                     let account_balance = account.balance.get_current_ref();
                     if original_balance != account_balance {
-                        conflicts.add_balance(address.clone(), account_balance.clone(), original_balance.clone());
+                        conflicts.add_balance(*address, account_balance.clone(), original_balance.clone());
                     }
                 }
 
@@ -152,7 +152,7 @@ impl InMemoryPermanentStorage {
                         if let Some(original_slot) = slot_change.take_original_ref() {
                             let account_slot_value = account_slot.value.clone();
                             if original_slot.value != account_slot_value {
-                                conflicts.add_slot(address.clone(), slot_index.clone(), account_slot_value, original_slot.value.clone());
+                                conflicts.add_slot(*address, slot_index.clone(), account_slot_value, original_slot.value.clone());
                             }
                         }
                     }
@@ -344,7 +344,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         for changes in account_changes {
             let account = state
                 .accounts
-                .entry(changes.address.clone())
+                .entry(changes.address)
                 .or_insert_with(|| InMemoryPermanentAccount::new_empty(changes.address));
 
             // account basic info
@@ -390,7 +390,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let mut state = self.lock_write().await;
         for account in accounts {
             state.accounts.insert(
-                account.address.clone(),
+                account.address,
                 InMemoryPermanentAccount::new_with_balance(account.address, account.balance),
             );
         }
@@ -440,7 +440,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
                     .filter_map(|slot| {
                         if slot.block_number >= start && slot.block_number < end {
                             Some(SlotSample {
-                                address: contract.address.clone(),
+                                address: contract.address,
                                 block_number: slot.block_number,
                                 index: slot.value.index,
                                 value: slot.value.value,
@@ -522,7 +522,7 @@ impl InMemoryPermanentAccount {
     /// Converts itself to an account at a point-in-time.
     pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
         Account {
-            address: self.address.clone(),
+            address: self.address,
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),

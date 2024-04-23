@@ -148,7 +148,7 @@ impl StratusStorage {
                     tracing::debug!("account not found, assuming default value");
                     #[cfg(feature = "metrics")]
                     metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Account::new_empty(address.clone()))
+                    Ok(Account::new_empty(*address))
                 }
             },
         }

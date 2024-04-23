@@ -93,7 +93,7 @@ impl Execution {
 
         for changes in &self.changes {
             if changes.bytecode.is_modified() {
-                return Some(changes.address.clone());
+                return Some(changes.address);
             }
         }
         None

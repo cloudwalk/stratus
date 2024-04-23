@@ -18,14 +18,17 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Difficulty;
+use crate::eth::primitives::Execution;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
+use crate::eth::primitives::LogMined;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
@@ -155,7 +158,7 @@ impl NonceRocksdb {
 impl AccountRocksdb {
     pub fn to_account(&self, address: &Address) -> Account {
         Account {
-            address: address.clone(),
+            address: *address,
             nonce: self.nonce.clone().into(),
             balance: self.balance.clone().into(),
             bytecode: self.bytecode.clone().map_into(),

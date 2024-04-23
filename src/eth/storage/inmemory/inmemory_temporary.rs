@@ -125,7 +125,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         for change in changes {
             let account = state
                 .accounts
-                .entry(change.address.clone())
+                .entry(change.address)
                 .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
 
             // account basic info

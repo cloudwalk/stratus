@@ -13,6 +13,14 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
+use super::types::AccountRocksdb;
+use super::types::AddressRocksdb;
+use super::types::BlockNumberRocksdb;
+use super::types::BlockRocksdb;
+use super::types::HashRocksdb;
+use super::types::IndexRocksdb;
+use super::types::SlotIndexRocksdb;
+use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -25,21 +33,12 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionInput;
+
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks_db::DbConfig;
 use crate::eth::storage::rocks_db::RocksDb;
 use crate::ext::OptionExt;
 use crate::log_and_err;
-
-use super::types::AccountRocksdb;
-use super::types::AddressRocksdb;
-use super::types::BlockNumberRocksdb;
-use super::types::BlockRocksdb;
-use super::types::HashRocksdb;
-use super::types::IndexRocksdb;
-use super::types::SlotIndexRocksdb;
-use super::types::SlotValueRocksdb;
 
 pub struct RocksStorageState {
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
@@ -364,8 +363,8 @@ impl RocksStorageState {
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_accounts {
-                let address: AddressRocksdb = change.address.clone().into();
-                let mut account_info_entry = accounts.entry_or_insert_with(address.clone(), || AccountRocksdb::default());
+                let address: AddressRocksdb = change.address.into();
+                let mut account_info_entry = accounts.entry_or_insert_with(address, AccountRocksdb::default);
                 if let Some(nonce) = change.nonce.clone().take_modified() {
                     account_info_entry.nonce = nonce.into();
                 }
@@ -376,8 +375,8 @@ impl RocksStorageState {
                     account_info_entry.bytecode = bytecode.map_into();
                 }
 
-                account_changes.push((address.clone(), account_info_entry.clone()));
-                account_history_changes.push(((address.clone(), block_number.into()), account_info_entry));
+                account_changes.push((address, account_info_entry.clone()));
+                account_history_changes.push(((address, block_number.into()), account_info_entry));
             }
 
             accounts.insert_batch(account_changes, Some(block_number.into()));
@@ -389,11 +388,11 @@ impl RocksStorageState {
 
         let slot_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_slots {
-                let address: AddressRocksdb = change.address.clone().into();
+                let address: AddressRocksdb = change.address.into();
                 for (slot_index, slot_change) in change.slots.clone() {
                     if let Some(slot) = slot_change.take_modified() {
-                        slot_changes.push(((address.clone(), slot_index.clone().into()), slot.value.clone().into()));
-                        slot_history_changes.push(((address.clone(), slot_index.into(), block_number.into()), slot.value.into()));
+                        slot_changes.push(((address, slot_index.clone().into()), slot.value.clone().into()));
+                        slot_history_changes.push(((address, slot_index.into(), block_number.into()), slot.value.into()));
                     }
                 }
             }
@@ -437,13 +436,12 @@ impl RocksStorageState {
             })
             .flatten_ok()
             .filter_map(|log_res| match log_res {
-                Ok(log) => {
+                Ok(log) =>
                     if filter.matches(&log) {
                         Some(Ok(log))
                     } else {
                         None
-                    }
-                }
+                    },
                 err => Some(err),
             })
             .collect()
@@ -453,7 +451,7 @@ impl RocksStorageState {
         match point_in_time {
             StoragePointInTime::Present => self
                 .account_slots
-                .get(&(address.clone().into(), index.clone().into()))
+                .get(&((*address).into(), index.clone().into()))
                 .map(|account_slot_value| Slot {
                     index: index.clone(),
                     value: account_slot_value.clone().into(),
@@ -461,10 +459,10 @@ impl RocksStorageState {
             StoragePointInTime::Past(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
-                    .iter_from((address.clone(), index.clone(), *number), rocksdb::Direction::Reverse)
+                    .iter_from((*address, index.clone(), *number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if rocks_index == (*index).clone().into() && rocks_address == (*address).clone().into() {
+                    if rocks_index == (*index).clone().into() && rocks_address == (*address).into() {
                         return Some(Slot {
                             index: rocks_index.into(),
                             value: value.into(),
@@ -478,7 +476,7 @@ impl RocksStorageState {
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
         match point_in_time {
-            StoragePointInTime::Present => match self.accounts.get(&((*address).clone().into())) {
+            StoragePointInTime::Present => match self.accounts.get(&((*address).into())) {
                 Some(inner_account) => {
                     let account = inner_account.to_account(address);
                     tracing::trace!(%address, ?account, "account found");
@@ -491,13 +489,13 @@ impl RocksStorageState {
                 }
             },
             StoragePointInTime::Past(block_number) => {
-                let rocks_address: AddressRocksdb = address.clone().into();
+                let rocks_address: AddressRocksdb = (*address).into();
                 if let Some(((addr, _), account_info)) = self
                     .accounts_history
                     .iter_from((rocks_address, *block_number), rocksdb::Direction::Reverse)
                     .next()
                 {
-                    if addr == (*address).clone().into() {
+                    if addr == (*address).into() {
                         return Some(account_info.to_account(address));
                     }
                 }
