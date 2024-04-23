@@ -32,6 +32,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Difficulty;
+use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
@@ -45,6 +46,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
@@ -425,9 +427,45 @@ impl From<SizeRocksdb> for Size {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TransactionMinedRocksdb {
+    pub input: TransactionInput,
+    pub execution: Execution,
+    pub logs: Vec<LogMined>,
+    pub transaction_index: IndexRocksdb,
+    pub block_number: BlockNumberRocksdb,
+    pub block_hash: HashRocksdb,
+}
+
+impl From<TransactionMined> for TransactionMinedRocksdb {
+    fn from(item: TransactionMined) -> Self {
+        Self {
+            input: item.input,
+            execution: item.execution,
+            logs: item.logs,
+            transaction_index: IndexRocksdb::from(item.transaction_index),
+            block_number: BlockNumberRocksdb::from(item.block_number),
+            block_hash: HashRocksdb::from(item.block_hash),
+        }
+    }
+}
+
+impl From<TransactionMinedRocksdb> for TransactionMined {
+    fn from(item: TransactionMinedRocksdb) -> Self {
+        Self {
+            input: item.input,
+            execution: item.execution,
+            logs: item.logs,
+            transaction_index: item.transaction_index.into(),
+            block_number: item.block_number.into(),
+            block_hash: item.block_hash.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockRocksdb {
     pub header: BlockHeaderRocksdb,
-    pub transactions: Vec<TransactionMined>, //XXX this one is missing yet
+    pub transactions: Vec<TransactionMinedRocksdb>, //XXX this one is missing yet
 }
 
 impl From<Block> for BlockRocksdb {
@@ -453,7 +491,7 @@ impl From<Block> for BlockRocksdb {
                 total_difficulty: item.header.total_difficulty.into(),
                 nonce: item.header.nonce.into(),
             },
-            transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
+            transactions: item.transactions.into_iter().map(TransactionMinedRocksdb::from).collect(),
         }
     }
 }
@@ -859,7 +897,7 @@ impl RocksStorageState {
                 Some(block) => {
                     tracing::trace!(%tx_hash, "transaction found");
                     match block.transactions.into_iter().find(|tx| &tx.input.hash == tx_hash) {
-                        Some(tx) => Ok(Some(tx)),
+                        Some(tx) => Ok(Some(tx.into())),
                         None => log_and_err!("transaction was not found in block"),
                     }
                 }
