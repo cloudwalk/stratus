@@ -31,7 +31,7 @@ async fn test_import_external_snapshot_with_postgres() {
         sqlx::query("insert into account_slots(idx, value, account_address, creation_block) values($1, $2, $3, $4)")
             .bind(slot.index.clone())
             .bind(slot.value.clone())
-            .bind(&address)
+            .bind(address)
             .bind(0)
             .execute(&mut *tx)
             .await

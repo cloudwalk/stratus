@@ -33,7 +33,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
-
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks_db::DbConfig;
 use crate::eth::storage::rocks_db::RocksDb;

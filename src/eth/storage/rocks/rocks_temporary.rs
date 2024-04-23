@@ -95,12 +95,7 @@ impl TemporaryStorage for RocksTemporary {
             .cloned()
             .map(|account| {
                 let address = account.info.address;
-                let slots = account
-                    .slots
-                    .values()
-                    .cloned()
-                    .map(|slot| (address, slot))
-                    .collect::<Vec<(Address, Slot)>>();
+                let slots = account.slots.values().cloned().map(|slot| (address, slot)).collect::<Vec<(Address, Slot)>>();
                 (account.info, slots)
             })
             .unzip();

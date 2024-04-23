@@ -376,10 +376,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
 
         // status: created
         if account_created {
-            execution_changes.insert(
-                account.address,
-                ExecutionAccountChanges::from_modified_values(account, account_modified_slots),
-            );
+            execution_changes.insert(account.address, ExecutionAccountChanges::from_modified_values(account, account_modified_slots));
         }
         // status: touched
         else if account_touched {

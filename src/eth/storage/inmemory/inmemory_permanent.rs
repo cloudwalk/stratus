@@ -389,10 +389,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         let mut state = self.lock_write().await;
         for account in accounts {
-            state.accounts.insert(
-                account.address,
-                InMemoryPermanentAccount::new_with_balance(account.address, account.balance),
-            );
+            state
+                .accounts
+                .insert(account.address, InMemoryPermanentAccount::new_with_balance(account.address, account.balance));
         }
         Ok(())
     }

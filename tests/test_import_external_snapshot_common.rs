@@ -115,7 +115,7 @@ pub fn filter_accounts_and_slots(snapshot: InMemoryPermanentStorageState) -> (Ve
     for account in snapshot.accounts.values() {
         for slot_history in account.slots.values() {
             let slot = slot_history.get_current();
-            slots.push((account.address.clone(), slot));
+            slots.push((account.address, slot));
         }
     }
 

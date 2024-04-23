@@ -143,7 +143,6 @@ impl From<Nonce> for NonceRocksdb {
     }
 }
 
-
 impl NonceRocksdb {
     pub const ZERO: NonceRocksdb = NonceRocksdb(U64::zero());
 }
