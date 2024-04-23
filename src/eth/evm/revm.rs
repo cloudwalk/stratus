@@ -316,7 +316,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
         output,
         logs,
         gas,
-        changes: execution_changes.into_values().collect(),
+        changes: execution_changes,
         deployed_contract_address: None,
     }
 }

@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use itertools::Itertools;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -152,7 +153,9 @@ impl EthExecutor {
                     };
 
                     // temporarily save state to next transactions from the same block
-                    self.storage.save_account_changes_to_temp(execution.changes.clone()).await?;
+                    self.storage
+                        .save_account_changes_to_temp(execution.changes.values().cloned().collect_vec())
+                        .await?;
                     executions.push((tx, receipt.clone(), execution.clone()));
 
                     // track metrics

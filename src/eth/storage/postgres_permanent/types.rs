@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -58,7 +60,7 @@ impl PostgresTransaction {
             result: self.result,
             logs: inner_logs,
             // TODO: do this correctly
-            changes: vec![],
+            changes: HashMap::new(),
             execution_costs_applied: true,
             deployed_contract_address: self.contract_address,
         };
