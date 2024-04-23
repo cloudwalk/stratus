@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -20,9 +21,11 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
+use crate::eth::primitives::Log;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
@@ -479,6 +482,48 @@ impl From<TransactionInputRocksdb> for TransactionInput {
             v: item.v,
             r: item.r,
             s: item.s,
+        }
+    }
+}
+
+// ExecutionResultRocksdb
+// Log
+
+pub struct ExecutionRocksdb {
+    pub block_timestamp: UnixTimeRocksdb,
+    pub execution_costs_applied: bool,
+    pub result: ExecutionResult,
+    pub output: BytesRocksdb,
+    pub logs: Vec<Log>,
+    pub gas: GasRocksdb,
+    pub deployed_contract_address: Option<AddressRocksdb>, //XXX use this instead of changes
+}
+
+impl From<Execution> for ExecutionRocksdb {
+    fn from(item: Execution) -> Self {
+        Self {
+            block_timestamp: UnixTimeRocksdb::from(item.block_timestamp),
+            execution_costs_applied: item.execution_costs_applied,
+            result: item.result,
+            output: BytesRocksdb::from(item.output),
+            logs: item.logs,
+            gas: GasRocksdb::from(item.gas),
+            deployed_contract_address: item.deployed_contract_address.map_into(),
+        }
+    }
+}
+
+impl From<ExecutionRocksdb> for Execution {
+    fn from(item: ExecutionRocksdb) -> Self {
+        Self {
+            block_timestamp: item.block_timestamp.into(),
+            execution_costs_applied: item.execution_costs_applied,
+            result: item.result,
+            output: item.output.into(),
+            logs: item.logs,
+            gas: item.gas.into(),
+            changes: HashMap::new(),
+            deployed_contract_address: item.deployed_contract_address.map_into(),
         }
     }
 }
