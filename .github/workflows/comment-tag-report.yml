@@ -17,6 +17,9 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v2
 
+            - name: Set up Rust
+              run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
             - name: Setup Ruby
               uses: ruby/setup-ruby@v1
               with:
@@ -24,12 +27,12 @@ jobs:
 
             - name: Install fd-find
               run: |
-                sudo apt-get -y install fd-find
+                cargo install fd-find
                 command -v fd
 
             - name: Install ripgrep
               run: |
-                sudo apt-get -y install ripgrep
+                cargo install ripgrep
                 command -v rg
 
             - name: Notify Slack
