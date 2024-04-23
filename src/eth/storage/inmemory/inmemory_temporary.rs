@@ -110,7 +110,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         match account.slots.get(index) {
             Some(slot) => {
                 tracing::trace!(%address, %index, %slot, "slot found");
-                Ok(Some(slot.clone()))
+                Ok(Some(*slot))
             }
 
             None => {
@@ -150,7 +150,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
             // slots
             for (_, slot) in change.slots {
                 if let Some(slot) = slot.take() {
-                    account.slots.insert(slot.index.clone(), slot);
+                    account.slots.insert(slot.index, slot);
                 }
             }
         }

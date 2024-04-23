@@ -16,7 +16,7 @@ use sqlx::error::BoxDynError;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(transparent)]
 pub struct LogsBloom(Bloom);
 

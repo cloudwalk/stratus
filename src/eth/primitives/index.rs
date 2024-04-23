@@ -25,7 +25,7 @@ use crate::gen_newtype_try_from;
 /// Represents a transaction index or log index.
 ///
 /// TODO: representing it as u16 is probably wrong because external libs uses u64.
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash)]
 pub struct Index(u64);
 
 impl Index {

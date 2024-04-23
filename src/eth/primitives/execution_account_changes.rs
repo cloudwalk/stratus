@@ -65,7 +65,7 @@ impl ExecutionAccountChanges {
         };
 
         for slot in modified_slots {
-            changes.slots.insert(slot.index.clone(), ExecutionValueChange::from_modified(slot));
+            changes.slots.insert(slot.index, ExecutionValueChange::from_modified(slot));
         }
 
         changes
@@ -98,7 +98,7 @@ impl ExecutionAccountChanges {
                     entry.set_modified(slot);
                 }
                 None => {
-                    self.slots.insert(slot.index.clone(), ExecutionValueChange::from_modified(slot));
+                    self.slots.insert(slot.index, ExecutionValueChange::from_modified(slot));
                 }
             };
         }

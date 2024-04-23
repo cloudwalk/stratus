@@ -194,7 +194,7 @@ impl Execution {
         };
 
         // subtract execution cost from sender balance
-        let current_balance = sender_changes.balance.take_ref().expect("balance is never None").clone();
+        let current_balance = *sender_changes.balance.take_ref().expect("balance is never None");
         let new_balance = current_balance - execution_cost; // TODO: handle underflow, but it should not happen
         sender_changes.balance.set_modified(new_balance);
         Ok(())

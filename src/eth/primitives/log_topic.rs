@@ -17,7 +17,7 @@ use sqlx::postgres::PgHasArrayType;
 use crate::gen_newtype_from;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LogTopic(H256);
 
 impl LogTopic {

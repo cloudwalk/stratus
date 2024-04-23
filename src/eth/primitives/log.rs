@@ -15,6 +15,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::LogTopic;
 
 /// Log is an event emitted by the EVM during contract execution.
+// Can be Copy once we move from a vec of topics to topic0, 1, 2, 3.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Log {
     /// Address that emitted the log.

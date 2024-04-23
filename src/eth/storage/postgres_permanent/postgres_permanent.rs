@@ -161,7 +161,7 @@ impl PermanentStorage for PostgresPermanentStorage {
         tracing::debug!(%address, %index, "reading slot");
 
         // TODO: improve this conversion
-        let slot_index_u8: [u8; 32] = index.clone().into();
+        let slot_index_u8: [u8; 32] = (*index).into();
 
         let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
         let slot_value_vec: Option<Vec<u8>> = match point_in_time {
@@ -192,7 +192,7 @@ impl PermanentStorage for PostgresPermanentStorage {
             Some(slot_value_vec) => {
                 let slot_value = SlotValue::from(slot_value_vec);
                 let slot = Slot {
-                    index: index.clone(),
+                    index: *index,
                     value: slot_value,
                 };
                 tracing::trace!(?address, ?index, %slot, "slot found");
@@ -573,8 +573,8 @@ impl PermanentStorage for PostgresPermanentStorage {
 
             account_batch.push(
                 change.address,
-                new_nonce.clone().unwrap_or(original_nonce.clone()),
-                new_balance.clone().unwrap_or(original_balance.clone()),
+                new_nonce.unwrap_or(original_nonce),
+                new_balance.unwrap_or(original_balance),
                 bytecode,
                 block.header.number,
                 original_nonce,
@@ -604,10 +604,10 @@ impl PermanentStorage for PostgresPermanentStorage {
                 };
                 let original_value = original_value.unwrap_or_default().value;
 
-                slot_batch.push(change.address, slot_idx.clone(), new_value.clone(), block.header.number, original_value);
-                historical_slot_batch.push(change.address, slot_idx.clone(), new_value.clone(), block.header.number);
+                slot_batch.push(change.address, slot_idx, new_value, block.header.number, original_value);
+                historical_slot_batch.push(change.address, slot_idx, new_value, block.header.number);
 
-                sload_batch.push((change.address, slot_idx.clone(), new_value.clone(), block.header.number));
+                sload_batch.push((change.address, slot_idx, new_value, block.header.number));
             }
         }
 

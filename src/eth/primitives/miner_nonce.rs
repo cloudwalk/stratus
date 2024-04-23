@@ -13,7 +13,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// The nonce of an Ethereum block.
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MinerNonce(H64);
 
 impl MinerNonce {
@@ -85,6 +85,6 @@ impl From<MinerNonce> for H64 {
 
 impl From<MinerNonce> for [u8; 8] {
     fn from(value: MinerNonce) -> Self {
-        H64::from(value.clone()).0
+        H64::from(value).0
     }
 }

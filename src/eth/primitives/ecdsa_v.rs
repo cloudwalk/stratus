@@ -6,6 +6,7 @@ use crate::gen_newtype_from;
 
 // Type representing `v` variable
 // from the ECDSA signature
+#[derive(Clone, Copy)]
 pub struct EcdsaV(U64);
 
 impl From<EcdsaV> for U64 {

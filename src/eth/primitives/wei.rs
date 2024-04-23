@@ -26,7 +26,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// Native token amount in wei.
-#[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 pub struct Wei(U256);
 
 impl Wei {
@@ -90,7 +90,7 @@ impl sqlx::Type<sqlx::Postgres> for Wei {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
+        match BigDecimal::try_from(*self) {
             Ok(res) => res.encode(buf),
             Err(err) => {
                 tracing::error!(?err, "failed to encode gas");
