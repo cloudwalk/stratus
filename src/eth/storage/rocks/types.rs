@@ -107,6 +107,8 @@ impl From<BytesRocksdb> for Bytes {
 #[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 pub struct WeiRocksdb(U256);
 
+gen_newtype_from!(self = WeiRocksdb, other = U256);
+
 impl From<WeiRocksdb> for Wei {
     fn from(value: WeiRocksdb) -> Self {
         value.0.into()
@@ -119,12 +121,6 @@ impl From<Wei> for WeiRocksdb {
     }
 }
 
-impl From<U256> for WeiRocksdb {
-    fn from(value: U256) -> Self {
-        Self(value)
-    }
-}
-
 impl WeiRocksdb {
     pub const ZERO: WeiRocksdb = WeiRocksdb(U256::zero());
     pub const ONE: WeiRocksdb = WeiRocksdb(U256::one());
@@ -132,6 +128,8 @@ impl WeiRocksdb {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NonceRocksdb(U64);
+
+gen_newtype_from!(self = NonceRocksdb, other = u64);
 
 impl From<NonceRocksdb> for Nonce {
     fn from(value: NonceRocksdb) -> Self {
@@ -145,11 +143,6 @@ impl From<Nonce> for NonceRocksdb {
     }
 }
 
-impl From<u64> for NonceRocksdb {
-    fn from(value: u64) -> Self {
-        Self(value.into())
-    }
-}
 
 impl NonceRocksdb {
     pub const ZERO: NonceRocksdb = NonceRocksdb(U64::zero());
@@ -300,6 +293,8 @@ impl From<IndexRocksdb> for Index {
 #[serde(transparent)]
 pub struct GasRocksdb(U64);
 
+gen_newtype_from!(self = GasRocksdb, other = u64);
+
 impl From<GasRocksdb> for Gas {
     fn from(value: GasRocksdb) -> Self {
         value.0.as_u64().into()
@@ -312,22 +307,10 @@ impl From<Gas> for GasRocksdb {
     }
 }
 
-impl From<u64> for GasRocksdb {
-    fn from(value: u64) -> Self {
-        Self(value.into())
-    }
-}
-
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MinerNonceRocksdb(H64);
 
-gen_newtype_from!(self = MinerNonceRocksdb, other = H64, [u8; 8]);
-
-impl From<MinerNonce> for MinerNonceRocksdb {
-    fn from(value: MinerNonce) -> Self {
-        Self(value.into())
-    }
-}
+gen_newtype_from!(self = MinerNonceRocksdb, other = H64, [u8; 8], MinerNonce);
 
 impl From<MinerNonceRocksdb> for MinerNonce {
     fn from(value: MinerNonceRocksdb) -> Self {
@@ -396,13 +379,7 @@ impl From<UnixTimeRocksdb> for UnixTime {
 #[serde(transparent)]
 pub struct LogsBloomRocksdb(Bloom);
 
-gen_newtype_from!(self = LogsBloomRocksdb, other = Bloom);
-
-impl From<LogsBloom> for LogsBloomRocksdb {
-    fn from(value: LogsBloom) -> Self {
-        Self(value.into())
-    }
-}
+gen_newtype_from!(self = LogsBloomRocksdb, other = Bloom, LogsBloom);
 
 impl From<LogsBloomRocksdb> for LogsBloom {
     fn from(value: LogsBloomRocksdb) -> Self {
