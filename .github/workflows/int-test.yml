@@ -8,11 +8,13 @@ on:
   #     - '.github/workflows/deploy.yml'
   #     - '.github/workflows/docs-release.yml'
   #     - '.github/workflows/outdated.yml'
+  #     - '.github/workflows/comment-tag-report.yml'
   #     - '.github/CODEOWNERS'
   #     - 'config/**'
   #     - 'README.md'
   #     - 'LICENSE'
   #     - 'CONTRIBUTING.md'
+  #     - 'utils/slack-notifiers/**'
   workflow_dispatch:
   # push: # Rebuild cache policy
   #   branches:
