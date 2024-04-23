@@ -25,6 +25,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks_db::DbConfig;
 use crate::eth::storage::rocks_db::RocksDb;
@@ -409,7 +410,7 @@ impl RocksStorageState {
                 Some(block) => {
                     tracing::trace!(%tx_hash, "transaction found");
                     match block.transactions.into_iter().find(|tx| &tx.input.hash == tx_hash) {
-                        Some(tx) => Ok(Some(tx)),
+                        Some(tx) => Ok(Some(tx.into())),
                         None => log_and_err!("transaction was not found in block"),
                     }
                 }

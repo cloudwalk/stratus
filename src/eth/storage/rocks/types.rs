@@ -426,9 +426,45 @@ impl From<SizeRocksdb> for Size {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TransactionMinedRocksdb {
+    pub input: TransactionInput,
+    pub execution: Execution,
+    pub logs: Vec<LogMined>,
+    pub transaction_index: IndexRocksdb,
+    pub block_number: BlockNumberRocksdb,
+    pub block_hash: HashRocksdb,
+}
+
+impl From<TransactionMined> for TransactionMinedRocksdb {
+    fn from(item: TransactionMined) -> Self {
+        Self {
+            input: item.input,
+            execution: item.execution,
+            logs: item.logs,
+            transaction_index: IndexRocksdb::from(item.transaction_index),
+            block_number: BlockNumberRocksdb::from(item.block_number),
+            block_hash: HashRocksdb::from(item.block_hash),
+        }
+    }
+}
+
+impl From<TransactionMinedRocksdb> for TransactionMined {
+    fn from(item: TransactionMinedRocksdb) -> Self {
+        Self {
+            input: item.input,
+            execution: item.execution,
+            logs: item.logs,
+            transaction_index: item.transaction_index.into(),
+            block_number: item.block_number.into(),
+            block_hash: item.block_hash.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockRocksdb {
     pub header: BlockHeaderRocksdb,
-    pub transactions: Vec<TransactionMined>, //XXX this one is missing yet
+    pub transactions: Vec<TransactionMinedRocksdb>,
 }
 
 impl From<Block> for BlockRocksdb {
@@ -454,7 +490,7 @@ impl From<Block> for BlockRocksdb {
                 total_difficulty: item.header.total_difficulty.into(),
                 nonce: item.header.nonce.into(),
             },
-            transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
+            transactions: item.transactions.into_iter().map(TransactionMinedRocksdb::from).collect(),
         }
     }
 }

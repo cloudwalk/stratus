@@ -222,7 +222,7 @@ impl PermanentStorage for RocksPermanentStorage {
         let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
         let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
 
-        // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, reset the counter
+        // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
         if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
             let x = Arc::clone(&self.state.backup_trigger);
             x.send(()).await.unwrap();
