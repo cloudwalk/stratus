@@ -17,6 +17,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Difficulty;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::Gas;
@@ -404,9 +405,87 @@ impl From<SizeRocksdb> for Size {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChainIdRocksdb(U64);
+
+impl ChainIdRocksdb {
+    pub fn inner_value(&self) -> U64 {
+        self.0
+    }
+}
+
+impl From<ChainId> for ChainIdRocksdb {
+    fn from(value: ChainId) -> Self {
+        ChainIdRocksdb(value.inner_value())
+    }
+}
+
+impl From<ChainIdRocksdb> for ChainId {
+    fn from(value: ChainIdRocksdb) -> Self {
+        ChainId::new(value.inner_value())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TransactionInputRocksdb {
+    pub chain_id: Option<ChainIdRocksdb>,
+    pub hash: HashRocksdb,
+    pub nonce: NonceRocksdb,
+    pub signer: AddressRocksdb,
+    pub from: AddressRocksdb,
+    pub to: Option<AddressRocksdb>,
+    pub value: WeiRocksdb,
+    pub input: BytesRocksdb,
+    pub gas_limit: GasRocksdb,
+    pub gas_price: WeiRocksdb,
+    pub v: U64,
+    pub r: U256,
+    pub s: U256,
+}
+
+impl From<TransactionInput> for TransactionInputRocksdb {
+    fn from(item: TransactionInput) -> Self {
+        Self {
+            chain_id: item.chain_id.map_into(),
+            hash: HashRocksdb::from(item.hash),
+            nonce: NonceRocksdb::from(item.nonce),
+            signer: AddressRocksdb::from(item.signer),
+            from: AddressRocksdb::from(item.from),
+            to: item.to.map(AddressRocksdb::from),
+            value: WeiRocksdb::from(item.value),
+            input: BytesRocksdb::from(item.input),
+            gas_limit: GasRocksdb::from(item.gas_limit),
+            gas_price: WeiRocksdb::from(item.gas_price),
+            v: item.v,
+            r: item.r,
+            s: item.s,
+        }
+    }
+}
+
+impl From<TransactionInputRocksdb> for TransactionInput {
+    fn from(item: TransactionInputRocksdb) -> Self {
+        Self {
+            chain_id: item.chain_id.map_into(),
+            hash: item.hash.into(),
+            nonce: item.nonce.into(),
+            signer: item.signer.into(),
+            from: item.from.into(),
+            to: item.to.map(Into::into),
+            value: item.value.into(),
+            input: item.input.into(),
+            gas_limit: item.gas_limit.into(),
+            gas_price: item.gas_price.into(),
+            v: item.v,
+            r: item.r,
+            s: item.s,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMinedRocksdb {
-    pub input: TransactionInput,
+    pub input: TransactionInputRocksdb,
     pub execution: Execution,
     pub logs: Vec<LogMined>,
     pub transaction_index: IndexRocksdb,
@@ -417,7 +496,7 @@ pub struct TransactionMinedRocksdb {
 impl From<TransactionMined> for TransactionMinedRocksdb {
     fn from(item: TransactionMined) -> Self {
         Self {
-            input: item.input,
+            input: item.input.into(),
             execution: item.execution,
             logs: item.logs,
             transaction_index: IndexRocksdb::from(item.transaction_index),
@@ -430,7 +509,7 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
 impl From<TransactionMinedRocksdb> for TransactionMined {
     fn from(item: TransactionMinedRocksdb) -> Self {
         Self {
-            input: item.input,
+            input: item.input.into(),
             execution: item.execution,
             logs: item.logs,
             transaction_index: item.transaction_index.into(),
