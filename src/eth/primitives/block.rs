@@ -140,7 +140,7 @@ impl Block {
     pub fn compact_account_changes(&self) -> Vec<ExecutionAccountChanges> {
         let mut block_compacted_changes: HashMap<Address, ExecutionAccountChanges> = HashMap::new();
         for transaction in &self.transactions {
-            for transaction_changes in transaction.execution.changes.values().cloned().into_iter() {
+            for transaction_changes in transaction.execution.changes.values().cloned() {
                 let account_compacted_changes = block_compacted_changes
                     .entry(transaction_changes.address)
                     .or_insert(transaction_changes.clone());
