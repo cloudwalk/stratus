@@ -2,8 +2,14 @@
 
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{runtime, trace, Resource};
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use opentelemetry_sdk::runtime;
+use opentelemetry_sdk::trace;
+use opentelemetry_sdk::Resource;
+use tracing_subscriber::fmt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 //use tracing_subscriber::EnvFilter;
 
 /// Init application global tracing.
