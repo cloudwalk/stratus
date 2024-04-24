@@ -71,7 +71,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
                 // Apply more aggressive compression settings, if I/O and CPU permit
                 opts.set_compression_per_level(&[
-                    rocksdb::DBCompressionType::None, // No compression for L0
+                    rocksdb::DBCompressionType::LZ4,
                     rocksdb::DBCompressionType::Zstd, // Use Zstd for higher compression from L1 onwards
                 ]);
             }
@@ -90,7 +90,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_level_zero_stop_writes_trigger(200);          // Stop writes at 200 L0 files
 
                 // Expand the maximum bytes for base level to further delay the need for compaction-related I/O
-                opts.set_max_bytes_for_level_base(2048 * 1024 * 1024); // 4GB at L1
+                opts.set_max_bytes_for_level_base(2048 * 1024 * 1024);
 
                 // Use a higher level multiplier to increase space exponentially at higher levels
                 opts.set_max_bytes_for_level_multiplier(10);
@@ -107,8 +107,8 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
                 // Choose compression that balances CPU use and effective storage reduction
                 opts.set_compression_per_level(&[
-                    rocksdb::DBCompressionType::LZ4,   // Fast compression with good performance and decent compression ratio
-                    rocksdb::DBCompressionType::Zstd,   // Fast compression with good performance and decent compression ratio
+                    rocksdb::DBCompressionType::LZ4,
+                    rocksdb::DBCompressionType::Zstd,
                 ]);
 
                 // Enable settings that make full use of CPU to handle more data in memory and process compaction
