@@ -27,7 +27,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogMined;
-use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Size;
@@ -515,7 +514,7 @@ impl From<ExecutionResultRocksdb> for ExecutionResult {
 
 pub struct LogRocksdb {
     pub address: AddressRocksdb,
-    pub topics: (H256, H256, H256, H256),
+    pub topics: (Option<H256>, Option<H256>, Option<H256>, Option<H256>),
     pub data: BytesRocksdb,
 }
 
@@ -523,7 +522,7 @@ impl From<Log> for LogRocksdb {
     fn from(item: Log) -> Self {
         Self {
             address: AddressRocksdb::from(item.address),
-            topics: (item.topic0, item.topic1, item.topic2, item.topic3),
+            topics: (item.topic0.map_into(), item.topic1.map_into(), item.topic2.map_into(), item.topic3.map_into()),
             data: BytesRocksdb::from(item.data),
         }
     }
@@ -533,10 +532,10 @@ impl From<LogRocksdb> for Log {
     fn from(item: LogRocksdb) -> Self {
         Self {
             address: item.address.into(),
-            topic0: item.topics.0,
-            topic1: item.topics.1,
-            topic2: item.topics.2,
-            topic3: item.topics.3,
+            topic0: item.topics.0.map_into(),
+            topic1: item.topics.1.map_into(),
+            topic2: item.topics.2.map_into(),
+            topic3: item.topics.3.map_into(),
             data: item.data.into(),
         }
     }
