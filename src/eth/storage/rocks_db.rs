@@ -86,8 +86,8 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_target_file_size_multiplier(1); // Minimal increase in file size at upper levels
 
                 // Increase triggers for write slowdown and stop to maximize buffer before I/O actions
-                opts.set_level_zero_file_num_compaction_trigger(100);  // Slow down writes at 100 L0 files
-                opts.set_level_zero_stop_writes_trigger(200);          // Stop writes at 200 L0 files
+                opts.set_level_zero_file_num_compaction_trigger(100); // Slow down writes at 100 L0 files
+                opts.set_level_zero_stop_writes_trigger(200); // Stop writes at 200 L0 files
 
                 // Expand the maximum bytes for base level to further delay the need for compaction-related I/O
                 opts.set_max_bytes_for_level_base(2048 * 1024 * 1024);
@@ -106,10 +106,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_max_open_files(20000);
 
                 // Choose compression that balances CPU use and effective storage reduction
-                opts.set_compression_per_level(&[
-                    rocksdb::DBCompressionType::Lz4,
-                    rocksdb::DBCompressionType::Zstd,
-                ]);
+                opts.set_compression_per_level(&[rocksdb::DBCompressionType::Lz4, rocksdb::DBCompressionType::Zstd]);
 
                 // Enable settings that make full use of CPU to handle more data in memory and process compaction
                 opts.set_allow_concurrent_memtable_write(true);
