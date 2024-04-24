@@ -79,6 +79,10 @@ pub struct CommonConfig {
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,
+
+    /// Url to the sentry project
+    #[arg(long = "sentry-url", env = "SENTRY_URL")]
+    pub sentry_url: Option<String>,
 }
 
 impl WithCommonConfig for CommonConfig {
