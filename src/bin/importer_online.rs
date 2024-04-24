@@ -21,7 +21,7 @@ const RECEIPTS_PARALELLISM: usize = 10;
 
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
-    let config: ImporterOnlineConfig = init_global_services();
+    let (config, _sentry_guard) = init_global_services::<ImporterOnlineConfig>();
     let runtime = config.init_runtime();
     runtime.block_on(run(config))
 }

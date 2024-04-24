@@ -512,6 +512,7 @@ impl From<ExecutionResultRocksdb> for ExecutionResult {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LogRocksdb {
     pub address: AddressRocksdb,
     pub topics: (Option<H256>, Option<H256>, Option<H256>, Option<H256>),
@@ -581,10 +582,46 @@ impl From<ExecutionRocksdb> for Execution {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct LogMinedRockdb {
+    pub log: LogRocksdb,
+    pub transaction_hash: HashRocksdb,
+    pub transaction_index: IndexRocksdb,
+    pub log_index: IndexRocksdb,
+    pub block_number: BlockNumberRocksdb,
+    pub block_hash: HashRocksdb,
+}
+
+impl From<LogMined> for LogMinedRockdb {
+    fn from(item: LogMined) -> Self {
+        Self {
+            log: item.log.into(),
+            transaction_hash: item.transaction_hash.into(),
+            transaction_index: item.transaction_index.into(),
+            log_index: item.log_index.into(),
+            block_number: item.block_number.into(),
+            block_hash: item.block_hash.into(),
+        }
+    }
+}
+
+impl From<LogMinedRockdb> for LogMined {
+    fn from(item: LogMinedRockdb) -> Self {
+        Self {
+            log: item.log.into(),
+            transaction_hash: item.transaction_hash.into(),
+            transaction_index: item.transaction_index.into(),
+            log_index: item.log_index.into(),
+            block_number: item.block_number.into(),
+            block_hash: item.block_hash.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: Execution,
-    pub logs: Vec<LogMined>, //XXX
+    pub logs: Vec<LogMinedRockdb>,
     pub transaction_index: IndexRocksdb,
     pub block_number: BlockNumberRocksdb,
     pub block_hash: HashRocksdb,
@@ -595,7 +632,7 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
         Self {
             input: item.input.into(),
             execution: item.execution,
-            logs: item.logs,
+            logs: item.logs.into_iter().map(LogMinedRockdb::from).collect(),
             transaction_index: IndexRocksdb::from(item.transaction_index),
             block_number: BlockNumberRocksdb::from(item.block_number),
             block_hash: HashRocksdb::from(item.block_hash),
@@ -608,7 +645,7 @@ impl From<TransactionMinedRocksdb> for TransactionMined {
         Self {
             input: item.input.into(),
             execution: item.execution,
-            logs: item.logs,
+            logs: item.logs.into_iter().map(LogMined::from).collect(),
             transaction_index: item.transaction_index.into(),
             block_number: item.block_number.into(),
             block_hash: item.block_hash.into(),

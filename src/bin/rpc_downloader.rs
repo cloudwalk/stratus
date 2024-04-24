@@ -20,7 +20,7 @@ use stratus::log_and_err;
 const BLOCKS_BY_TASK: usize = 1_000;
 
 fn main() -> anyhow::Result<()> {
-    let config: RpcDownloaderConfig = init_global_services();
+    let (config, _sentry_guard) = init_global_services::<RpcDownloaderConfig>();
     let runtime = config.init_runtime();
     runtime.block_on(run(config))
 }
