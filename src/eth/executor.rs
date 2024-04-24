@@ -85,7 +85,6 @@ impl EthExecutor {
     /// Re-executes an external block locally and imports it to the permanent storage.
     pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-
         let block = if let Some(relay) = &self.relay {
             tracing::debug!("relay found, draining pending failed transactions");
             let mut block = self.import_external_to_temp(block, receipts).await?;
@@ -113,9 +112,8 @@ impl EthExecutor {
     /// Re-executes an external block locally and imports it to the temporary storage.
     pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        let mut block_metrics = ExecutionMetrics::default();
         tracing::info!(number = %block.number(), "importing external block");
 
         // track active block number
@@ -123,19 +121,22 @@ impl EthExecutor {
 
         // re-execute transactions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
-        for tx in block.transactions.clone() {
+        for tx in &block.transactions {
             // re-execute transaction
             let receipt = receipts.try_get(&tx.hash())?;
-            let (execution, execution_metrics) = self.reexecute_external(&tx, receipt, &block).await?;
+            let (execution, _execution_metrics) = self.reexecute_external(tx, receipt, &block).await?;
 
-            // track state
+            // track execution changes
             self.storage
                 .save_account_changes_to_temp(execution.changes.values().cloned().collect_vec())
                 .await?;
-            executions.push((tx, receipt.clone(), execution));
+            executions.push((tx.clone(), receipt.clone(), execution));
 
             // track metrics
-            block_metrics += execution_metrics;
+            #[cfg(feature = "metrics")]
+            {
+                block_metrics += _execution_metrics;
+            }
         }
 
         // track metrics
@@ -153,7 +154,7 @@ impl EthExecutor {
     /// Reexecutes an external transaction locally ensuring it produces the same output.
     pub async fn reexecute_external(&self, tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<EvmExecutionResult> {
         #[cfg(feature = "metrics")]
-        let tx_start = metrics::now();
+        let start = metrics::now();
 
         // re-execute transaction or create a fake execution from the failed external transaction
         let execution_result = if receipt.is_success() {
@@ -183,7 +184,7 @@ impl EthExecutor {
 
                 // track metrics
                 #[cfg(feature = "metrics")]
-                metrics::inc_executor_external_transaction(tx_start.elapsed());
+                metrics::inc_executor_external_transaction(start.elapsed());
 
                 Ok((execution, execution_metrics))
             }
