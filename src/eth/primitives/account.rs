@@ -8,22 +8,18 @@
 //! tracking account states and differentiating between standard accounts and
 //! contract accounts.
 
-use std::collections::HashSet;
-
 use itertools::Itertools;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
 use super::slot::SlotIndexes;
 use crate::eth::evm::EvmInputSlotKeys;
-use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotAccess;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
 use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
@@ -128,40 +124,14 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
         let (address, info) = value;
 
-        // parse bytecode
-        let slot_indexes: HashSet<SlotAccess> = match info.code {
-            Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone().into()),
-            _ => HashSet::new(),
-        };
-
-        let mut static_slot_indexes = SlotIndexes::with_capacity(slot_indexes.len());
-        let mut mapping_slot_indexes = SlotIndexes::with_capacity(slot_indexes.len());
-        for index in slot_indexes {
-            match index {
-                SlotAccess::Static(index) => {
-                    static_slot_indexes.insert(index);
-                }
-                SlotAccess::Mapping(index) => {
-                    mapping_slot_indexes.insert(index);
-                }
-                _ => {}
-            }
-        }
-
         Self {
             address: address.into(),
             nonce: info.nonce.into(),
             balance: info.balance.into(),
             bytecode: info.code.map_into(),
             code_hash: info.code_hash.into(),
-            static_slot_indexes: match static_slot_indexes.is_empty() {
-                true => None,
-                false => Some(static_slot_indexes),
-            },
-            mapping_slot_indexes: match mapping_slot_indexes.is_empty() {
-                true => None,
-                false => Some(mapping_slot_indexes),
-            },
+            static_slot_indexes: None,
+            mapping_slot_indexes: None,
         }
     }
 }
