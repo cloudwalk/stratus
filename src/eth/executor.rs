@@ -259,6 +259,7 @@ impl EthExecutor {
     }
 
     /// Executes a transaction without persisting state changes.
+    #[tracing::instrument(skip(self))]
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
