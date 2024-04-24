@@ -71,7 +71,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
                 // Apply more aggressive compression settings, if I/O and CPU permit
                 opts.set_compression_per_level(&[
-                    rocksdb::DBCompressionType::LZ4,
+                    rocksdb::DBCompressionType::Lz4,
                     rocksdb::DBCompressionType::Zstd, // Use Zstd for higher compression from L1 onwards
                 ]);
             }
@@ -93,7 +93,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_max_bytes_for_level_base(2048 * 1024 * 1024);
 
                 // Use a higher level multiplier to increase space exponentially at higher levels
-                opts.set_max_bytes_for_level_multiplier(10);
+                opts.set_max_bytes_for_level_multiplier(10.0);
 
                 // Opt for larger block sizes to decrease the number of read and write operations to disk
                 block_based_options.set_block_size(512 * 1024); // 512KB blocks
@@ -107,7 +107,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
                 // Choose compression that balances CPU use and effective storage reduction
                 opts.set_compression_per_level(&[
-                    rocksdb::DBCompressionType::LZ4,
+                    rocksdb::DBCompressionType::Lz4,
                     rocksdb::DBCompressionType::Zstd,
                 ]);
 
