@@ -56,12 +56,12 @@ pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<Eth
 #[tracing::instrument(skip(executor, chain))]
 async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainClient) -> anyhow::Result<()> {
     // fetch block and receipts
-    let block = fetch_block(&chain, number).await?;
+    let block = fetch_block(chain, number).await?;
 
     // fetch receipts in parallel
     let mut receipts = Vec::with_capacity(block.transactions.len());
     for tx in &block.transactions {
-        receipts.push(fetch_receipt(&chain, tx.hash()));
+        receipts.push(fetch_receipt(chain, tx.hash()));
     }
     let receipts = futures::stream::iter(receipts).buffered(RECEIPTS_PARALELLISM).try_collect::<Vec<_>>().await?;
 
