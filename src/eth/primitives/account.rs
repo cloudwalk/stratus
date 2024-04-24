@@ -106,6 +106,19 @@ impl Account {
 
         slot_indexes
     }
+
+    /// Adds a bytecode slot index according to its type.
+    pub fn add_bytecode_slot_index(&mut self, index: SlotAccess) {
+        match index {
+            SlotAccess::Static(index) => {
+                self.static_slot_indexes.get_or_insert_with(SlotIndexes::new).insert(index);
+            }
+            SlotAccess::Mapping(index) => {
+                self.mapping_slot_indexes.get_or_insert_with(SlotIndexes::new).insert(index);
+            }
+            _ => {}
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

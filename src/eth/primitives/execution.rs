@@ -16,6 +16,8 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
@@ -57,7 +59,7 @@ pub struct Execution {
 
 impl Execution {
     /// Creates an execution from an external transaction that failed.
-    pub fn from_failed_external_transaction(block: &ExternalBlock, receipt: &ExternalReceipt, sender: Account) -> anyhow::Result<Self> {
+    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
@@ -102,6 +104,53 @@ impl Execution {
             }
         }
         None
+    }
+
+    /// Checks conflicts between two executions.
+    ///
+    /// Assumes self is the present execution and next should happen after self in a serialized context.
+    pub fn check_conflicts(&self, next_execution: &Execution) -> Option<ExecutionConflicts> {
+        let mut conflicts = ExecutionConflictsBuilder::default();
+
+        for current in self.changes.values() {
+            let Some(next) = next_execution.changes.get(&current.address) else {
+                continue;
+            };
+
+            // nonce conflict
+            let current_nonce = current.nonce.take_modified_ref();
+            let next_nonce = next.nonce.take_original_ref();
+            match (current_nonce, next_nonce) {
+                (Some(current_nonce), Some(next_nonce)) if current_nonce != next_nonce => {
+                    conflicts.add_nonce(current.address, *current_nonce, *next_nonce);
+                }
+                _ => {}
+            }
+
+            // balance conflict
+            let current_balance = current.balance.take_modified_ref();
+            let next_balance = next.balance.take_original_ref();
+            match (current_balance, next_balance) {
+                (Some(current_balance), Some(next_balance)) if current_balance != next_balance => {
+                    conflicts.add_balance(current.address, *current_balance, *next_balance);
+                }
+                _ => {}
+            }
+
+            // slot conflicts
+            for (slot_index, current_slot_change) in &current.slots {
+                let current_slot = current_slot_change.take_modified_ref();
+                let next_slot = next.slots.get(slot_index).and_then(|slot| slot.take_original_ref());
+                match (current_slot, next_slot) {
+                    (Some(current_slot), Some(next_slot)) if current_slot != next_slot => {
+                        conflicts.add_slot(current.address, *slot_index, current_slot.value, next_slot.value);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        conflicts.build()
     }
 
     /// Checks if current execution state matches the information present in the external receipt.
