@@ -2,12 +2,11 @@ use std::sync::Arc;
 
 use stratus::config::StratusConfig;
 use stratus::eth::rpc::serve_rpc;
-use stratus::init_global_services;
+use stratus::GlobalServices;
 
 fn main() -> anyhow::Result<()> {
-    let (config, _sentry_guard) = init_global_services::<StratusConfig>();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<StratusConfig>::init();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: StratusConfig) -> anyhow::Result<()> {

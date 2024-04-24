@@ -83,6 +83,7 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
+    #[tracing::instrument(skip(self))]
     pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
         let block = if let Some(relay) = &self.relay {
@@ -110,6 +111,7 @@ impl EthExecutor {
     }
 
     /// Re-executes an external block locally and imports it to the temporary storage.
+    #[tracing::instrument(skip(self))]
     pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
@@ -202,6 +204,7 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Executes a transaction persisting state changes.
+    #[tracing::instrument(skip(self))]
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -273,6 +276,7 @@ impl EthExecutor {
     }
 
     /// Executes a transaction without persisting state changes.
+    #[tracing::instrument(skip(self))]
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -326,6 +330,7 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
+    #[tracing::instrument(skip(self))]
     async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
         self.evm_tx.send((evm_input, execution_tx))?;

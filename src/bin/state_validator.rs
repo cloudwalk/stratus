@@ -6,13 +6,12 @@ use stratus::config::ValidatorMethodConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::BlockchainClient;
-use stratus::init_global_services;
+use stratus::GlobalServices;
 use tokio::task::JoinSet;
 
 fn main() -> anyhow::Result<()> {
-    let (config, _sentry_guard) = init_global_services::<StateValidatorConfig>();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<StateValidatorConfig>::init();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {

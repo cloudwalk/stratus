@@ -34,5 +34,18 @@ services:
       - "--web.enable-lifecycle"
       - "--log.level=debug"
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
+    environment:
+      SPAN_STORAGE_TYPE: badger
+      BADGER_EPHEMERAL: false
+      BADGER_DIRECTORY_VALUE: /badger/data
+      BADGER_DIRECTORY_KEY: /badger/key
+    volumes:
+      - /tmp:/badger
+    ports:
+      - 16686:16686
+      - 4317:4317
+
 volumes:
   postgres-data:

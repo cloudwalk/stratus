@@ -9,18 +9,20 @@ pub mod rocks_test {
 
     use super::test_import_external_snapshot_common as common;
 
-    #[tokio::test]
-    async fn test_import_external_snapshot_with_rocksdb() {
-        let docker = Docker::default();
-        let _prom_guard = docker.start_prometheus();
+    #[test]
+    fn test_import_external_snapshot_with_rocksdb() {
+        let (global_services, block, receipts, snapshot) = common::init_config_and_data();
+        global_services.runtime.block_on(async move {
+            let docker = Docker::default();
+            let _prom_guard = docker.start_prometheus();
 
-        let (config, block, receipts, snapshot) = common::init_config_and_data();
-        let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
+            let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
 
-        let rocks = RocksPermanentStorage::new().await.unwrap();
-        rocks.save_accounts(accounts).await.unwrap();
-        rocks.state.write_slots(slots, BlockNumber::ZERO);
+            let rocks = RocksPermanentStorage::new().await.unwrap();
+            rocks.save_accounts(accounts).await.unwrap();
+            rocks.state.write_slots(slots, BlockNumber::ZERO);
 
-        common::execute_test("RocksDB", &config, &docker, rocks, block, receipts).await;
+            common::execute_test("RocksDB", &global_services.config, &docker, rocks, block, receipts).await;
+        });
     }
 }

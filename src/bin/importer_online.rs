@@ -13,17 +13,16 @@ use stratus::eth::EthExecutor;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
-use stratus::init_global_services;
 use stratus::log_and_err;
+use stratus::GlobalServices;
 
 /// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
 
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
-    let (config, _sentry_guard) = init_global_services::<ImporterOnlineConfig>();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<ImporterOnlineConfig>::init();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
@@ -46,25 +45,32 @@ pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<Eth
 
         number = number.next();
 
-        // fetch block and receipts
-        let block = fetch_block(&chain, number).await?;
-
-        // fetch receipts in parallel
-        let mut receipts = Vec::with_capacity(block.transactions.len());
-        for tx in &block.transactions {
-            receipts.push(fetch_receipt(&chain, tx.hash()));
-        }
-        let receipts = futures::stream::iter(receipts).buffered(RECEIPTS_PARALELLISM).try_collect::<Vec<_>>().await?;
-
-        // import block
-        let receipts: ExternalReceipts = receipts.into();
-        executor.import_external_to_perm(block, &receipts).await?;
+        import(number, &executor, &chain).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_import_online(start.elapsed());
     }
 }
 
+#[tracing::instrument(skip(executor, chain))]
+async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainClient) -> anyhow::Result<()> {
+    // fetch block and receipts
+    let block = fetch_block(chain, number).await?;
+
+    // fetch receipts in parallel
+    let mut receipts = Vec::with_capacity(block.transactions.len());
+    for tx in &block.transactions {
+        receipts.push(fetch_receipt(chain, tx.hash()));
+    }
+    let receipts = futures::stream::iter(receipts).buffered(RECEIPTS_PARALELLISM).try_collect::<Vec<_>>().await?;
+
+    // import block
+    let receipts: ExternalReceipts = receipts.into();
+    executor.import_external_to_perm(block, &receipts).await?;
+    Ok(())
+}
+
+#[tracing::instrument(skip(chain))]
 async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<ExternalBlock> {
     let block = loop {
         tracing::info!(%number, "fetching block");
@@ -96,6 +102,7 @@ async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::R
     }
 }
 
+#[tracing::instrument(skip(chain))]
 async fn fetch_receipt(chain: &BlockchainClient, hash: Hash) -> anyhow::Result<ExternalReceipt> {
     let receipt = loop {
         tracing::info!(%hash, "fetching receipt");

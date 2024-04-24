@@ -83,6 +83,10 @@ pub struct CommonConfig {
     /// Url to the sentry project
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
     pub sentry_url: Option<String>,
+
+    /// Url to the tracing collector (Opentelemetry over gRPC)
+    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
+    pub tracing_url: Option<String>,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -94,10 +98,9 @@ impl WithCommonConfig for CommonConfig {
 impl CommonConfig {
     /// Initializes Tokio runtime.
     pub fn init_runtime(&self) -> Runtime {
-        tracing::info!(
-            async_threads = %self.num_async_threads,
-            blocking_threads = %self.num_blocking_threads,
-            "starting tokio runtime"
+        print!(
+            "starting tokio runtime; async_threads={}; blocking_threads={}",
+            self.num_async_threads, self.num_blocking_threads
         );
 
         let runtime = Builder::new_multi_thread()
