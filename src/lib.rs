@@ -1,6 +1,8 @@
 use std::env;
 use std::fmt::Debug;
 
+use sentry::ClientInitGuard;
+
 use crate::config::load_dotenv;
 use crate::config::WithCommonConfig;
 
@@ -10,7 +12,7 @@ pub mod ext;
 pub mod infra;
 
 /// Executes global services initialization.
-pub fn init_global_services<T>() -> T
+pub fn init_global_services<T>() -> (T, Option<ClientInitGuard>)
 where
     T: clap::Parser + WithCommonConfig + Debug,
 {
@@ -28,7 +30,9 @@ where
     #[cfg(feature = "metrics")]
     infra::init_metrics(config.common().metrics_histogram_kind);
 
-    config
+    let guard = config.common().sentry_url.as_ref().map(|sentry_url| infra::init_sentry(sentry_url));
+
+    (config, guard)
 }
 
 /// Get the current binary basename.

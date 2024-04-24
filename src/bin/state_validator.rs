@@ -10,7 +10,7 @@ use stratus::init_global_services;
 use tokio::task::JoinSet;
 
 fn main() -> anyhow::Result<()> {
-    let config: StateValidatorConfig = init_global_services();
+    let (config, _sentry_guard) = init_global_services::<StateValidatorConfig>();
     let runtime = config.init_runtime();
     runtime.block_on(run(config))
 }

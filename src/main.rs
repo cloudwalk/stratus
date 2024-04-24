@@ -5,7 +5,7 @@ use stratus::eth::rpc::serve_rpc;
 use stratus::init_global_services;
 
 fn main() -> anyhow::Result<()> {
-    let config: StratusConfig = init_global_services();
+    let (config, _sentry_guard) = init_global_services::<StratusConfig>();
     let runtime = config.init_runtime();
     runtime.block_on(run(config))
 }

@@ -88,7 +88,7 @@ const METRIC_QUERIES: [&str; 0] = [];
 // -----------------------------------------------------------------------------
 pub fn init_config_and_data() -> (IntegrationTestConfig, ExternalBlock, ExternalReceipts, InMemoryPermanentStorageState) {
     // init config
-    let mut config = init_global_services::<IntegrationTestConfig>();
+    let (mut config, _sentry_guard) = init_global_services::<IntegrationTestConfig>();
     config.executor.chain_id = 2009;
 
     // init block data
