@@ -381,7 +381,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         if account_created {
             // parse bytecode slots
             let slot_indexes: HashSet<SlotAccess> = match account.bytecode {
-                Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone().into()),
+                Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone()),
                 _ => HashSet::new(),
             };
             for index in slot_indexes {
