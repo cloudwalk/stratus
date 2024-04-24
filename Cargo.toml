@@ -71,9 +71,14 @@ tower = "=0.4.13"
 # observability
 metrics = { version = "=0.21.1", optional = true }
 metrics-exporter-prometheus = { version = "=0.12.2", optional = true }
-tracing = "=0.1.40"
+tracing = { version = "=0.1.40", features = ["attributes"] }
 tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
+tracing-opentelemetry = "=0.23.0"
 sentry = "=0.32.3"
+opentelemetry = "=0.22.0"
+opentelemetry-otlp = "=0.15.0"
+opentelemetry_sdk = { version = "0.22.1", features = ["rt-tokio"] }
+
 
 # storage
 sqlx = { version = "=0.7.3", features = ["runtime-tokio", "postgres", "bigdecimal", "time"] }

@@ -43,6 +43,7 @@ use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
 #[cfg(feature = "dev")]
 use crate::ext::not;
+use crate::infra;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
@@ -83,6 +84,10 @@ pub struct CommonConfig {
     /// Url to the sentry project
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
     pub sentry_url: Option<String>,
+
+    /// Url to the tracing collector (Opentelemetry over gRPC)
+    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
+    pub tracing_url: Option<String>,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -94,10 +99,9 @@ impl WithCommonConfig for CommonConfig {
 impl CommonConfig {
     /// Initializes Tokio runtime.
     pub fn init_runtime(&self) -> Runtime {
-        tracing::info!(
-            async_threads = %self.num_async_threads,
-            blocking_threads = %self.num_blocking_threads,
-            "starting tokio runtime"
+        print!(
+            "starting tokio runtime; async_threads={}; blocking_threads={}",
+            self.num_async_threads, self.num_blocking_threads
         );
 
         let runtime = Builder::new_multi_thread()
@@ -108,6 +112,8 @@ impl CommonConfig {
             .thread_keep_alive(Duration::from_secs(u64::MAX))
             .build()
             .expect("failed to start tokio runtime");
+
+        runtime.block_on(async { infra::init_tracing(self.tracing_url.as_ref()) });
 
         runtime
     }

@@ -27,6 +27,7 @@ impl TransactionRelay {
     }
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
+    #[tracing::instrument(skip(self))]
     pub async fn forward_transaction(&self, execution: Execution, transaction: TransactionInput) -> anyhow::Result<()> {
         tracing::debug!(?transaction.hash, "forwarding transaction");
         if execution.result == ExecutionResult::Success {

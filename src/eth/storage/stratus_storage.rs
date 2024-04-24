@@ -309,6 +309,7 @@ impl StratusStorage {
     }
 
     /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
+    #[tracing::instrument(skip(self))]
     pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();

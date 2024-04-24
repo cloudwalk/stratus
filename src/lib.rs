@@ -26,7 +26,6 @@ where
     }
 
     // init services
-    infra::init_tracing();
     #[cfg(feature = "metrics")]
     infra::init_metrics(config.common().metrics_histogram_kind);
 

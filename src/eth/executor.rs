@@ -81,6 +81,7 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
+    #[tracing::instrument(skip(self))]
     pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
 
@@ -109,6 +110,7 @@ impl EthExecutor {
     }
 
     /// Re-executes an external block locally and imports it to the temporary storage.
+    #[tracing::instrument(skip(self))]
     pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -185,6 +187,7 @@ impl EthExecutor {
     }
 
     /// Executes a transaction persisting state changes.
+    #[tracing::instrument(skip(self))]
     pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -309,6 +312,7 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
+    #[tracing::instrument(skip(self))]
     async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
         self.evm_tx.send((evm_input, execution_tx))?;
