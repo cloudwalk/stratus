@@ -5,6 +5,7 @@
 //! interacting with the project's storage backend to manage state. `Revm` embodies the practical application
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -30,6 +31,7 @@ use crate::eth::evm::evm::EvmExecutionResult;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmError;
 use crate::eth::evm::EvmInput;
+use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -43,6 +45,7 @@ use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
+use crate::eth::primitives::SlotAccess;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -364,7 +367,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
 
         // parse revm to internal representation
-        let account: Account = (revm_address, revm_account.info).into();
+        let mut account: Account = (revm_address, revm_account.info).into();
         let account_modified_slots: Vec<Slot> = revm_account
             .storage
             .into_iter()
@@ -376,6 +379,15 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
 
         // status: created
         if account_created {
+            // parse bytecode slots
+            let slot_indexes: HashSet<SlotAccess> = match account.bytecode {
+                Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone().into()),
+                _ => HashSet::new(),
+            };
+            for index in slot_indexes {
+                account.add_bytecode_slot_index(index);
+            }
+
             execution_changes.insert(account.address, ExecutionAccountChanges::from_modified_values(account, account_modified_slots));
         }
         // status: touched
