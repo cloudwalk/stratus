@@ -108,6 +108,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 // Choose compression that balances CPU use and effective storage reduction
                 opts.set_compression_per_level(&[
                     rocksdb::DBCompressionType::LZ4,   // Fast compression with good performance and decent compression ratio
+                    rocksdb::DBCompressionType::Zstd,   // Fast compression with good performance and decent compression ratio
                 ]);
 
                 // Enable settings that make full use of CPU to handle more data in memory and process compaction
