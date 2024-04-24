@@ -59,7 +59,7 @@ pub struct Execution {
 
 impl Execution {
     /// Creates an execution from an external transaction that failed.
-    pub fn from_failed_external_transaction(block: &ExternalBlock, receipt: &ExternalReceipt, sender: Account) -> anyhow::Result<Self> {
+    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
