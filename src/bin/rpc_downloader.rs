@@ -13,16 +13,15 @@ use stratus::eth::primitives::Hash;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::ext::not;
 use stratus::infra::BlockchainClient;
-use stratus::init_global_services;
 use stratus::log_and_err;
+use stratus::GlobalServices;
 
 /// Number of blocks each parallel download will process.
 const BLOCKS_BY_TASK: usize = 1_000;
 
 fn main() -> anyhow::Result<()> {
-    let (config, _sentry_guard) = init_global_services::<RpcDownloaderConfig>();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<RpcDownloaderConfig>::init_global_services();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {

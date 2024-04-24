@@ -5,13 +5,12 @@ use std::sync::Arc;
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
-use stratus::init_global_services;
+use stratus::GlobalServices;
 use tokio::try_join;
 
 fn main() -> anyhow::Result<()> {
-    let (config, _sentry_guard) = init_global_services::<RunWithImporterConfig>();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<RunWithImporterConfig>::init_global_services();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {

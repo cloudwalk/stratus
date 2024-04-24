@@ -43,7 +43,6 @@ use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
 #[cfg(feature = "dev")]
 use crate::ext::not;
-use crate::infra;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
@@ -112,8 +111,6 @@ impl CommonConfig {
             .thread_keep_alive(Duration::from_secs(u64::MAX))
             .build()
             .expect("failed to start tokio runtime");
-
-        runtime.block_on(async { infra::init_tracing(self.tracing_url.as_ref()) });
 
         runtime
     }

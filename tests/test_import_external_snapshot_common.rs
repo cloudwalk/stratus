@@ -17,7 +17,7 @@ use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::docker::Docker;
-use stratus::init_global_services;
+use stratus::GlobalServices;
 #[cfg(feature = "metrics")]
 mod m {
     pub use const_format::formatcp;
@@ -86,10 +86,15 @@ const METRIC_QUERIES: [&str; 0] = [];
 // -----------------------------------------------------------------------------
 // Data initialization
 // -----------------------------------------------------------------------------
-pub fn init_config_and_data() -> (IntegrationTestConfig, ExternalBlock, ExternalReceipts, InMemoryPermanentStorageState) {
+pub fn init_config_and_data() -> (
+    GlobalServices<IntegrationTestConfig>,
+    ExternalBlock,
+    ExternalReceipts,
+    InMemoryPermanentStorageState,
+) {
     // init config
-    let (mut config, _sentry_guard) = init_global_services::<IntegrationTestConfig>();
-    config.executor.chain_id = 2009;
+    let mut global_services = GlobalServices::<IntegrationTestConfig>::init_global_services();
+    global_services.config.executor.chain_id = 2009;
 
     // init block data
     let block_json = include_str!("fixtures/snapshots/292973/block.json");
@@ -103,7 +108,7 @@ pub fn init_config_and_data() -> (IntegrationTestConfig, ExternalBlock, External
     let snapshot_json = include_str!("fixtures/snapshots/292973/snapshot.json");
     let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
 
-    (config, block, receipts, snapshot)
+    (global_services, block, receipts, snapshot)
 }
 
 pub fn filter_accounts_and_slots(snapshot: InMemoryPermanentStorageState) -> (Vec<Account>, Vec<(Address, Slot)>) {

@@ -21,8 +21,8 @@ use stratus::eth::EthExecutor;
 use stratus::ext::not;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
-use stratus::init_global_services;
 use stratus::log_and_err;
+use stratus::GlobalServices;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -38,9 +38,8 @@ const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 2_000_000;
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
 fn main() -> anyhow::Result<()> {
-    let (config, _sentry_guard) = init_global_services::<ImporterOfflineConfig>();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<ImporterOfflineConfig>::init_global_services();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {

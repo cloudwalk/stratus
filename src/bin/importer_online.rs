@@ -13,17 +13,16 @@ use stratus::eth::EthExecutor;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
-use stratus::init_global_services;
 use stratus::log_and_err;
+use stratus::GlobalServices;
 
 /// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
 
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
-    let (config, _sentry_guard) = init_global_services::<ImporterOnlineConfig>();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<ImporterOnlineConfig>::init_global_services();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
