@@ -689,13 +689,19 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         if modified_accounts != expected_modified_accounts {
             tx.rollback().await.context("failed to rollback transaction")?;
-            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::Account]));
+            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::AccountModifiedCount {
+                expected: expected_modified_accounts,
+                actual: modified_accounts,
+            }]));
             return Err(error);
         }
 
         if modified_slots != expected_modified_slots {
             tx.rollback().await.context("failed to rollback transaction")?;
-            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::PgSlot]));
+            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::SlotModifiedCount {
+                expected: expected_modified_slots,
+                actual: modified_slots
+            }]));
             return Err(error);
         }
 

@@ -141,12 +141,12 @@ impl EvmInput {
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
     ///
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
-    pub fn from_external_transaction(block: &ExternalBlock, tx: ExternalTransaction, receipt: &ExternalReceipt) -> anyhow::Result<Self> {
+    pub fn from_external_transaction(tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
         Ok(Self {
             from: tx.0.from.into(),
             to: tx.0.to.map_into(),
             value: tx.0.value.into(),
-            data: tx.0.input.into(),
+            data: tx.0.input.clone().into(),
             nonce: Some(tx.0.nonce.try_into()?),
             gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.try_into()?),
             gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.0.gas_price.map_into().unwrap_or(Wei::ZERO)),

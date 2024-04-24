@@ -359,10 +359,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
             if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
                 account.bytecode.push(*number, Some(bytecode));
             }
-            if let Some(indexes) = changes.static_slot_indexes.take() {
+            if let Some(indexes) = changes.static_slot_indexes.take_modified() {
                 account.static_slot_indexes.push(*number, indexes);
             }
-            if let Some(indexes) = changes.mapping_slot_indexes.take() {
+            if let Some(indexes) = changes.mapping_slot_indexes.take_modified() {
                 account.mapping_slot_indexes.push(*number, indexes);
             }
 
