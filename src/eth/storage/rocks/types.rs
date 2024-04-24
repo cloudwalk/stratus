@@ -515,10 +515,7 @@ impl From<ExecutionResultRocksdb> for ExecutionResult {
 
 pub struct LogRocksdb {
     pub address: AddressRocksdb,
-    pub topic0: Option<LogTopic>, //XXX
-    pub topic1: Option<LogTopic>,
-    pub topic2: Option<LogTopic>,
-    pub topic3: Option<LogTopic>,
+    pub topics: (H256, H256, H256, H256),
     pub data: BytesRocksdb,
 }
 
@@ -526,10 +523,7 @@ impl From<Log> for LogRocksdb {
     fn from(item: Log) -> Self {
         Self {
             address: AddressRocksdb::from(item.address),
-            topic0: item.topic0,
-            topic1: item.topic1,
-            topic2: item.topic2,
-            topic3: item.topic3,
+            topics: (item.topic0, item.topic1, item.topic2, item.topic3),
             data: BytesRocksdb::from(item.data),
         }
     }
@@ -539,10 +533,10 @@ impl From<LogRocksdb> for Log {
     fn from(item: LogRocksdb) -> Self {
         Self {
             address: item.address.into(),
-            topic0: item.topic0,
-            topic1: item.topic1,
-            topic2: item.topic2,
-            topic3: item.topic3,
+            topic0: item.topics.0,
+            topic1: item.topics.1,
+            topic2: item.topics.2,
+            topic3: item.topics.3,
             data: item.data.into(),
         }
     }
