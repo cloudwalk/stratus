@@ -93,7 +93,7 @@ pub fn init_config_and_data() -> (
     InMemoryPermanentStorageState,
 ) {
     // init config
-    let mut global_services = GlobalServices::<IntegrationTestConfig>::init_global_services();
+    let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
     global_services.config.executor.chain_id = 2009;
 
     // init block data

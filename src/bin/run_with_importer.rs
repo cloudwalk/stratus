@@ -9,7 +9,7 @@ use stratus::GlobalServices;
 use tokio::try_join;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<RunWithImporterConfig>::init_global_services();
+    let global_services = GlobalServices::<RunWithImporterConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 

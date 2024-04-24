@@ -26,7 +26,7 @@ where
     T: clap::Parser + WithCommonConfig + Debug,
 {
     /// Executes global services initialization.
-    pub fn init_global_services() -> Self
+    pub fn init() -> Self
     where
         T: clap::Parser + WithCommonConfig + Debug,
     {
