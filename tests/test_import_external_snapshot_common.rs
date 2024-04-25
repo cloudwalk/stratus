@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -86,7 +87,9 @@ const METRIC_QUERIES: [&str; 0] = [];
 // -----------------------------------------------------------------------------
 // Data initialization
 // -----------------------------------------------------------------------------
-pub fn init_config_and_data() -> (
+pub fn init_config_and_data(
+    block_number: u64,
+) -> (
     GlobalServices<IntegrationTestConfig>,
     ExternalBlock,
     ExternalReceipts,
@@ -97,16 +100,16 @@ pub fn init_config_and_data() -> (
     global_services.config.executor.chain_id = 2009;
 
     // init block data
-    let block_json = include_str!("fixtures/snapshots/292973/block.json");
-    let block: ExternalBlock = serde_json::from_str(block_json).unwrap();
+    let block_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/block.json", block_number)).unwrap();
+    let block: ExternalBlock = serde_json::from_str(&block_json).unwrap();
 
     // init receipts data
-    let receipts_json = include_str!("fixtures/snapshots/292973/receipts.json");
-    let receipts: ExternalReceipts = serde_json::from_str(receipts_json).unwrap();
+    let receipts_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/receipts.json", block_number)).unwrap();
+    let receipts: ExternalReceipts = serde_json::from_str(&receipts_json).unwrap();
 
     // init snapshot data
-    let snapshot_json = include_str!("fixtures/snapshots/292973/snapshot.json");
-    let snapshot: InMemoryPermanentStorageState = serde_json::from_str(snapshot_json).unwrap();
+    let snapshot_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/snapshot.json", block_number)).unwrap();
+    let snapshot: InMemoryPermanentStorageState = serde_json::from_str(&snapshot_json).unwrap();
 
     (global_services, block, receipts, snapshot)
 }
