@@ -33,7 +33,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
 
 /// used for multiple purposes, such as TPS counting and backup management
-const TRANSACTION_LOOP_THRESHOLD: usize = 420_000;
+const TRANSACTION_LOOP_THRESHOLD: usize = 120_000;
 
 static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -220,12 +220,13 @@ impl PermanentStorage for RocksPermanentStorage {
         );
 
         let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
-        let current_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
+        let _ = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
+        let current_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
 
         // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
         if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
-            let x = Arc::clone(&self.state.backup_trigger);
-            x.send(()).await.unwrap();
+            let backup_channel = Arc::clone(&self.state.backup_trigger);
+            backup_channel.send(()).await.unwrap();
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 
