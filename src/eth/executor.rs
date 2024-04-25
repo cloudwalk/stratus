@@ -90,8 +90,7 @@ impl EthExecutor {
 
         // import relay failed transactions
         if let Some(relay) = &self.relay {
-            let failed = relay.failed_transactions.lock().await.drain(..).collect::<Vec<_>>();
-            for (tx, ex) in failed {
+            for (tx, ex) in relay.drain_failed_transactions().await {
                 block.push_execution(tx, ex);
             }
         }
