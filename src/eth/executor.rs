@@ -86,18 +86,15 @@ impl EthExecutor {
     #[tracing::instrument(skip(self))]
     pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-        let block = if let Some(relay) = &self.relay {
-            tracing::debug!("relay found, draining pending failed transactions");
-            let mut block = self.import_external_to_temp(block, receipts).await?;
-            let pending = relay.failed_transactions.lock().await.drain(..).collect::<Vec<_>>();
-            for (tx, ex) in pending {
-                tracing::debug!(?tx, ?ex, "adding tx to block");
+        let mut block = self.import_external_to_temp(block, receipts).await?;
+
+        // import relay failed transactions
+        if let Some(relay) = &self.relay {
+            let failed = relay.failed_transactions.lock().await.drain(..).collect::<Vec<_>>();
+            for (tx, ex) in failed {
                 block.push_execution(tx, ex);
             }
-            block
-        } else {
-            self.import_external_to_temp(block, receipts).await?
-        };
+        }
 
         // commit block
         self.storage.set_mined_block_number(*block.number()).await?;
