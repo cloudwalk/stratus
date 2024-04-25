@@ -196,6 +196,27 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         bincode::deserialize(&value_bytes).ok()
     }
 
+    pub fn multi_get<I>(&self, keys: I) -> anyhow::Result<Vec<(K, V)>>
+    where
+        I: IntoIterator<Item = K> + Clone,
+    {
+        let serialized_keys = keys.clone().into_iter().map(|k| bincode::serialize(&k)).collect::<Result<Vec<_>, _>>()?;
+        Ok(self
+            .db
+            .multi_get(serialized_keys)
+            .into_iter()
+            .zip(keys)
+            .filter_map(|(value, key)| {
+                if let Ok(Some(value)) = value {
+                    let Ok(value) = bincode::deserialize::<V>(&value) else { return None }; // XXX: Maybe we should fail on a failed conversion instead of ignoring;
+                    Some((key, value))
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
     pub fn get_current_block_number(&self) -> u64 {
         let Ok(serialized_key) = bincode::serialize(&"current_block") else {
             return 0;
