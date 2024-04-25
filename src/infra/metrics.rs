@@ -157,7 +157,13 @@ metrics! {
     group: importer_online,
 
     "Time to execute import_online operation."
-    histogram_duration import_online{} []
+    histogram_duration import_online{} [],
+
+    "Time to import one mined block."
+    histogram_duration import_online_mined_block{} [],
+
+    "Transactions imported"
+    counter importer_online_transactions_total{} []
 }
 
 // Execution metrics.
