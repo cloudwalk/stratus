@@ -23,6 +23,11 @@ Then simply run:
 just run-release
 ```
 
+If you want to use OpenTelemery use the flag `--tracing-collector-url <url>` and pass
+the url of your OpenTelemetry collector of choice. Jaeger is included in the compose
+file, its collector url is `http://localhost:4317` and the ui can be accessed at
+`localhost:16686` on your browser.
+
 ### Testing
 
 To run tests, you also need to:
@@ -32,7 +37,7 @@ To run tests, you also need to:
   + Node.js `v20.10.0` and `v21.6.1`
   + Solidity `v0.8.16`
 
-Configure the test environment with 
+Configure the test environment with
 
 ```bash
 just setup
