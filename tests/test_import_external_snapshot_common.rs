@@ -87,7 +87,9 @@ const METRIC_QUERIES: [&str; 0] = [];
 // -----------------------------------------------------------------------------
 // Data initialization
 // -----------------------------------------------------------------------------
-pub fn init_config_and_data(block_number: u64) -> (
+pub fn init_config_and_data(
+    block_number: u64,
+) -> (
     GlobalServices<IntegrationTestConfig>,
     ExternalBlock,
     ExternalReceipts,
