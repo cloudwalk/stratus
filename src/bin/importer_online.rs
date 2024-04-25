@@ -57,6 +57,9 @@ async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainC
     // fetch block and receipts
     let block = fetch_block(chain, number).await?;
 
+    #[cfg(feature = "metrics")]
+    let start = metrics::now();
+
     // fetch receipts in parallel
     let mut receipts = Vec::with_capacity(block.transactions.len());
     for tx in &block.transactions {
@@ -67,6 +70,12 @@ async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainC
     // import block
     let receipts: ExternalReceipts = receipts.into();
     executor.import_external_to_perm(block, &receipts).await?;
+
+    #[cfg(feature = "metrics")]
+    metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
+    #[cfg(feature = "metrics")]
+    metrics::inc_import_online_mined_block(start.elapsed());
+
     Ok(())
 }
 
