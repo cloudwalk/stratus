@@ -62,4 +62,10 @@ impl TransactionRelay {
 
         Ok(())
     }
+
+    /// Drain failed transactions.
+    pub async fn drain_failed_transactions(&self) -> Vec<(TransactionInput, Execution)> {
+        let mut failed_tx_lock = self.failed_transactions.lock().await;
+        failed_tx_lock.drain(..).collect::<Vec<_>>()
+    }
 }
