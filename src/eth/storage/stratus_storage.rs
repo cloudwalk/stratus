@@ -53,7 +53,7 @@ impl StratusStorage {
 
     // Retrieves the active block number.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -68,7 +68,7 @@ impl StratusStorage {
 
     // Retrieves the last mined block number.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -83,7 +83,7 @@ impl StratusStorage {
 
     /// Atomically increments the block number, returning the new value.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -98,7 +98,7 @@ impl StratusStorage {
 
     /// Sets the active block number to a specific value.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -113,7 +113,7 @@ impl StratusStorage {
 
     /// Sets the mined block number to a specific value.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -131,7 +131,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Retrieves an account from the storage. Returns default value when not found.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -161,7 +161,7 @@ impl StratusStorage {
     }
 
     /// Retrieves an slot from the storage. Returns default value when not found.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -191,7 +191,7 @@ impl StratusStorage {
     }
 
     /// Retrieves multiple slots from the storage. Returns default values when not found.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_slots(&self, address: &Address, slot_indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -230,7 +230,7 @@ impl StratusStorage {
 
     /// Retrieves a block from the storage.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -245,7 +245,7 @@ impl StratusStorage {
 
     /// Retrieves a transaction from the storage.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -260,7 +260,7 @@ impl StratusStorage {
 
     /// Retrieves logs from the storage.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -279,7 +279,7 @@ impl StratusStorage {
 
     /// Persists accounts like pre-genesis accounts or test accounts.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn save_accounts_to_perm(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -294,7 +294,7 @@ impl StratusStorage {
 
     /// Temporarily saves account's changes generated during block production.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn save_account_changes_to_temp(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -309,7 +309,7 @@ impl StratusStorage {
 
     /// If necessary, flushes temporary state to durable storage.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn flush_temp(&self) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -323,7 +323,7 @@ impl StratusStorage {
     }
 
     /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -350,7 +350,7 @@ impl StratusStorage {
 
     /// Resets temporary storage.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn reset_temp(&self) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -365,7 +365,7 @@ impl StratusStorage {
 
     /// Resets permanent storage down to specific block_number.
     #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn reset_perm(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();

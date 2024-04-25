@@ -52,7 +52,7 @@ pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<Eth
     }
 }
 
-#[tracing::instrument(skip(executor, chain))]
+#[tracing::instrument(skip_all)]
 async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainClient) -> anyhow::Result<()> {
     // fetch block and receipts
     let block = fetch_block(chain, number).await?;
@@ -70,7 +70,7 @@ async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainC
     Ok(())
 }
 
-#[tracing::instrument(skip(chain))]
+#[tracing::instrument(skip_all)]
 async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<ExternalBlock> {
     let block = loop {
         tracing::info!(%number, "fetching block");
@@ -102,7 +102,7 @@ async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::R
     }
 }
 
-#[tracing::instrument(skip(chain))]
+#[tracing::instrument(skip_all)]
 async fn fetch_receipt(chain: &BlockchainClient, hash: Hash) -> anyhow::Result<ExternalReceipt> {
     let receipt = loop {
         tracing::info!(%hash, "fetching receipt");
