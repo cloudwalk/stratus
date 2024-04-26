@@ -11,6 +11,7 @@ use std::fmt::Debug;
 
 use anyhow::anyhow;
 use anyhow::Ok;
+use itertools::Itertools;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -92,7 +93,7 @@ impl Execution {
         matches!(self.result, ExecutionResult::Success { .. })
     }
 
-    /// When the transaction is a contract deployment, returns the address of the deployed contract.
+    /// Returns the address of the deployed contract if the transaction is a deployment.
     pub fn contract_address(&self) -> Option<Address> {
         if let Some(contract_address) = &self.deployed_contract_address {
             return Some(contract_address.to_owned());
@@ -104,6 +105,11 @@ impl Execution {
             }
         }
         None
+    }
+
+    /// Returns account changes to be persisted.
+    pub fn changes_to_persist(&self) -> Vec<ExecutionAccountChanges> {
+        self.changes.values().cloned().collect_vec()
     }
 
     /// Checks conflicts between two executions.

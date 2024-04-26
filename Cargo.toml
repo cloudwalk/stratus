@@ -144,14 +144,17 @@ dev  = []
 # Application is running in performance test mode.
 perf = []
 
-# Enable prefetching slots during EVM execution.
-evm-slot-prefetch = []
-
 # Enable metrics dependencies and code for metrics collection.
 metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
 
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode", "kube", "k8s-openapi"]
+
+# XXX: Enable external transaction parallel execution.
+executor-parallel = []
+
+# XXX: Enable prefetching slots during EVM execution.
+evm-slot-prefetch = []
 
 # ------------------------------------------------------------------------------
 # Lints
