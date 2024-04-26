@@ -235,7 +235,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        Arc::new(EthExecutor::new(evm_tx, Arc::clone(&storage), self.forward_to.as_ref()).await)
+        Arc::new(EthExecutor::new(Arc::clone(&storage), evm_tx, self.num_evms, self.forward_to.as_ref()).await)
     }
 }
 
