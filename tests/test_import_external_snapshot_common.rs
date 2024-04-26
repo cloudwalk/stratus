@@ -24,6 +24,7 @@ mod m {
     pub use const_format::formatcp;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION_SLOT_READS_CACHED;
+    pub use stratus::infra::metrics::METRIC_EXECUTOR_EXTERNAL_BLOCK;
     pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
@@ -31,7 +32,10 @@ mod m {
 }
 
 #[cfg(feature = "metrics")]
-const METRIC_QUERIES: [&str; 46] = [
+const METRIC_QUERIES: [&str; 48] = [
+    // Executor
+    "* Executor",
+    m::formatcp!("{}_sum", m::METRIC_EXECUTOR_EXTERNAL_BLOCK),
     // EVM
     "* EVM",
     m::formatcp!("{}_count", m::METRIC_EVM_EXECUTION),
@@ -98,6 +102,8 @@ pub fn init_config_and_data(
     // init config
     let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
     global_services.config.executor.chain_id = 2009;
+    global_services.config.executor.num_evms = 8;
+    global_services.config.stratus_storage.perm_storage.perm_storage_connections = 9;
 
     // init block data
     let block_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/block.json", block_number)).unwrap();
@@ -144,8 +150,6 @@ pub async fn execute_test(
     receipts: ExternalReceipts,
 ) {
     println!("Executing: {}", test_name);
-
-    // restart prometheus, so the metrics are reset
 
     // init executor and execute
     let storage = StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage));

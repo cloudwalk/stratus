@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+// TODO: Remove clippy `allow` after feature-flags are enabled.
+
 //! EthExecutor: Ethereum Transaction Coordinator
 //!
 //! This module provides the `EthExecutor` struct, which acts as a coordinator for executing Ethereum transactions.
@@ -8,6 +12,7 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use futures::StreamExt;
 use itertools::Itertools;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot;
@@ -43,26 +48,29 @@ pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>
 /// It holds references to the EVM, block miner, and storage, managing the overall process of
 /// transaction execution, block production, and state management.
 pub struct EthExecutor {
-    // Channel to send transactions to background EVMs.
+    /// Channel to send transactions to background EVMs.
     evm_tx: crossbeam_channel::Sender<EvmTask>,
 
-    // Mutex-wrapped miner for creating new blockchain blocks.
+    // Number of running EVMs.
+    num_evms: usize,
+
+    /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Mutex<BlockMiner>,
 
-    // Provider for sending rpc calls to substrate
+    /// Provider for sending rpc calls to substrate
     relay: Option<TransactionRelay>,
 
-    // Shared storage backend for persisting blockchain state.
+    /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
 
-    // Broadcast channels for notifying subscribers about new blocks and logs.
+    /// Broadcast channels for notifying subscribers about new blocks and logs.
     block_notifier: broadcast::Sender<Block>,
     log_notifier: broadcast::Sender<LogMined>,
 }
 
 impl EthExecutor {
     /// Creates a new executor.
-    pub async fn new(evm_tx: crossbeam_channel::Sender<EvmTask>, storage: Arc<StratusStorage>, forward_to: Option<&String>) -> Self {
+    pub async fn new(storage: Arc<StratusStorage>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize, forward_to: Option<&String>) -> Self {
         let relay = match forward_to {
             Some(rpc_url) => Some(TransactionRelay::new(rpc_url).await.expect("failed to instantiate the relay")),
             None => None,
@@ -70,6 +78,7 @@ impl EthExecutor {
 
         Self {
             evm_tx,
+            num_evms,
             miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
@@ -115,31 +124,100 @@ impl EthExecutor {
         tracing::info!(number = %block.number(), "importing external block");
 
         // track active block number
-        self.storage.set_active_block_number(block.number()).await?;
+        let storage = &self.storage;
+        storage.set_active_block_number(block.number()).await?;
 
-        // re-execute transactions
+        // track executions
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
-        for tx in &block.transactions {
-            // re-execute transaction
-            let receipt = receipts.try_get(&tx.hash())?;
-            let (execution, _execution_metrics) = self.reexecute_external(tx, receipt, &block).await?;
+        let mut executions_metrics: Vec<ExecutionMetrics> = Vec::with_capacity(block.transactions.len());
 
-            // track execution changes
-            self.storage
-                .save_account_changes_to_temp(execution.changes.values().cloned().collect_vec())
-                .await?;
-            executions.push((tx.clone(), receipt.clone(), execution));
+        // serial execution
+        #[cfg(not(feature = "executor-parallel"))]
+        {
+            for tx in &block.transactions {
+                let receipt = receipts.try_get(&tx.hash())?;
+                let (exec, exec_metrics) = self.reexecute_external(tx, receipt, &block).await?;
 
-            // track metrics
-            #[cfg(feature = "metrics")]
-            {
-                block_metrics += _execution_metrics;
+                storage.save_account_changes_to_temp(exec.changes_to_persist()).await?;
+
+                executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), exec));
+                executions_metrics.push(exec_metrics);
+            }
+        }
+
+        // parallel execution
+        #[cfg(feature = "executor-parallel")]
+        {
+            // prepare execution for parallelism
+            let mut parallel_executions = Vec::with_capacity(block.transactions.len());
+            for tx in &block.transactions {
+                let receipt = receipts.try_get(&tx.hash())?;
+                parallel_executions.push(self.reexecute_external(tx, receipt, &block));
+            }
+
+            // execute in parallel
+            let mut tx_index: usize = 0;
+            let mut tx_par_executions = futures::stream::iter(parallel_executions).buffered(self.num_evms);
+            let mut prev_tx_execution: Option<Execution> = None;
+
+            while let Some(result) = tx_par_executions.next().await {
+                // check result of parallel execution
+                let decision = match (result, &prev_tx_execution) {
+                    //
+                    // execution success and no previous transaction execution
+                    (Ok(result), None) => ExecutionDecision::Proceed(tx_index, result),
+                    //
+                    // execution success, but with previous transaction execution
+                    (Ok(result), Some(prev_tx_execution)) => {
+                        let current_execution = &result.0;
+                        let conflicts = prev_tx_execution.check_conflicts(current_execution);
+                        match conflicts {
+                            None => ExecutionDecision::Proceed(tx_index, result),
+                            Some(conflicts) => {
+                                tracing::warn!(?conflicts, "parallel execution conflicts");
+                                ExecutionDecision::Reexecute(tx_index)
+                            }
+                        }
+                    }
+                    //
+                    // execution failure
+                    (Err(e), _) => {
+                        tracing::warn!(reason = ?e, "parallel execution failed");
+                        ExecutionDecision::Reexecute(tx_index)
+                    }
+                };
+
+                // re-execute if necessary
+                // TODO: execution must return tx and receipt to avoid having to retrieve them again
+                let (tx, receipt, exec, exec_metrics) = match decision {
+                    ExecutionDecision::Proceed(tx_index, result) => {
+                        let tx = &block.transactions[tx_index];
+                        let receipt = receipts.try_get(&tx.hash())?;
+                        (tx, receipt, result.0, result.1)
+                    }
+                    ExecutionDecision::Reexecute(tx_index) => {
+                        let tx = &block.transactions[tx_index];
+                        let receipt = receipts.try_get(&tx.hash())?;
+                        let result = self.reexecute_external(tx, receipt, &block).await?;
+                        (tx, receipt, result.0, result.1)
+                    }
+                };
+
+                storage.save_account_changes_to_temp(exec.changes_to_persist()).await?;
+
+                tx_index += 1;
+                prev_tx_execution = Some(exec.clone());
+                executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), exec));
+                executions_metrics.push(exec_metrics);
             }
         }
 
         // track metrics
         #[cfg(feature = "metrics")]
         {
+            for execution_metrics in executions_metrics {
+                block_metrics += execution_metrics;
+            }
             metrics::inc_executor_external_block(start.elapsed());
             metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
@@ -332,4 +410,11 @@ impl EthExecutor {
         self.evm_tx.send((evm_input, execution_tx))?;
         execution_rx.await?
     }
+}
+
+enum ExecutionDecision {
+    /// Parallel execution succeeded and can be persisted.
+    Proceed(usize, (Execution, ExecutionMetrics)),
+    /// Parallel execution failed and must be re-executed in a serial manner.
+    Reexecute(usize),
 }
