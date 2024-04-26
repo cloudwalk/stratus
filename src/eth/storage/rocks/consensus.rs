@@ -1,5 +1,5 @@
-use futures::{StreamExt, TryStreamExt};
-use kube::{Client, api::{Api, ResourceExt, ListParams, PostParams}};
+
+use kube::{Client, api::{Api, ResourceExt, ListParams}};
 use k8s_openapi::api::core::v1::Pod;
 use anyhow::Result;
 
