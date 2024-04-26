@@ -373,6 +373,12 @@ impl RocksStorageState {
                 if let Some(bytecode) = change.bytecode.clone().take_modified() {
                     account_info_entry.bytecode = bytecode.map_into();
                 }
+                if let Some(static_indexes) = change.static_slot_indexes.clone().take_modified() {
+                    account_info_entry.static_slot_indexes = static_indexes;
+                }
+                if let Some(mapping_indexes) = change.mapping_slot_indexes.clone().take_modified() {
+                    account_info_entry.mapping_slot_indexes = mapping_indexes;
+                }
 
                 account_changes.push((address, account_info_entry.clone()));
                 account_history_changes.push(((address, block_number.into()), account_info_entry));

@@ -31,6 +31,7 @@ use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
@@ -44,6 +45,8 @@ pub struct AccountRocksdb {
     pub balance: WeiRocksdb,
     pub nonce: NonceRocksdb,
     pub bytecode: Option<BytesRocksdb>,
+    pub static_slot_indexes: Option<SlotIndexes>,
+    pub mapping_slot_indexes: Option<SlotIndexes>,
 }
 
 impl From<Account> for (AddressRocksdb, AccountRocksdb) {
@@ -54,6 +57,8 @@ impl From<Account> for (AddressRocksdb, AccountRocksdb) {
                 balance: value.balance.into(),
                 nonce: value.nonce.into(),
                 bytecode: value.bytecode.map_into(),
+                static_slot_indexes: value.static_slot_indexes,
+                mapping_slot_indexes: value.mapping_slot_indexes,
             },
         )
     }
@@ -65,6 +70,8 @@ impl Default for AccountRocksdb {
             balance: WeiRocksdb::ZERO,
             nonce: NonceRocksdb::ZERO,
             bytecode: None,
+            static_slot_indexes: None,
+            mapping_slot_indexes: None,
         }
     }
 }
@@ -152,15 +159,15 @@ impl NonceRocksdb {
 }
 
 impl AccountRocksdb {
-    pub fn to_account(&self, address: &Address) -> Account {
+    pub fn to_account(self, address: &Address) -> Account {
         Account {
             address: *address,
-            nonce: self.nonce.clone().into(),
-            balance: self.balance.clone().into(),
-            bytecode: self.bytecode.clone().map_into(),
+            nonce: self.nonce.into(),
+            balance: self.balance.into(),
+            bytecode: self.bytecode.map_into(),
             code_hash: KECCAK_EMPTY.into(),
-            static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
-            mapping_slot_indexes: None, // TODO: is it necessary for RocksDB?
+            static_slot_indexes: self.static_slot_indexes,   // TODO: is it necessary for RocksDB?
+            mapping_slot_indexes: self.mapping_slot_indexes, // TODO: is it necessary for RocksDB?
         }
     }
 }
@@ -229,7 +236,7 @@ impl From<BlockNumberRocksdb> for BlockNumber {
     }
 }
 
-#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndexRocksdb(U256);
 
 impl SlotIndexRocksdb {
