@@ -456,13 +456,23 @@ mod tests {
         let db: RocksDb<SlotIndex, SlotValue> = RocksDb::new("./data/slots_test.rocksdb", super::DbConfig::Default).unwrap();
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
+        let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
+            .map(|_| (Faker.fake(), Faker.fake()))
+            .filter(|(key, _)| !slots.contains_key(key))
+            .collect();
 
         db.insert_batch(slots.clone().into_iter().collect(), None);
+        db.insert_batch(extra_slots.clone().into_iter().collect(), None);
 
-        let extra_keys: HashSet<SlotIndex> = (0..1000).map(|_| Faker.fake()).collect();
+        let extra_keys: HashSet<SlotIndex> = (0..1000)
+            .map(|_| Faker.fake())
+            .filter(|key| !extra_slots.contains_key(key) && !slots.contains_key(key))
+            .collect();
+
         let keys: Vec<SlotIndex> = slots.keys().cloned().chain(extra_keys).collect();
         let result = db.multi_get(keys).expect("this should not fail");
 
+        assert_eq!(result.len(), slots.keys().len());
         for (idx, value) in result {
             assert_eq!(value, *slots.get(&idx).expect("should not be None"));
         }
