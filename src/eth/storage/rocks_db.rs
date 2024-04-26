@@ -437,3 +437,36 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq> Iterat
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::collections::HashSet;
+    use std::fs;
+
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::RocksDb;
+    use crate::eth::primitives::SlotIndex;
+    use crate::eth::primitives::SlotValue;
+
+    #[test]
+    fn test_multi_get() {
+        let db: RocksDb<SlotIndex, SlotValue> = RocksDb::new("./data/slots_test.rocksdb", super::DbConfig::Default).unwrap();
+
+        let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
+
+        db.insert_batch(slots.clone().into_iter().collect(), None);
+
+        let extra_keys: HashSet<SlotIndex> = (0..1000).map(|_| Faker.fake()).collect();
+        let keys: Vec<SlotIndex> = slots.keys().cloned().chain(extra_keys).collect();
+        let result = db.multi_get(keys).expect("this should not fail");
+
+        for (idx, value) in result {
+            assert_eq!(value, *slots.get(&idx).expect("should not be None"));
+        }
+
+        fs::remove_dir_all("./data/slots_test.rocksdb").unwrap();
+    }
+}
