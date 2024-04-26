@@ -1,8 +1,9 @@
-
-use kube::{Client, api::{Api, ResourceExt, ListParams}};
-use k8s_openapi::api::core::v1::Pod;
 use anyhow::Result;
-
+use k8s_openapi::api::core::v1::Pod;
+use kube::api::Api;
+use kube::api::ListParams;
+use kube::api::ResourceExt;
+use kube::Client;
 
 pub async fn gather_clients() -> Result<()> {
     // Infer the runtime environment and try to create a Kubernetes Client
