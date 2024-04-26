@@ -32,6 +32,9 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 }
 
 pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<EthExecutor>, storage: Arc<StratusStorage>) -> anyhow::Result<()> {
+    #[cfg(feature = "rocks")]
+    let _ = stratus::eth::storage::rocks::consensus::gather_clients().await;
+
     // init services
     let chain = BlockchainClient::new(&config.external_rpc).await?;
 
