@@ -21,7 +21,7 @@ DATA_FOLDER="$1"
 RANGE_START="$2"
 RANGE_END="$3"
 
-files=$($DATA_FOLDER/*.csv)
+files="$DATA_FOLDER/*.csv"
 
 function import() {
     file="$1"
