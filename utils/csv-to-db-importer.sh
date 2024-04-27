@@ -21,20 +21,22 @@ DATA_FOLDER="$1"
 RANGE_START="$2"
 RANGE_END="$3"
 
-files="$DATA_FOLDER/*.csv"
+files=$(ls -w 1 -v $DATA_FOLDER/*.csv)
 
 function import() {
     file="$1"
     number="$2"
 
-    echo "would import $file $number"
+    echo "would import $file"
+
+    echo "$file" >> imported.logs
 }
 
 for file in $files; do
     number=$(echo "$file" | grep -oP "\d+")
 
     # If in the expected range
-    if [[ "$RANGE_START" -lt "$number" && "$number" -lt "$RANGE_END" ]]; then
+    if [[ "$RANGE_START" -le "$number" && "$number" -lt "$RANGE_END" ]]; then
         import "$file" "$number"
     fi
 done
