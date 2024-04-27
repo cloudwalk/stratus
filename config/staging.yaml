@@ -1,0 +1,72 @@
+kubernetes:
+  base:
+    sourceRepo:
+      name: stratus
+      org: cloudwalk
+    monoRepo:
+      url: git@github.com:cloudwalk/monorepo-gitops.git
+      appsFolder: apps-config
+      argoCDValues: helms/argocd/values.yaml
+    containerRegistry:
+      url: gcr.io/infinitepay-staging
+    deployConfig:
+      cluster: infinitepay-staging
+      environment: staging
+      steps:
+        - build
+        - push
+        - versioning
+        - deploy
+      service:
+        asmRevision: asm-managed-stable
+  apps:
+    # --------------------------------------------------------------------------
+    # EVM api Rocksdb storage
+    # --------------------------------------------------------------------------
+    - name: stratus-api
+      dockerfile: ./docker/Dockerfile.run_with_importer
+      secretsManager:
+        enabled: true
+        provider: gcpsm
+      imageRepoName: stratus-rocks
+      kind: statefulset
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 1
+          maxUnavailable: 0
+      replicas: 2
+      resources:
+        requests:
+          cpu: 16000m
+          memory: 32Gi
+      envs:
+        - name: ENV
+          value: "staging"
+      service:
+        metrics:
+          path: "/"
+          port: "9000"
+        ports:
+          - containerPort: 3000
+            name: app-stratus
+            virtualservice:
+              gateway: internal
+              hosts:
+                - stratus-api.services.staging.cloudwalk.network
+          - containerPort: 9000
+            name: metrics
+        healthcheck:
+          initialDelaySeconds: 10
+          interval: 10
+          path: /health
+          port: 3000
+          timeoutSeconds: 5
+      volumeClaims:
+      - name: rocksdata
+        storageClass: premium-rwo
+        size: 1500Gi
+      volumeMounts:
+      - volumeName: rocksdata
+        mountPath: /app/data
+        storageClass: premium-rwo
