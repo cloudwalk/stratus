@@ -37,7 +37,7 @@ function import() {
     table=$(echo "$file" | grep -oP "(?<=/)\w+(?=-)")
 
     echo "Importing $file..."
-    psql "$DATABASE_URL" -c "\copy $table FROM '$file' DELIMITER E'\t' CSV HEADER"
+    time psql "$DATABASE_URL" -c "\copy $table FROM '$file' DELIMITER E'\t' CSV HEADER"
 
     echo "$file" >> imported.logs
     import_count=$(( import_count + 1 ))
