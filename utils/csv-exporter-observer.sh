@@ -3,6 +3,8 @@
 # Script to monitor and report the progress of a csv exporter run
 set -e
 
+RED='\033[0;31m'
+RESET='\033[0m'
 
 if [[ -t 1 ]]; then
     echo >&2 "Tip: run this with 'tee' to save output in another file."
@@ -23,14 +25,8 @@ if [[ "$(basename $(pwd))" != "utils" ]]; then
     echo >&2 "  OK, continuing."
 fi
 
-function machine_used_memory_percentage() {
-    output=$(free)
-
-    used=$(echo $output | awk '{ print $9 }')
-    free=$(echo $output | awk '{ print $10 }')
-
-    result=$(echo "scale=2; $used * 100.0 / $free" | bc)
-    echo "$result%"
+function machine_amount_of_free_memory_gb() {
+    awk '/MemFree/ { printf "%.1f\n", $2/1024/1024 }' /proc/meminfo
 }
 
 
@@ -58,13 +54,13 @@ while ps -p $PID > /dev/null; do
         eta_h=$(( (remaining_transactions / tps) / 60 / 60 ))
     fi
 
-    total_mem_usage=$(machine_used_memory_percentage)
-    log="mins_elapsed = $minutes, used_memory% = $total_mem_usage%, importer-off_mem% = $process_mem_percentage%, block = $current_block, transaction = $current_transaction ($transaction_progress%), tps = $tps, ETA=$eta_h hours"
+    free_memory_amount=$(machine_amount_of_free_memory_gb)
+    log="mins_elapsed = $minutes, free_memory = $free_memory_amount GB, importer-off_mem% = $process_mem_percentage%, block = $current_block, transaction = $current_transaction ($transaction_progress%), tps = $tps, ETA=$eta_h hours"
     echo "$log"
 
-    # If memory usage is above 60%
-    if [[ "$(echo $total_mem_usage | cut -d . -f 1)" -gt 60 ]]; then
-        echo 'WARNING: MEMORY USAGE ABOVE 60%!!!!'
+    # If free memory is below 10GB
+    if [[ "$(echo $free_memory_amount | cut -d . -f 1)" -lt 10 ]]; then
+        echo -e "${RED}WARNING: FREE MEMORY BELOW 10GB${RESET}"
     fi
 
     previous_transaction="$current_transaction"
