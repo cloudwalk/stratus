@@ -58,6 +58,8 @@ while ps -p $PID > /dev/null; do
     log="mins_elapsed = $minutes, free_memory = $free_memory_amount GB, importer-off_mem% = $process_mem_percentage%, block = $current_block, transaction = $current_transaction ($transaction_progress%), tps = $tps, ETA=$eta_h hours"
     echo "$log"
 
+    df -h | grep -P "data|Use"
+
     # If free memory is below 10GB
     if [[ "$(echo $free_memory_amount | cut -d . -f 1)" -lt 10 ]]; then
         echo -e "${RED}WARNING: FREE MEMORY BELOW 10GB${RESET}"
