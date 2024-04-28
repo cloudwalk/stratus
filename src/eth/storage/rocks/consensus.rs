@@ -9,6 +9,8 @@ pub async fn gather_clients() -> Result<()> {
     // Infer the runtime environment and try to create a Kubernetes Client
     let client = Client::try_default().await?;
 
+    println!("searching for pods");
+
     // Read pods in the configured namespace into the typed interface from k8s-openapi
     let pods: Api<Pod> = Api::default_namespaced(client);
     for p in pods.list(&ListParams::default()).await? {
