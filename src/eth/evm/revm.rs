@@ -243,7 +243,7 @@ impl Database for RevmSession {
             let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
             let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
             for slot in slots {
-                self.account_slots_cache.entry(address.clone()).or_default().insert(slot.index.clone(), slot);
+                self.account_slots_cache.entry(address).or_default().insert(slot.index, slot);
             }
         }
 
@@ -277,7 +277,7 @@ impl Database for RevmSession {
                 // cached
                 Some(slot) => {
                     self.metrics.slot_reads_cached += 1;
-                    slot.clone()
+                    *slot
                 }
             }
         };

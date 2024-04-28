@@ -196,6 +196,27 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         bincode::deserialize(&value_bytes).ok()
     }
 
+    pub fn multi_get<I>(&self, keys: I) -> anyhow::Result<Vec<(K, V)>>
+    where
+        I: IntoIterator<Item = K> + Clone,
+    {
+        let serialized_keys = keys.clone().into_iter().map(|k| bincode::serialize(&k)).collect::<Result<Vec<_>, _>>()?;
+        Ok(self
+            .db
+            .multi_get(serialized_keys)
+            .into_iter()
+            .zip(keys)
+            .filter_map(|(value, key)| {
+                if let Ok(Some(value)) = value {
+                    let Ok(value) = bincode::deserialize::<V>(&value) else { return None }; // XXX: Maybe we should fail on a failed conversion instead of ignoring;
+                    Some((key, value))
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
     pub fn get_current_block_number(&self) -> u64 {
         let Ok(serialized_key) = bincode::serialize(&"current_block") else {
             return 0;
@@ -414,5 +435,48 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq> Iterat
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::collections::HashSet;
+    use std::fs;
+
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::RocksDb;
+    use crate::eth::primitives::SlotIndex;
+    use crate::eth::primitives::SlotValue;
+
+    #[test]
+    fn test_multi_get() {
+        let db: RocksDb<SlotIndex, SlotValue> = RocksDb::new("./data/slots_test.rocksdb", super::DbConfig::Default).unwrap();
+
+        let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
+        let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
+            .map(|_| (Faker.fake(), Faker.fake()))
+            .filter(|(key, _)| !slots.contains_key(key))
+            .collect();
+
+        db.insert_batch(slots.clone().into_iter().collect(), None);
+        db.insert_batch(extra_slots.clone().into_iter().collect(), None);
+
+        let extra_keys: HashSet<SlotIndex> = (0..1000)
+            .map(|_| Faker.fake())
+            .filter(|key| !extra_slots.contains_key(key) && !slots.contains_key(key))
+            .collect();
+
+        let keys: Vec<SlotIndex> = slots.keys().cloned().chain(extra_keys).collect();
+        let result = db.multi_get(keys).expect("this should not fail");
+
+        assert_eq!(result.len(), slots.keys().len());
+        for (idx, value) in result {
+            assert_eq!(value, *slots.get(&idx).expect("should not be None"));
+        }
+
+        fs::remove_dir_all("./data/slots_test.rocksdb").unwrap();
     }
 }

@@ -48,7 +48,7 @@ impl TransactionMined {
     ///
     /// TODO: this kind of conversion should be infallibe.
     pub fn from_external(execution: ExternalTransactionExecution) -> anyhow::Result<Self> {
-        let (tx, receipt, execution) = execution;
+        let ExternalTransactionExecution { tx, receipt, execution } = execution;
         Ok(Self {
             input: tx.try_into()?,
             execution,

@@ -20,8 +20,8 @@ fn test_import_external_snapshot_with_postgres() {
 
         let pg = PostgresPermanentStorage::new(PostgresPermanentStorageConfig {
             url: docker.postgres_connection_url().to_string(),
-            connections: 5,
-            acquire_timeout: Duration::from_secs(10),
+            connections: global_services.config.stratus_storage.perm_storage.perm_storage_connections,
+            acquire_timeout: Duration::from_millis(global_services.config.stratus_storage.perm_storage.perm_storage_timeout_millis),
         })
         .await
         .unwrap();
