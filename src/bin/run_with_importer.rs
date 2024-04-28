@@ -10,6 +10,8 @@ use tokio::try_join;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RunWithImporterConfig>::init();
+    #[cfg(feature = "rocks")]
+    let _ = stratus::eth::storage::rocks::consensus::gather_clients().await;
     global_services.runtime.block_on(run(global_services.config))
 }
 
