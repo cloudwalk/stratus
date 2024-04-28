@@ -38,8 +38,8 @@ kubernetes:
       replicas: 2
       resources:
         requests:
-          cpu: 16000m
-          memory: 32Gi
+          cpu: 8000m
+          memory: 8Gi
       envs:
         - name: ENV
           value: "staging"
