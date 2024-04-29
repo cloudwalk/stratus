@@ -24,6 +24,7 @@ kubernetes:
     # EVM api Rocksdb storage
     # --------------------------------------------------------------------------
     - name: stratus-api
+      serviceAccount: raft-role
       dockerfile: ./docker/Dockerfile.run_with_importer
       secretsManager:
         enabled: true
