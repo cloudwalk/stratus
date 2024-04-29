@@ -176,13 +176,13 @@ impl SlotValueRocksdb {
 
 impl From<SlotValue> for SlotValueRocksdb {
     fn from(item: SlotValue) -> Self {
-        SlotValueRocksdb(item.inner_value())
+        SlotValueRocksdb(item.as_u256())
     }
 }
 
 impl From<SlotValueRocksdb> for SlotValue {
     fn from(item: SlotValueRocksdb) -> Self {
-        SlotValue::new(item.inner_value())
+        SlotValue::from(item.inner_value())
     }
 }
 
