@@ -16,7 +16,7 @@ pub async fn gather_clients() -> Result<()> {
     let pods: Api<Pod> = Api::default_namespaced(client);
     let pods_list = pods.list(&ListParams::default()).await.unwrap();
     for pod in pods_list {
-        let pod_ip = format!("http://{}", pod.status.as_ref().unwrap().pod_ip.as_ref().unwrap().clone());
+        let pod_ip = format!("http://{}:3000", pod.status.as_ref().unwrap().pod_ip.as_ref().unwrap().clone());
 
         println!("found pod {} with address {}", pod.name_any(), pod_ip);
 
