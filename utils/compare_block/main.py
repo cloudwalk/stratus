@@ -1,7 +1,6 @@
 from typing import List
 from deepdiff import DeepDiff
 from hexbytes import HexBytes
-from pprintpp import pformat
 import typer
 import web3
 from rich import print
@@ -44,13 +43,17 @@ def print_diff(
         print(
             f"{'\t'*indent}\t[red]The left {name} is missing the following fields:[/red]"
         )
-        print_items(diff["dictionary_item_added"], [*ignore, *ignore_in_item], indent + 2)
+        print_items(
+            diff["dictionary_item_added"], [*ignore, *ignore_in_item], indent + 2
+        )
 
     if len(diff.get("dictionary_item_removed", [])):
         print(
             f"{'\t'*indent}\t[red]The right {name} is missing the following fields:[/red]"
         )
-        print_items(diff["dictionary_item_removed"], [*ignore, *ignore_in_item], indent + 2)
+        print_items(
+            diff["dictionary_item_removed"], [*ignore, *ignore_in_item], indent + 2
+        )
 
     if len(diff.get("values_changed", [])):
         print(f"{'\t'*indent}\t[red]The follwing values don't match:[/red]")
