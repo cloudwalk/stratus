@@ -32,8 +32,8 @@ const STORAGE_PERM: &str = "permanent";
 const DEFAULT_VALUE: &str = "default";
 
 pub struct StratusStorage {
-    temp: Arc<dyn TemporaryStorage>,
-    perm: Arc<dyn PermanentStorage>,
+    pub temp: Arc<dyn TemporaryStorage>,
+    pub perm: Arc<dyn PermanentStorage>,
 }
 
 impl StratusStorage {
