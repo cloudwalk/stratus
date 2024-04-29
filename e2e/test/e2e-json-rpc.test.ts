@@ -6,6 +6,7 @@ import { isStratus } from "./helpers/network";
 import {
     CHAIN_ID,
     CHAIN_ID_DEC,
+    HEX_PATTERN,
     TEST_BALANCE,
     ZERO,
     send,
@@ -57,6 +58,14 @@ describe("JSON-RPC", () => {
             } else {
                 gasPrice.not.eq(ZERO);
             }
+        });
+        it("eth_estimateGas", async () => {
+            let tx = { from: ALICE.address, to: BOB.address, value: "0x1" }
+            let gas = await send("eth_estimateGas", [tx]);
+            expect(gas).match(HEX_PATTERN, "format");
+            
+            const gasDec = parseInt(gas, 16); 
+            expect(gasDec).to.be.greaterThan(0).and.lessThan(1_000_000);
         });
     });
 
