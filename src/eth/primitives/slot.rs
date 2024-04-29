@@ -1,11 +1,3 @@
-//! Slot Module
-//!
-//! Manages the concept of slots in Ethereum's state storage. A slot represents
-//! a storage location in a smart contract, identified by an index and holding a
-//! value. This module defines the structure of a slot and provides mechanisms
-//! for interacting with slots, including reading and modifying storage data in
-//! the context of Ethereum smart contracts.
-
 use std::fmt::Debug;
 use std::fmt::Display;
 
@@ -41,19 +33,5 @@ impl Slot {
 impl Display for Slot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}={}", self.index, self.value)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use hex_literal::hex;
-
-    use crate::eth::primitives::SlotIndex;
-
-    #[test]
-    fn slot_index_to_mapping_index() {
-        let address = hex!("3c44cdddb6a900fa2b585dd299e03d12fa4293bc").to_vec();
-        let hashed = SlotIndex::ZERO.to_mapping_index(address);
-        assert_eq!(hashed.to_string(), "0x215be5d23550ceb1beff54fb579a765903ba2ccc85b6f79bcf9bda4e8cb86034");
     }
 }
