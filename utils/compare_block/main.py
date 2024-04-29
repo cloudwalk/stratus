@@ -6,22 +6,36 @@ import typer
 import web3
 from rich import print
 
-def print_items(changes: list, ignore: list[str]):
+def print_items(changes: list, ignore: list[str], indent: int = 0):
     for change in changes:
         field = change.path(root="", output_format="list")[0]
         if field not in ignore:
-            print(f"\t\t[bold red]{field}[/bold red]")
+            print(f"{'\t'*indent}\t\t[bold red]{field}[/bold red]")
     print()
 
-def print_changed(changes: list, ignore: list[str]):
+def print_changes(changes: list, ignore: list[str], left, right, indent: int = 0):
     for change in changes:
         field = change.path(root="", output_format="list")[0]
-        if field != "transactions" and field not in ignore:
-            if isinstance(change.up.t1[field], HexBytes) and isinstance(change.up.t2[field], HexBytes):
-                print(f"\t\t{field}: [bold red]Left: {change.up.t1[field].hex()}[/bold red], [bold green]Right: {change.up.t2[field].hex()}[/bold green]")
+        if field not in ignore:
+            if isinstance(left[field], HexBytes) and isinstance(right[field], HexBytes):
+                print(f"{'\t'*indent}\t\t{field}:\n{'\t'*indent}\t\t\t[bold red]Left: {left[field].hex()}[/bold red]\n{'\t'*indent}\t\t\t[bold green]Right: {right[field].hex()}[/bold green]")
             else:
-                print(f"\t\t{field}: [bold red]Left: {change.up.t1[field]}[/bold red], [bold green]Right: {change.up.t2[field]}[/bold green]")
+                print(f"{'\t'*indent}\t\t{field}:\n{'\t'*indent}\t\t\t[bold red]Left: {left[field]}[/bold red]\n{'\t'*indent}\t\t\t[bold green]Right: {right[field]}[/bold green]")
     print()
+
+def print_diff(diff: DeepDiff, left, right, name: str, ignore: list[str], ignore_in_item: list[str], indent: int = 0):
+    print(f"{'\t'*indent}{name} Diff:")
+    if len(diff.get('dictionary_item_added', [])):
+        print(f"{'\t'*indent}\t[red]The left {name} is missing the following fields:[/red]")
+        print_items(diff['dictionary_item_added'], [*ignore, *ignore_in_item], indent)
+
+    if len(diff.get('dictionary_item_removed', [])):
+        print(f"{'\t'*indent}\t[red]The right {name} is missing the following fields:[/red]")
+        print_items(diff['dictionary_item_removed'], [*ignore, *ignore_in_item], indent)
+
+    if len(diff.get('values_changed', [])):
+        print(f"{'\t'*indent}\t[red]The follwing values don't match:[/red]", indent)
+        print_changes(diff['values_changed'], ignore, left, right)
 
 def main(rpc_left: str, rpc_right: str, block: int, ignore: List[str] = []):
     w3_left = web3.Web3(web3.HTTPProvider(rpc_left))
@@ -32,62 +46,25 @@ def main(rpc_left: str, rpc_right: str, block: int, ignore: List[str] = []):
 
     block_diff = DeepDiff(block_left, block_right, view='tree')
 
-    print("Block Header Diff:")
-    if len(block_diff['dictionary_item_added']):
-        print("\t[red]The left block is missing the following fields:[/red]")
-        print_items(block_diff['dictionary_item_added'], [*ignore, "transactions"])
-
-    if len(block_diff['dictionary_item_removed']):
-        print("\t[red]The right block is missing the following fields:[/red]")
-        print_items(block_diff['dictionary_item_removed'], [*ignore, "transactions"])
-
-    if len(block_diff['values_changed']):
-        print("\t[red]The follwing values don't match:[/red]")
-        print_changed(block_diff['values_changed'], [*ignore, "transactions"])
+    print_diff(block_diff, block_left, block_right, "Block Header", ignore, ["transactions"])
 
     transactions_left = block_left.get('transactions')
     transactions_right = block_right.get('transactions')
-
     if transactions_left is not None and transactions_right is not None:
         if len(transactions_left) != len(transactions_right):
             print(f"[red]Transactions length mismatch: [/red][bold red]Left: {len(transactions_left)}[/bold red], [bold green]Right: {len(transactions_right)}[/bold green]")
             print()
 
         for (idx, (left, right)) in enumerate(zip(transactions_left, transactions_right)):
-            print(f"\tTransaction {idx} Diff:")
-            diff = DeepDiff(left, right, view='tree')
-
-            if len(diff.get('dictionary_item_added', [])):
-                print("\t\t[red]The left tx is missing the following fields:[/red]")
-                print_items(diff['dictionary_item_added'], ignore)
-
-            if len(diff.get('dictionary_item_removed', [])):
-                print("\t\t[red]The right tx is missing the following fields:[/red]")
-                print_items(diff['dictionary_item_removed'], ignore)
-
-            if len(diff.get('values_changed', [])):
-                print("\t\t[red]The follwing values don't match:[/red]")
-                print_changed(diff['values_changed'], [*ignore, "transactions"])
+            tx_diff = DeepDiff(left, right, view='tree')
+            print_diff(tx_diff, left, right, f"Transaction {idx}", ignore, [], 1)
 
             if not isinstance(left, HexBytes) and not isinstance(right, HexBytes):
-                print(f"\tTransaction {idx} Receipt Diff:")
+                left_receipt = w3_left.eth.get_transaction_receipt(left.get("hash", HexBytes("")))
+                right_receipt = w3_right.eth.get_transaction_receipt(right.get("hash", HexBytes("")))
 
-                left = w3_left.eth.get_transaction_receipt(left.get("hash", HexBytes("")))
-                right = w3_right.eth.get_transaction_receipt(right.get("hash", HexBytes("")))
-
-                diff = DeepDiff(left, right, view='tree')
-
-                if len(diff.get('dictionary_item_added', [])):
-                    print("\t\t[red]The left tx receipt is missing the following fields:[/red]")
-                    print_items(diff['dictionary_item_added'], [*ignore, "logs"])
-
-                if len(diff.get('dictionary_item_removed', [])):
-                    print("\t\t[red]The right tx receipt is missing the following fields:[/red]")
-                    print_items(diff['dictionary_item_removed'], [*ignore, "logs"])
-
-                if len(diff.get('values_changed', [])):
-                    print("\t\t[red]The follwing values don't match:[/red]")
-                    print_changed(diff['values_changed'], ignore)
+                receipt_diff = DeepDiff(left_receipt, right_receipt, view='tree')
+                print_diff(receipt_diff, left_receipt, right_receipt, f"Transaction {idx} Receipt", ignore, ["logs"], 2)
 
 
 if __name__ == "__main__":
