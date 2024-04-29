@@ -6,9 +6,9 @@ import { ALICE, Account, BOB, randomAccounts } from "./helpers/account";
 import { isStratus } from "./helpers/network";
 import {
     CHAIN_ID,
-    CHAIN_ID_DEC,
     HASH_EMPTY_TRANSACTIONS,
     HASH_EMPTY_UNCLES,
+    HEX_PATTERN,
     NATIVE_TRANSFER_GAS,
     ONE,
     TEST_BALANCE,
@@ -27,7 +27,6 @@ describe("Transaction: serial transfer", () => {
     var _block: Block;
     var _txSentTimestamp: number;
     var new_account: Account;
-    const HEX_PATTERN = /^0x[\da-fA-F]+$/;
 
     it("Resets blockchain", async () => {
         await sendReset();
