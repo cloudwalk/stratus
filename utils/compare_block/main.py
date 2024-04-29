@@ -57,12 +57,17 @@ def print_diff(
         print_changes(diff["values_changed"], ignore, left, right, indent + 2)
 
 
-def main(rpc_left: str, rpc_right: str, block: int, ignore: List[str] = []):
+def main(rpc_left: str, rpc_right: str, block_number: int, ignore: List[str] = []):
+    """
+    Compare a block's header, transactions, and transaction receipts between the two provided rpcs.
+
+    If you want to ignore a some comparisons use the --ignore option. (eg. <command> --ignore logsBloom --ignore cumulativeGasUsed)
+    """
     w3_left = web3.Web3(web3.HTTPProvider(rpc_left))
     w3_right = web3.Web3(web3.HTTPProvider(rpc_right))
 
-    left_block = w3_left.eth.get_block(block, full_transactions=True)
-    right_block = w3_right.eth.get_block(block, full_transactions=True)
+    left_block = w3_left.eth.get_block(block_number, full_transactions=True)
+    right_block = w3_right.eth.get_block(block_number, full_transactions=True)
 
     block_diff = DeepDiff(left_block, right_block, view="tree")
 
