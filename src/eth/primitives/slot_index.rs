@@ -55,21 +55,22 @@ impl Dummy<Faker> for SlotIndex {
     }
 }
 
-impl Debug for SlotIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SlotIndex({:#x})", self.0)
-    }
-}
-
 impl Display for SlotIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:#x}", self.0)
     }
 }
 
+impl Debug for SlotIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SlotIndex({:#x})", self.0)
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+
 gen_newtype_from!(self = SlotIndex, other = u64, U256, [u8; 32]);
 
 impl From<Vec<u8>> for SlotIndex {
