@@ -17,6 +17,7 @@ use sqlx::PgPool;
 use sqlx::Postgres;
 use sqlx::Row;
 
+use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -58,6 +59,7 @@ pub struct PostgresPermanentStorageConfig {
 }
 
 pub struct PostgresPermanentStorage {
+    url: String,
     pub pool: PgPool,
 }
 
@@ -84,7 +86,10 @@ impl PostgresPermanentStorage {
             Err(e) => return log_and_err!(reason = e, "failed to start postgres permanent storage"),
         };
 
-        let storage = Self { pool };
+        let storage = Self {
+            url: config.url.to_string(),
+            pool,
+        };
 
         Ok(storage)
     }
@@ -92,6 +97,10 @@ impl PostgresPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for PostgresPermanentStorage {
+    fn kind(&self) -> PermanentStorageKind {
+        PermanentStorageKind::Postgres { url: self.url.clone() }
+    }
+
     async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
         let conn = self.pool.acquire().await?;
         let conn = conn.leak();

@@ -189,10 +189,6 @@ pub struct ExecutorConfig {
     #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
 
-    /// Prefetch account slots during EVM execution.
-    #[arg(long = "prefetch-slots", env = "PREFETCH_SLOTS", default_value = "false")]
-    pub prefetch_slots: bool,
-
     /// RPC address to forward transactions to.
     #[arg(long = "forward-to", env = "FORWARD_TO")]
     pub forward_to: Option<String>,
@@ -210,7 +206,10 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: self.prefetch_slots,
+                prefetch_slots: match storage.perm.kind() {
+                    PermanentStorageKind::Postgres { .. } => true,
+                    _ => false,
+                },
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
