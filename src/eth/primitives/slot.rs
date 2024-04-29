@@ -18,8 +18,6 @@ use sqlx::postgres::PgHasArrayType;
 use sqlx::types::Json;
 use sqlx::Decode;
 
-use super::Address;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 
@@ -53,18 +51,6 @@ impl Display for Slot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}={}", self.index, self.value)
     }
-}
-
-// -----------------------------------------------------------------------------
-// SlotSample
-// -----------------------------------------------------------------------------
-
-#[derive(Debug, sqlx::Decode)]
-pub struct SlotSample {
-    pub address: Address,
-    pub block_number: BlockNumber,
-    pub index: SlotIndex,
-    pub value: SlotValue,
 }
 
 #[cfg(test)]
