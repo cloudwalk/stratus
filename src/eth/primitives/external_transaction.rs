@@ -5,7 +5,12 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
 
-pub type ExternalTransactionExecution = (ExternalTransaction, ExternalReceipt, Execution);
+#[derive(Debug, Clone, derive_new::new)]
+pub struct ExternalTransactionExecution {
+    pub tx: ExternalTransaction,
+    pub receipt: ExternalReceipt,
+    pub execution: Execution,
+}
 
 #[derive(Debug, Clone, Default, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]

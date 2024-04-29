@@ -1,12 +1,20 @@
-name: GitHub Builder Production
+name: GitHub Builder
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: 'Choose the deployment environment'
+        options:
+        - production
+        - staging
+        default: staging
 
 jobs:
   deploy:
     uses: cloudwalk/github-builder/.github/workflows/deploy.yaml@v2
     secrets: inherit
     with:
-      environment: production
+      environment: ${{ github.event.inputs.environment }}
       config_path: config
