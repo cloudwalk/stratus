@@ -17,6 +17,7 @@ use tokio::runtime::Runtime;
 use crate::bin_name;
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
+use crate::eth::evm::EvmConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
@@ -188,7 +189,11 @@ pub struct ExecutorConfig {
     #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
 
-    /// Rpc address to forward the transactions to.
+    /// Prefetch account slots during EVM execution.
+    #[arg(long = "prefetch-slots", env = "PREFETCH_SLOTS", default_value = "false")]
+    pub prefetch_slots: bool,
+
+    /// RPC address to forward transactions to.
     #[arg(long = "forward-to", env = "FORWARD_TO")]
     pub forward_to: Option<String>,
 }
@@ -203,7 +208,10 @@ impl ExecutorConfig {
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
         for _ in 1..=num_evms {
             // create evm resources
-            let evm_chain_id = self.chain_id.into();
+            let evm_config = EvmConfig {
+                chain_id: self.chain_id.into(),
+                prefetch_slots: self.prefetch_slots,
+            };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
             let evm_rx = evm_rx.clone();
@@ -221,7 +229,7 @@ impl ExecutorConfig {
                 }
 
                 // init evm
-                let mut evm = Revm::new(evm_storage, evm_chain_id);
+                let mut evm = Revm::new(evm_storage, evm_config);
 
                 // keep executing transactions until the channel is closed
                 while let Ok((input, tx)) = evm_rx.recv() {
