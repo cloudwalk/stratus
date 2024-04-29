@@ -132,7 +132,7 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
 
             // metrify response
             #[cfg(feature = "metrics")]
-            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.success_or_error.is_success());
+            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.is_success());
         }
 
         response
