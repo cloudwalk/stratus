@@ -5,6 +5,7 @@
 //! interacting with the project's storage backend to manage state. `Revm` embodies the practical application
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -185,11 +186,11 @@ struct RevmSession {
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 
+    /// Slots cached during account load.
+    account_slots_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
+
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
-
-    /// Slots cached during account load.
-    account_slots_cache: std::collections::HashMap<Address, std::collections::HashMap<SlotIndex, Slot>>,
 }
 
 impl RevmSession {
@@ -209,8 +210,8 @@ impl RevmSession {
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
         self.storage_changes = Default::default();
-        self.metrics = Default::default();
         self.account_slots_cache.clear();
+        self.metrics = Default::default();
     }
 }
 
