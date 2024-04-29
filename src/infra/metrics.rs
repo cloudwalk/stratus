@@ -355,7 +355,7 @@ macro_rules! metrics_impl_fn_inc {
                         )*
                     ]
                 );
-                histogram!(stringify!([<stratus_$name>]), n as f64, labels)
+                histogram!(stringify!([<stratus_$name>]), n as f64, labels);
             }
         }
     };
@@ -371,7 +371,7 @@ macro_rules! metrics_impl_fn_inc {
                         )*
                     ]
                 );
-                histogram!(stringify!([<stratus_$name>]), duration, labels)
+                histogram!(stringify!([<stratus_$name>]), duration, labels);
             }
         }
     };

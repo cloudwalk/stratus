@@ -125,14 +125,14 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
                 method = %proj.method,
                 function = %proj.function.unwrap_or_default(),
                 duration_ms = %elapsed.as_millis(),
-                success = %response.success_or_error.is_success(),
+                success = %response.is_success(),
                 // result = %response.result,
                 "rpc response"
             );
 
             // metrify response
             #[cfg(feature = "metrics")]
-            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.success_or_error.is_success());
+            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.is_success());
         }
 
         response
