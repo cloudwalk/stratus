@@ -4,7 +4,9 @@ import { TestContractBalances } from "../typechain-types";
 import { CHARLIE } from "./helpers/account";
 import {
     calculateSlotPosition,
+    CHAIN_ID,
     deployTestContractBalances,
+    HEX_PATTERN,
     send,
     sendExpect,
     sendGetBlockNumber,
@@ -13,6 +15,8 @@ import {
     toHex,
     toPaddedHex,
 } from "./helpers/rpc";
+import { Transaction } from "web3-types";
+import { network } from "hardhat";
 
 // Test contract topics
 const CONTRACT_TOPIC_ADD = "0x2728c9d3205d667bbc0eefdfeda366261b4d021949630c047f3e5834b30611ab";
@@ -78,6 +82,29 @@ describe("Transaction: serial TestContractBalances", () => {
         // status
         const STATUS_SUCCESS = '0x1';
         expect(receipt.status).eq(STATUS_SUCCESS, "receipt.status");
+    });
+
+    it("Deployment transaction by hash", async () => {
+        const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
+        expect(deploymentTransactionHash).not.eq(undefined);
+
+        const transaction: Transaction = await send("eth_getTransactionByHash", [deploymentTransactionHash]);
+        
+        expect(transaction.from).eq(CHARLIE.address, "tx.from");
+        expect(transaction.to).eq(null), "tx.to";
+        expect(transaction.value).eq('0x0', "tx.value");
+        expect(transaction.gas).match(HEX_PATTERN, "tx.gas format");
+        expect(transaction.gasPrice).match(HEX_PATTERN, "tx.gasPrice format");
+        expect(transaction.input).match(HEX_PATTERN, "tx.input format");
+        expect(transaction.nonce).eq('0x0', "tx.nonce");
+
+        if (network.name === 'stratus') {
+            expect(transaction.chainId).eq(CHAIN_ID, "tx.chainId");
+        }
+        
+        expect(transaction.v).match(HEX_PATTERN, "tx.v format");
+        expect(transaction.r).match(HEX_PATTERN, "tx.r format");
+        expect(transaction.s).match(HEX_PATTERN, "tx.s format");
     });
 
     it("Eth_call works on read function", async () => {

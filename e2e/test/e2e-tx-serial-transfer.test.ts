@@ -6,9 +6,9 @@ import { ALICE, Account, BOB, randomAccounts } from "./helpers/account";
 import { isStratus } from "./helpers/network";
 import {
     CHAIN_ID,
-    CHAIN_ID_DEC,
     HASH_EMPTY_TRANSACTIONS,
     HASH_EMPTY_UNCLES,
+    HEX_PATTERN,
     NATIVE_TRANSFER_GAS,
     ONE,
     TEST_BALANCE,
@@ -43,6 +43,17 @@ describe("Transaction: serial transfer", () => {
         expect(_tx.to).eq(BOB.address, "tx.to");
         expect(_tx.nonce).eq(ZERO, "tx.nonce");
         expect(_tx.chainId).eq(CHAIN_ID, "tx.chainId");
+
+        const expectedValue = `0x${TEST_TRANSFER.toString(16)}`;
+        expect(_tx.value).eq(expectedValue, "tx.value");
+
+        expect(_tx.gasPrice).eq(ZERO, "tx.gasPrice");
+        expect(_tx.gas).match(HEX_PATTERN, "tx.gas format");
+        expect(_tx.input).eq("0x", "tx.input");
+        expect(_tx.v).match(HEX_PATTERN, "tx.v format");
+        expect(_tx.r).match(HEX_PATTERN, "tx.r format");
+        expect(_tx.s).match(HEX_PATTERN, "tx.s format");
+        // FIXME expect(_tx.type).to.be.oneOf([ZERO, ONE], "tx.type");
     });
     it("Block is created", async () => {
         expect(await send("eth_blockNumber")).eq(ONE);
