@@ -206,10 +206,7 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: match storage.perm.kind() {
-                    PermanentStorageKind::Postgres { .. } => true,
-                    _ => false,
-                },
+                prefetch_slots: matches!(storage.perm.kind(), PermanentStorageKind::Postgres { .. }),
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
