@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use super::CodeHash;
-use crate::eth::primitives::slot::SlotIndexes;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -9,6 +8,7 @@ use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 
