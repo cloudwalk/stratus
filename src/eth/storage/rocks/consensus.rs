@@ -13,7 +13,7 @@ pub async fn gather_clients() -> Result<()> {
 
     // Read pods in the configured namespace into the typed interface from k8s-openapi
     let pods: Api<Pod> = Api::default_namespaced(client);
-    let pods_list = pods.list(&ListParams::default()).await.unwrap()
+    let pods_list = pods.list(&ListParams::default()).await.unwrap();
     for pod in pods_list {
         let pod_ip = pod.status.as_ref().unwrap().pod_ip.as_ref().unwrap().clone();
 
