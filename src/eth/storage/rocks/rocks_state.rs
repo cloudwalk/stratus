@@ -13,6 +13,8 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
+use super::rocks_db::DbConfig;
+use super::rocks_db::RocksDb;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
@@ -34,8 +36,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::rocks_db::DbConfig;
-use crate::eth::storage::rocks_db::RocksDb;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
