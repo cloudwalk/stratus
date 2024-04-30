@@ -21,10 +21,12 @@ pub async fn gather_clients() -> Result<()> {
 
         println!("found pod {} with address {}", pod.name_any(), pod_ip);
 
-        let chain = BlockchainClient::new(&pod_ip).await.unwrap();
-        let block_number = chain.get_current_block_number().await.unwrap();
+        if pod.name_any() != std::env::var("HOSTNAME")? {
+            let chain = BlockchainClient::new(&pod_ip).await.unwrap();
+            let block_number = chain.get_current_block_number().await.unwrap();
 
-        println!("block number: {}", block_number);
+            println!("block number: {}", block_number);
+        }
     }
     Ok(())
 }
