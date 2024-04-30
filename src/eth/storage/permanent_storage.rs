@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 
+use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -22,6 +23,9 @@ use crate::eth::storage::StorageError;
 /// Permanent (committed) storage operations
 #[async_trait]
 pub trait PermanentStorage: Send + Sync {
+    /// Returns the current implementation kind.
+    fn kind(&self) -> PermanentStorageKind;
+
     /// Allows the storage to allocate dedicated resources for EVM execution.
     async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()>;
 

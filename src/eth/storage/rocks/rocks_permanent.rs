@@ -11,6 +11,7 @@ use futures::future::join_all;
 use super::rocks_state::RocksStorageState;
 use super::types::NonceRocksdb;
 use super::types::WeiRocksdb;
+use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -104,6 +105,10 @@ impl RocksPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for RocksPermanentStorage {
+    fn kind(&self) -> PermanentStorageKind {
+        PermanentStorageKind::Rocks
+    }
+
     async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
         Ok(())
     }

@@ -5,6 +5,7 @@
 //! interacting with the project's storage backend to manage state. `Revm` embodies the practical application
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -29,13 +30,13 @@ use tokio::runtime::Handle;
 
 use crate::eth::evm::evm::EvmExecutionResult;
 use crate::eth::evm::Evm;
+use crate::eth::evm::EvmConfig;
 use crate::eth::evm::EvmError;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
@@ -61,8 +62,8 @@ pub struct Revm {
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
     #[allow(clippy::arc_with_non_send_sync)]
-    pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
-        tracing::info!(%chain_id, "starting revm");
+    pub fn new(storage: Arc<StratusStorage>, config: EvmConfig) -> Self {
+        tracing::info!(?config, "starting revm");
 
         // configure handler
         let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
@@ -84,13 +85,13 @@ impl Revm {
         // configure revm
         let mut evm = RevmEvm::builder()
             .with_external_context(())
-            .with_db(RevmSession::new(storage))
+            .with_db(RevmSession::new(storage, config.clone()))
             .with_handler(handler)
             .build();
 
         // global general config
         let cfg_env = evm.cfg_mut();
-        cfg_env.chain_id = chain_id.into();
+        cfg_env.chain_id = config.chain_id.into();
         cfg_env.limit_contract_code_size = Some(usize::MAX);
 
         // global block config
@@ -176,29 +177,31 @@ struct RevmSession {
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
 
+    /// EVM global configuraiton directives,
+    config: EvmConfig,
+
     /// Input passed to EVM to execute the transaction.
     input: EvmInput,
 
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
 
+    /// Slots cached during account load.
+    account_slots_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
+
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
-
-    #[cfg(feature = "evm-slot-prefetch")]
-    /// Slots cached during account load.
-    account_slots_cache: std::collections::HashMap<Address, std::collections::HashMap<SlotIndex, Slot>>,
 }
 
 impl RevmSession {
     /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: EvmConfig) -> Self {
         Self {
             storage,
+            config,
             input: Default::default(),
             storage_changes: Default::default(),
             metrics: Default::default(),
-            #[cfg(feature = "evm-slot-prefetch")]
             account_slots_cache: Default::default(),
         }
     }
@@ -207,9 +210,8 @@ impl RevmSession {
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
         self.storage_changes = Default::default();
-        self.metrics = Default::default();
-        #[cfg(feature = "evm-slot-prefetch")]
         self.account_slots_cache.clear();
+        self.metrics = Default::default();
     }
 }
 
@@ -238,8 +240,7 @@ impl Database for RevmSession {
         }
 
         // prefetch slots
-        #[cfg(feature = "evm-slot-prefetch")]
-        {
+        if self.config.prefetch_slots {
             let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
             let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
             for slot in slots {
@@ -258,28 +259,28 @@ impl Database for RevmSession {
         self.metrics.slot_reads += 1;
         let handle = Handle::current();
 
-        // retrieve slot
+        // convert slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
 
-        // load slot from storage
-        #[cfg(not(feature = "evm-slot-prefetch"))]
-        let slot = handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
+        // load slot from storage or (cache and storage)
+        let slot = match self.config.prefetch_slots {
+            // try cache
+            true => {
+                let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
+                match cached_slot {
+                    // not found, query storage
+                    None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
 
-        // load slot from cache or storage
-        #[cfg(feature = "evm-slot-prefetch")]
-        let slot = {
-            let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
-            match cached_slot {
-                // not found, query storage
-                None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
-
-                // cached
-                Some(slot) => {
-                    self.metrics.slot_reads_cached += 1;
-                    *slot
+                    // cached
+                    Some(slot) => {
+                        self.metrics.slot_reads_cached += 1;
+                        *slot
+                    }
                 }
             }
+            // ignore cache
+            false => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
         };
 
         // track original value, except if ignored address

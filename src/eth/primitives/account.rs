@@ -12,13 +12,13 @@ use itertools::Itertools;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
-use super::slot::SlotIndexes;
 use crate::eth::evm::EvmInputSlotKeys;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotAccess;
+use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
 
