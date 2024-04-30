@@ -136,10 +136,10 @@ impl EthExecutor {
         {
             for tx in &block.transactions {
                 let receipt = receipts.try_get(&tx.hash())?;
-                let evm_result = self.reexecute_external(tx, receipt, &block).await.0?;
+                let evm_result = self.reexecute_external(tx, receipt, &block).await.2?;
 
                 storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
-                executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result.execution));
+                executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
             }
         }
 
