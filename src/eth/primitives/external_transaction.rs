@@ -1,15 +1,15 @@
 use ethers_core::types::Transaction as EthersTransaction;
 
-use crate::eth::primitives::Execution;
+use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, derive_new::new)]
 pub struct ExternalTransactionExecution {
     pub tx: ExternalTransaction,
     pub receipt: ExternalReceipt,
-    pub execution: Execution,
+    pub evm_result: EvmExecutionResult,
 }
 
 #[derive(Debug, Clone, Default, derive_more:: Deref, serde::Deserialize, serde::Serialize)]

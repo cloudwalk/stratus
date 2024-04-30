@@ -27,7 +27,12 @@ use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
 use crate::if_else;
 
-pub type EvmExecutionResult = (Execution, ExecutionMetrics);
+/// Evm execution result.
+#[derive(Debug)]
+pub struct EvmExecutionResult {
+    pub execution: Execution,
+    pub metrics: ExecutionMetrics,
+}
 
 /// EVM operations.
 pub trait Evm {

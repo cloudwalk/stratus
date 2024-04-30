@@ -153,9 +153,6 @@ rocks = ["rocksdb", "bincode"]
 # XXX: Enable external transaction parallel execution.
 executor-parallel = []
 
-# XXX: Enable prefetching slots during EVM execution.
-evm-slot-prefetch = []
-
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------
