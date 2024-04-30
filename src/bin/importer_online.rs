@@ -83,7 +83,7 @@ async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainC
 
 #[tracing::instrument(skip_all)]
 async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<ExternalBlock> {
-    let mut delay = 25;
+    let mut delay = 10;
     let block = loop {
         tracing::info!(%number, "fetching block");
         let block = match chain.get_block_by_number(number).await {
