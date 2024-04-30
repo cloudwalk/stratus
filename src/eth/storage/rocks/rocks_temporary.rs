@@ -1,3 +1,4 @@
+// In its current implementation this storage is only viable for exporting CSV
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
