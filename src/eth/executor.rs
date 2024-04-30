@@ -184,7 +184,6 @@ impl EthExecutor {
                 };
 
                 // re-execute if necessary
-                // TODO: execution must return tx and receipt to avoid having to retrieve them again
                 let (tx, receipt, evm_result) = match decision {
                     ExecutionDecision::Proceed(tx, receipt, evm_result) => (tx, receipt, evm_result),
                     ExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external(tx, receipt, &block).await {
