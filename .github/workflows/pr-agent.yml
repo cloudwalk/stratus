@@ -3,6 +3,18 @@ name: Codium AI
 on:
   pull_request:
     types: [opened, reopened, ready_for_review]
+    paths-ignore:
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/docs-release.yml'
+      - '.github/workflows/outdated.yml'
+      - '.github/workflows/comment-tag-report.yml'
+      - '.github/workflows/pr-agent.yml'
+      - '.github/CODEOWNERS'
+      - 'config/**'
+      - 'README.md'
+      - 'LICENSE'
+      - 'CONTRIBUTING.md'
+      - 'utils/slack-notifiers/**'
   issue_comment:
 jobs:
   pr_agent_job:
@@ -25,3 +37,5 @@ jobs:
           github_action_config.auto_describe: "false"
           pr_description.publish_labels: "false"
           github_action_config.enable_output: "false"
+          pr_reviewer.enable_review_labels_effort: "false"
+          pr_reviewer.enable_review_labels_security: "false"
