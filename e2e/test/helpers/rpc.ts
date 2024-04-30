@@ -18,6 +18,8 @@ export const CHAIN_ID = toHex(CHAIN_ID_DEC);
 
 export const TX_PARAMS = { chainId: CHAIN_ID, gasPrice: 0, gasLimit: 1_000_000 };
 
+export const HEX_PATTERN = /^0x[\da-fA-F]+$/;
+
 // Special numbers
 export const ZERO = "0x0";
 export const ONE = "0x1";

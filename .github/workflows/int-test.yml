@@ -9,6 +9,7 @@ on:
   #     - '.github/workflows/docs-release.yml'
   #     - '.github/workflows/outdated.yml'
   #     - '.github/workflows/comment-tag-report.yml'
+  #     - '.github/workflows/pr-agent.yml'
   #     - '.github/CODEOWNERS'
   #     - 'config/**'
   #     - 'README.md'

@@ -37,6 +37,16 @@ pub trait Evm {
 
 pub type EvmInputSlotKeys = Vec<Vec<u8>>;
 
+/// EVM configuration.
+#[derive(Debug, Clone)]
+pub struct EvmConfig {
+    /// Chain ID of the EVM.
+    pub chain_id: ChainId,
+
+    /// Should try to predict and prefetch slots before executing transactions?
+    pub prefetch_slots: bool,
+}
+
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(Debug, Clone, Default)]
 pub struct EvmInput {
