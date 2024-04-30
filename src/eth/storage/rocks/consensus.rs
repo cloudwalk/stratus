@@ -7,11 +7,11 @@ use crate::infra::BlockchainClient;
 
 pub async fn gather_clients() -> Result<()> {
     // Initialize a HashMap to store pod IPs and roles
-    let mut pods_list = vec!["http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
-                             "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
-                             "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000"];
-
-
+    let mut pods_list = vec![
+        "http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
+        "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
+        "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000",
+    ];
 
     for pod_ip in pods_list.iter() {
         let chain = match BlockchainClient::new(&pod_ip).await {
