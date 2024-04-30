@@ -4,6 +4,7 @@ use kube::api::Api;
 use kube::api::ListParams;
 use kube::api::ResourceExt;
 use kube::Client;
+
 use crate::infra::BlockchainClient;
 
 pub async fn gather_clients() -> Result<()> {
