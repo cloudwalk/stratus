@@ -16,6 +16,7 @@ on:
       - 'CONTRIBUTING.md'
       - 'utils/slack-notifiers/**'
   issue_comment:
+  workflow_dispatch:
 jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' }}
