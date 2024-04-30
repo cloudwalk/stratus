@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::StreamExt;
 use futures::TryStreamExt;
@@ -15,6 +16,7 @@ use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
 use stratus::GlobalServices;
+use tokio::time::sleep;
 
 /// Number of transactions receipts that can be fetched in parallel.
 const RECEIPTS_PARALELLISM: usize = 10;
@@ -81,12 +83,15 @@ async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainC
 
 #[tracing::instrument(skip_all)]
 async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<ExternalBlock> {
+    let mut delay = 25;
     let block = loop {
         tracing::info!(%number, "fetching block");
         let block = match chain.get_block_by_number(number).await {
             Ok(json) => json,
             Err(e) => {
                 tracing::warn!(reason = ?e, "retrying block download because error");
+                sleep(Duration::from_millis(delay)).await;
+                delay *= 2;
                 continue;
             }
         };
