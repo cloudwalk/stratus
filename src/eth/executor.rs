@@ -155,7 +155,7 @@ impl EthExecutor {
 
             // execute in parallel
             let mut parallel_executions = futures::stream::iter(parallel_executions).buffered(self.num_evms);
-            let mut prev_execution: Option<Execution> = None;
+            let mut prev_execution: Option<&Execution> = None;
 
             while let Some(result) = parallel_executions.next().await {
                 // check result of parallel execution
@@ -194,8 +194,9 @@ impl EthExecutor {
 
                 storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
 
-                prev_execution = Some(evm_result.execution.clone());
                 executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
+                let pushed = executions.last().unwrap();
+                prev_execution = Some(&pushed.evm_result.execution);
             }
         }
 
