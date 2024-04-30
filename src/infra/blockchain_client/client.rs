@@ -6,7 +6,6 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use serde_json::Value as JsonValue;
-use tokio::time::sleep;
 
 use super::pending_transaction::PendingTransaction;
 use crate::eth::primitives::Address;
@@ -81,28 +80,14 @@ impl BlockchainClient {
         tracing::debug!(%number, "retrieving block");
 
         let number = serde_json::to_value(number)?;
-        let mut retries = 10; // Max number of retries
-        let mut delay = 25; // Initial delay in milliseconds
+        let result = self
+            .http
+            .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number, JsonValue::Bool(true)])
+            .await;
 
-        loop {
-            let result = self
-                .http
-                .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number.clone(), JsonValue::Bool(true)])
-                .await;
-
-            match result {
-                Ok(block) => return Ok(block),
-                Err(e) => {
-                    if retries > 0 {
-                        tracing::warn!(%e, "Failed to retrieve block by number, retrying...");
-                        sleep(Duration::from_millis(delay)).await;
-                        retries -= 1;
-                        delay *= 2;
-                    } else {
-                        return Err(e.into()); // Convert error and return
-                    }
-                }
-            }
+        match result {
+            Ok(block) => Ok(block),
+            Err(e) => log_and_err!(reason = e, "failed to retrieve block by number"),
         }
     }
 
