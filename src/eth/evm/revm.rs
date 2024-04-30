@@ -164,7 +164,10 @@ impl Evm for Revm {
             metrics::inc_evm_execution_slot_reads_cached(session_metrics.slot_reads_cached);
         }
 
-        execution.map(|execution| (execution, session_metrics))
+        execution.map(|execution| EvmExecutionResult {
+            execution,
+            metrics: session_metrics,
+        })
     }
 }
 

@@ -47,11 +47,15 @@ impl TransactionMined {
     /// Creates a new mined transaction from an external mined transaction that was re-executed locally.
     ///
     /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(execution: ExternalTransactionExecution) -> anyhow::Result<Self> {
-        let ExternalTransactionExecution { tx, receipt, execution } = execution;
+    pub fn from_external(evm_result: ExternalTransactionExecution) -> anyhow::Result<Self> {
+        let ExternalTransactionExecution {
+            tx,
+            receipt,
+            evm_result: execution,
+        } = evm_result;
         Ok(Self {
             input: tx.try_into()?,
-            execution,
+            execution: execution.execution,
             block_number: receipt.block_number(),
             block_hash: receipt.block_hash(),
             transaction_index: receipt.transaction_index.into(),

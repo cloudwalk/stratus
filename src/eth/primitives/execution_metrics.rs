@@ -1,4 +1,4 @@
-#[derive(Debug, Default, derive_more::Add, derive_more::AddAssign)]
+#[derive(Clone, Copy, Debug, Default, derive_more::Add, derive_more::AddAssign)]
 pub struct ExecutionMetrics {
     /// Number of account reads during EVM execution.
     pub account_reads: usize,

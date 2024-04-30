@@ -136,7 +136,7 @@ path = "src/bin/run_with_importer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = []
+default = ["executor-parallel"]
 
 # Application is running in develoment mode.
 dev  = []
@@ -152,9 +152,6 @@ rocks = ["rocksdb", "bincode"]
 
 # XXX: Enable external transaction parallel execution.
 executor-parallel = []
-
-# XXX: Enable prefetching slots during EVM execution.
-evm-slot-prefetch = []
 
 # ------------------------------------------------------------------------------
 # Lints
