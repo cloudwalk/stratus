@@ -45,7 +45,9 @@ pub async fn gather_clients() -> Result<()> {
 
         let pp = PatchParams::apply("leader-election-handler");
 
-        pods.patch(&pod.metadata.name.as_ref().unwrap(), &pp, &Patch::Apply(&patch)).await?;
+        pods.patch(&pod.metadata.name.as_ref().unwrap(), &pp, &Patch::Apply(&patch)).await.unwrap();
+
+        println!("patched pod {} with role {}", pod.name_any(), role);
 
         if pod.name_any() != std::env::var("HOSTNAME")? {
             let chain = BlockchainClient::new(&pod_ip).await.unwrap();
