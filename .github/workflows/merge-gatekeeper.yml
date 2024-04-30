@@ -20,3 +20,4 @@ jobs:
           self: Merge Gatekeeper
           interval: 5
           timeout: 1800
+          ignored: PR Agent

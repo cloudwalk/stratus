@@ -23,14 +23,10 @@ if [[ "$(basename $(pwd))" != "utils" ]]; then
     echo >&2 "  OK, continuing."
 fi
 
-function machine_used_memory_percentage() {
-    output=$(free)
-
-    used=$(echo $output | awk '{ print $9 }')
-    free=$(echo $output | awk '{ print $10 }')
-
-    result=$(echo "scale=2; $used * 100.0 / $free" | bc)
-    echo "$result%"
+function machine_available_memory_gb() {
+    output=$(free --giga)
+    available=$(echo $output | awk '{ print $13 }')
+    echo "$available GB"
 }
 
 
@@ -58,14 +54,9 @@ while ps -p $PID > /dev/null; do
         eta_h=$(( (remaining_transactions / tps) / 60 / 60 ))
     fi
 
-    total_mem_usage=$(machine_used_memory_percentage)
-    log="mins_elapsed = $minutes, used_memory% = $total_mem_usage%, importer-off_mem% = $process_mem_percentage%, block = $current_block, transaction = $current_transaction ($transaction_progress%), tps = $tps, ETA=$eta_h hours"
+    available_memory=$(machine_available_memory_gb)
+    log="mins_elapsed = $minutes, available_memory = $available_memory, importer-off_mem% = $process_mem_percentage%, block = $current_block, transaction = $current_transaction ($transaction_progress%), tps = $tps, ETA=$eta_h hours"
     echo "$log"
-
-    # If memory usage is above 60%
-    if [[ "$(echo $total_mem_usage | cut -d . -f 1)" -gt 60 ]]; then
-        echo 'WARNING: MEMORY USAGE ABOVE 60%!!!!'
-    fi
 
     previous_transaction="$current_transaction"
     minutes=$(( minutes + 1 ))

@@ -8,8 +8,7 @@ mod postgres_external_rpc;
 mod postgres_permanent;
 #[cfg(feature = "rocks")]
 pub mod rocks;
-#[cfg(feature = "rocks")]
-pub mod rocks_db;
+
 mod storage_error;
 mod stratus_storage;
 mod temporary_storage;
