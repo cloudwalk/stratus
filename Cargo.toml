@@ -136,7 +136,7 @@ path = "src/bin/run_with_importer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["executor-parallel"]
+default = []
 
 # Application is running in develoment mode.
 dev  = []
