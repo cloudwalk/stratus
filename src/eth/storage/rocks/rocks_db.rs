@@ -379,7 +379,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let block_cache_miss = self.opts.get_ticker_count(Ticker::BlockCacheMiss);
         let block_cache_hit = self.opts.get_ticker_count(Ticker::BlockCacheHit);
         let bytes_written = self.opts.get_ticker_count(Ticker::BytesWritten);
-        let bytes_read = self.opts.get_ticker_count(Ticker::BytesWritten);
+        let bytes_read = self.opts.get_ticker_count(Ticker::BytesRead);
 
         metrics::inc_db_get(db_get.count() as usize, self.db.path().to_str());
         metrics::inc_db_write(db_write.count() as usize, self.db.path().to_str());
