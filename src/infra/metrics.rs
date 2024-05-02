@@ -6,7 +6,9 @@ use std::time::Instant;
 
 use metrics::counter;
 use metrics::describe_counter;
+use metrics::describe_gauge;
 use metrics::describe_histogram;
+use metrics::gauge;
 use metrics::histogram;
 use metrics::Label as MetricsLabel;
 use metrics_exporter_prometheus::Matcher;
@@ -42,6 +44,7 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
     metrics.extend(metrics_for_evm());
     metrics.extend(metrics_for_storage_read());
     metrics.extend(metrics_for_storage_write());
+    metrics.extend(metrics_for_rocks());
 
     // init exporter
     let mut builder = PrometheusBuilder::new();
@@ -206,6 +209,37 @@ metrics! {
 
     "Number of slots read cached in a single EVM execution."
     histogram_counter evm_execution_slot_reads_cached{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000.]
+}
+
+metrics! {
+    group: rocks,
+
+    "Number of issued gets to rocksdb."
+    gauge rocks_db_get{dbname} [],
+
+    "Number of writes issued to rocksdb."
+    gauge rocks_db_write{dbname} [],
+
+    "Time spent compacting data."
+    gauge rocks_compaction_time{dbname} [],
+
+    "CPU time spent compacting data."
+    gauge rocks_compaction_cpu_time{dbname} [],
+
+    "Time spent flushing memtable to disk."
+    gauge rocks_flush_time{dbname} [],
+
+    "Number of block cache misses."
+    gauge rocks_block_cache_miss{dbname} [],
+
+    "Number of block cache hits."
+    gauge rocks_block_cache_hit{dbname} [],
+
+    "Number of bytes written."
+    gauge rocks_bytes_written{dbname} [],
+
+    "Number of bytes read."
+    gauge rocks_bytes_read{dbname} []
 }
 
 // -----------------------------------------------------------------------------
@@ -375,6 +409,22 @@ macro_rules! metrics_impl_fn_inc {
             }
         }
     };
+    (gauge  $name:ident $group:ident $($label:ident)*) => {
+        paste! {
+            #[doc = "Set `" $name "` gauge."]
+            pub fn [<set_ $name>](n: u64, $( $label: impl Into<LabelValue> ),*) {
+                let labels = into_labels(
+                    vec![
+                        ("group", stringify!($group).into()),
+                        $(
+                            (stringify!($label), $label.into()),
+                        )*
+                    ]
+                );
+                gauge!(stringify!([<stratus_$name>]), n as f64, labels);
+            }
+        }
+    };
 }
 
 /// Metric defintion.
@@ -396,6 +446,7 @@ impl Metric {
         match self.kind {
             "counter" => describe_counter!(self.name, self.description),
             "histogram_duration" | "histogram_counter" => describe_histogram!(self.name, self.description),
+            "gauge" => describe_gauge!(self.name, self.description),
             _ => {}
         }
     }
