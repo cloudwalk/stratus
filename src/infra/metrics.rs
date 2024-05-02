@@ -213,31 +213,31 @@ metrics! {
     group: rocks,
 
     "Number of issued gets to rocksdb."
-    histogram_counter db_get{dbname} [],
+    histogram_counter rocks_db_get{dbname} [],
 
     "Number of writes issued to rocksdb."
-    histogram_counter db_write{dbname} [],
+    histogram_counter rocks_db_write{dbname} [],
 
     "Time spent compacting data."
-    histogram_counter compaction_time{dbname} [],
+    histogram_counter rocks_compaction_time{dbname} [],
 
     "CPU time spent compacting data."
-    histogram_counter compaction_cpu_time{dbname} [],
+    histogram_counter rocks_compaction_cpu_time{dbname} [],
 
     "Time spent flushing memtable to disk."
-    histogram_counter flush_time{dbname} [],
+    histogram_counter rocks_flush_time{dbname} [],
 
     "Number of block cache misses."
-    counter block_cache_miss{dbname} [],
+    counter rocks_block_cache_miss{dbname} [],
 
     "Number of block cache hits."
-    counter block_cache_hit{dbname} [],
+    counter rocks_block_cache_hit{dbname} [],
 
     "Number of bytes written."
-    counter bytes_written{dbname} [],
+    counter rocks_bytes_written{dbname} [],
 
     "Number of bytes read."
-    counter bytes_read{dbname} []
+    counter rocks_bytes_read{dbname} []
 }
 
 // -----------------------------------------------------------------------------
