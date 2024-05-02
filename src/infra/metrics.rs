@@ -42,6 +42,7 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
     metrics.extend(metrics_for_evm());
     metrics.extend(metrics_for_storage_read());
     metrics.extend(metrics_for_storage_write());
+    metrics.extend(metrics_for_rocks());
 
     // init exporter
     let mut builder = PrometheusBuilder::new();
@@ -206,6 +207,37 @@ metrics! {
 
     "Number of slots read cached in a single EVM execution."
     histogram_counter evm_execution_slot_reads_cached{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000.]
+}
+
+metrics! {
+    group: rocks,
+
+    "Number of issued gets to rocksdb."
+    histogram_counter db_get{dbname} [],
+
+    "Number of writes issued to rocksdb."
+    histogram_counter db_write{dbname} [],
+
+    "Time spent compacting data."
+    histogram_counter compaction_time{dbname} [],
+
+    "CPU time spent compacting data."
+    histogram_counter compaction_cpu_time{dbname} [],
+
+    "Time spent flushing memtable to disk."
+    histogram_counter flush_time{dbname} [],
+
+    "Number of block cache misses."
+    counter block_cache_miss{dbname} [],
+
+    "Number of block cache hits."
+    counter block_cache_hit{dbname} [],
+
+    "Number of bytes written."
+    counter bytes_written{dbname} [],
+
+    "Number of bytes read."
+    counter bytes_read{dbname} []
 }
 
 // -----------------------------------------------------------------------------
