@@ -135,7 +135,6 @@ impl EthExecutor {
         let tx_routes = route_transactions(&block.transactions, receipts)?;
         let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
         let mut parallel_executions = Vec::with_capacity(block.transactions.len());
-        let mut prev_execution: Option<&Execution> = None;
 
         // execute parallel executions
         for tx_route in &tx_routes {
@@ -155,32 +154,37 @@ impl EthExecutor {
                     // persist state
                     storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
-                    prev_execution = Some(&executions.last().unwrap().evm_result.execution);
                 }
 
                 // parallel: check results and re-execute if necessary
                 ParallelExecutionRoute::Parallel(..) => {
                     let evm_result = parallel_executions.next().await.unwrap();
 
-                    let decision = match (evm_result, &prev_execution) {
-                        //
-                        // execution success and no previous transaction execution
-                        ((tx, receipt, Ok(evm_result)), None) => ParallelExecutionDecision::Proceed(tx, receipt, evm_result),
-                        //
-                        // execution success, but with previous transaction execution
-                        ((tx, receipt, Ok(evm_result)), Some(prev_tx_execution)) => {
-                            let conflicts = prev_tx_execution.check_conflicts(&evm_result.execution);
-                            match conflicts {
-                                None => ParallelExecutionDecision::Proceed(tx, receipt, evm_result),
-                                Some(conflicts) => {
+                    let decision = match evm_result {
+                        // execution success
+                        (tx, receipt, Ok(evm_result)) => {
+                            let current_execution = &evm_result.execution;
+
+                            // check conflict with all previous transactions
+                            // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
+                            let mut reexecute = false;
+                            for prev_execution in &executions {
+                                let prev_execution = &prev_execution.evm_result.execution;
+
+                                if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
                                     tracing::warn!(?conflicts, "parallel execution conflicts");
-                                    ParallelExecutionDecision::Reexecute(tx, receipt)
+                                    reexecute = true;
+                                    break;
                                 }
                             }
+                            if reexecute {
+                                ParallelExecutionDecision::Reexecute(tx, receipt)
+                            } else {
+                                ParallelExecutionDecision::Proceed(tx, receipt, evm_result)
+                            }
                         }
-                        //
                         // execution failure
-                        ((tx, receipt, Err(e)), _) => {
+                        (tx, receipt, Err(e)) => {
                             tracing::warn!(reason = ?e, "parallel execution failed");
                             ParallelExecutionDecision::Reexecute(tx, receipt)
                         }
@@ -198,7 +202,6 @@ impl EthExecutor {
                     // persist state
                     storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
-                    prev_execution = Some(&executions.last().unwrap().evm_result.execution);
                 }
             }
         }
