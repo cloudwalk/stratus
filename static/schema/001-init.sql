@@ -113,7 +113,7 @@ CREATE TABLE public.accounts (
     id bigint NOT NULL,
     address bytea NOT NULL,
     bytecode bytea,
-    code_hash bytea NOT NULL,
+    code_hash bytea,
     mapping_slot_indexes JSONB,
     static_slot_indexes JSONB,
     latest_balance numeric NOT NULL,
