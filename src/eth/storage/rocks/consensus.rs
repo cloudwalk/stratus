@@ -1,6 +1,10 @@
 //TODO move this onto temporary storage, it will be called from a channel
 use std::collections::HashMap;
-
+use raft::{Config, storage::MemStorage, raw_node::RawNode, eraftpb::Message};
+use tokio::{sync::Mutex, time::{self, Duration}};
+use std::collections::HashMap;
+use reqwest::Client;
+use tracing::{info, error, Instrument};
 use anyhow::Result;
 
 use crate::infra::BlockchainClient;
@@ -31,5 +35,82 @@ pub async fn gather_clients() -> Result<()> {
 
         println!("block number: {}", block_number);
     }
+
+    let urls = pods_list.iter().map(|s| s.to_string()).collect();
+
+    let raft_node = RaftNode::new(1, urls).await?;
+    raft_node.run().await;
+
     Ok(())
+}
+
+struct RaftNode {
+    node: Mutex<RawNode<MemStorage>>,
+    http_client: Client,
+    peers: HashMap<u64, String>,  // Maps node index to URLs for simplicity
+}
+
+impl RaftNode {
+    /// Initializes a new Raft node using URLs for peers. Assigns IDs based on order.
+    pub async fn new(my_id: u64, urls: Vec<String>) -> Result<Self> {
+        let mut peers = HashMap::new();
+        for (id, url) in urls.iter().enumerate() {
+            peers.insert(id as u64 + 1, url.clone());  // Node IDs are 1-indexed
+        }
+
+        let config = Config {
+            id: my_id,
+            election_tick: 10,
+            heartbeat_tick: 3,
+            ..Default::default()
+        };
+        config.validate()?;
+        let storage = MemStorage::new_with_conf_state((peers.keys().cloned().collect(), vec![]));
+        let node = RawNode::new(&config, storage)?;
+
+        Ok(Self {
+            node: Mutex::new(node),
+            http_client: Client::new(),
+            peers,
+        })
+    }
+
+    pub async fn run(&self) {
+        let timeout = Duration::from_millis(100);
+        let mut interval = time::interval(timeout);
+        loop {
+            interval.tick().await;
+            let mut node = self.node.lock().await;
+            node.tick();
+            if node.has_ready() {
+                self.handle_ready(&mut node).await;
+            }
+        }
+    }
+
+    async fn handle_ready(&self, node: &mut RawNode<MemStorage>) {
+        let ready = node.ready();
+        if let Some(hs) = ready.hs() {
+            if hs.get_term() != node.raft.term {
+                info!("Term changed to {}", hs.get_term());
+                if hs.get_vote() == self.node.id {
+                    info!("Node {} became leader in term {}", self.node.id, hs.get_term());
+                } else {
+                    info!("Node {} observed new leader {} in term {}", self.node.id, hs.get_vote(), hs.get_term());
+                }
+            }
+        }
+
+        for msg in ready.messages() {
+            if let Some(url) = self.peers.get(&msg.to) {
+                let send_future = self.http_client.post(url)
+                    .json(&msg)
+                    .send();
+                if let Err(e) = send_future.await {
+                    error!("Failed to send Raft message: {:?}", e);
+                }
+            }
+        }
+        node.advance(ready);
+    }
 }
