@@ -46,6 +46,8 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
         #[cfg(feature = "metrics")]
         opts.enable_statistics();
+        #[cfg(feature = "metrics")]
+        opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
 
         match config {
             DbConfig::LargeSSTFiles => {
