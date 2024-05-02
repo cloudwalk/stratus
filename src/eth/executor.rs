@@ -461,10 +461,6 @@ fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a
         routes.push(route);
     }
 
-    for route in &routes {
-        println!("route = {}", route)
-    }
-
     Ok(routes)
 }
 
