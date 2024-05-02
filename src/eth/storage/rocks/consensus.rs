@@ -1,17 +1,26 @@
 //TODO move this onto temporary storage, it will be called from a channel
 use std::collections::HashMap;
-use raft::{Config, storage::MemStorage, raw_node::RawNode, eraftpb::Message};
+use serde_json::to_string;
+use raft::{Config, storage::MemStorage, raw_node::RawNode};
 use tokio::{sync::Mutex, time::{self, Duration}};
-use std::collections::HashMap;
 use reqwest::Client;
-use tracing::{info, error, Instrument};
+use tracing::{info, error};
 use anyhow::Result;
 
 use crate::infra::BlockchainClient;
+use slog::{Drain, Logger, o};
+
+fn setup_logger() -> Logger {
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::CompactFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+    Logger::root(drain, o!())
+}
+
 
 pub async fn gather_clients() -> Result<()> {
     // Initialize a HashMap to store pod IPs and roles
-    let mut pods_list = vec![
+    let pods_list = vec![
         "http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000",
@@ -37,6 +46,7 @@ pub async fn gather_clients() -> Result<()> {
     }
 
     let urls = pods_list.iter().map(|s| s.to_string()).collect();
+
 
     let raft_node = RaftNode::new(1, urls).await?;
     raft_node.run().await;
@@ -65,8 +75,11 @@ impl RaftNode {
             ..Default::default()
         };
         config.validate()?;
-        let storage = MemStorage::new_with_conf_state((peers.keys().cloned().collect(), vec![]));
-        let node = RawNode::new(&config, storage)?;
+        let storage = MemStorage::new_with_conf_state((peers.keys().cloned().collect::<Vec<u64>>(), vec![]));
+
+
+        let logger = setup_logger();
+        let node = RawNode::new(&config, storage, &logger)?;
 
         Ok(Self {
             node: Mutex::new(node),
@@ -93,22 +106,29 @@ impl RaftNode {
         if let Some(hs) = ready.hs() {
             if hs.get_term() != node.raft.term {
                 info!("Term changed to {}", hs.get_term());
-                if hs.get_vote() == self.node.id {
-                    info!("Node {} became leader in term {}", self.node.id, hs.get_term());
+                let node_id = {
+                    let node_guard = self.node.lock().await;  // Lock the mutex asynchronously
+                    node_guard.raft.id  // Access the id of the Raft node
+                };
+                if hs.get_vote() == node_id {
+                    info!("Node {} became leader in term {}", node_id, hs.get_term());
                 } else {
-                    info!("Node {} observed new leader {} in term {}", self.node.id, hs.get_vote(), hs.get_term());
+                    info!("Node {} observed new leader {} in term {}", node_id, hs.get_vote(), hs.get_term());
                 }
             }
         }
 
         for msg in ready.messages() {
             if let Some(url) = self.peers.get(&msg.to) {
-                let send_future = self.http_client.post(url)
-                    .json(&msg)
-                    .send();
-                if let Err(e) = send_future.await {
-                    error!("Failed to send Raft message: {:?}", e);
-                }
+                // Serialize the message manually to JSON
+                //XXX let msg_json = to_string(&msg).unwrap_or_else(|_| "{}".to_string()); // Handle error more gracefully in production
+                //XXX let send_future = self.http_client.post(url)
+                //XXX                                   .header("Content-Type", "application/json")
+                //XXX                                   .body(msg_json)
+                //XXX                                   .send();
+                //XXX if let Err(e) = send_future.await {
+                //XXX     error!("Failed to send Raft message: {:?}", e);
+                //XXX }
             }
         }
         node.advance(ready);
