@@ -426,13 +426,24 @@ impl EthExecutor {
     }
 }
 
+#[cfg(not(feature = "executor-parallel"))]
+fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a ExternalReceipts) -> anyhow::Result<Vec<ParallelExecutionRoute<'a>>> {
+    let mut routes = Vec::with_capacity(transactions.len());
+    for tx in transactions {
+        let receipt = receipts.try_get(&tx.hash())?;
+        routes.push(ParallelExecutionRoute::Serial(tx, receipt));
+    }
+    Ok(routes)
+}
+
+#[cfg(feature = "executor-parallel")]
 fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a ExternalReceipts) -> anyhow::Result<Vec<ParallelExecutionRoute<'a>>> {
     // no transactions
     if transactions.is_empty() {
         return Ok(vec![]);
     }
 
-    // single transactions
+    // single transaction
     if transactions.len() == 1 {
         let tx = &transactions[0];
         let receipt = receipts.try_get(&tx.hash())?;
