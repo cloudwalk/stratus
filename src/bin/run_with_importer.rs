@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     #[cfg(feature = "rocks")]
-    let _ = stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
+    stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
     let stratus_config = config.as_stratus();
     let importer_config = config.as_importer();
 
