@@ -51,7 +51,9 @@ pub fn load_dotenv() {
     let env_filename = format!("config/{}.env.{}", bin_name(), env);
 
     println!("reading env file: {}", env_filename);
-    let _ = dotenvy::from_filename(env_filename);
+    if let Err(e) = dotenvy::from_filename(env_filename) {
+        println!("env file error: {e}");
+    }
 }
 
 // -----------------------------------------------------------------------------
