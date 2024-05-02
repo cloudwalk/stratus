@@ -4,6 +4,7 @@ use ethers_core::types::TransactionReceipt as EthersReceipt;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
+use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
@@ -34,12 +35,17 @@ impl ExternalReceipt {
         (gas_price * gas_used).into()
     }
 
-    /// Checks if the receipt is for a transaction that was completed successfully.
+    /// Checks if the transaction was completed with success.
     pub fn is_success(&self) -> bool {
         match self.0.status {
             Some(status) => status.as_u64() == 1,
             None => false,
         }
+    }
+
+    /// Checks if the transaction was completed with error.
+    pub fn is_failure(&self) -> bool {
+        not(self.is_success())
     }
 }
 
