@@ -8,9 +8,8 @@ use metrics::counter;
 use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
-use metrics::histogram;
 use metrics::gauge;
-
+use metrics::histogram;
 use metrics::Label as MetricsLabel;
 use metrics_exporter_prometheus::Matcher;
 use metrics_exporter_prometheus::PrometheusBuilder;
