@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use futures::TryStreamExt;
+use serde::Deserialize;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
@@ -110,7 +111,7 @@ async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::R
         break block;
     };
 
-    match serde_json::from_value(block.clone()) {
+    match ExternalBlock::deserialize(&block) {
         Ok(block) => Ok(block),
         Err(e) => log_and_err!(reason = e, payload = block, "failed to deserialize external block"),
     }

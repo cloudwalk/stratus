@@ -6,6 +6,7 @@ use anyhow::Context;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use itertools::Itertools;
+use serde::Deserialize;
 use stratus::config::RpcDownloaderConfig;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
@@ -116,7 +117,7 @@ async fn download(
             };
 
             // extract transaction hashes
-            let block: ImporterBlock = match serde_json::from_value(block_json.clone()) {
+            let block: ImporterBlock = match ImporterBlock::deserialize(&block_json) {
                 Ok(block) => block,
                 Err(e) => {
                     tracing::error!(reason = ?e, number = %current, payload = ?block_json, "block does not match expected format");
