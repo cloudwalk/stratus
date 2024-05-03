@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use anyhow::Context;
+
 use super::CodeHash;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -112,5 +114,20 @@ impl ExecutionAccountChanges {
     /// Checks if the account was updated by this transaction (it must already exist).
     pub fn is_account_update(&self) -> bool {
         not(self.new_account)
+    }
+}
+
+impl TryFrom<ExecutionAccountChanges> for Account {
+    type Error = anyhow::Error;
+    fn try_from(value: ExecutionAccountChanges) -> Result<Self, Self::Error> {
+        Ok(Account {
+            address: value.address,
+            nonce: value.nonce.take().context("No nonce in changes")?,
+            balance: value.balance.take().context("No balance in changes")?,
+            bytecode: value.bytecode.take().context("No bytecode in changes")?,
+            code_hash: value.code_hash,
+            static_slot_indexes: value.static_slot_indexes.take().context("No static_slot_indexes in changes")?,
+            mapping_slot_indexes: value.mapping_slot_indexes.take().context("No mapping_slot_indexes in changes")?,
+        })
     }
 }

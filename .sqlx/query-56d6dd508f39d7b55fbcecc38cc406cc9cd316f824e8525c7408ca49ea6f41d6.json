@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "TRUNCATE TABLE accounts_temporary, account_slots_temporary",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "56d6dd508f39d7b55fbcecc38cc406cc9cd316f824e8525c7408ca49ea6f41d6"
+}

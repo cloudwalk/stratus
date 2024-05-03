@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE active_block_number SET block_number = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "237779f5aaeb17aa6db780dc8a8f9b73449b706ed9b37c170f60e5f6b623c2d1"
+}

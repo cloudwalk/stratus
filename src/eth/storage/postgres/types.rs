@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use anyhow::Context;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -8,6 +10,7 @@ use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::EcdsaRs;
 use crate::eth::primitives::EcdsaV;
 use crate::eth::primitives::Execution;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
@@ -312,5 +315,80 @@ impl HistoricalSlotBatch {
         self.index.push(index);
         self.value.push(value);
         self.block_number.push(block_number);
+    }
+}
+
+#[derive(Default)]
+pub struct TemporaryAccountBatch {
+    pub address: Vec<Address>,
+    pub new_nonce: Vec<Nonce>,
+    pub new_balance: Vec<Wei>,
+    pub bytecode: Vec<Option<Bytes>>,
+    pub original_nonce: Vec<Nonce>,
+    pub original_balance: Vec<Wei>,
+    pub code_hash: Vec<CodeHash>,
+    pub static_slot_indexes: Vec<Option<SlotIndexes>>,
+    pub mapping_slot_indexes: Vec<Option<SlotIndexes>>,
+}
+
+impl TemporaryAccountBatch {
+    #[allow(clippy::too_many_arguments)]
+    pub fn push(
+        &mut self,
+        address: Address,
+        new_nonce: Nonce,
+        new_balance: Wei,
+        bytecode: Option<Bytes>,
+        original_nonce: Nonce,
+        original_balance: Wei,
+        code_hash: CodeHash,
+        static_slot_indexes: Option<SlotIndexes>,
+        mapping_slot_indexes: Option<SlotIndexes>,
+    ) {
+        self.address.push(address);
+        self.new_nonce.push(new_nonce);
+        self.new_balance.push(new_balance);
+        self.bytecode.push(bytecode);
+        self.original_nonce.push(original_nonce);
+        self.original_balance.push(original_balance);
+        self.code_hash.push(code_hash);
+        self.static_slot_indexes.push(static_slot_indexes);
+        self.mapping_slot_indexes.push(mapping_slot_indexes);
+    }
+
+    pub fn push_change(&mut self, change: ExecutionAccountChanges) -> anyhow::Result<()> {
+        let (original_nonce, nonce) = change.nonce.take_both();
+        let (original_balance, balance) = change.balance.take_both();
+
+        self.push(
+            change.address,
+            nonce.context("No valid nonce in change")?,
+            balance.context("No valid balance in change")?,
+            change.bytecode.take().context("No valid bytecode in change")?,
+            original_nonce.unwrap_or_default(),
+            original_balance.unwrap_or_default(),
+            change.code_hash,
+            change.static_slot_indexes.take().context("No valid static_slot_indexes in change")?,
+            change.mapping_slot_indexes.take().context("No valid mapping_slot_indexes in change")?,
+        );
+        Ok(())
+    }
+}
+
+
+#[derive(Default, Debug)]
+pub struct TemporarySlotBatch {
+    pub index: Vec<SlotIndex>,
+    pub value: Vec<SlotValue>,
+    pub address: Vec<Address>,
+    pub original_value: Vec<SlotValue>,
+}
+
+impl TemporarySlotBatch {
+    pub fn push(&mut self, address: Address, slot_idx: SlotIndex, new_value: SlotValue, original_value: SlotValue) {
+        self.address.push(address);
+        self.index.push(slot_idx);
+        self.value.push(new_value);
+        self.original_value.push(original_value);
     }
 }

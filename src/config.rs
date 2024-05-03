@@ -33,6 +33,8 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
+use crate::eth::storage::PostgresTemporaryStorage;
+use crate::eth::storage::PostgresTemporaryStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
 #[cfg(feature = "rocks")]
@@ -562,6 +564,13 @@ pub struct TemporaryStorageConfig {
     /// Temporary storage implementation.
     #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
     pub temp_storage_kind: TemporaryStorageKind,
+
+    #[arg(long = "temp-storage-connections", env = "TEMP_STORAGE_CONNECTIONS")]
+    pub temp_storage_connections: u32,
+
+    /// Permamenent storage timeout when opening a connection (in millis).
+    #[arg(long = "temp-storage-timeout", env = "TEMP_STORAGE_TIMEOUT")]
+    pub temp_storage_timeout_millis: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -569,15 +578,26 @@ pub enum TemporaryStorageKind {
     InMemory,
     #[cfg(feature = "rocks")]
     Rocks,
+    Postgres {
+        url: String,
+    },
 }
 
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
-        match self.temp_storage_kind {
+        match self.temp_storage_kind.clone() {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
             #[cfg(feature = "rocks")]
             TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new().await?)),
+            TemporaryStorageKind::Postgres { url } => Ok(Arc::new(
+                PostgresTemporaryStorage::new(PostgresTemporaryStorageConfig {
+                    url,
+                    connections: self.temp_storage_connections,
+                    acquire_timeout: Duration::from_millis(self.temp_storage_timeout_millis),
+                })
+                .await?,
+            )),
         }
     }
 }
@@ -590,6 +610,7 @@ impl FromStr for TemporaryStorageKind {
             "inmemory" => Ok(Self::InMemory),
             #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
+            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
     }

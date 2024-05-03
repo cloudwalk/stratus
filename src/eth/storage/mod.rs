@@ -5,7 +5,7 @@ mod external_rpc_storage;
 mod inmemory;
 mod permanent_storage;
 mod postgres_external_rpc;
-mod postgres_permanent;
+mod postgres;
 #[cfg(feature = "rocks")]
 pub mod rocks;
 
@@ -21,8 +21,10 @@ pub use inmemory::InMemoryTemporaryStorage;
 pub use permanent_storage::PermanentStorage;
 pub use postgres_external_rpc::PostgresExternalRpcStorage;
 pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
-pub use postgres_permanent::PostgresPermanentStorage;
-pub use postgres_permanent::PostgresPermanentStorageConfig;
+pub use postgres::PostgresPermanentStorage;
+pub use postgres::PostgresPermanentStorageConfig;
+pub use postgres::PostgresTemporaryStorage;
+pub use postgres::PostgresTemporaryStorageConfig;
 #[cfg(feature = "rocks")]
 pub use rocks::rocks_permanent::RocksPermanentStorage;
 #[cfg(feature = "rocks")]

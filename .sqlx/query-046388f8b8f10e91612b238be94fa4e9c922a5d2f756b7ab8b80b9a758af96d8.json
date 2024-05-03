@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT block_number as \"0:_\" FROM active_block_number",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "0:_",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "046388f8b8f10e91612b238be94fa4e9c922a5d2f756b7ab8b80b9a758af96d8"
+}

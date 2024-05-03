@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH slot_insert AS (\n                WITH slot_updates AS (\n                    SELECT *\n                    FROM unnest(\n                            $10::bytea [],\n                            $11::bytea [],\n                            $12::bytea [],\n                            $13::bytea []\n                        ) AS t (\n                            idx,\n                            value,\n                            account_address,\n                            original_value\n                        )\n                )\n                INSERT INTO account_slots_temporary (\n                        idx,\n                        value,\n                        previous_value,\n                        account_address\n                    )\n                SELECT idx,\n                    value,\n                    original_value,\n                    account_address\n                FROM slot_updates ON CONFLICT (idx, account_address) DO\n                UPDATE\n                SET value = excluded.value,\n                    previous_value = excluded.previous_value\n                WHERE account_slots_temporary.value = excluded.previous_value\n                RETURNING 1 as res\n            ),\n            account_updates AS (\n                SELECT *\n                FROM unnest(\n                        $1::bytea [],\n                        $2::bytea [],\n                        $3::numeric [],\n                        $4::numeric [],\n                        $5::numeric [],\n                        $6::numeric [],\n                        $7::bytea [],\n                        $8::JSONB [],\n                        $9::JSONB []\n                    ) AS t (\n                        address,\n                        bytecode,\n                        new_balance,\n                        new_nonce,\n                        previous_balance,\n                        previous_nonce,\n                        code_hash,\n                        static_slot_indexes,\n                        mapping_slot_indexes\n                    )\n            )\n            INSERT INTO accounts_temporary (\n                    address,\n                    bytecode,\n                    latest_balance,\n                    latest_nonce,\n                    previous_balance,\n                    previous_nonce,\n                    code_hash,\n                    static_slot_indexes,\n                    mapping_slot_indexes\n                )\n            SELECT address,\n                bytecode,\n                new_balance,\n                new_nonce,\n                previous_balance,\n                previous_nonce,\n                code_hash,\n                static_slot_indexes,\n                mapping_slot_indexes\n            FROM account_updates ON CONFLICT (address) DO\n            UPDATE\n            SET latest_nonce = excluded.latest_nonce,\n                latest_balance = excluded.latest_balance,\n                previous_balance = excluded.previous_balance,\n                previous_nonce = excluded.previous_nonce\n            WHERE accounts_temporary.latest_nonce = excluded.previous_nonce\n                AND accounts_temporary.latest_balance = excluded.previous_balance\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "ByteaArray",
+        "ByteaArray",
+        "NumericArray",
+        "NumericArray",
+        "NumericArray",
+        "NumericArray",
+        "ByteaArray",
+        "JsonbArray",
+        "JsonbArray",
+        "ByteaArray",
+        "ByteaArray",
+        "ByteaArray",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d45816a9ef4a05501dd7188a88af0a777659f3482847d3f78bf8397766057cca"
+}
