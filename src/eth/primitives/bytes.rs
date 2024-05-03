@@ -99,8 +99,8 @@ impl From<&RevmBytes> for Bytes {
 impl From<RevmOutput> for Bytes {
     fn from(value: RevmOutput) -> Self {
         match value {
-            RevmOutput::Call(bytes) => bytes.into(),
-            RevmOutput::Create(bytes, _) => bytes.into(),
+            RevmOutput::Call(bytes) => Self(bytes.0.into()),
+            RevmOutput::Create(bytes, _) => Self(bytes.0.into()),
         }
     }
 }
