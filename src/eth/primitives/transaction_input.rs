@@ -89,7 +89,7 @@ impl Decodable for TransactionInput {
 }
 
 // -----------------------------------------------------------------------------
-// Conversion: Self -> Other
+// Conversion: Other -> Self
 // -----------------------------------------------------------------------------
 impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
