@@ -51,9 +51,9 @@ impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
     }
 }
 
-impl TryFrom<ExternalBlock> for Block {
+impl TryFrom<&ExternalBlock> for Block {
     type Error = anyhow::Error;
-    fn try_from(value: ExternalBlock) -> Result<Self, Self::Error> {
+    fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {
         Ok(Block {
             header: value.try_into()?,
             transactions: vec![],

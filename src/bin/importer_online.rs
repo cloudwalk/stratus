@@ -71,7 +71,7 @@ async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainC
 
     // import block
     let receipts: ExternalReceipts = receipts.into();
-    executor.import_external_to_perm(block, &receipts).await?;
+    executor.import_external_to_perm(&block, &receipts).await?;
 
     #[cfg(feature = "metrics")]
     metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);

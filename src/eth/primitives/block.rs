@@ -47,7 +47,7 @@ impl Block {
     /// Creates a new block based on an external block and its local transactions re-execution.
     ///
     /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(block: ExternalBlock, executions: Vec<ExternalTransactionExecution>) -> anyhow::Result<Self> {
+    pub fn from_external(block: &ExternalBlock, executions: Vec<ExternalTransactionExecution>) -> anyhow::Result<Self> {
         let mut transactions = Vec::with_capacity(executions.len());
         for execution in executions {
             transactions.push(TransactionMined::from_external(execution)?);
