@@ -1,5 +1,6 @@
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
+use serde::Deserialize;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -68,7 +69,7 @@ impl TryFrom<serde_json::Value> for ExternalBlock {
     type Error = anyhow::Error;
 
     fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
-        match serde_json::from_value(value.clone()) {
+        match ExternalBlock::deserialize(&value) {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),
         }
