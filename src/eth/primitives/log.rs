@@ -49,6 +49,7 @@ impl From<RevmLog> for Log {
             ..Default::default()
         };
 
+        // you may not like it but this is what peak performance looks like
         match topics_len {
             4 => {
                 log.topic0 = Some(topics[0].into());
