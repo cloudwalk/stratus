@@ -123,7 +123,7 @@ alias rpc-downloader := bin-rpc-downloader
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 bin-importer-offline *args="":
-    cargo run --bin importer-offline {{release_flag}} --features dev -- {{args}}
+    cargo run --bin importer-offline {{release_flag}} --features {{feature_flags}} -- {{args}}
 alias importer-offline := bin-importer-offline
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage - with rocksdb
