@@ -1,10 +1,8 @@
 //TODO move this onto temporary storage, it will be called from a channel
 use std::collections::HashMap;
-use serde_json::to_string;
 use raft::{Config, storage::MemStorage, raw_node::RawNode};
 use tokio::{sync::Mutex, time::{self, Duration}};
-use reqwest::Client;
-use tracing::{info, error};
+use tracing::info;
 use anyhow::Result;
 
 use crate::infra::BlockchainClient;
@@ -20,14 +18,12 @@ fn setup_logger() -> Logger {
 
 pub async fn gather_clients() -> Result<()> {
     // Initialize a HashMap to store pod IPs and roles
-    let pods_list = vec![
-        "http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
+    let pods_list = ["http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
-        "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000",
-    ];
+        "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000"];
 
     for pod_ip in pods_list.iter() {
-        let chain = match BlockchainClient::new(&pod_ip).await {
+        let chain = match BlockchainClient::new(pod_ip).await {
             Ok(chain) => chain,
             Err(e) => {
                 println!("Error: {}", e);
@@ -56,7 +52,6 @@ pub async fn gather_clients() -> Result<()> {
 
 struct RaftNode {
     node: Mutex<RawNode<MemStorage>>,
-    http_client: Client,
     peers: HashMap<u64, String>,  // Maps node index to URLs for simplicity
 }
 
@@ -83,7 +78,6 @@ impl RaftNode {
 
         Ok(Self {
             node: Mutex::new(node),
-            http_client: Client::new(),
             peers,
         })
     }
@@ -119,7 +113,7 @@ impl RaftNode {
         }
 
         for msg in ready.messages() {
-            if let Some(url) = self.peers.get(&msg.to) {
+            if let Some(_url) = self.peers.get(&msg.to) {
                 // Serialize the message manually to JSON
                 //XXX let msg_json = to_string(&msg).unwrap_or_else(|_| "{}".to_string()); // Handle error more gracefully in production
                 //XXX let send_future = self.http_client.post(url)
