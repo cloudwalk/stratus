@@ -30,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         contract: [token, pix, periphery, compound, yield, multisig]
-    name: E2E Postgres on ${{ matrix.contract }}
+    name: E2E Postgres Temp on ${{ matrix.contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -81,7 +81,7 @@ jobs:
         run: just contracts-clone --${{ matrix.contract }}
 
       - name: Run e2e tests
-        run: just contracts-test-stratus-postgres --${{ matrix.contract }}
+        run: just contracts-test-stratus-postgres-temp --${{ matrix.contract }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
           RUST_LOG: off 
