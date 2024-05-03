@@ -7,8 +7,8 @@ use anyhow::Context;
 use anyhow::Ok;
 use byte_unit::Byte;
 use byte_unit::Unit;
+use chrono::format::StrftimeItems;
 use ethereum_types::U256;
-use itertools::Itertools;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
@@ -212,11 +212,12 @@ impl CsvExporter {
     // -------------------------------------------------------------------------
     pub fn flush(&mut self) -> anyhow::Result<()> {
         // export blocks
-        let blocks = self.staged_blocks.drain(..).collect_vec();
+        let blocks: Vec<Block> = self.staged_blocks.drain(..).collect();
         for block in blocks {
-            self.export_account_changes(*block.number(), block.compact_account_changes(), block.number())?;
-            self.export_block(block.header)?;
-            self.export_transactions(block.transactions)?;
+            let now = now();
+            self.export_account_changes(now.clone(), *block.number(), block.compact_account_changes())?;
+            self.export_block(now.clone(), block.header)?;
+            self.export_transactions(now.clone(), block.transactions)?;
         }
 
         // flush pending data
@@ -270,9 +271,9 @@ impl CsvExporter {
     }
 
     pub fn export_initial_accounts(&mut self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        let now = now();
         for account in accounts {
             self.accounts_id.value += 1;
-            let now = now();
             let row = [
                 self.accounts_id.value.to_string(),                         // id
                 to_bytea(account.address),                                  // address
@@ -284,7 +285,7 @@ impl CsvExporter {
                 NULL.to_owned(),                                            // previous_balance
                 NULL.to_owned(),                                            // previous_nonce
                 now.clone(),                                                // created_at
-                now,                                                        // updated_at
+                now.clone(),                                                // updated_at
             ];
             self.accounts_csv.write_record(row).context("failed to write csv transaction")?;
         }
@@ -292,15 +293,14 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_transactions(&mut self, transactions: Vec<TransactionMined>) -> anyhow::Result<()> {
+    fn export_transactions(&mut self, now: String, transactions: Vec<TransactionMined>) -> anyhow::Result<()> {
         for tx in transactions {
             self.transactions_id.value += 1;
 
             // export relationships
-            self.export_logs(tx.logs)?;
+            self.export_logs(now.clone(), tx.logs)?;
 
             // export data
-            let now = now();
             let row = [
                 self.transactions_id.value.to_string(),                            // id
                 to_bytea(tx.input.hash),                                           // hash
@@ -321,7 +321,7 @@ impl CsvExporter {
                 tx.input.value.to_string(),                                        // value
                 tx.execution.result.to_string(),                                   // result
                 now.clone(),                                                       // created_at
-                now,                                                               // updated_at
+                now.clone(),                                                       // updated_at
                 from_option(tx.input.chain_id),                                    // chain_id
                 tx.execution.contract_address().map(to_bytea).unwrap_or_default(), // contract_address
             ];
@@ -330,10 +330,8 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_block(&mut self, block: BlockHeader) -> anyhow::Result<()> {
+    fn export_block(&mut self, now: String, block: BlockHeader) -> anyhow::Result<()> {
         self.blocks_id.value += 1;
-
-        let now = now();
 
         let row = &[
             self.blocks_id.value.to_string(),   // id
@@ -364,10 +362,8 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_account_changes(&mut self, number: BlockNumber, changes: Vec<ExecutionAccountChanges>, block_number: &BlockNumber) -> anyhow::Result<()> {
+    fn export_account_changes(&mut self, now: String, number: BlockNumber, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
         for change in changes {
-            let now = now();
-
             if change.is_account_creation() {
                 self.accounts_id.value += 1;
                 let change_bytecode = change.bytecode.take_ref().and_then(|x| x.clone().map(to_bytea)).unwrap_or(NULL.to_string());
@@ -394,7 +390,7 @@ impl CsvExporter {
                     self.historical_nonces_id.value.to_string(), // id
                     to_bytea(change.address),                    // address
                     nonce.to_string(),                           // nonce
-                    block_number.to_string(),                    // block_number
+                    number.to_string(),                          // block_number
                     now.clone(),                                 // updated_at
                     now.clone(),                                 // created_at
                 ];
@@ -407,7 +403,7 @@ impl CsvExporter {
                     self.historical_balances_id.value.to_string(), // id
                     to_bytea(change.address),                      // address
                     balance.to_string(),                           // balance
-                    block_number.to_string(),                      // block_number
+                    number.to_string(),                            // block_number
                     now.clone(),                                   // updated_at
                     now.clone(),                                   // created_at
                 ];
@@ -424,7 +420,7 @@ impl CsvExporter {
                         self.historical_slots_id.value.to_string(), // id
                         u256_to_bytea(slot.index.as_u256()),        // idx
                         u256_to_bytea(slot.value.as_u256()),        // value
-                        block_number.to_string(),                   // block_number
+                        number.to_string(),                         // block_number
                         to_bytea(change.address),                   // account_address
                         now.clone(),                                // updated_at
                         now.clone(),                                // created_at
@@ -436,13 +432,12 @@ impl CsvExporter {
         Ok(())
     }
 
-    fn export_logs(&mut self, logs: Vec<LogMined>) -> anyhow::Result<()> {
+    fn export_logs(&mut self, now: String, logs: Vec<LogMined>) -> anyhow::Result<()> {
         for log in logs {
             self.logs_id.value += 1;
 
             let get_topic_with_index = |index| log.log.topics().get(index).map(to_bytea).unwrap_or_default();
 
-            let now = now();
             let row = [
                 self.logs_id.value.to_string(),    // id
                 to_bytea(log.address()),           // address
@@ -457,7 +452,7 @@ impl CsvExporter {
                 get_topic_with_index(2),           // topic2
                 get_topic_with_index(3),           // topic3
                 now.clone(),                       // created_at
-                now,                               // updated_at
+                now.clone(),                       // updated_at
             ];
             self.logs_csv.write_record(row).context("failed to write csv transaction log")?;
         }
@@ -560,8 +555,9 @@ fn u256_to_bytea(integer: U256) -> String {
 }
 
 /// Returns the current date formatted for the CSV file.
+const CSV_DATE_FORMAT: StrftimeItems = StrftimeItems::new("%Y-%m-%d %H:%M:%S%.6f");
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f").to_string()
+    chrono::Utc::now().format_with_items(CSV_DATE_FORMAT).to_string()
 }
 
 /// Builds a string from an optional displayable value.
