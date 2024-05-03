@@ -3,7 +3,6 @@ use ethers_core::types::Transaction as EthersTransaction;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::TransactionInput;
 
 #[derive(Debug, derive_new::new)]
 pub struct ExternalTransactionExecution {
@@ -23,13 +22,9 @@ impl ExternalTransaction {
     }
 }
 
-impl TryFrom<ExternalTransaction> for TransactionInput {
-    type Error = anyhow::Error;
-    fn try_from(value: ExternalTransaction) -> Result<Self, Self::Error> {
-        value.0.try_into()
-    }
-}
-
+// -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
 impl From<EthersTransaction> for ExternalTransaction {
     fn from(value: EthersTransaction) -> Self {
         ExternalTransaction(value)
