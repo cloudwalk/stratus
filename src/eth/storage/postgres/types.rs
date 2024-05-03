@@ -375,7 +375,6 @@ impl TemporaryAccountBatch {
     }
 }
 
-
 #[derive(Default, Debug)]
 pub struct TemporarySlotBatch {
     pub index: Vec<SlotIndex>,

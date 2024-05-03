@@ -4,8 +4,8 @@ mod csv;
 mod external_rpc_storage;
 mod inmemory;
 mod permanent_storage;
-mod postgres_external_rpc;
 mod postgres;
+mod postgres_external_rpc;
 #[cfg(feature = "rocks")]
 pub mod rocks;
 
@@ -19,12 +19,12 @@ pub use inmemory::InMemoryPermanentStorage;
 pub use inmemory::InMemoryPermanentStorageState;
 pub use inmemory::InMemoryTemporaryStorage;
 pub use permanent_storage::PermanentStorage;
-pub use postgres_external_rpc::PostgresExternalRpcStorage;
-pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
 pub use postgres::PostgresPermanentStorage;
 pub use postgres::PostgresPermanentStorageConfig;
 pub use postgres::PostgresTemporaryStorage;
 pub use postgres::PostgresTemporaryStorageConfig;
+pub use postgres_external_rpc::PostgresExternalRpcStorage;
+pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
 #[cfg(feature = "rocks")]
 pub use rocks::rocks_permanent::RocksPermanentStorage;
 #[cfg(feature = "rocks")]

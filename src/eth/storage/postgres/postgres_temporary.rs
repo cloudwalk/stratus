@@ -1,20 +1,19 @@
 use std::time::Duration;
 
+use async_trait::async_trait;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
+
+use super::types::TemporaryAccountBatch;
+use super::types::TemporarySlotBatch;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::log_and_err;
-use async_trait::async_trait;
-use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
-
 use crate::eth::storage::TemporaryStorage;
-
-use super::types::TemporaryAccountBatch;
-use super::types::TemporarySlotBatch;
+use crate::log_and_err;
 
 #[derive(Debug)]
 pub struct PostgresTemporaryStorageConfig {
@@ -43,9 +42,7 @@ impl PostgresTemporaryStorage {
             Err(e) => return log_and_err!(reason = e, "failed to start postgres permanent storage"),
         };
 
-        let storage = Self {
-            pool
-        };
+        let storage = Self { pool };
 
         Ok(storage)
     }
@@ -124,7 +121,7 @@ impl TemporaryStorage for PostgresTemporaryStorage {
 
                 let original_value = original.unwrap_or_default().value;
 
-                slots_batch.push(change.address, *idx, new_value, original_value)
+                slots_batch.push(change.address, *idx, new_value, original_value);
             }
             account_batch.push_change(change)?;
         }
