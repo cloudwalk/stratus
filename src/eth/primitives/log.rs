@@ -12,10 +12,9 @@ use revm::primitives::Log as RevmLog;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::LogTopic;
-use crate::ext::OptionExt;
 
 /// Log is an event emitted by the EVM during contract execution.
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Log {
     /// Address that emitted the log.
     pub address: Address,
@@ -41,28 +40,76 @@ impl Log {
 // ----------------------------------------------------------------------------
 impl From<RevmLog> for Log {
     fn from(value: RevmLog) -> Self {
-        Self {
+        let (topics, data) = value.data.split();
+        let topics_len = topics.len();
+
+        let mut log = Self {
             address: value.address.into(),
-            #[allow(clippy::get_first)]
-            topic0: value.topics().get(0).cloned().map_into(),
-            topic1: value.topics().get(1).cloned().map_into(),
-            topic2: value.topics().get(2).cloned().map_into(),
-            topic3: value.topics().get(3).cloned().map_into(),
-            data: value.data.data.into(),
+            data: data.into(),
+            ..Default::default()
+        };
+
+        // you may not like it but this is what peak performance looks like
+        match topics_len {
+            4 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+                log.topic3 = Some(topics[3].into());
+            }
+            3 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+            }
+            2 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+            }
+            1 => {
+                log.topic0 = Some(topics[0].into());
+            }
+            _ => {}
         }
+
+        log
     }
 }
 
 impl From<EthersLog> for Log {
     fn from(value: EthersLog) -> Self {
-        Self {
+        let topics = value.topics;
+        let topics_len = topics.len();
+
+        let mut log = Self {
             address: value.address.into(),
-            #[allow(clippy::get_first)]
-            topic0: value.topics.get(0).cloned().map_into(),
-            topic1: value.topics.get(1).cloned().map_into(),
-            topic2: value.topics.get(2).cloned().map_into(),
-            topic3: value.topics.get(3).cloned().map_into(),
             data: value.data.into(),
+            ..Default::default()
+        };
+
+        // you may not like it but this is what peak performance looks like
+        match topics_len {
+            4 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+                log.topic3 = Some(topics[3].into());
+            }
+            3 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+            }
+            2 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+            }
+            1 => {
+                log.topic0 = Some(topics[0].into());
+            }
+            _ => {}
         }
+
+        log
     }
 }
