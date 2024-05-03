@@ -74,7 +74,7 @@ kubernetes:
     # EVM api postgres storage
     # --------------------------------------------------------------------------
     - name: stratus-api-postgres
-      dockerfile: ./docker/Dockerfile.run_with_importer_postgres
+      dockerfile: ./docker/Dockerfile.importer_online_postgres
       secretsManager:
         enabled: true
         provider: gcpsm
