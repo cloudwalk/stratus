@@ -49,23 +49,26 @@ impl From<RevmLog> for Log {
             ..Default::default()
         };
 
-        if topics_len == 4 {
-            log.topic0 = Some(topics[0].into());
-            log.topic1 = Some(topics[1].into());
-            log.topic2 = Some(topics[2].into());
-            log.topic3 = Some(topics[3].into());
-        }
-        if topics_len == 3 {
-            log.topic0 = Some(topics[0].into());
-            log.topic1 = Some(topics[1].into());
-            log.topic2 = Some(topics[2].into());
-        }
-        if topics_len == 2 {
-            log.topic0 = Some(topics[0].into());
-            log.topic1 = Some(topics[1].into());
-        }
-        if topics_len == 1 {
-            log.topic0 = Some(topics[0].into());
+        match topics_len {
+            4 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+                log.topic3 = Some(topics[3].into());
+            }
+            3 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+            }
+            2 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+            }
+            1 => {
+                log.topic0 = Some(topics[0].into());
+            }
+            _ => {}
         }
 
         log
@@ -83,23 +86,27 @@ impl From<EthersLog> for Log {
             ..Default::default()
         };
 
-        if topics_len == 4 {
-            log.topic0 = Some(topics[0].into());
-            log.topic1 = Some(topics[1].into());
-            log.topic2 = Some(topics[2].into());
-            log.topic3 = Some(topics[3].into());
-        }
-        if topics_len == 3 {
-            log.topic0 = Some(topics[0].into());
-            log.topic1 = Some(topics[1].into());
-            log.topic2 = Some(topics[2].into());
-        }
-        if topics_len == 2 {
-            log.topic0 = Some(topics[0].into());
-            log.topic1 = Some(topics[1].into());
-        }
-        if topics_len == 1 {
-            log.topic0 = Some(topics[0].into());
+        // you may not like it but this is what peak performance looks like
+        match topics_len {
+            4 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+                log.topic3 = Some(topics[3].into());
+            }
+            3 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+                log.topic2 = Some(topics[2].into());
+            }
+            2 => {
+                log.topic0 = Some(topics[0].into());
+                log.topic1 = Some(topics[1].into());
+            }
+            1 => {
+                log.topic0 = Some(topics[0].into());
+            }
+            _ => {}
         }
 
         log
