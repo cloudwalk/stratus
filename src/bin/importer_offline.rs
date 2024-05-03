@@ -1,6 +1,7 @@
 use std::cmp::min;
 use std::fs;
 use std::sync::Arc;
+use std::thread;
 
 use anyhow::anyhow;
 use futures::try_join;
@@ -23,6 +24,7 @@ use stratus::ext::not;
 use stratus::infra::metrics;
 use stratus::log_and_err;
 use stratus::GlobalServices;
+use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -47,6 +49,9 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.stratus_storage.init().await?;
     let executor = config.executor.init(Arc::clone(&stratus_storage)).await;
+
+    // init block snapshots to export
+    let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
 
     // init block range
     let block_start = match config.block_start {
@@ -76,27 +81,39 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     }
 
     // execute parallel tasks (external rpc storage loader and block importer)
-    let _loader_task = tokio::spawn(execute_external_rpc_storage_loader(
-        rpc_storage,
-        cancellation.clone(),
-        config.blocks_by_fetch,
-        config.paralellism,
-        block_start,
-        block_end,
-        backlog_tx,
-    ));
+    let storage_thread = thread::Builder::new().name("loader".into());
+    let storage_tokio = Handle::current();
+    let storage_cancellation = cancellation.clone();
+    let _ = storage_thread.spawn(move || {
+        let _tokio_guard = storage_tokio.enter();
 
-    let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
-    let importer_task = tokio::spawn(execute_block_importer(
-        executor,
-        stratus_storage,
-        csv,
-        cancellation.clone(),
-        backlog_rx,
-        block_snapshots,
-    ));
+        storage_tokio.block_on(execute_external_rpc_storage_loader(
+            rpc_storage,
+            storage_cancellation,
+            config.blocks_by_fetch,
+            config.paralellism,
+            block_start,
+            block_end,
+            backlog_tx,
+        ))
+    });
 
-    importer_task.await??;
+    let importer_thread = thread::Builder::new().name("importer".into());
+    let importer_tokio = Handle::current();
+    let importer_cancellation = cancellation.clone();
+    let importer_join = importer_thread.spawn(move || {
+        let _tokio_guard = importer_tokio.enter();
+        importer_tokio.block_on(execute_block_importer(
+            executor,
+            stratus_storage,
+            csv,
+            importer_cancellation,
+            backlog_rx,
+            block_snapshots,
+        ))
+    })?;
+
+    let _ = importer_join.join();
 
     Ok(())
 }
@@ -207,7 +224,6 @@ async fn execute_external_rpc_storage_loader(
     let reason = loop {
         // retrieve next batch of loaded blocks
         let Some(result) = tasks.next().await else {
-            cancellation.cancel();
             break "no more blocks to process";
         };
 

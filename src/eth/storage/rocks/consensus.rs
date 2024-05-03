@@ -18,7 +18,8 @@ fn setup_logger() -> Logger {
 
 pub async fn gather_clients() -> Result<()> {
     // Initialize a HashMap to store pod IPs and roles
-    let pods_list = ["http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
+    let pods_list = [
+        "http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000"];
 

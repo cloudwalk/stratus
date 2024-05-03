@@ -45,12 +45,6 @@ impl Dummy<Faker> for LogTopic {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = LogTopic, other = H256, [u8; 32]);
 
-impl AsRef<[u8]> for LogTopic {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
-
 impl From<RevmB256> for LogTopic {
     fn from(value: RevmB256) -> Self {
         Self(value.0.into())
@@ -60,6 +54,12 @@ impl From<RevmB256> for LogTopic {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl AsRef<[u8]> for LogTopic {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 impl From<LogTopic> for H256 {
     fn from(value: LogTopic) -> Self {
         value.0

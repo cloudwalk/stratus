@@ -553,6 +553,18 @@ impl RocksStorageState {
         self.logs.clear()?;
         Ok(())
     }
+
+    #[cfg(feature = "metrics")]
+    pub fn export_metrics(&self) {
+        self.account_slots.export_metrics();
+        self.account_slots_history.export_metrics();
+
+        self.accounts.export_metrics();
+        self.accounts_history.export_metrics();
+
+        self.blocks_by_hash.export_metrics();
+        self.blocks_by_number.export_metrics();
+    }
 }
 
 impl fmt::Debug for RocksStorageState {

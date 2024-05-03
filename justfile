@@ -11,7 +11,8 @@ database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratu
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
 
 # Cargo flags.
-build_flags := release_flag + " --bin stratus --features dev"
+feature_flags := "dev," + env("FEATURES", "")
+build_flags := release_flag + " --bin stratus --features " + feature_flags
 run_flags := "--enable-genesis --enable-test-accounts"
 
 # Project: Show available tasks
@@ -117,12 +118,12 @@ db-load-csv:
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 bin-rpc-downloader *args="":
-    cargo run --bin rpc-downloader {{release_flag}} --features dev -- {{args}}
+    cargo run --bin rpc-downloader {{release_flag}} --features {{feature_flags}} -- {{args}}
 alias rpc-downloader := bin-rpc-downloader
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 bin-importer-offline *args="":
-    cargo run --bin importer-offline {{release_flag}} --features dev -- {{args}}
+    cargo run --bin importer-offline {{release_flag}} --features {{feature_flags}} -- {{args}}
 alias importer-offline := bin-importer-offline
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage - with rocksdb
@@ -156,11 +157,11 @@ test-doc name="":
 
 # Test: Execute Rust unit tests
 test-unit name="":
-    cargo test --lib {{name}} -- --nocapture
+    cargo test --lib {{name}} --features {{feature_flags}} -- --nocapture
 
 # Test: Execute Rust integration tests
 test-int name="'*'":
-    cargo test --test {{name}} {{release_flag}} --features metrics,rocks -- --nocapture
+    cargo test --test {{name}} {{release_flag}} --features {{feature_flags}},metrics,rocks -- --nocapture
 
 # ------------------------------------------------------------------------------
 # E2E tasks

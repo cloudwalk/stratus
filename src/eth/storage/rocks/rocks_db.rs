@@ -5,6 +5,10 @@ use anyhow::Result;
 use rocksdb::backup::BackupEngine;
 use rocksdb::backup::BackupEngineOptions;
 use rocksdb::backup::RestoreOptions;
+#[cfg(feature = "metrics")]
+use rocksdb::statistics::Histogram;
+#[cfg(feature = "metrics")]
+use rocksdb::statistics::Ticker;
 use rocksdb::BlockBasedOptions;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::Env;
@@ -15,6 +19,9 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
+
 pub enum DbConfig {
     LargeSSTFiles,
     FastWriteSST,
@@ -24,6 +31,7 @@ pub enum DbConfig {
 // A generic struct that abstracts over key-value pairs stored in RocksDB.
 pub struct RocksDb<K, V> {
     pub db: DB,
+    pub opts: Options,
     _marker: PhantomData<(K, V)>,
 }
 
@@ -34,6 +42,12 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
         opts.create_if_missing(true);
         opts.increase_parallelism(16);
+
+        // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
+        #[cfg(feature = "metrics")]
+        opts.enable_statistics();
+        #[cfg(feature = "metrics")]
+        opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
 
         match config {
             DbConfig::LargeSSTFiles => {
@@ -148,10 +162,13 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             }
         }
         opts.set_block_based_table_factory(&block_based_options);
-
         let db = DB::open(&opts, db_path)?;
 
-        Ok(RocksDb { db, _marker: PhantomData })
+        Ok(RocksDb {
+            db,
+            opts,
+            _marker: PhantomData,
+        })
     }
 
     pub fn backup_path(&self) -> anyhow::Result<String> {
@@ -351,6 +368,30 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         } else {
             None
         }
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn export_metrics(&self) {
+        let db_get = self.opts.get_histogram_data(Histogram::DbGet);
+        let db_write = self.opts.get_histogram_data(Histogram::DbWrite);
+        let compaction_time = self.opts.get_histogram_data(Histogram::CompactionTime);
+        let compaction_cpu_time = self.opts.get_histogram_data(Histogram::CompactionCpuTime);
+        let flush_time = self.opts.get_histogram_data(Histogram::FlushTime);
+
+        let block_cache_miss = self.opts.get_ticker_count(Ticker::BlockCacheMiss);
+        let block_cache_hit = self.opts.get_ticker_count(Ticker::BlockCacheHit);
+        let bytes_written = self.opts.get_ticker_count(Ticker::BytesWritten);
+        let bytes_read = self.opts.get_ticker_count(Ticker::BytesRead);
+
+        metrics::set_rocks_db_get(db_get.count(), self.db.path().to_str());
+        metrics::set_rocks_db_write(db_write.count(), self.db.path().to_str());
+        metrics::set_rocks_compaction_time(compaction_time.count(), self.db.path().to_str());
+        metrics::set_rocks_compaction_cpu_time(compaction_cpu_time.count(), self.db.path().to_str());
+        metrics::set_rocks_flush_time(flush_time.count(), self.db.path().to_str());
+        metrics::set_rocks_block_cache_miss(block_cache_miss, self.db.path().to_str());
+        metrics::set_rocks_block_cache_hit(block_cache_hit, self.db.path().to_str());
+        metrics::set_rocks_bytes_written(bytes_written, self.db.path().to_str());
+        metrics::set_rocks_bytes_read(bytes_read, self.db.path().to_str());
     }
 }
 
