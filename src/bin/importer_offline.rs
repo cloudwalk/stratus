@@ -207,7 +207,6 @@ async fn execute_external_rpc_storage_loader(
     let reason = loop {
         // retrieve next batch of loaded blocks
         let Some(result) = tasks.next().await else {
-            cancellation.cancel();
             break "no more blocks to process";
         };
 
