@@ -45,6 +45,16 @@ jobs:
       group: ${{ github.workflow }}-postgres-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
+  e2e-stratus-postgres-temp:
+    name: E2E Stratus Postgres as Temp Storage
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: 'e2e-stratus-postgres-temp'
+
+    concurrency:
+      group: ${{ github.workflow }}-postgres-temp-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
   e2e-stratus-rocks:
     name: E2E Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
