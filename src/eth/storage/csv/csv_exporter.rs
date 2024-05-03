@@ -7,7 +7,6 @@ use anyhow::Context;
 use anyhow::Ok;
 use byte_unit::Byte;
 use byte_unit::Unit;
-use const_hex::hex;
 use ethereum_types::U256;
 use itertools::Itertools;
 
@@ -551,7 +550,7 @@ fn csv_writer(base_path: &'static str, number: BlockNumber, headers: &[&'static 
 
 /// Convert a byte sequence to a `bytea` representation that is parseable by Postgres.
 fn to_bytea(bytes: impl AsRef<[u8]>) -> String {
-    let hex = hex::encode(bytes.as_ref());
+    let hex = const_hex::encode(bytes);
     format!("\\x{hex}")
 }
 
