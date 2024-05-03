@@ -74,25 +74,25 @@ gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8], [u8; 32]);
 
 impl From<EthersBytes> for Bytes {
     fn from(value: EthersBytes) -> Self {
-        Self(value.into_iter().collect())
+        Self(value.0.into())
     }
 }
 
 impl From<RevmBytecode> for Bytes {
     fn from(value: RevmBytecode) -> Self {
-        Self(value.bytecode.0.to_vec())
+        Self(value.bytecode.0.into())
     }
 }
 
 impl From<RevmBytes> for Bytes {
     fn from(value: RevmBytes) -> Self {
-        Self(value.0.into_iter().collect())
+        Self(value.0.into())
     }
 }
 
 impl From<&RevmBytes> for Bytes {
     fn from(value: &RevmBytes) -> Self {
-        Self(value.to_vec())
+        Self(value.0.clone().to_vec())
     }
 }
 
