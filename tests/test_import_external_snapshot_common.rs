@@ -154,7 +154,7 @@ pub async fn execute_test(
     // init executor and execute
     let storage = StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage));
     let executor = config.executor.init(Arc::new(storage)).await;
-    executor.import_external_to_perm(block, &receipts).await.unwrap();
+    executor.import_external_to_perm(&block, &receipts).await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
     tokio::time::sleep(Duration::from_secs(5)).await;
