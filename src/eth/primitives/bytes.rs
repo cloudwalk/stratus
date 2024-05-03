@@ -92,7 +92,7 @@ impl From<RevmBytes> for Bytes {
 
 impl From<&RevmBytes> for Bytes {
     fn from(value: &RevmBytes) -> Self {
-        Self(value.0.clone().to_vec())
+        Self(value.0.clone().into())
     }
 }
 
