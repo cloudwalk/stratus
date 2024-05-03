@@ -18,6 +18,7 @@ use rlp::Decodable;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
+use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
@@ -88,47 +89,61 @@ impl Decodable for TransactionInput {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: Other -> Self
+// Conversion: Other -> Self
 // -----------------------------------------------------------------------------
+impl TryFrom<ExternalTransaction> for TransactionInput {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
+        try_from_ethers_transaction(value.0, false)
+    }
+}
 
 impl TryFrom<EthersTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: EthersTransaction) -> anyhow::Result<Self> {
-        // extract signer
-        let signer: Address = match value.recover_from() {
+        try_from_ethers_transaction(value, true)
+    }
+}
+
+fn try_from_ethers_transaction(value: EthersTransaction, compute_signer: bool) -> anyhow::Result<TransactionInput> {
+    // extract signer
+    let signer: Address = match compute_signer {
+        true => match value.recover_from() {
             Ok(signer) => signer.into(),
             Err(e) => {
                 tracing::warn!(reason = ?e, "failed to recover transaction signer");
                 return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
             }
-        };
+        },
+        false => value.from.into(),
+    };
 
-        // extract gas price
-        let gas_price: Wei = match value.gas_price {
-            Some(wei) => wei.into(),
-            None => return log_and_err!("transaction without gas_price id is not allowed"),
-        };
+    // extract gas price
+    let gas_price: Wei = match value.gas_price {
+        Some(wei) => wei.into(),
+        None => return log_and_err!("transaction without gas_price id is not allowed"),
+    };
 
-        Ok(Self {
-            chain_id: match value.chain_id {
-                Some(chain_id) => Some(chain_id.try_into()?),
-                None => None,
-            },
-            hash: value.hash.into(),
-            nonce: value.nonce.try_into()?,
-            signer,
-            from: Address::new(value.from.into()),
-            to: value.to.map_into(),
-            value: value.value.into(),
-            input: value.input.clone().into(),
-            gas_limit: value.gas.try_into()?,
-            gas_price,
-            v: value.v,
-            r: value.r,
-            s: value.s,
-        })
-    }
+    Ok(TransactionInput {
+        chain_id: match value.chain_id {
+            Some(chain_id) => Some(chain_id.try_into()?),
+            None => None,
+        },
+        hash: value.hash.into(),
+        nonce: value.nonce.try_into()?,
+        signer,
+        from: Address::new(value.from.into()),
+        to: value.to.map_into(),
+        value: value.value.into(),
+        input: value.input.clone().into(),
+        gas_limit: value.gas.try_into()?,
+        gas_price,
+        v: value.v,
+        r: value.r,
+        s: value.s,
+    })
 }
 
 // -----------------------------------------------------------------------------
