@@ -12,7 +12,6 @@ use std::fmt::Display;
 use std::ops::Deref;
 
 use ethers_core::types::Bytes as EthersBytes;
-use revm::interpreter::analysis::to_analysed;
 use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::Bytes as RevmBytes;
 use revm::primitives::Output as RevmOutput;
@@ -136,6 +135,6 @@ impl From<Bytes> for RevmBytes {
 
 impl From<Bytes> for RevmBytecode {
     fn from(value: Bytes) -> Self {
-        to_analysed(RevmBytecode::new_raw(value.0.into()))
+        RevmBytecode::new_raw(value.0.into())
     }
 }

@@ -12,6 +12,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use anyhow::Context;
 use itertools::Itertools;
+use revm::interpreter::analysis::to_analysed;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
@@ -192,6 +193,9 @@ struct RevmSession {
     /// Slots cached during account load.
     account_slots_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
 
+    /// Analysed bytecodes cached.
+    bytecode_cache: HashMap<Address, RevmBytecode>,
+
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
 }
@@ -204,8 +208,9 @@ impl RevmSession {
             config,
             input: Default::default(),
             storage_changes: Default::default(),
-            metrics: Default::default(),
             account_slots_cache: Default::default(),
+            bytecode_cache: Default::default(),
+            metrics: Default::default(),
         }
     }
 
@@ -246,7 +251,19 @@ impl Database for RevmSession {
         }
 
         // early convert response because account will be moved
-        let revm_account: AccountInfo = (&account).into();
+        let mut revm_account: AccountInfo = (&account).into();
+        if let Some(raw_bytecode) = revm_account.code {
+            match self.bytecode_cache.get(&address) {
+                // bytecode cached, use it
+                Some(analysed_bytecode) => revm_account.code = Some(analysed_bytecode.clone()),
+                // bytecode not cached, analyse it and use it
+                None => {
+                    let analysed_bytecode = to_analysed(raw_bytecode);
+                    self.bytecode_cache.insert(address, analysed_bytecode.clone());
+                    revm_account.code = Some(analysed_bytecode)
+                }
+            }
+        }
 
         // track original value, except if ignored address
         if not(account.address.is_ignored()) {
