@@ -260,7 +260,7 @@ impl Database for RevmSession {
                 None => {
                     let analysed_bytecode = to_analysed(raw_bytecode);
                     self.bytecode_cache.insert(address, analysed_bytecode.clone());
-                    revm_account.code = Some(analysed_bytecode)
+                    revm_account.code = Some(analysed_bytecode);
                 }
             }
         }
