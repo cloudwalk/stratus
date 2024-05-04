@@ -3,7 +3,7 @@ use anyhow::Result;
 
 pub async fn gather_clients() -> Result<()> {
     // Initialize a HashMap to store pod IPs and roles
-    let pods_list = [
+    let _pods_list = [
         "http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000",
@@ -28,7 +28,7 @@ pub struct ClusterManagementService;
 impl ClusterManagement for ClusterManagementService {
     async fn init_cluster(
         &self,
-        request: Request<Node>,
+        _request: Request<Node>,
     ) -> Result<Response<ResultResponse>, Status> {
         // Mocked response for initializing a cluster
         Ok(Response::new(ResultResponse {
@@ -39,7 +39,7 @@ impl ClusterManagement for ClusterManagementService {
 
     async fn add_learner(
         &self,
-        request: Request<AddLearnerRequest>,
+        _request: Request<AddLearnerRequest>,
     ) -> Result<Response<ResultResponse>, Status> {
         // Mocked response for adding a learner
         Ok(Response::new(ResultResponse {
@@ -50,7 +50,7 @@ impl ClusterManagement for ClusterManagementService {
 
     async fn change_membership(
         &self,
-        request: Request<ChangeMembershipRequest>,
+        _request: Request<ChangeMembershipRequest>,
     ) -> Result<Response<ResultResponse>, Status> {
         // Mocked response for changing membership
         Ok(Response::new(ResultResponse {
