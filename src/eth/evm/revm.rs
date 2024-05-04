@@ -236,12 +236,6 @@ impl Database for RevmSession {
             }
         }
 
-        // track original value, except if ignored address
-        if not(account.address.is_ignored()) {
-            self.storage_changes
-                .insert(account.address, ExecutionAccountChanges::from_original_values(account.clone()));
-        }
-
         // prefetch slots
         if self.config.prefetch_slots {
             let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
@@ -251,7 +245,16 @@ impl Database for RevmSession {
             }
         }
 
-        Ok(Some(account.into()))
+        // early convert response because account will be moved
+        let revm_account: AccountInfo = (&account).into();
+
+        // track original value, except if ignored address
+        if not(account.address.is_ignored()) {
+            self.storage_changes
+                .insert(account.address, ExecutionAccountChanges::from_original_values(account));
+        }
+
+        Ok(Some(revm_account))
     }
 
     fn code_by_hash(&mut self, _: B256) -> anyhow::Result<RevmBytecode> {

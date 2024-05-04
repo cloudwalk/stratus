@@ -140,13 +140,13 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<Account> for RevmAccountInfo {
-    fn from(value: Account) -> Self {
+impl From<&Account> for RevmAccountInfo {
+    fn from(value: &Account) -> Self {
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
             code_hash: value.code_hash.inner().0.into(),
-            code: value.bytecode.map_into(),
+            code: value.bytecode.as_ref().cloned().map_into(),
         }
     }
 }

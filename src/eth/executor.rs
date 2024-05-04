@@ -96,7 +96,7 @@ impl EthExecutor {
 
     /// Re-executes an external block locally and imports it to the permanent storage.
     #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_perm(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
         let mut block = self.import_external_to_temp(block, receipts).await?;
 
@@ -120,7 +120,7 @@ impl EthExecutor {
 
     /// Re-executes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_temp(&self, block: ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_temp(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
@@ -139,7 +139,7 @@ impl EthExecutor {
         // execute parallel executions
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                parallel_executions.push(self.reexecute_external(tx, receipt, &block));
+                parallel_executions.push(self.reexecute_external(tx, receipt, block));
             }
         }
         let mut parallel_executions = futures::stream::iter(parallel_executions).buffered(self.num_evms);
@@ -149,7 +149,7 @@ impl EthExecutor {
             match tx_route {
                 // serial: execute now
                 ParallelExecutionRoute::Serial(tx, receipt) => {
-                    let evm_result = self.reexecute_external(tx, receipt, &block).await.2?;
+                    let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
 
                     // persist state
                     storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
@@ -193,7 +193,7 @@ impl EthExecutor {
                     // re-execute if necessary
                     let (tx, receipt, evm_result) = match decision {
                         ParallelExecutionDecision::Proceed(tx, receipt, evm_result) => (tx, receipt, evm_result),
-                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external(tx, receipt, &block).await {
+                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external(tx, receipt, block).await {
                             (tx, receipt, Ok(evm_result)) => (tx, receipt, evm_result),
                             (.., Err(e)) => return Err(e),
                         },

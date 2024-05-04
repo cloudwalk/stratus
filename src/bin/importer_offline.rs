@@ -174,11 +174,11 @@ async fn execute_block_importer(
             // * when not exporting to csv, permanent state is written to storage
             let mined_block = match csv {
                 Some(ref mut csv) => {
-                    let mined_block = executor.import_external_to_temp(block.clone(), &receipts).await?;
+                    let mined_block = executor.import_external_to_temp(&block, &receipts).await?;
                     import_external_to_csv(&stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
                     mined_block
                 }
-                None => executor.import_external_to_perm(block.clone(), &receipts).await?,
+                None => executor.import_external_to_perm(&block, &receipts).await?,
             };
 
             // export snapshot for tests
