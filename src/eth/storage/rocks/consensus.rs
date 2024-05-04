@@ -60,7 +60,7 @@ impl ClusterManagement for ClusterManagementService {
     }
 }
 
-pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_server() -> Result<()> {
     let addr = "[::1]:50051".parse()?;
     let svc = ClusterManagementServer::new(ClusterManagementService);
 
