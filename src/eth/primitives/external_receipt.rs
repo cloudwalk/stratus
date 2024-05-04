@@ -1,5 +1,6 @@
 use ethereum_types::U256;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
+use serde::Deserialize;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -67,7 +68,7 @@ impl TryFrom<serde_json::Value> for ExternalReceipt {
     type Error = anyhow::Error;
 
     fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
-        match serde_json::from_value(value.clone()) {
+        match ExternalReceipt::deserialize(&value) {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),
         }

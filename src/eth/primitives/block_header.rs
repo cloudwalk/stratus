@@ -167,9 +167,9 @@ where
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
-impl TryFrom<ExternalBlock> for BlockHeader {
+impl TryFrom<&ExternalBlock> for BlockHeader {
     type Error = anyhow::Error;
-    fn try_from(mut value: ExternalBlock) -> Result<Self, Self::Error> {
+    fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {
         Ok(Self {
             number: value.number(),
             hash: value.hash(),
@@ -180,7 +180,7 @@ impl TryFrom<ExternalBlock> for BlockHeader {
             parent_hash: value.parent_hash.into(),
             gas_limit: value.gas_limit.try_into()?,
             author: value.author(),
-            extra_data: value.extra_data(),
+            extra_data: value.extra_data.clone().into(),
             miner: value.author.unwrap_or_default().into(),
             difficulty: value.difficulty.into(),
             receipts_root: value.receipts_root.into(),
