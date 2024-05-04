@@ -26,7 +26,6 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let rpc_task = tokio::spawn(serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config));
     let importer_task = tokio::spawn(run_importer_online(importer_config, Arc::clone(&executor), storage));
 
-
     #[cfg(feature = "rocks")]
     let join_result = try_join!(rpc_task, importer_task, consensus_task)?;
 
