@@ -1,6 +1,6 @@
-pub mod client;
+pub mod cluster_management_client;
+pub mod raft_client;
 pub mod server;
-
 
 mod test {
     #[tokio::test(flavor = "multi_thread")]
@@ -12,7 +12,7 @@ mod test {
         // Ensure the server has time to start up
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-        let mut client = crate::eth::storage::consensus::client::ManagementClient::connect("http://[::1]:50051".to_string()).await?;
+        let mut client = crate::eth::storage::consensus::cluster_management_client::ManagementClient::connect("http://[::1]:50051".to_string()).await?;
 
         // Test initializing the cluster
         let init_msg = client.init_cluster(1, "127.0.0.1:8080".to_string()).await?;
