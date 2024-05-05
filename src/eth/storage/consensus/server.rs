@@ -43,6 +43,9 @@ impl ClusterManagement for ClusterManagementService {
     }
 }
 
+///////
+///////
+///////
 pub mod raftpb {
     tonic::include_proto!("raftpb"); // Make sure this path is correct as per your setup
 }
@@ -84,6 +87,31 @@ impl RaftPb for RaftPbService {
     }
 }
 
+////////
+////////
+////////
+use serde::{Serialize, Deserialize};
+use std::io::Cursor;
+
+
+openraft::declare_raft_types!(
+    pub TypeConfig: D = TransactionLogEntry, R = ApplyLogResponse
+);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TransactionLogEntry {
+    pub key: u64,
+    pub value: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApplyLogResponse {
+    pub success: bool,
+}
+
+////////
+////////
+////////
 pub async fn run_server() -> Result<()> {
     let addr = "[::1]:50051".parse()?;
     let cluster_management_svc = ClusterManagementServer::new(ClusterManagementService);
