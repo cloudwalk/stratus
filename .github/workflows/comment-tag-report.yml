@@ -20,9 +20,6 @@ jobs:
             - name: Set up Rust
               run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
-            - name: Install protobuf compiler
-              run: sudo apt-get install -y protobuf-compiler
-
             - name: Setup Ruby
               uses: ruby/setup-ruby@v1
               with:
@@ -42,3 +39,4 @@ jobs:
               run: ruby utils/slack-notifiers/comments.rb
               env:
                   SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
+                  
