@@ -21,8 +21,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     let executor = stratus_config.executor.init(Arc::clone(&storage)).await;
 
-    #[cfg(feature = "rocks")] // this should be a shared strategy between InMemory-Temporary and RocksDB-Permanent
-    let consensus_task = tokio::spawn(stratus::eth::storage::consensus::server::run_server());
+    #[cfg(feature = "rocks")]
+    let consensus_task = tokio::spawn(stratus::eth::storage::rocks::consensus::run_server());
     let rpc_task = tokio::spawn(serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config));
     let importer_task = tokio::spawn(run_importer_online(importer_config, Arc::clone(&executor), storage));
 
