@@ -43,16 +43,16 @@ impl ClusterManagement for ClusterManagementService {
     }
 }
 
-
-
-
 pub mod raftpb {
     tonic::include_proto!("raftpb"); // Make sure this path is correct as per your setup
 }
 
-use raftpb::{VoteRequest, AppendEntriesRequest, InstallSnapshotRequest, ResultResponse as RaftResultResponse};
 use raftpb::raft_pb_server::RaftPb;
 use raftpb::raft_pb_server::RaftPbServer;
+use raftpb::AppendEntriesRequest;
+use raftpb::InstallSnapshotRequest;
+use raftpb::ResultResponse as RaftResultResponse;
+use raftpb::VoteRequest;
 
 pub struct RaftPbService;
 
