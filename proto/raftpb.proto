@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package raftpb;
+
+message VoteRequest {
+    int64 term = 1;
+    int64 candidateId = 2;
+    int64 lastLogIndex = 3;
+    int64 lastLogTerm = 4;
+}
+
+message AppendEntriesRequest {
+    int64 term = 1;
+    int64 leaderId = 2;
+    repeated LogEntry entries = 3;
+    int64 prevLogIndex = 4;
+    int64 prevLogTerm = 5;
+    int64 leaderCommit = 6;
+}
+
+message InstallSnapshotRequest {
+    int64 term = 1;
+    int64 leaderId = 2;
+    int64 lastIncludedIndex = 3;
+    int64 lastIncludedTerm = 4;
+    bytes data = 5;  // Snapshot data
+}
+
+message LogEntry {
+    int64 term = 1;
+    string command = 2;  // Serialized command data
+}
+
+message ResultResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+service RaftPb {
+    rpc Vote(VoteRequest) returns (ResultResponse);
+    rpc AppendEntries(AppendEntriesRequest) returns (ResultResponse);
+    rpc InstallSnapshot(InstallSnapshotRequest) returns (ResultResponse);
+}
