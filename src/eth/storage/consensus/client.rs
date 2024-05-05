@@ -1,6 +1,8 @@
-use tonic::transport::Channel;
 use management::cluster_management_client::ClusterManagementClient;
-use management::{AddLearnerRequest, ChangeMembershipRequest, Node};
+use management::AddLearnerRequest;
+use management::ChangeMembershipRequest;
+use management::Node;
+use tonic::transport::Channel;
 
 pub mod management {
     tonic::include_proto!("management");
