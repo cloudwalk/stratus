@@ -391,6 +391,10 @@ pub struct RunWithImporterConfig {
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
 
+    /// gRPC (consensus) binding address.
+    #[arg(short = 'g', long = "grpc", env = "GRPC_ADDRESS", default_value = "0.0.0.0:50000")]
+    pub grpc_address: SocketAddr,
+
     #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
 
