@@ -18,8 +18,11 @@ jobs:
               uses: actions/checkout@v2
 
             - name: Set up Rust
-              run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y    
-            
+              run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+            - name: Install protobuf compiler
+              run: sudo apt-get install -y protobuf-compiler
+
             - name: Set up Just
               uses: extractions/setup-just@v1
 
@@ -36,4 +39,3 @@ jobs:
               env:
                   SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
                   OUTDATED_TABLE_FILE_NAME: outdated.txt
-                  

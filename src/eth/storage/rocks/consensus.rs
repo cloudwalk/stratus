@@ -1,133 +1,67 @@
 //TODO move this onto temporary storage, it will be called from a channel
-use std::collections::HashMap;
-
 use anyhow::Result;
-use raft::raw_node::RawNode;
-use raft::storage::MemStorage;
-use raft::Config;
-use slog::o;
-use slog::Drain;
-use slog::Logger;
-use tokio::sync::Mutex;
-use tokio::time::Duration;
-use tokio::time::{self};
-use tracing::info;
-
-use crate::infra::BlockchainClient;
-
-fn setup_logger() -> Logger {
-    let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::CompactFormat::new(decorator).build().fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
-    Logger::root(drain, o!())
-}
 
 pub async fn gather_clients() -> Result<()> {
     // Initialize a HashMap to store pod IPs and roles
-    let pods_list = [
+    let _pods_list = [
         "http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
         "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000",
     ];
 
-    for pod_ip in pods_list.iter() {
-        let chain = match BlockchainClient::new(pod_ip).await {
-            Ok(chain) => chain,
-            Err(e) => {
-                println!("Error: {}", e);
-                continue;
-            }
-        };
-        let block_number = match chain.get_current_block_number().await {
-            Ok(block_number) => block_number,
-            Err(e) => {
-                println!("Error: {}", e);
-                continue;
-            }
-        };
-
-        println!("block number: {}", block_number);
-    }
-
-    let urls = pods_list.iter().map(|s| s.to_string()).collect();
-
-    let raft_node = RaftNode::new(1, urls).await?;
-    raft_node.run().await;
-
     Ok(())
 }
 
-struct RaftNode {
-    node: Mutex<RawNode<MemStorage>>,
-    peers: HashMap<u64, String>, // Maps node index to URLs for simplicity
+use tonic::transport::Server;
+use tonic::Request;
+use tonic::Response;
+use tonic::Status;
+
+pub mod management {
+    tonic::include_proto!("management"); // Make sure this path is correct as per your setup
 }
 
-impl RaftNode {
-    /// Initializes a new Raft node using URLs for peers. Assigns IDs based on order.
-    pub async fn new(my_id: u64, urls: Vec<String>) -> Result<Self> {
-        let mut peers = HashMap::new();
-        for (id, url) in urls.iter().enumerate() {
-            peers.insert(id as u64 + 1, url.clone()); // Node IDs are 1-indexed
-        }
+use management::cluster_management_server::ClusterManagement;
+use management::cluster_management_server::ClusterManagementServer;
+use management::AddLearnerRequest;
+use management::ChangeMembershipRequest;
+use management::Node;
+use management::ResultResponse;
 
-        let config = Config {
-            id: my_id,
-            election_tick: 10,
-            heartbeat_tick: 3,
-            ..Default::default()
-        };
-        config.validate()?;
-        let storage = MemStorage::new_with_conf_state((peers.keys().cloned().collect::<Vec<u64>>(), vec![]));
+pub struct ClusterManagementService;
 
-        let logger = setup_logger();
-        let node = RawNode::new(&config, storage, &logger)?;
-
-        Ok(Self { node: Mutex::new(node), peers })
+#[tonic::async_trait]
+impl ClusterManagement for ClusterManagementService {
+    async fn init_cluster(&self, _request: Request<Node>) -> Result<Response<ResultResponse>, Status> {
+        // Mocked response for initializing a cluster
+        Ok(Response::new(ResultResponse {
+            success: true,
+            message: "Cluster initialized (mocked).".to_string(),
+        }))
     }
 
-    pub async fn run(&self) {
-        let timeout = Duration::from_millis(100);
-        let mut interval = time::interval(timeout);
-        loop {
-            interval.tick().await;
-            let mut node = self.node.lock().await;
-            node.tick();
-            if node.has_ready() {
-                self.handle_ready(&mut node).await;
-            }
-        }
+    async fn add_learner(&self, _request: Request<AddLearnerRequest>) -> Result<Response<ResultResponse>, Status> {
+        // Mocked response for adding a learner
+        Ok(Response::new(ResultResponse {
+            success: true,
+            message: "Learner added (mocked).".to_string(),
+        }))
     }
 
-    async fn handle_ready(&self, node: &mut RawNode<MemStorage>) {
-        let ready = node.ready();
-        if let Some(hs) = ready.hs() {
-            if hs.get_term() != node.raft.term {
-                info!("Term changed to {}", hs.get_term());
-                let node_id = {
-                    let node_guard = self.node.lock().await; // Lock the mutex asynchronously
-                    node_guard.raft.id // Access the id of the Raft node
-                };
-                if hs.get_vote() == node_id {
-                    info!("Node {} became leader in term {}", node_id, hs.get_term());
-                } else {
-                    info!("Node {} observed new leader {} in term {}", node_id, hs.get_vote(), hs.get_term());
-                }
-            }
-        }
-
-        for msg in ready.messages() {
-            if let Some(_url) = self.peers.get(&msg.to) {
-                // Serialize the message manually to JSON
-                //XXX let msg_json = to_string(&msg).unwrap_or_else(|_| "{}".to_string()); // Handle error more gracefully in production
-                //XXX let send_future = self.http_client.post(url)
-                //XXX                                   .header("Content-Type", "application/json")
-                //XXX                                   .body(msg_json)
-                //XXX                                   .send();
-                //XXX if let Err(e) = send_future.await {
-                //XXX     error!("Failed to send Raft message: {:?}", e);
-                //XXX }
-            }
-        }
-        node.advance(ready);
+    async fn change_membership(&self, _request: Request<ChangeMembershipRequest>) -> Result<Response<ResultResponse>, Status> {
+        // Mocked response for changing membership
+        Ok(Response::new(ResultResponse {
+            success: true,
+            message: "Membership changed (mocked).".to_string(),
+        }))
     }
+}
+
+pub async fn run_server() -> Result<()> {
+    let addr = "[::1]:50051".parse()?;
+    let svc = ClusterManagementServer::new(ClusterManagementService);
+
+    Server::builder().add_service(svc).serve(addr).await?;
+
+    Ok(())
 }
