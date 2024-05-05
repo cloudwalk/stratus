@@ -13,7 +13,6 @@ pub struct RaftClient {
     client: RaftPbClient<Channel>,
 }
 
-
 impl RaftClient {
     pub async fn connect(addr: String) -> Result<Self, tonic::transport::Error> {
         let client = RaftPbClient::connect(addr).await?;
