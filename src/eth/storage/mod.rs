@@ -1,5 +1,6 @@
 //! Ethereum / EVM storage.
 
+pub mod consensus;
 mod csv;
 mod external_rpc_storage;
 mod inmemory;
