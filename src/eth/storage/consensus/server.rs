@@ -1,17 +1,5 @@
 //TODO move this onto temporary storage, it will be called from a channel
 use anyhow::Result;
-
-pub async fn gather_clients() -> Result<()> {
-    // Initialize a HashMap to store pod IPs and roles
-    let _pods_list = [
-        "http://stratus-api-0.stratus-api.stratus-staging.svc.cluster.local:3000",
-        "http://stratus-api-1.stratus-api.stratus-staging.svc.cluster.local:3000",
-        "http://stratus-api-2.stratus-api.stratus-staging.svc.cluster.local:3000",
-    ];
-
-    Ok(())
-}
-
 use tonic::transport::Server;
 use tonic::Request;
 use tonic::Response;
@@ -41,7 +29,6 @@ impl ClusterManagement for ClusterManagementService {
     }
 
     async fn add_learner(&self, _request: Request<AddLearnerRequest>) -> Result<Response<ResultResponse>, Status> {
-        // Mocked response for adding a learner
         Ok(Response::new(ResultResponse {
             success: true,
             message: "Learner added (mocked).".to_string(),
@@ -49,7 +36,6 @@ impl ClusterManagement for ClusterManagementService {
     }
 
     async fn change_membership(&self, _request: Request<ChangeMembershipRequest>) -> Result<Response<ResultResponse>, Status> {
-        // Mocked response for changing membership
         Ok(Response::new(ResultResponse {
             success: true,
             message: "Membership changed (mocked).".to_string(),

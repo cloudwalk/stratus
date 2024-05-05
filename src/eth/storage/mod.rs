@@ -6,6 +6,7 @@ mod inmemory;
 mod permanent_storage;
 mod postgres_external_rpc;
 mod postgres_permanent;
+pub mod consensus;
 #[cfg(feature = "rocks")]
 pub mod rocks;
 
