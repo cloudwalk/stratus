@@ -54,6 +54,7 @@ use raftpb::InstallSnapshotRequest;
 use raftpb::ResultResponse as RaftResultResponse;
 use raftpb::VoteRequest;
 
+
 pub struct RaftPbService;
 
 #[tonic::async_trait]
@@ -73,7 +74,7 @@ impl RaftPb for RaftPbService {
             message: "Entries appended successfully.".to_string(),
         }))
     }
-
+  
     async fn install_snapshot(&self, _request: Request<InstallSnapshotRequest>) -> Result<Response<RaftResultResponse>, Status> {
         // Here you handle the installation of a snapshot
         Ok(Response::new(RaftResultResponse {
