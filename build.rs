@@ -14,6 +14,7 @@ use nom::IResult;
 
 fn main() {
     generate_signature_maps();
+    tonic_build::compile_protos("proto/raftpb.proto").unwrap();
     tonic_build::compile_protos("proto/management.proto").unwrap();
 }
 
