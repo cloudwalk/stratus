@@ -58,7 +58,7 @@ pub struct RaftPbService;
 
 #[tonic::async_trait]
 impl RaftPb for RaftPbService {
-    async fn vote(&self, request: Request<VoteRequest>) -> Result<Response<RaftResultResponse>, Status> {
+    async fn vote(&self, _request: Request<VoteRequest>) -> Result<Response<RaftResultResponse>, Status> {
         // Here you would have your logic to process a vote
         Ok(Response::new(RaftResultResponse {
             success: true,
@@ -66,7 +66,7 @@ impl RaftPb for RaftPbService {
         }))
     }
 
-    async fn append_entries(&self, request: Request<AppendEntriesRequest>) -> Result<Response<RaftResultResponse>, Status> {
+    async fn append_entries(&self, _request: Request<AppendEntriesRequest>) -> Result<Response<RaftResultResponse>, Status> {
         // Here you would handle appending entries to the log
         Ok(Response::new(RaftResultResponse {
             success: true,
@@ -74,7 +74,7 @@ impl RaftPb for RaftPbService {
         }))
     }
 
-    async fn install_snapshot(&self, request: Request<InstallSnapshotRequest>) -> Result<Response<RaftResultResponse>, Status> {
+    async fn install_snapshot(&self, _request: Request<InstallSnapshotRequest>) -> Result<Response<RaftResultResponse>, Status> {
         // Here you handle the installation of a snapshot
         Ok(Response::new(RaftResultResponse {
             success: true,
