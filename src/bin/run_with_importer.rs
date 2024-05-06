@@ -27,7 +27,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let rpc_task = serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config);
     let importer_task = run_importer_online(importer_config, Arc::clone(&executor), storage);
 
-    let join_result = try_join!(rpc_task, importer_task)?;
+    try_join!(rpc_task, importer_task)?;
     debug!("rpc and importer tasks finished");
 
     Ok(())
