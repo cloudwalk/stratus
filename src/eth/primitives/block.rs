@@ -16,7 +16,7 @@ use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
-use super::Execution;
+use super::EvmExecution;
 use super::LogMined;
 use super::TransactionInput;
 use crate::eth::primitives::Address;
@@ -59,7 +59,7 @@ impl Block {
     }
 
     /// Pushes a single transaction execution to the blocks transactions
-    pub fn push_execution(&mut self, input: TransactionInput, execution: Execution) {
+    pub fn push_execution(&mut self, input: TransactionInput, execution: EvmExecution) {
         let transaction_index = (self.transactions.len() as u64).into();
         self.transactions.push(TransactionMined {
             logs: execution

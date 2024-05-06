@@ -25,7 +25,7 @@ use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
@@ -34,7 +34,9 @@ use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::TransactionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -152,7 +154,10 @@ impl EthExecutor {
                     let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
 
                     // persist state
-                    storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
+                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution.clone());
+                    storage.save_execution_to_temp(tx_execution).await?;
+
+                    // TODO: remove and use data from temporary storage
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
 
@@ -200,7 +205,10 @@ impl EthExecutor {
                     };
 
                     // persist state
-                    storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
+                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution.clone());
+                    storage.save_execution_to_temp(tx_execution).await?;
+
+                    // TODO: remove and use data from temporary storage
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
             }
@@ -244,7 +252,7 @@ impl EthExecutor {
                 Ok(sender) => sender,
                 Err(e) => return (tx, receipt, Err(e)),
             };
-            let execution = match Execution::from_failed_external_transaction(sender, receipt, block) {
+            let execution = match EvmExecution::from_failed_external_transaction(sender, receipt, block) {
                 Ok(execution) => execution,
                 Err(e) => return (tx, receipt, Err(e)),
             };
@@ -296,7 +304,7 @@ impl EthExecutor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(skip_all)]
-    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<Execution> {
+    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -368,7 +376,7 @@ impl EthExecutor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(skip_all)]
-    pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<Execution> {
+    pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 

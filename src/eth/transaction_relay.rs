@@ -4,7 +4,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::TransactionInput;
 use crate::infra::BlockchainClient;
@@ -14,7 +14,7 @@ pub struct TransactionRelay {
     provider: BlockchainClient,
 
     // Sender for transactions that failed on our side, and should be included in the next block
-    pub failed_transactions: Mutex<Vec<(TransactionInput, Execution)>>,
+    pub failed_transactions: Mutex<Vec<(TransactionInput, EvmExecution)>>,
 }
 
 impl TransactionRelay {
@@ -28,7 +28,7 @@ impl TransactionRelay {
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
     #[tracing::instrument(skip_all)]
-    pub async fn forward_transaction(&self, execution: Execution, transaction: TransactionInput) -> anyhow::Result<()> {
+    pub async fn forward_transaction(&self, execution: EvmExecution, transaction: TransactionInput) -> anyhow::Result<()> {
         tracing::debug!(?transaction.hash, "forwarding transaction");
         if execution.result == ExecutionResult::Success {
             let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction.clone()).rlp()).await?;
@@ -64,7 +64,7 @@ impl TransactionRelay {
     }
 
     /// Drain failed transactions.
-    pub async fn drain_failed_transactions(&self) -> Vec<(TransactionInput, Execution)> {
+    pub async fn drain_failed_transactions(&self) -> Vec<(TransactionInput, EvmExecution)> {
         let mut failed_tx_lock = self.failed_transactions.lock().await;
         failed_tx_lock.drain(..).collect::<Vec<_>>()
     }
