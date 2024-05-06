@@ -57,7 +57,6 @@ use raftpb::InstallSnapshotRequest;
 use raftpb::ResultResponse as RaftResultResponse;
 use raftpb::VoteRequest;
 
-
 pub struct RaftPbService;
 
 #[tonic::async_trait]
@@ -77,7 +76,7 @@ impl RaftPb for RaftPbService {
             message: "Entries appended successfully.".to_string(),
         }))
     }
-  
+
     async fn install_snapshot(&self, _request: Request<InstallSnapshotRequest>) -> Result<Response<RaftResultResponse>, Status> {
         // Here you handle the installation of a snapshot
         Ok(Response::new(RaftResultResponse {
@@ -90,9 +89,10 @@ impl RaftPb for RaftPbService {
 ////////
 ////////
 ////////
-use serde::{Serialize, Deserialize};
 use std::io::Cursor;
 
+use serde::Deserialize;
+use serde::Serialize;
 
 openraft::declare_raft_types!(
     pub TypeConfig: D = TransactionLogEntry, R = ApplyLogResponse
