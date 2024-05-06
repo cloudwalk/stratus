@@ -57,8 +57,8 @@ kubernetes:
           - containerPort: 9000
             name: metrics
         healthcheck:
-          initialDelaySeconds: 10
-          interval: 10
+          initialDelaySeconds: 600
+          interval: 30
           path: /health
           port: 3000
           timeoutSeconds: 5
