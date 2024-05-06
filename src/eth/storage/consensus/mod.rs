@@ -2,6 +2,7 @@ pub mod cluster_management_client;
 pub mod raft_client;
 pub mod server;
 pub mod log_store;
+pub mod state_machine_store;
 
 mod test {
     #[tokio::test(flavor = "multi_thread")]

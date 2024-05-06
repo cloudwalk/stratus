@@ -1,5 +1,8 @@
 //TODO move this onto temporary storage, it will be called from a channel
 use anyhow::Result;
+use crate::eth::storage::consensus::state_machine_store::StateMachineStore;
+use openraft::Config;
+use openraft::Raft;
 use tonic::transport::Server;
 use tonic::Request;
 use tonic::Response;
@@ -50,14 +53,47 @@ pub mod raftpb {
     tonic::include_proto!("raftpb"); // Make sure this path is correct as per your setup
 }
 
+use std::io::Cursor;
+use std::sync::Arc;
+
 use raftpb::raft_pb_server::RaftPb;
 use raftpb::raft_pb_server::RaftPbServer;
 use raftpb::AppendEntriesRequest;
 use raftpb::InstallSnapshotRequest;
 use raftpb::ResultResponse as RaftResultResponse;
 use raftpb::VoteRequest;
+use serde::Deserialize;
+use serde::Serialize;
 
-pub struct RaftPbService;
+openraft::declare_raft_types!(
+    pub TypeConfig: D = super::state_machine_store::Request, R = super::state_machine_store::Response
+);
+
+pub struct RaftPbService {
+    raft: Arc<Raft<TypeConfig>>,
+}
+
+impl RaftPbService {
+    pub async fn new(node_id: u64) -> Self {
+        // Configure Raft Node
+        let config = Config {
+            heartbeat_interval: 500,
+            election_timeout_min: 1500,
+            election_timeout_max: 3000,
+            ..Default::default()
+        };
+        let config = Arc::new(config.validate().unwrap());
+
+        // Create memory-based stores for simplicity, or define your own.
+        let log_store = super::log_store::LogStore::<TypeConfig>::default();
+        let state_machine_store = Arc::new(StateMachineStore::default());
+        let raft = Raft::new(node_id, config, network, log_store, state_machine_store)
+            .await
+            .expect("Failed to create Raft node");
+
+        Self { raft: Arc::new(raft) }
+    }
+}
 
 #[tonic::async_trait]
 impl RaftPb for RaftPbService {
@@ -89,33 +125,10 @@ impl RaftPb for RaftPbService {
 ////////
 ////////
 ////////
-use std::io::Cursor;
-
-use serde::Deserialize;
-use serde::Serialize;
-
-openraft::declare_raft_types!(
-    pub TypeConfig: D = TransactionLogEntry, R = ApplyLogResponse
-);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TransactionLogEntry {
-    pub key: u64,
-    pub value: u64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ApplyLogResponse {
-    pub success: bool,
-}
-
-////////
-////////
-////////
 pub async fn run_server() -> Result<()> {
     let addr = "[::1]:50051".parse()?;
     let cluster_management_svc = ClusterManagementServer::new(ClusterManagementService);
-    let raft_svc = RaftPbServer::new(RaftPbService);
+    let raft_svc = RaftPbServer::new(RaftPbService::new(1).await);
 
     Server::builder().add_service(cluster_management_svc).add_service(raft_svc).serve(addr).await?;
 
