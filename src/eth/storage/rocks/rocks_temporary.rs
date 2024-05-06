@@ -8,7 +8,7 @@ use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::Execution;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
@@ -78,8 +78,8 @@ impl TemporaryStorage for RocksTemporary {
         Ok(self.db.read_slot(address, index, &StoragePointInTime::Present))
     }
 
-    async fn save_account_changes(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
-        self.temp.save_account_changes(changes).await?;
+    async fn save_execution(&self, execution: Execution) -> anyhow::Result<()> {
+        self.temp.save_execution(execution).await?;
         Ok(())
     }
 

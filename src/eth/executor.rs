@@ -152,7 +152,7 @@ impl EthExecutor {
                     let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
 
                     // persist state
-                    storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
+                    storage.save_execution_to_temp(evm_result.execution.clone()).await?;
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
 
@@ -200,7 +200,7 @@ impl EthExecutor {
                     };
 
                     // persist state
-                    storage.save_account_changes_to_temp(evm_result.execution.changes_to_persist()).await?;
+                    storage.save_execution_to_temp(evm_result.execution.clone()).await?;
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
             }

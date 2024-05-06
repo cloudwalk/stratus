@@ -129,7 +129,7 @@ metrics! {
     histogram_duration storage_save_accounts{success} [],
 
     "Time to execute storage save_account_changes operation."
-    histogram_duration storage_save_account_changes{success} [],
+    histogram_duration storage_save_execution{success} [],
 
     "Time to execute storage flush_temp operation."
     histogram_duration storage_flush_temp{success} [],
