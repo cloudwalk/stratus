@@ -3,10 +3,9 @@ use async_trait::async_trait;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Execution;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionKind;
+use crate::eth::primitives::TransactionExecution;
 
 /// Temporary storage (in-between blocks) operations
 #[async_trait]
@@ -24,7 +23,7 @@ pub trait TemporaryStorage: Send + Sync {
     async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
 
     /// Saves a transaction and its execution result.
-    async fn save_execution(&self, transaction: TransactionKind, execution: Execution) -> anyhow::Result<()>;
+    async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()>;
 
     /// If necessary, flushes temporary state to durable storage.
     async fn flush(&self) -> anyhow::Result<()>;

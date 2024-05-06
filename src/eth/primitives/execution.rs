@@ -30,9 +30,9 @@ use crate::log_and_err;
 
 pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
 
-/// Output of a executed transaction in the EVM.
+/// Output of a transaction executed in the EVM.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
-pub struct Execution {
+pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
     pub block_timestamp: UnixTime,
 
@@ -58,7 +58,7 @@ pub struct Execution {
     pub deployed_contract_address: Option<Address>,
 }
 
-impl Execution {
+impl EvmExecution {
     /// Creates an execution from an external transaction that failed.
     pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
         if receipt.is_success() {
@@ -115,7 +115,7 @@ impl Execution {
     /// Checks conflicts between two executions.
     ///
     /// Assumes self is the present execution and next should happen after self in a serialized context.
-    pub fn check_conflicts(&self, next_execution: &Execution) -> Option<ExecutionConflicts> {
+    pub fn check_conflicts(&self, next_execution: &EvmExecution) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for current in self.changes.values() {

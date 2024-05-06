@@ -13,7 +13,7 @@ use nonempty::NonEmpty;
 
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
@@ -50,7 +50,7 @@ impl BlockMiner {
     /// Mine one block with a single transaction.
     /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
     /// enabling consistent processing for both single and multiple transaction scenarios.
-    pub async fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: Execution) -> anyhow::Result<Block> {
+    pub async fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: EvmExecution) -> anyhow::Result<Block> {
         let transactions = NonEmpty::new((input, execution));
         self.mine_with_many_transactions(transactions).await
     }
@@ -60,7 +60,7 @@ impl BlockMiner {
     /// and finalizing the block. It is used both directly for multiple transactions and indirectly by `mine_with_one_transaction`.
     ///
     /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
-    pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, Execution)>) -> anyhow::Result<Block> {
+    pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, EvmExecution)>) -> anyhow::Result<Block> {
         // init block
         let number = self.storage.increment_block_number().await?;
         let block_timestamp = transactions

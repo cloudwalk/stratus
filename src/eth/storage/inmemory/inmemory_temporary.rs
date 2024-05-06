@@ -10,10 +10,9 @@ use tokio::sync::RwLockWriteGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Execution;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionKind;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug, Default)]
@@ -121,10 +120,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
     }
 
-    async fn save_execution(&self, _: TransactionKind, execution: Execution) -> anyhow::Result<()> {
+    async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
 
-        let changes = execution.changes_to_persist();
+        let changes = transaction_execution.evm_execution.changes_to_persist();
         for change in changes {
             let account = state
                 .accounts

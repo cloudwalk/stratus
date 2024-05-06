@@ -20,7 +20,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Difficulty;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
@@ -552,8 +552,8 @@ pub struct ExecutionRocksdb {
     pub deployed_contract_address: Option<AddressRocksdb>,
 }
 
-impl From<Execution> for ExecutionRocksdb {
-    fn from(item: Execution) -> Self {
+impl From<EvmExecution> for ExecutionRocksdb {
+    fn from(item: EvmExecution) -> Self {
         Self {
             block_timestamp: UnixTimeRocksdb::from(item.block_timestamp),
             execution_costs_applied: item.execution_costs_applied,
@@ -566,7 +566,7 @@ impl From<Execution> for ExecutionRocksdb {
     }
 }
 
-impl From<ExecutionRocksdb> for Execution {
+impl From<ExecutionRocksdb> for EvmExecution {
     fn from(item: ExecutionRocksdb) -> Self {
         Self {
             block_timestamp: item.block_timestamp.into(),
@@ -620,7 +620,7 @@ impl From<LogMinedRockdb> for LogMined {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
-    pub execution: Execution,
+    pub execution: EvmExecution,
     pub logs: Vec<LogMinedRockdb>,
     pub transaction_index: IndexRocksdb,
     pub block_number: BlockNumberRocksdb,

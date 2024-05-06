@@ -7,7 +7,7 @@ use crate::eth::primitives::ChainId;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::EcdsaRs;
 use crate::eth::primitives::EcdsaV;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
@@ -53,7 +53,7 @@ impl PostgresTransaction {
 
         let inner_logs = mined_logs.iter().map(|log| log.log.clone()).collect();
 
-        let execution = Execution {
+        let execution = EvmExecution {
             gas: self.gas,
             output: self.output,
             block_timestamp: UnixTime::ZERO, //*self.block_timestamp,

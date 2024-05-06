@@ -13,7 +13,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
@@ -30,7 +30,7 @@ use crate::if_else;
 /// Evm execution result.
 #[derive(Debug)]
 pub struct EvmExecutionResult {
-    pub execution: Execution,
+    pub execution: EvmExecution,
     pub metrics: ExecutionMetrics,
 }
 

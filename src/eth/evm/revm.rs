@@ -37,7 +37,7 @@ use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionMetrics;
@@ -314,12 +314,12 @@ impl Database for RevmSession {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Execution {
+fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> EvmExecution {
     let (result, output, logs, gas) = parse_revm_result(revm_result.result);
     let changes = parse_revm_state(revm_result.state, execution_changes);
 
     tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
-    Execution {
+    EvmExecution {
         block_timestamp: input.block_timestamp,
         execution_costs_applied: false,
         result,

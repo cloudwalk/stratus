@@ -12,7 +12,7 @@ use itertools::Itertools;
 use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Execution;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
@@ -28,7 +28,7 @@ pub struct TransactionMined {
     pub input: TransactionInput,
 
     /// Transaction EVM execution result.
-    pub execution: Execution,
+    pub execution: EvmExecution,
 
     /// Logs added to the block.
     pub logs: Vec<LogMined>,

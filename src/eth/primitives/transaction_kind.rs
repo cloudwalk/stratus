@@ -1,3 +1,5 @@
+#![allow(clippy::large_enum_variant)]
+
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::TransactionInput;
