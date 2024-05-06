@@ -18,7 +18,7 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::log_and_err;
 
-const MAX_RETRIES: u64 = 5;
+const MAX_RETRIES: u64 = 50;
 
 pub struct PostgresExternalRpcStorage {
     pool: PgPool,
@@ -98,7 +98,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     if attempts < MAX_RETRIES {
                         attempts += 1;
                         tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
-                        sleep(Duration::from_secs(attempts.pow(2))).await; // Exponential backoff
+                        sleep(Duration::from_millis(attempts.pow(2))).await; // Exponential backoff
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve external blocks");
                     }
@@ -132,7 +132,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     if attempts < MAX_RETRIES {
                         attempts += 1;
                         tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
-                        sleep(Duration::from_secs(attempts.pow(2))).await; // Exponential backoff
+                        sleep(Duration::from_millis(attempts.pow(2))).await; // Exponential backoff
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve receipts");
                     }

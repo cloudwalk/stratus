@@ -79,6 +79,7 @@ impl RocksStorageState {
     }
 
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
+        tracing::info!("starting backup trigger listener");
         let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
         let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>::clone(&self.accounts_history);
         let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>::clone(&self.account_slots);
@@ -145,6 +146,8 @@ impl RocksStorageState {
                 self.reset_at(BlockNumber::from(min_block_number)).await?;
             }
         }
+
+        tracing::info!("data is in sync");
 
         Ok(())
     }
