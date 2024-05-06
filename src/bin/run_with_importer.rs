@@ -7,6 +7,7 @@ use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
 use stratus::GlobalServices;
 use tokio::try_join;
+use tracing::trace;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RunWithImporterConfig>::init();
@@ -23,12 +24,15 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     let executor = stratus_config.executor.init(Arc::clone(&storage)).await;
 
-    let rpc_task = tokio::spawn(serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config));
-    let importer_task = tokio::spawn(run_importer_online(importer_config, Arc::clone(&executor), storage));
+    let rpc_task = serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config);
+    let importer_task = run_importer_online(importer_config, Arc::clone(&executor), storage);
 
     let join_result = try_join!(rpc_task, importer_task)?;
+    debug!("rpc and importer tasks finished");
     join_result.0?;
+    debug!("rpc task finished");
     join_result.1?;
+    debug!("importer task finished");
 
     Ok(())
 }
