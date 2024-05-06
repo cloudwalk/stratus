@@ -7,7 +7,7 @@ use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
 use stratus::GlobalServices;
 use tokio::try_join;
-use tracing::trace;
+use tracing::debug;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RunWithImporterConfig>::init();
@@ -15,8 +15,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
-    #[cfg(feature = "rocks")]
-    stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
+    //XXX #[cfg(feature = "rocks")]
+    //XXX stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
     let stratus_config = config.as_stratus();
     let importer_config = config.as_importer();
 
@@ -29,10 +29,6 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     let join_result = try_join!(rpc_task, importer_task)?;
     debug!("rpc and importer tasks finished");
-    join_result.0?;
-    debug!("rpc task finished");
-    join_result.1?;
-    debug!("importer task finished");
 
     Ok(())
 }
