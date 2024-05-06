@@ -13,6 +13,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Execution;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::TransactionKind;
 use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug, Default)]
@@ -120,7 +121,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
     }
 
-    async fn save_execution(&self, execution: Execution) -> anyhow::Result<()> {
+    async fn save_execution(&self, _: TransactionKind, execution: Execution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
 
         let changes = execution.changes_to_persist();

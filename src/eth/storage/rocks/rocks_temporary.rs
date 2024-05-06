@@ -12,6 +12,7 @@ use crate::eth::primitives::Execution;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionKind;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
@@ -78,8 +79,8 @@ impl TemporaryStorage for RocksTemporary {
         Ok(self.db.read_slot(address, index, &StoragePointInTime::Present))
     }
 
-    async fn save_execution(&self, execution: Execution) -> anyhow::Result<()> {
-        self.temp.save_execution(execution).await?;
+    async fn save_execution(&self, transaction: TransactionKind, execution: Execution) -> anyhow::Result<()> {
+        self.temp.save_execution(transaction, execution).await?;
         Ok(())
     }
 

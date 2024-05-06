@@ -6,13 +6,14 @@ export RUST_BACKTRACE := "1"
 export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
 
 # Global arguments that can be passed to receipts.
+feature_flags := "dev," + env("FEATURES", "")
+nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
 
 # Cargo flags.
-feature_flags := "dev," + env("FEATURES", "")
-build_flags := release_flag + " --bin stratus --features " + feature_flags
+build_flags := nightly_flag + " " + release_flag + " --bin stratus --features " + feature_flags
 run_flags := "--enable-genesis --enable-test-accounts"
 
 # Project: Show available tasks

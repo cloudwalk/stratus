@@ -16,6 +16,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionKind;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StorageError;
@@ -295,11 +296,11 @@ impl StratusStorage {
     /// Saves a transaction and its execution generated during block production.
     #[allow(clippy::let_and_return)]
     #[tracing::instrument(skip_all)]
-    pub async fn save_execution_to_temp(&self, execution: Execution) -> anyhow::Result<()> {
+    pub async fn save_execution_to_temp(&self, transaction: TransactionKind, execution: Execution) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let result = self.temp.save_execution(execution).await;
+        let result = self.temp.save_execution(transaction, execution).await;
 
         #[cfg(feature = "metrics")]
         metrics::inc_storage_save_execution(start.elapsed(), result.is_ok());

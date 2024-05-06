@@ -35,6 +35,7 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::TransactionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -152,7 +153,11 @@ impl EthExecutor {
                     let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
 
                     // persist state
-                    storage.save_execution_to_temp(evm_result.execution.clone()).await?;
+                    storage
+                        .save_execution_to_temp(TransactionKind::new_external(tx.clone(), receipt.clone()), evm_result.execution.clone())
+                        .await?;
+
+                    // TODO: remove and use data from temporary storage
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
 
@@ -200,7 +205,11 @@ impl EthExecutor {
                     };
 
                     // persist state
-                    storage.save_execution_to_temp(evm_result.execution.clone()).await?;
+                    storage
+                        .save_execution_to_temp(TransactionKind::new_external(tx.clone(), receipt.clone()), evm_result.execution.clone())
+                        .await?;
+
+                    // TODO: remove and use data from temporary storage
                     executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
             }
