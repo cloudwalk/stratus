@@ -23,13 +23,9 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionKind;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
-use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
