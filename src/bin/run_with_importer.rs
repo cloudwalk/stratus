@@ -17,15 +17,17 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     //XXX #[cfg(feature = "rocks")]
     //XXX stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
-    let stratus_config = config.as_stratus();
-    let importer_config = config.as_importer();
 
+
+    let stratus_config = config.as_stratus();
     let storage = stratus_config.stratus_storage.init().await?;
 
-    let executor = stratus_config.executor.init(Arc::clone(&storage)).await;
+    let rpc_task_executor = stratus_config.executor.init(Arc::clone(&storage)).await;
+    let rpc_task = serve_rpc(Arc::clone(&rpc_task_executor), Arc::clone(&storage), stratus_config);
 
-    let rpc_task = serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config);
-    let importer_task = run_importer_online(importer_config, Arc::clone(&executor), storage);
+    let importer_config = config.as_importer();
+    let importer_task_executor = importer_config.executor.init(Arc::clone(&storage)).await;
+    let importer_task = run_importer_online(importer_config, Arc::clone(&importer_task_executor), storage);
 
     try_join!(rpc_task, importer_task)?;
     debug!("rpc and importer tasks finished");
