@@ -56,30 +56,6 @@ impl Block {
         Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
-    /// Creates a new block based on an external block and its local transactions re-execution.
-    ///
-    /// All transactions must be external transactions.
-    ///
-    /// TODO: this kind of conversion should be infallibe.
-    ///
-    /// TODO: this should be moved to BlockMiner component.
-    pub fn from_external_only(block: &ExternalBlock, transactions: Vec<TransactionExecution>) -> anyhow::Result<Self> {
-        let mut block_transactions = Vec::with_capacity(transactions.len());
-        for tx in transactions {
-            match tx.kind {
-                TransactionKind::External(external_tx, external_receipt) => {
-                    let mined = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
-                    block_transactions.push(mined);
-                }
-                _ => return log_and_err!("Cannot generate block because one of the transactions is not an external transaction"),
-            }
-        }
-        Ok(Self {
-            header: block.try_into()?,
-            transactions: block_transactions,
-        })
-    }
-
     /// Pushes a single transaction execution to the blocks transactions
     pub fn push_execution(&mut self, input: TransactionInput, execution: EvmExecution) {
         let transaction_index = (self.transactions.len() as u64).into();
