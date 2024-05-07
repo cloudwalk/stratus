@@ -21,6 +21,7 @@ use crate::eth::evm::EvmConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 #[cfg(feature = "dev")]
@@ -153,7 +154,7 @@ impl StratusStorageConfig {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                storage.commit_to_perm(BlockMiner::genesis()).await?;
+                storage.commit_to_perm(Block::genesis()).await?;
             }
         }
 
@@ -178,6 +179,18 @@ impl StratusStorageConfig {
 }
 
 // -----------------------------------------------------------------------------
+// Config: Miner
+// -----------------------------------------------------------------------------
+#[derive(Parser, Debug, Clone)]
+pub struct MinerConfig {}
+
+impl MinerConfig {
+    pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<BlockMiner> {
+        Arc::new(BlockMiner::new(storage))
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Config: Executor
 // -----------------------------------------------------------------------------
 
@@ -197,7 +210,9 @@ pub struct ExecutorConfig {
 }
 
 impl ExecutorConfig {
-    /// Initializes EthExecutor. Should be called inside an async runtime.
+    /// Initializes EthExecutor.
+    ///
+    /// Note: Should be called only after async runtime is initialized.
     pub async fn init(&self, storage: Arc<StratusStorage>) -> Arc<EthExecutor> {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(evms = %num_evms, "starting executor and evms");
@@ -261,6 +276,9 @@ pub struct StratusConfig {
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -341,6 +359,9 @@ pub struct ImporterOfflineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
 
     #[clap(flatten)]
@@ -372,6 +393,9 @@ pub struct ImporterOnlineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
 
     #[deref]
@@ -395,6 +419,9 @@ pub struct RunWithImporterConfig {
     pub stratus_storage: StratusStorageConfig,
 
     #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
     pub executor: ExecutorConfig,
 
     /// External RPC endpoint to sync blocks with Stratus.
@@ -404,26 +431,6 @@ pub struct RunWithImporterConfig {
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
-}
-
-impl RunWithImporterConfig {
-    pub fn as_importer(&self) -> ImporterOnlineConfig {
-        ImporterOnlineConfig {
-            external_rpc: self.external_rpc.clone(),
-            executor: self.executor.clone(),
-            stratus_storage: self.stratus_storage.clone(),
-            common: self.common.clone(),
-        }
-    }
-
-    pub fn as_stratus(&self) -> StratusConfig {
-        StratusConfig {
-            address: self.address,
-            executor: self.executor.clone(),
-            stratus_storage: self.stratus_storage.clone(),
-            common: self.common.clone(),
-        }
-    }
 }
 
 impl WithCommonConfig for RunWithImporterConfig {
@@ -486,6 +493,9 @@ pub struct IntegrationTestConfig {
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
 
     #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,

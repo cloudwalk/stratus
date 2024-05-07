@@ -1,5 +1,6 @@
 //! RPC server for HTTP and WS.
 
+use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -14,13 +15,13 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
 
-use crate::config::StratusConfig;
 use crate::eth::primitives::Address;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::SlotIndex;
@@ -43,17 +44,23 @@ use crate::eth::EthExecutor;
 // -----------------------------------------------------------------------------
 
 /// Starts JSON-RPC server.
-pub async fn serve_rpc(executor: Arc<EthExecutor>, storage: Arc<StratusStorage>, config: StratusConfig) -> anyhow::Result<()> {
+pub async fn serve_rpc(
+    // services
+    executor: Arc<EthExecutor>,
+    storage: Arc<StratusStorage>,
+    // config
+    address: SocketAddr,
+    chain_id: ChainId,
+) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     let subscriptions_cleaner_handle = Arc::clone(&subs).spawn_subscriptions_cleaner();
     let logs_notifier_handle = Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
     let heads_notifier_handle = Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
-    let address = config.address;
 
     // configure context
     let ctx = RpcContext {
-        chain_id: config.executor.chain_id.into(),
+        chain_id,
         client_version: "stratus",
         gas_price: 0,
 

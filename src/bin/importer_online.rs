@@ -11,6 +11,7 @@ use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
+use stratus::eth::BlockMiner;
 use stratus::eth::EthExecutor;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -31,13 +32,18 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
     let executor = config.executor.init(Arc::clone(&storage)).await;
-    run_importer_online(config, executor, storage).await
-}
-
-pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<EthExecutor>, storage: Arc<StratusStorage>) -> anyhow::Result<()> {
-    // init services
+    let miner = config.miner.init(Arc::clone(&storage));
     let chain = BlockchainClient::new(&config.external_rpc).await?;
 
+    run_importer_online(executor, miner, storage, chain).await
+}
+
+pub async fn run_importer_online(
+    executor: Arc<EthExecutor>,
+    miner: Arc<BlockMiner>,
+    storage: Arc<StratusStorage>,
+    chain: BlockchainClient,
+) -> anyhow::Result<()> {
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
 
@@ -47,8 +53,7 @@ pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<Eth
         let start = metrics::now();
 
         number = number.next();
-
-        import(number, &executor, &chain).await?;
+        import(&executor, &miner, &chain, number).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_import_online(start.elapsed());
@@ -56,7 +61,7 @@ pub async fn run_importer_online(config: ImporterOnlineConfig, executor: Arc<Eth
 }
 
 #[tracing::instrument(skip_all)]
-async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainClient) -> anyhow::Result<()> {
+async fn import(executor: &EthExecutor, miner: &BlockMiner, chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<()> {
     // fetch block and receipts
     let block = fetch_block(chain, number).await?;
 
@@ -72,7 +77,7 @@ async fn import(number: BlockNumber, executor: &EthExecutor, chain: &BlockchainC
 
     // import block
     let receipts: ExternalReceipts = receipts.into();
-    executor.import_external_to_perm(&block, &receipts).await?;
+    executor.import_external_to_perm(miner, &block, &receipts).await?;
 
     #[cfg(feature = "metrics")]
     metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
