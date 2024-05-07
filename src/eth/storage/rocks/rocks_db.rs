@@ -383,15 +383,24 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let bytes_written = self.opts.get_ticker_count(Ticker::BytesWritten);
         let bytes_read = self.opts.get_ticker_count(Ticker::BytesRead);
 
-        metrics::set_rocks_db_get(db_get.count(), self.db.path().to_str());
-        metrics::set_rocks_db_write(db_write.count(), self.db.path().to_str());
-        metrics::set_rocks_compaction_time(compaction_time.count(), self.db.path().to_str());
-        metrics::set_rocks_compaction_cpu_time(compaction_cpu_time.count(), self.db.path().to_str());
-        metrics::set_rocks_flush_time(flush_time.count(), self.db.path().to_str());
-        metrics::set_rocks_block_cache_miss(block_cache_miss, self.db.path().to_str());
-        metrics::set_rocks_block_cache_hit(block_cache_hit, self.db.path().to_str());
-        metrics::set_rocks_bytes_written(bytes_written, self.db.path().to_str());
-        metrics::set_rocks_bytes_read(bytes_read, self.db.path().to_str());
+        let db_name = self.db.path().file_name().unwrap().to_str();
+
+        metrics::set_rocks_db_get(db_get.count(), db_name);
+        metrics::set_rocks_db_write(db_write.count(), db_name);
+        metrics::set_rocks_block_cache_miss(block_cache_miss, db_name);
+        metrics::set_rocks_block_cache_hit(block_cache_hit, db_name);
+        metrics::set_rocks_bytes_written(bytes_written, db_name);
+        metrics::set_rocks_bytes_read(bytes_read, db_name);
+
+        metrics::set_rocks_compaction_time(
+            compaction_time.average().max(std::u64::MIN as f64).min(std::u64::MAX as f64).round() as u64,
+            db_name,
+        );
+        metrics::set_rocks_compaction_cpu_time(
+            compaction_cpu_time.average().max(std::u64::MIN as f64).min(std::u64::MAX as f64).round() as u64,
+            db_name,
+        );
+        metrics::set_rocks_flush_time(flush_time.average().max(std::u64::MIN as f64).min(std::u64::MAX as f64).round() as u64, db_name);
     }
 }
 
