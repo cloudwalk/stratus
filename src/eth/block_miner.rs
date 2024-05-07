@@ -1,10 +1,3 @@
-//! Block Miner
-//!
-//! Responsible for the creation of new blocks in the blockchain. The BlockMiner struct handles
-//! the mining process, transforming a set of transactions into a block. It plays a crucial role in
-//! the transaction execution pipeline, ensuring that transactions are validated, processed, and
-//! added to the blockchain in an orderly and secure manner.
-
 use std::sync::Arc;
 
 use ethereum_types::BloomInput;
@@ -12,39 +5,57 @@ use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::TransactionKind;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::UnixTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
+use crate::log_and_err;
 
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 }
 
 impl BlockMiner {
-    /// Initializes a new BlockMiner with storage access.
-    /// The storage component is crucial for retrieving the current state and persisting new blocks.
+    /// Initializes a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self { storage }
     }
 
-    /// Constructs the genesis block, the first block in the blockchain.
-    /// This block serves as the foundation of the blockchain, with a fixed state and no previous block.
-    pub fn genesis() -> Block {
-        Block::new_with_capacity(BlockNumber::ZERO, UnixTime::from(1702568764), 0)
+    /// Mine a block with no transactions.
+    pub async fn mine_empty(&mut self) -> anyhow::Result<Block> {
+        let number = self.storage.increment_block_number().await?;
+        Ok(Block::new_at_now(number))
     }
 
-    /// Mine one block with no transactions.
-    #[cfg(feature = "dev")]
-    pub async fn mine_with_no_transactions(&mut self) -> anyhow::Result<Block> {
-        let number = self.storage.increment_block_number().await?;
-        Ok(Block::new_with_capacity(number, UnixTime::now(), 0))
+    /// Mine a block from an external imported block.
+    ///
+    /// Note: all transactions must be external transactions.
+    pub async fn mine_external(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
+        let transactions = self.storage.temp.read_executions().await;
+        self.storage.temp.reset_executions().await;
+
+        let mut mined_transactions = Vec::with_capacity(transactions.len());
+        for tx in transactions {
+            let TransactionKind::External(external_tx, external_receipt) = tx.kind else {
+                return log_and_err!("cannot generate block because one of the transactions is not an external transaction");
+            };
+            let mined_tx = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
+            mined_transactions.push(mined_tx);
+        }
+
+        // TODO: validate if transactions really belong to the specified block.
+
+        Ok(Block {
+            header: BlockHeader::try_from(external_block)?,
+            transactions: mined_transactions,
+        })
     }
 
     /// Mine one block with a single transaction.
@@ -67,7 +78,9 @@ impl BlockMiner {
             .minimum_by(|(_, e1), (_, e2)| e1.block_timestamp.cmp(&e2.block_timestamp))
             .1
             .block_timestamp;
-        let mut block = Block::new_with_capacity(number, block_timestamp, transactions.len());
+
+        let mut block = Block::new(number, block_timestamp);
+        block.transactions.reserve(transactions.len());
 
         // mine transactions and logs
         let mut log_index = Index::ZERO;

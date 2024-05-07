@@ -128,6 +128,12 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         state.transaction_executions.clone()
     }
 
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn reset_executions(&self) {
+        let mut state = self.lock_write().await;
+        state.transaction_executions.clear();
+    }
+
     async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
 

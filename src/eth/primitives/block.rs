@@ -23,13 +23,9 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionKind;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
-use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -38,36 +34,22 @@ pub struct Block {
 }
 
 impl Block {
-    /// Creates a new block with the given number and transactions capacity.
-    pub fn new_with_capacity(number: BlockNumber, timestamp: UnixTime, capacity: usize) -> Self {
+    /// Creates a new block with the given number assuming the current system timestamp as the block timestamp.
+    pub fn new_at_now(number: BlockNumber) -> Self {
+        Self::new(number, UnixTime::now())
+    }
+
+    /// Creates a new block with the given number and timestamp.
+    pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
         Self {
             header: BlockHeader::new(number, timestamp),
-            transactions: Vec::with_capacity(capacity),
+            transactions: Vec::new(),
         }
     }
 
-    /// Creates a new block based on an external block and its local transactions re-execution.
-    ///
-    /// All transactions must be external transactions.
-    ///
-    /// TODO: this kind of conversion should be infallibe.
-    ///
-    /// TODO: this should be moved to BlockMiner component.
-    pub fn from_external_only(block: &ExternalBlock, transactions: Vec<TransactionExecution>) -> anyhow::Result<Self> {
-        let mut block_transactions = Vec::with_capacity(transactions.len());
-        for tx in transactions {
-            match tx.kind {
-                TransactionKind::External(external_tx, external_receipt) => {
-                    let mined = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
-                    block_transactions.push(mined);
-                }
-                _ => return log_and_err!("Cannot generate block because one of the transactions is not an external transaction"),
-            }
-        }
-        Ok(Self {
-            header: block.try_into()?,
-            transactions: block_transactions,
-        })
+    /// Constructs an empty genesis block.
+    pub fn genesis() -> Block {
+        Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
     /// Pushes a single transaction execution to the blocks transactions
