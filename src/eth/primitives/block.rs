@@ -23,8 +23,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
@@ -36,26 +34,22 @@ pub struct Block {
 }
 
 impl Block {
-    /// Creates a new block with the given number and transactions capacity.
-    pub fn new_with_capacity(number: BlockNumber, timestamp: UnixTime, capacity: usize) -> Self {
+    /// Creates a new block with the given number assuming the current system timestamp as the block timestamp.
+    pub fn new_at_now(number: BlockNumber) -> Self {
+        Self::new(number, UnixTime::now())
+    }
+
+    /// Creates a new block with the given number and timestamp.
+    pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
         Self {
             header: BlockHeader::new(number, timestamp),
-            transactions: Vec::with_capacity(capacity),
+            transactions: Vec::new(),
         }
     }
 
-    /// Creates a new block based on an external block and its local transactions re-execution.
-    ///
-    /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(block: &ExternalBlock, executions: Vec<ExternalTransactionExecution>) -> anyhow::Result<Self> {
-        let mut transactions = Vec::with_capacity(executions.len());
-        for execution in executions {
-            transactions.push(TransactionMined::from_external(execution)?);
-        }
-        Ok(Self {
-            header: block.try_into()?,
-            transactions,
-        })
+    /// Constructs an empty genesis block.
+    pub fn genesis() -> Block {
+        Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
     /// Pushes a single transaction execution to the blocks transactions

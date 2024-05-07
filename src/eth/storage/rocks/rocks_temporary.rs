@@ -24,7 +24,7 @@ pub struct RocksTemporary {
 
 impl RocksTemporary {
     pub async fn new() -> anyhow::Result<Self> {
-        tracing::info!("starting rocks temporary storage");
+        tracing::info!("creating rocks temporary storage");
         let db = RocksStorageState::new();
         db.sync_data().await?;
         let current_block = db.preload_block_number()?;
@@ -76,6 +76,16 @@ impl TemporaryStorage for RocksTemporary {
         }
 
         Ok(self.db.read_slot(address, index, &StoragePointInTime::Present))
+    }
+
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn read_executions(&self) -> Vec<TransactionExecution> {
+        self.temp.read_executions().await
+    }
+
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn reset_executions(&self) {
+        self.temp.reset_executions().await;
     }
 
     async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {

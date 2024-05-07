@@ -21,8 +21,10 @@ use crate::log_and_err;
 /// Default timeout for blockchain operations.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
 
+#[derive(Debug)]
 pub struct BlockchainClient {
     http: HttpClient,
+    pub url: String,
 }
 
 impl BlockchainClient {
@@ -35,7 +37,7 @@ impl BlockchainClient {
             Ok(http) => http,
             Err(e) => return log_and_err!(reason = e, "failed to create blockchain http client"),
         };
-        let client = Self { http };
+        let client = Self { http, url: url.to_string() };
 
         // check health before assuming it is ok
         client.check_health().await?;

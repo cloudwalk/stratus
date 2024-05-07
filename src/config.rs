@@ -21,6 +21,7 @@ use crate::eth::evm::EvmConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 #[cfg(feature = "dev")]
@@ -40,10 +41,12 @@ use crate::eth::storage::RocksTemporary;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
-use crate::eth::EthExecutor;
 use crate::eth::EvmTask;
+use crate::eth::Executor;
+use crate::eth::TransactionRelayer;
 #[cfg(feature = "dev")]
 use crate::ext::not;
+use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
@@ -153,7 +156,7 @@ impl StratusStorageConfig {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                storage.commit_to_perm(BlockMiner::genesis()).await?;
+                storage.commit_to_perm(Block::genesis()).await?;
             }
         }
 
@@ -190,17 +193,15 @@ pub struct ExecutorConfig {
     /// Number of EVM instances to run.
     #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
-
-    /// RPC address to forward transactions to.
-    #[arg(long = "forward-to", env = "FORWARD_TO")]
-    pub forward_to: Option<String>,
 }
 
 impl ExecutorConfig {
-    /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub async fn init(&self, storage: Arc<StratusStorage>) -> Arc<EthExecutor> {
+    /// Initializes Executor.
+    ///
+    /// Note: Should be called only after async runtime is initialized.
+    pub async fn init(&self, storage: Arc<StratusStorage>, relayer: Option<Arc<TransactionRelayer>>) -> Arc<Executor> {
         let num_evms = max(self.num_evms, 1);
-        tracing::info!(evms = %num_evms, "starting executor and evms");
+        tracing::info!(config = ?self, "configuring executor");
 
         // spawn evm in background using native threads
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
@@ -241,7 +242,46 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        Arc::new(EthExecutor::new(Arc::clone(&storage), evm_tx, self.num_evms, self.forward_to.as_ref()).await)
+        let executor = Executor::new(storage, relayer, evm_tx, self.num_evms);
+        Arc::new(executor)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: Miner
+// -----------------------------------------------------------------------------
+#[derive(Parser, Debug, Clone)]
+pub struct MinerConfig {}
+
+impl MinerConfig {
+    pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<BlockMiner> {
+        tracing::info!(config = ?self, "configuring block miner");
+        Arc::new(BlockMiner::new(storage))
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: Relayer
+// -----------------------------------------------------------------------------
+#[derive(Parser, Debug, Clone)]
+pub struct RelayerConfig {
+    /// RPC address to forward transactions to.
+    #[arg(long = "forward-to", env = "FORWARD_TO")]
+    pub forward_to: Option<String>,
+}
+
+impl RelayerConfig {
+    pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
+        tracing::info!(config = ?self, "configuring transaction relayer");
+
+        match self.forward_to {
+            Some(ref url) => {
+                let chain = BlockchainClient::new(url).await?;
+                let relayer = TransactionRelayer::new(storage, chain);
+                Ok(Some(Arc::new(relayer)))
+            }
+            None => Ok(None),
+        }
     }
 }
 
@@ -261,6 +301,12 @@ pub struct StratusConfig {
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub relayer: RelayerConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -341,6 +387,9 @@ pub struct ImporterOfflineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
 
     #[clap(flatten)]
@@ -372,6 +421,12 @@ pub struct ImporterOnlineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
+    pub relayer: RelayerConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
 
     #[deref]
@@ -397,6 +452,12 @@ pub struct RunWithImporterConfig {
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
+    #[clap(flatten)]
+    pub relayer: RelayerConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
@@ -404,26 +465,6 @@ pub struct RunWithImporterConfig {
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
-}
-
-impl RunWithImporterConfig {
-    pub fn as_importer(&self) -> ImporterOnlineConfig {
-        ImporterOnlineConfig {
-            external_rpc: self.external_rpc.clone(),
-            executor: self.executor.clone(),
-            stratus_storage: self.stratus_storage.clone(),
-            common: self.common.clone(),
-        }
-    }
-
-    pub fn as_stratus(&self) -> StratusConfig {
-        StratusConfig {
-            address: self.address,
-            executor: self.executor.clone(),
-            stratus_storage: self.stratus_storage.clone(),
-            common: self.common.clone(),
-        }
-    }
 }
 
 impl WithCommonConfig for RunWithImporterConfig {
@@ -488,6 +529,12 @@ pub struct IntegrationTestConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
+    pub relayer: RelayerConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
 
     #[clap(flatten)]
@@ -528,6 +575,8 @@ pub enum ExternalRpcStorageKind {
 impl ExternalRpcStorageConfig {
     /// Initializes external rpc storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
+        tracing::info!(config = ?self, "configuring external rpc storage");
+
         match self.external_rpc_storage_kind {
             ExternalRpcStorageKind::Postgres { ref url } => {
                 let config = PostgresExternalRpcStorageConfig {
@@ -574,6 +623,8 @@ pub enum TemporaryStorageKind {
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
+        tracing::info!(config = ?self, "configuring temporary storage");
+
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
             #[cfg(feature = "rocks")]
@@ -628,6 +679,8 @@ pub enum PermanentStorageKind {
 impl PermanentStorageConfig {
     /// Initializes permanent storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
+        tracing::info!(config = ?self, "configuring permanent storage");
+
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]

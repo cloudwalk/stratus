@@ -5,6 +5,7 @@ use std::sync::Arc;
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
+use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
 use tokio::try_join;
 use tracing::debug;
@@ -17,16 +18,24 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     //XXX #[cfg(feature = "rocks")]
     //XXX stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
-    let stratus_config = config.as_stratus();
-    let importer_config = config.as_importer();
+    // init services
+    let storage = config.stratus_storage.init().await?;
+    let relayer = config.relayer.init(Arc::clone(&storage)).await?;
+    let executor = config.executor.init(Arc::clone(&storage), relayer).await;
+    let miner = config.miner.init(Arc::clone(&storage));
+    let chain = BlockchainClient::new(&config.external_rpc).await?;
 
-    let storage = stratus_config.stratus_storage.init().await?;
+    // run rpc and importer-online in parallel
+    let rpc_task = serve_rpc(
+        Arc::clone(&storage),
+        Arc::clone(&executor),
+        Arc::clone(&miner),
+        config.address,
+        config.executor.chain_id.into(),
+    );
+    let importer_task = run_importer_online(executor, miner, storage, chain);
 
-    let executor = stratus_config.executor.init(Arc::clone(&storage)).await;
-
-    let rpc_task = serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config);
-    let importer_task = run_importer_online(importer_config, Arc::clone(&executor), storage);
-
+    // await one of the two services to stop
     try_join!(rpc_task, importer_task)?;
     debug!("rpc and importer tasks finished");
 

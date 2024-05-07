@@ -2,13 +2,6 @@
 #![allow(unused_imports)]
 // TODO: Remove clippy `allow` after feature-flags are enabled.
 
-//! EthExecutor: Ethereum Transaction Coordinator
-//!
-//! This module provides the `EthExecutor` struct, which acts as a coordinator for executing Ethereum transactions.
-//! It encapsulates the logic for transaction execution, state mutation, and event notification.
-//! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
-//! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -31,7 +24,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
@@ -40,19 +32,16 @@ use crate::eth::primitives::TransactionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-use crate::eth::TransactionRelay;
+use crate::eth::TransactionRelayer;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::BlockchainClient;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
 
 pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
-
-/// The EthExecutor struct is responsible for orchestrating the execution of Ethereum transactions.
-/// It holds references to the EVM, block miner, and storage, managing the overall process of
-/// transaction execution, block production, and state management.
-pub struct EthExecutor {
+pub struct Executor {
     /// Channel to send transactions to background EVMs.
     evm_tx: crossbeam_channel::Sender<EvmTask>,
 
@@ -63,7 +52,7 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     /// Provider for sending rpc calls to substrate
-    relay: Option<TransactionRelay>,
+    relayer: Option<Arc<TransactionRelayer>>,
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -73,13 +62,10 @@ pub struct EthExecutor {
     log_notifier: broadcast::Sender<LogMined>,
 }
 
-impl EthExecutor {
-    /// Creates a new executor.
-    pub async fn new(storage: Arc<StratusStorage>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize, forward_to: Option<&String>) -> Self {
-        let relay = match forward_to {
-            Some(rpc_url) => Some(TransactionRelay::new(rpc_url).await.expect("failed to instantiate the relay")),
-            None => None,
-        };
+impl Executor {
+    /// Creates a new [`Executor`].
+    pub fn new(storage: Arc<StratusStorage>, relayer: Option<Arc<TransactionRelayer>>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
+        tracing::info!(%num_evms, "creating executor");
 
         Self {
             evm_tx,
@@ -88,7 +74,7 @@ impl EthExecutor {
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
-            relay,
+            relayer,
         }
     }
 
@@ -97,13 +83,16 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
+    ///
+    /// TODO: this method will be removed.
     #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_perm(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(&self, miner: &BlockMiner, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-        let mut block = self.import_external_to_temp(block, receipts).await?;
+        self.reexecute_external_transactions(block, receipts).await?;
+        let mut block = miner.mine_external(block).await?;
 
         // import relay failed transactions
-        if let Some(relay) = &self.relay {
+        if let Some(relay) = &self.relayer {
             for (tx, ex) in relay.drain_failed_transactions().await {
                 block.push_execution(tx, ex);
             }
@@ -122,7 +111,7 @@ impl EthExecutor {
 
     /// Re-executes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_temp(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn reexecute_external_transactions(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
@@ -135,16 +124,15 @@ impl EthExecutor {
 
         // execute mixing serial and parallel approaches
         let tx_routes = route_transactions(&block.transactions, receipts)?;
-        let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
-        let mut parallel_executions = Vec::with_capacity(block.transactions.len());
+        let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
 
         // execute parallel executions
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                parallel_executions.push(self.reexecute_external(tx, receipt, block));
+                tx_parallel_executions.push(self.reexecute_external(tx, receipt, block));
             }
         }
-        let mut parallel_executions = futures::stream::iter(parallel_executions).buffered(self.num_evms);
+        let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.num_evms);
 
         // execute serial transactions joining them with parallel
         for tx_route in tx_routes {
@@ -154,11 +142,8 @@ impl EthExecutor {
                     let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
 
                     // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution.clone());
+                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
                     storage.save_execution_to_temp(tx_execution).await?;
-
-                    // TODO: remove and use data from temporary storage
-                    executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
 
                 // parallel: check results and re-execute if necessary
@@ -173,9 +158,10 @@ impl EthExecutor {
                             // check conflict with all previous transactions
                             // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
                             let mut reexecute = false;
-                            for prev_execution in &executions {
-                                let prev_execution = &prev_execution.evm_result.execution;
 
+                            let prev_txs = storage.temp.read_executions().await;
+                            for prev_tx in prev_txs {
+                                let prev_execution = &prev_tx.execution;
                                 if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
                                     tracing::warn!(?conflicts, "parallel execution conflicts");
                                     reexecute = true;
@@ -204,12 +190,15 @@ impl EthExecutor {
                         },
                     };
 
-                    // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution.clone());
-                    storage.save_execution_to_temp(tx_execution).await?;
+                    // track metrics
+                    #[cfg(feature = "metrics")]
+                    {
+                        block_metrics += evm_result.metrics;
+                    }
 
-                    // TODO: remove and use data from temporary storage
-                    executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
+                    // persist state
+                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
+                    storage.save_execution_to_temp(tx_execution).await?;
                 }
             }
         }
@@ -217,17 +206,13 @@ impl EthExecutor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            for execution in &executions {
-                block_metrics += execution.evm_result.metrics;
-            }
             metrics::inc_executor_external_block(start.elapsed());
             metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
             metrics::inc_executor_external_block_slot_reads_cached(block_metrics.slot_reads_cached);
         }
 
-        drop(parallel_executions);
-        Block::from_external(block, executions)
+        Ok(())
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
@@ -325,7 +310,7 @@ impl EthExecutor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let execution = if let Some(relay) = &self.relay {
+        let execution = if let Some(relay) = &self.relayer {
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?.execution;
             relay.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
@@ -400,7 +385,7 @@ impl EthExecutor {
     #[cfg(feature = "dev")]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
-        let block = miner_lock.mine_with_no_transactions().await?;
+        let block = miner_lock.mine_empty().await?;
         self.storage.commit_to_perm(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {

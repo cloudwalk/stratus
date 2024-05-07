@@ -72,7 +72,7 @@ impl Drop for PostgresPermanentStorage {
 impl PostgresPermanentStorage {
     /// Creates a new [`PostgresPermanentStorage`].
     pub async fn new(config: PostgresPermanentStorageConfig) -> anyhow::Result<Self> {
-        tracing::info!(?config, "starting postgres permanent storage");
+        tracing::info!(?config, "creating postgres permanent storage");
 
         let result = PgPoolOptions::new()
             .min_connections(config.connections)

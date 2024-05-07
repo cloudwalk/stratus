@@ -17,12 +17,14 @@ use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug, Default)]
 pub struct InMemoryTemporaryStorageState {
+    pub transaction_executions: Vec<TransactionExecution>,
     pub accounts: HashMap<Address, InMemoryTemporaryAccount>,
     pub active_block_number: Option<BlockNumber>,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
+        self.transaction_executions.clear();
         self.accounts.clear();
         self.active_block_number = None;
     }
@@ -41,7 +43,7 @@ impl InMemoryTemporaryStorage {
 
 impl Default for InMemoryTemporaryStorage {
     fn default() -> Self {
-        tracing::info!("starting inmemory temporary storage");
+        tracing::info!("creating inmemory temporary storage");
         Self { state: Default::default() }
     }
 }
@@ -120,10 +122,23 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
     }
 
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn read_executions(&self) -> Vec<TransactionExecution> {
+        let state = self.lock_read().await;
+        state.transaction_executions.clone()
+    }
+
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn reset_executions(&self) {
+        let mut state = self.lock_write().await;
+        state.transaction_executions.clear();
+    }
+
     async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
 
-        let changes = transaction_execution.evm_execution.changes_to_persist();
+        // save account changes
+        let changes = transaction_execution.execution.changes_to_persist();
         for change in changes {
             let account = state
                 .accounts
@@ -156,6 +171,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                 }
             }
         }
+
+        // save executions
+        state.transaction_executions.push(transaction_execution);
+
         Ok(())
     }
 

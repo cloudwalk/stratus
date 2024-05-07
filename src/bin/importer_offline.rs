@@ -18,7 +18,8 @@ use stratus::eth::storage::CsvExporter;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
-use stratus::eth::EthExecutor;
+use stratus::eth::BlockMiner;
+use stratus::eth::Executor;
 use stratus::ext::not;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -48,7 +49,8 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.stratus_storage.init().await?;
-    let executor = config.executor.init(Arc::clone(&stratus_storage)).await;
+    let executor = config.executor.init(Arc::clone(&stratus_storage), None).await;
+    let miner = config.miner.init(Arc::clone(&stratus_storage));
 
     // init block snapshots to export
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
@@ -80,8 +82,8 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         }
     }
 
-    // execute parallel tasks (external rpc storage loader and block importer)
-    let storage_thread = thread::Builder::new().name("loader".into());
+    // execute thread: external rpc storage loader
+    let storage_thread = thread::Builder::new().name("storage-loader".into());
     let storage_tokio = Handle::current();
     let storage_cancellation = cancellation.clone();
     let _ = storage_thread.spawn(move || {
@@ -98,13 +100,15 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         ))
     });
 
-    let importer_thread = thread::Builder::new().name("importer".into());
+    // execute thread: block importer
+    let importer_thread = thread::Builder::new().name("block-importer".into());
     let importer_tokio = Handle::current();
     let importer_cancellation = cancellation.clone();
     let importer_join = importer_thread.spawn(move || {
         let _tokio_guard = importer_tokio.enter();
         importer_tokio.block_on(execute_block_importer(
             executor,
+            miner,
             stratus_storage,
             csv,
             importer_cancellation,
@@ -136,8 +140,9 @@ fn signal_handler(cancellation: CancellationToken) {
 // -----------------------------------------------------------------------------
 async fn execute_block_importer(
     // services
-    executor: Arc<EthExecutor>,
-    stratus_storage: Arc<StratusStorage>,
+    executor: Arc<Executor>,
+    miner: Arc<BlockMiner>,
+    storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
     cancellation: CancellationToken,
     // data
@@ -169,20 +174,24 @@ async fn execute_block_importer(
             #[cfg(feature = "metrics")]
             let start = metrics::now();
 
-            // import block
-            // * when exporting to csv, permanent state is written to csv
-            // * when not exporting to csv, permanent state is written to storage
-            let mined_block = match csv {
+            // re-execute and mine
+            executor.reexecute_external_transactions(&block, &receipts).await?;
+            let mined_block = miner.mine_external(&block).await?;
+            let mined_block_number = mined_block.number();
+
+            // export to csv OR permanent storage
+            match csv {
                 Some(ref mut csv) => {
-                    let mined_block = executor.import_external_to_temp(&block, &receipts).await?;
-                    import_external_to_csv(&stratus_storage, csv, mined_block.clone(), block_index, block_last_index).await?;
-                    mined_block
+                    import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?;
                 }
-                None => executor.import_external_to_perm(&block, &receipts).await?,
+                None => {
+                    storage.commit_to_perm(mined_block.clone()).await?;
+                    storage.set_mined_block_number(*mined_block_number).await?; // TODO: commit_to_perm should set the miner block number
+                }
             };
 
             // export snapshot for tests
-            if blocks_to_export_snapshot.contains(&block.number()) {
+            if blocks_to_export_snapshot.contains(mined_block.number()) {
                 export_snapshot(&block, &receipts, &mined_block)?;
             }
 

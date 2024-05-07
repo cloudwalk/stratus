@@ -5,15 +5,15 @@ use crate::eth::primitives::TransactionKind;
 
 #[derive(Debug, Clone)]
 pub struct TransactionExecution {
-    pub transaction: TransactionKind,
-    pub evm_execution: EvmExecution,
+    pub kind: TransactionKind,
+    pub execution: EvmExecution,
 }
 
 impl TransactionExecution {
     pub fn new_external(transaction: ExternalTransaction, receipt: ExternalReceipt, evm_execution: EvmExecution) -> Self {
         Self {
-            transaction: TransactionKind::new_external(transaction, receipt),
-            evm_execution,
+            kind: TransactionKind::new_external(transaction, receipt),
+            execution: evm_execution,
         }
     }
 }
