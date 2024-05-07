@@ -378,6 +378,11 @@ impl StratusStorage {
         result
     }
 
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    pub async fn read_temp_executions(&self) -> Vec<TransactionExecution> {
+        self.temp.read_executions().await
+    }
+
     // -------------------------------------------------------------------------
     // Utils
     // -------------------------------------------------------------------------

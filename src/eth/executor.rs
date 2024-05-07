@@ -31,7 +31,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
@@ -135,16 +134,15 @@ impl EthExecutor {
 
         // execute mixing serial and parallel approaches
         let tx_routes = route_transactions(&block.transactions, receipts)?;
-        let mut executions: Vec<ExternalTransactionExecution> = Vec::with_capacity(block.transactions.len());
-        let mut parallel_executions = Vec::with_capacity(block.transactions.len());
+        let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
 
         // execute parallel executions
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                parallel_executions.push(self.reexecute_external(tx, receipt, block));
+                tx_parallel_executions.push(self.reexecute_external(tx, receipt, block));
             }
         }
-        let mut parallel_executions = futures::stream::iter(parallel_executions).buffered(self.num_evms);
+        let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.num_evms);
 
         // execute serial transactions joining them with parallel
         for tx_route in tx_routes {
@@ -154,11 +152,8 @@ impl EthExecutor {
                     let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
 
                     // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution.clone());
+                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
                     storage.save_execution_to_temp(tx_execution).await?;
-
-                    // TODO: remove and use data from temporary storage
-                    executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
                 }
 
                 // parallel: check results and re-execute if necessary
@@ -173,9 +168,10 @@ impl EthExecutor {
                             // check conflict with all previous transactions
                             // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
                             let mut reexecute = false;
-                            for prev_execution in &executions {
-                                let prev_execution = &prev_execution.evm_result.execution;
 
+                            let prev_txs = storage.read_temp_executions().await;
+                            for prev_tx in prev_txs {
+                                let prev_execution = &prev_tx.execution;
                                 if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
                                     tracing::warn!(?conflicts, "parallel execution conflicts");
                                     reexecute = true;
@@ -204,12 +200,15 @@ impl EthExecutor {
                         },
                     };
 
-                    // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution.clone());
-                    storage.save_execution_to_temp(tx_execution).await?;
+                    // track metrics
+                    #[cfg(feature = "metrics")]
+                    {
+                        block_metrics += evm_result.metrics;
+                    }
 
-                    // TODO: remove and use data from temporary storage
-                    executions.push(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
+                    // persist state
+                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
+                    storage.save_execution_to_temp(tx_execution).await?;
                 }
             }
         }
@@ -217,9 +216,6 @@ impl EthExecutor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            for execution in &executions {
-                block_metrics += execution.evm_result.metrics;
-            }
             metrics::inc_executor_external_block(start.elapsed());
             metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
@@ -227,7 +223,10 @@ impl EthExecutor {
         }
 
         drop(parallel_executions);
-        Block::from_external(block, executions)
+
+        // TODO: temporary stuff while block-per-second is being implemented. it should start using the BlockMiner component instead of performing a conversion.
+        let executions = storage.read_temp_executions().await;
+        Block::from_external_only(block, executions)
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.

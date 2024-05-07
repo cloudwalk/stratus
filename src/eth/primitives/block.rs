@@ -24,10 +24,12 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionKind;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
+use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -46,15 +48,25 @@ impl Block {
 
     /// Creates a new block based on an external block and its local transactions re-execution.
     ///
+    /// All transactions must be external transactions.
+    ///
     /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(block: &ExternalBlock, executions: Vec<ExternalTransactionExecution>) -> anyhow::Result<Self> {
-        let mut transactions = Vec::with_capacity(executions.len());
-        for execution in executions {
-            transactions.push(TransactionMined::from_external(execution)?);
+    ///
+    /// TODO: this should be moved to BlockMiner component.
+    pub fn from_external_only(block: &ExternalBlock, transactions: Vec<TransactionExecution>) -> anyhow::Result<Self> {
+        let mut block_transactions = Vec::with_capacity(transactions.len());
+        for tx in transactions {
+            match tx.kind {
+                TransactionKind::External(external_tx, external_receipt) => {
+                    let mined = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
+                    block_transactions.push(mined);
+                }
+                _ => return log_and_err!("Cannot generate block because one of the transactions is not an external transaction"),
+            }
         }
         Ok(Self {
             header: block.try_into()?,
-            transactions,
+            transactions: block_transactions,
         })
     }
 
