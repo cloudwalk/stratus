@@ -13,7 +13,8 @@ use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
@@ -47,10 +48,9 @@ impl TransactionMined {
     /// Creates a new mined transaction from an external mined transaction that was re-executed locally.
     ///
     /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(evm_result: ExternalTransactionExecution) -> anyhow::Result<Self> {
-        let ExternalTransactionExecution { tx, receipt, execution } = evm_result;
+    pub fn from_external(tx: ExternalTransaction, receipt: ExternalReceipt, execution: EvmExecution) -> anyhow::Result<Self> {
         Ok(Self {
-            input: tx.try_into()?,
+            input: tx.clone().try_into()?,
             execution,
             block_number: receipt.block_number(),
             block_hash: receipt.block_hash(),

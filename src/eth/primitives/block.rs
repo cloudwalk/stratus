@@ -24,7 +24,8 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
@@ -47,10 +48,10 @@ impl Block {
     /// Creates a new block based on an external block and its local transactions re-execution.
     ///
     /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(block: &ExternalBlock, executions: Vec<ExternalTransactionExecution>) -> anyhow::Result<Self> {
+    pub fn from_external(block: &ExternalBlock, executions: Vec<(ExternalTransaction, ExternalReceipt, EvmExecution)>) -> anyhow::Result<Self> {
         let mut transactions = Vec::with_capacity(executions.len());
-        for execution in executions {
-            transactions.push(TransactionMined::from_external(execution)?);
+        for (tx, receipt, execution) in executions {
+            transactions.push(TransactionMined::from_external(tx, receipt, execution)?);
         }
         Ok(Self {
             header: block.try_into()?,

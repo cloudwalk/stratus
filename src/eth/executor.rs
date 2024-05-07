@@ -31,7 +31,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
@@ -229,7 +228,7 @@ impl EthExecutor {
         let mut external = Vec::new();
         for tx in storage.read_temp_executions().await {
             if let TransactionKind::External(external_tx, external_receipt) = tx.kind {
-                external.push(ExternalTransactionExecution::new(external_tx, external_receipt, tx.execution));
+                external.push((external_tx, external_receipt, tx.execution));
             }
         }
 
