@@ -85,7 +85,7 @@ impl TemporaryStorage for RocksTemporary {
 
     /// TODO: temporary stuff while block-per-second is being implemented.
     async fn reset_executions(&self) {
-        self.temp.reset_executions().await
+        self.temp.reset_executions().await;
     }
 
     async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
