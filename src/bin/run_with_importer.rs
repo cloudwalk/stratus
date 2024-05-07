@@ -18,7 +18,6 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     //XXX #[cfg(feature = "rocks")]
     //XXX stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
 
-
     let stratus_config = config.as_stratus();
     let storage = stratus_config.stratus_storage.init().await?;
 
