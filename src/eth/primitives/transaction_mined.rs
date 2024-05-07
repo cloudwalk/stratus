@@ -51,11 +51,11 @@ impl TransactionMined {
         let ExternalTransactionExecution {
             tx,
             receipt,
-            evm_result: execution,
+            execution,
         } = evm_result;
         Ok(Self {
             input: tx.try_into()?,
-            execution: execution.execution,
+            execution,
             block_number: receipt.block_number(),
             block_hash: receipt.block_hash(),
             transaction_index: receipt.transaction_index.into(),

@@ -78,6 +78,11 @@ impl TemporaryStorage for RocksTemporary {
         Ok(self.db.read_slot(address, index, &StoragePointInTime::Present))
     }
 
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn read_executions(&self) -> Vec<TransactionExecution> {
+        self.temp.read_executions().await
+    }
+
     async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
         self.temp.save_execution(transaction_execution).await?;
         Ok(())
