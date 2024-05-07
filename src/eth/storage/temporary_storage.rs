@@ -25,6 +25,9 @@ pub trait TemporaryStorage: Send + Sync {
     /// TODO: temporary stuff while block-per-second is being implemented.
     async fn read_executions(&self) -> Vec<TransactionExecution>;
 
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn reset_executions(&self);
+
     /// Saves a transaction and its execution result.
     async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()>;
 

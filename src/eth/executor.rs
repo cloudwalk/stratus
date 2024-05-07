@@ -96,10 +96,13 @@ impl EthExecutor {
     // -------------------------------------------------------------------------
 
     /// Re-executes an external block locally and imports it to the permanent storage.
+    ///
+    /// TODO: this method will be removed.
     #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_perm(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(&self, miner: &BlockMiner, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-        let mut block = self.import_external_to_temp(block, receipts).await?;
+        self.reexecute_external_transactions(block, receipts).await?;
+        let mut block = miner.mine_external(block).await?;
 
         // import relay failed transactions
         if let Some(relay) = &self.relay {
@@ -121,7 +124,7 @@ impl EthExecutor {
 
     /// Re-executes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_temp(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn reexecute_external_transactions(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
@@ -169,7 +172,7 @@ impl EthExecutor {
                             // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
                             let mut reexecute = false;
 
-                            let prev_txs = storage.read_temp_executions().await;
+                            let prev_txs = storage.temp.read_executions().await;
                             for prev_tx in prev_txs {
                                 let prev_execution = &prev_tx.execution;
                                 if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
@@ -222,11 +225,7 @@ impl EthExecutor {
             metrics::inc_executor_external_block_slot_reads_cached(block_metrics.slot_reads_cached);
         }
 
-        drop(parallel_executions);
-
-        // TODO: temporary stuff while block-per-second is being implemented. it should start using the BlockMiner component instead of performing a conversion.
-        let executions = storage.read_temp_executions().await;
-        Block::from_external_only(block, executions)
+        Ok(())
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
@@ -399,7 +398,7 @@ impl EthExecutor {
     #[cfg(feature = "dev")]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let mut miner_lock = self.miner.lock().await;
-        let block = miner_lock.mine_with_no_transactions().await?;
+        let block = miner_lock.mine_empty().await?;
         self.storage.commit_to_perm(block.clone()).await?;
 
         if let Err(e) = self.block_notifier.send(block.clone()) {

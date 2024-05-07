@@ -38,12 +38,22 @@ pub struct Block {
 }
 
 impl Block {
-    /// Creates a new block with the given number and transactions capacity.
-    pub fn new_with_capacity(number: BlockNumber, timestamp: UnixTime, capacity: usize) -> Self {
+    /// Creates a new block with the given number assuming the current system timestamp as the block timestamp.
+    pub fn new_at_now(number: BlockNumber) -> Self {
+        Self::new(number, UnixTime::now())
+    }
+
+    /// Creates a new block with the given number and timestamp.
+    pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
         Self {
             header: BlockHeader::new(number, timestamp),
-            transactions: Vec::with_capacity(capacity),
+            transactions: Vec::new(),
         }
+    }
+
+    /// Constructs an empty genesis block.
+    pub fn genesis() -> Block {
+        Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
     /// Creates a new block based on an external block and its local transactions re-execution.
