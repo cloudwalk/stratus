@@ -2,13 +2,6 @@
 #![allow(unused_imports)]
 // TODO: Remove clippy `allow` after feature-flags are enabled.
 
-//! EthExecutor: Ethereum Transaction Coordinator
-//!
-//! This module provides the `EthExecutor` struct, which acts as a coordinator for executing Ethereum transactions.
-//! It encapsulates the logic for transaction execution, state mutation, and event notification.
-//! `EthExecutor` is designed to work with the `Evm` trait implementations to execute transactions and calls,
-//! while also interfacing with a miner component to handle block mining and a storage component to persist state changes.
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -39,19 +32,16 @@ use crate::eth::primitives::TransactionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-use crate::eth::TransactionRelay;
+use crate::eth::TransactionRelayer;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::BlockchainClient;
 
 /// Number of events in the backlog.
 const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
 
 pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
-
-/// The EthExecutor struct is responsible for orchestrating the execution of Ethereum transactions.
-/// It holds references to the EVM, block miner, and storage, managing the overall process of
-/// transaction execution, block production, and state management.
-pub struct EthExecutor {
+pub struct Executor {
     /// Channel to send transactions to background EVMs.
     evm_tx: crossbeam_channel::Sender<EvmTask>,
 
@@ -62,7 +52,7 @@ pub struct EthExecutor {
     miner: Mutex<BlockMiner>,
 
     /// Provider for sending rpc calls to substrate
-    relay: Option<TransactionRelay>,
+    relayer: Option<Arc<TransactionRelayer>>,
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -72,13 +62,10 @@ pub struct EthExecutor {
     log_notifier: broadcast::Sender<LogMined>,
 }
 
-impl EthExecutor {
-    /// Creates a new executor.
-    pub async fn new(storage: Arc<StratusStorage>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize, forward_to: Option<&String>) -> Self {
-        let relay = match forward_to {
-            Some(rpc_url) => Some(TransactionRelay::new(rpc_url).await.expect("failed to instantiate the relay")),
-            None => None,
-        };
+impl Executor {
+    /// Creates a new [`Executor`].
+    pub fn new(storage: Arc<StratusStorage>, relayer: Option<Arc<TransactionRelayer>>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
+        tracing::info!(%num_evms, "creating executor");
 
         Self {
             evm_tx,
@@ -87,7 +74,7 @@ impl EthExecutor {
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
-            relay,
+            relayer,
         }
     }
 
@@ -105,7 +92,7 @@ impl EthExecutor {
         let mut block = miner.mine_external(block).await?;
 
         // import relay failed transactions
-        if let Some(relay) = &self.relay {
+        if let Some(relay) = &self.relayer {
             for (tx, ex) in relay.drain_failed_transactions().await {
                 block.push_execution(tx, ex);
             }
@@ -323,7 +310,7 @@ impl EthExecutor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let execution = if let Some(relay) = &self.relay {
+        let execution = if let Some(relay) = &self.relayer {
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?.execution;
             relay.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.

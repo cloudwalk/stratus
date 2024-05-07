@@ -12,7 +12,7 @@ use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
-use stratus::eth::EthExecutor;
+use stratus::eth::Executor;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
@@ -31,19 +31,15 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
-    let executor = config.executor.init(Arc::clone(&storage)).await;
+    let relayer = config.relayer.init(Arc::clone(&storage)).await?;
+    let executor = config.executor.init(Arc::clone(&storage), relayer).await;
     let miner = config.miner.init(Arc::clone(&storage));
     let chain = BlockchainClient::new(&config.external_rpc).await?;
 
     run_importer_online(executor, miner, storage, chain).await
 }
 
-pub async fn run_importer_online(
-    executor: Arc<EthExecutor>,
-    miner: Arc<BlockMiner>,
-    storage: Arc<StratusStorage>,
-    chain: BlockchainClient,
-) -> anyhow::Result<()> {
+pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>, storage: Arc<StratusStorage>, chain: BlockchainClient) -> anyhow::Result<()> {
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
 
@@ -61,7 +57,7 @@ pub async fn run_importer_online(
 }
 
 #[tracing::instrument(skip_all)]
-async fn import(executor: &EthExecutor, miner: &BlockMiner, chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<()> {
+async fn import(executor: &Executor, miner: &BlockMiner, chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<()> {
     // fetch block and receipts
     let block = fetch_block(chain, number).await?;
 

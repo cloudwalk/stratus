@@ -24,7 +24,7 @@ pub struct RocksTemporary {
 
 impl RocksTemporary {
     pub async fn new() -> anyhow::Result<Self> {
-        tracing::info!("starting rocks temporary storage");
+        tracing::info!("creating rocks temporary storage");
         let db = RocksStorageState::new();
         db.sync_data().await?;
         let current_block = db.preload_block_number()?;

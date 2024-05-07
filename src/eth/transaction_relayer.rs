@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::anyhow;
 use ethers_core::types::Transaction;
 use tokio::fs::File;
@@ -7,23 +9,29 @@ use tokio::sync::Mutex;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::storage::StratusStorage;
 use crate::infra::BlockchainClient;
 
-pub struct TransactionRelay {
-    // Provider for sending rpc calls to substrate
-    provider: BlockchainClient,
+pub struct TransactionRelayer {
+    /// TODO: implement storage use.
+    _storage: Arc<StratusStorage>,
 
-    // Sender for transactions that failed on our side, and should be included in the next block
+    /// RPC client that will submit transactions.
+    chain: BlockchainClient,
+
+    /// TODO: remove it because failed transactions will be kept in temporary storage.
     pub failed_transactions: Mutex<Vec<(TransactionInput, EvmExecution)>>,
 }
 
-impl TransactionRelay {
-    /// Creates a new relay for forwarding transactions to another blockchain.
-    pub async fn new(rpc_url: &str) -> anyhow::Result<Self> {
-        Ok(Self {
+impl TransactionRelayer {
+    /// Creates a new [`TransactionRelayer`].
+    pub fn new(storage: Arc<StratusStorage>, chain: BlockchainClient) -> Self {
+        tracing::info!(?chain, "creating transaction relayer");
+        Self {
+            _storage: storage,
+            chain,
             failed_transactions: Mutex::new(vec![]),
-            provider: BlockchainClient::new(rpc_url).await?,
-        })
+        }
     }
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
@@ -31,7 +39,7 @@ impl TransactionRelay {
     pub async fn forward_transaction(&self, execution: EvmExecution, transaction: TransactionInput) -> anyhow::Result<()> {
         tracing::debug!(?transaction.hash, "forwarding transaction");
         if execution.result == ExecutionResult::Success {
-            let pending_tx = self.provider.send_raw_transaction(Transaction::from(transaction.clone()).rlp()).await?;
+            let pending_tx = self.chain.send_raw_transaction(Transaction::from(transaction.clone()).rlp()).await?;
 
             let Some(receipt) = pending_tx.await? else {
                 return Err(anyhow!("transaction did not produce a receipt"));
