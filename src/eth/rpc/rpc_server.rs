@@ -37,7 +37,8 @@ use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
-use crate::eth::EthExecutor;
+use crate::eth::BlockMiner;
+use crate::eth::Executor;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -46,8 +47,9 @@ use crate::eth::EthExecutor;
 /// Starts JSON-RPC server.
 pub async fn serve_rpc(
     // services
-    executor: Arc<EthExecutor>,
     storage: Arc<StratusStorage>,
+    executor: Arc<Executor>,
+    miner: Arc<BlockMiner>,
     // config
     address: SocketAddr,
     chain_id: ChainId,
@@ -67,6 +69,7 @@ pub async fn serve_rpc(
         // services
         executor,
         storage,
+        _miner: miner,
 
         // subscriptions
         subs,

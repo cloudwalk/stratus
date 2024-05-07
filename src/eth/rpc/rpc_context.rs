@@ -4,7 +4,8 @@ use std::sync::Arc;
 use crate::eth::primitives::ChainId;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
-use crate::eth::EthExecutor;
+use crate::eth::BlockMiner;
+use crate::eth::Executor;
 
 pub struct RpcContext {
     // blockchain config
@@ -15,7 +16,8 @@ pub struct RpcContext {
     pub gas_price: usize,
 
     // services
-    pub executor: Arc<EthExecutor>,
+    pub executor: Arc<Executor>,
+    pub _miner: Arc<BlockMiner>,
     pub storage: Arc<StratusStorage>,
     pub subs: Arc<RpcSubscriptions>,
 }

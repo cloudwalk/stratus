@@ -23,8 +23,9 @@ pub struct BlockMiner {
 }
 
 impl BlockMiner {
-    /// Initializes a new [`BlockMiner`].
+    /// Creates a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>) -> Self {
+        tracing::info!("creating block miner");
         Self { storage }
     }
 

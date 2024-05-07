@@ -19,7 +19,7 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
-use stratus::eth::EthExecutor;
+use stratus::eth::Executor;
 use stratus::ext::not;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -49,7 +49,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.stratus_storage.init().await?;
-    let executor = config.executor.init(Arc::clone(&stratus_storage)).await;
+    let executor = config.executor.init(Arc::clone(&stratus_storage), None).await;
     let miner = config.miner.init(Arc::clone(&stratus_storage));
 
     // init block snapshots to export
@@ -140,7 +140,7 @@ fn signal_handler(cancellation: CancellationToken) {
 // -----------------------------------------------------------------------------
 async fn execute_block_importer(
     // services
-    executor: Arc<EthExecutor>,
+    executor: Arc<Executor>,
     miner: Arc<BlockMiner>,
     storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
