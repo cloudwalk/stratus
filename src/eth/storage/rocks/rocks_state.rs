@@ -453,6 +453,10 @@ impl RocksStorageState {
     }
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
+        if address.is_coinbase() { //XXX temporary, we will reload the database later without it
+            return None;
+        }
+
         match point_in_time {
             StoragePointInTime::Present => self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
                 index: *index,
@@ -477,6 +481,10 @@ impl RocksStorageState {
     }
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
+        if address.is_coinbase() { //XXX temporary, we will reload the database later without it
+            return None;
+        }
+
         match point_in_time {
             StoragePointInTime::Present => match self.accounts.get(&((*address).into())) {
                 Some(inner_account) => {
