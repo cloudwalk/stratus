@@ -51,7 +51,7 @@ where
             id = %request.id,
             %method,
             function = %function.unwrap_or_default(),
-            // params = ?request.params(),
+            params = ?request.params(),
             "rpc request"
         );
 
