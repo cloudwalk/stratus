@@ -34,6 +34,7 @@ fn init_stdout_tracing() {
         .with_target(false)
         .with_thread_ids(true)
         .with_thread_names(true)
+        .with_ansi(false)
         .with_env_filter(EnvFilter::from_default_env())
         .try_init()
         .expect("failed to start tracing");
