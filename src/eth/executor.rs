@@ -224,15 +224,9 @@ impl EthExecutor {
 
         drop(parallel_executions);
 
-        // TODO: temporary stuff while block-per-second is being implemented.
-        let mut external = Vec::new();
-        for tx in storage.read_temp_executions().await {
-            if let TransactionKind::External(external_tx, external_receipt) = tx.kind {
-                external.push((external_tx, external_receipt, tx.execution));
-            }
-        }
-
-        Block::from_external(block, external)
+        // TODO: temporary stuff while block-per-second is being implemented. it should start using the BlockMiner component instead of performing a conversion.
+        let executions = storage.read_temp_executions().await;
+        Block::from_external_only(block, executions)
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
