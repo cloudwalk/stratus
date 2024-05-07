@@ -156,7 +156,6 @@ pub use external_block::ExternalBlock;
 pub use external_receipt::ExternalReceipt;
 pub use external_receipts::ExternalReceipts;
 pub use external_transaction::ExternalTransaction;
-pub use external_transaction::ExternalTransactionExecution;
 pub use gas::Gas;
 pub use hash::Hash;
 pub use index::Index;

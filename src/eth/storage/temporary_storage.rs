@@ -22,6 +22,9 @@ pub trait TemporaryStorage: Send + Sync {
     /// Retrieves an slot from the storage. Returns Option when not found.
     async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
 
+    /// TODO: temporary stuff while block-per-second is being implemented.
+    async fn read_executions(&self) -> Vec<TransactionExecution>;
+
     /// Saves a transaction and its execution result.
     async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()>;
 
