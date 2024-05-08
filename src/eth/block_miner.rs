@@ -47,30 +47,78 @@ impl BlockMiner {
     }
 
     /// Mine a block from an external block.
+    ///
+    /// TODO: external_block must come from storage.
+    /// TODO: validate if transactions really belong to the specified block.
     pub async fn mine_external(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
-        let transactions = self.storage.temp.read_executions().await;
+        // TODO: draining executions must be atomic instead of 2 calls
+        let txs = self.storage.temp.read_executions().await;
         self.storage.temp.reset_executions().await;
 
-        let mut mined_transactions = Vec::with_capacity(transactions.len());
-        for tx in transactions {
+        // mine external transactions.
+        // fails if finds a transaction that is not external.
+        let mut mined_txs = Vec::with_capacity(txs.len());
+        for tx in txs {
             let TransactionKind::External(external_tx, external_receipt) = tx.kind else {
-                return log_and_err!("cannot generate block because one of the transactions is not an external transaction");
+                return log_and_err!("cannot mine external block because one of the transactions is not an external transaction");
             };
             let mined_tx = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
-            mined_transactions.push(mined_tx);
+            mined_txs.push(mined_tx);
         }
-
-        // TODO: validate if transactions really belong to the specified block.
 
         Ok(Block {
             header: BlockHeader::try_from(external_block)?,
-            transactions: mined_transactions,
+            transactions: mined_txs,
         })
+    }
+
+    /// Mine a block from an external block and local failed transactions.
+    ///
+    /// TODO: external_block must come from storage.
+    /// TODO: validate if transactions really belong to the specified block.
+    pub async fn mine_mixed(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
+        // TODO: draining executions must be atomic instead of 2 calls
+        let txs = self.storage.temp.read_executions().await;
+        self.storage.temp.reset_executions().await;
+
+        let mut mined_txs = Vec::with_capacity(txs.len());
+        let mut failed_txs = Vec::new();
+
+        // mine external transactions
+        for tx in txs {
+            match tx.kind {
+                TransactionKind::External(external_tx, external_receipt) => {
+                    let mined_tx = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
+                    mined_txs.push(mined_tx);
+                }
+                TransactionKind::Local(tx_input) => {
+                    failed_txs.push((tx_input, tx.execution));
+                }
+            }
+        }
+
+        let mut block = Block {
+            header: BlockHeader::try_from(external_block)?,
+            transactions: mined_txs,
+        };
+
+        // mine failed transactions
+        // fails if finds a local transaction that is not a failure
+        for (failed_tx_input, failed_tx_execution) in failed_txs {
+            if failed_tx_execution.is_success() {
+                return log_and_err!("cannot mine mixed block because one of the local execution is not a failure");
+            }
+            block.push_execution(failed_tx_input, failed_tx_execution);
+        }
+
+        Ok(block)
     }
 
     /// Mine one block with a single transaction.
     /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
     /// enabling consistent processing for both single and multiple transaction scenarios.
+    ///
+    /// TODO: remove
     pub async fn mine_with_one_transaction(&self, input: TransactionInput, execution: EvmExecution) -> anyhow::Result<Block> {
         let transactions = NonEmpty::new((input, execution));
         self.mine_with_many_transactions(transactions).await
