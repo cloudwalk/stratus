@@ -482,9 +482,16 @@ impl RocksStorageState {
     }
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
-        if address.is_coinbase() || *address == Address::BRLC {
+        if address.is_coinbase() || address.is_zero() {
             //XXX temporary, we will reload the database later without it
             return None;
+        }
+
+        if *address == Address::BRLC {
+            let inner_account = self.accounts.get(&((*address).into())).unwrap();
+            let account = inner_account.to_account(address);
+            tracing::trace!(%address, ?account, "account found");
+            return Some(account);
         }
 
         match point_in_time {
