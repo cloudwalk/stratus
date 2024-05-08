@@ -27,7 +27,7 @@ on:
 jobs:
   run_lint:
     name: Lint and Style checks
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
     timeout-minutes: 25
 
     concurrency:

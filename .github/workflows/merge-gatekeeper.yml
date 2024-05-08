@@ -7,7 +7,7 @@ on:
 
 jobs:
   merge-gatekeeper:
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
     name: Merge Gatekeeper
     permissions:
       checks: read

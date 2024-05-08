@@ -22,7 +22,7 @@ concurrency:
 jobs:
   # Build the documentation and upload as an artifact
   docs-build:
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
 
     steps:
       - name: Checkout code
@@ -39,12 +39,12 @@ jobs:
           key: ${{ runner.os }}-cargo-nightly-debug-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-cargo-nightly-debug-
-      
+
       - name: Set up Rust Nightly and Rust Docs
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01
           rustup component add rust-docs
-      
+
       - name: Set up Just
         uses: extractions/setup-just@v1
 
@@ -61,7 +61,7 @@ jobs:
 
   # Upload the documentation to GitHub Pages
   docs-release:
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
     needs: docs-build
 
     environment:

@@ -28,7 +28,7 @@ jobs:
   int_tests:
     if: ${{ github.event_name == 'workflow_dispatch' }} # Defensive programming
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
     timeout-minutes: 25
 
     concurrency:

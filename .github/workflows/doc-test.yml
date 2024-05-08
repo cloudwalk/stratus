@@ -20,7 +20,7 @@ on:
 jobs:
   doc_unit_tests:
     name: Documentation Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
     timeout-minutes: 25
 
     concurrency:

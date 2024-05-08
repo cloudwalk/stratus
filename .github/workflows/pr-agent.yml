@@ -20,7 +20,7 @@ on:
 jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' }}
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
     permissions:
       issues: write
       pull-requests: write

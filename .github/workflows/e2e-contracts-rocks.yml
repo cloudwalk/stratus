@@ -31,7 +31,7 @@ jobs:
       matrix:
         contract: [token, pix, periphery, compound, yield, multisig]
     name: E2E Rocks on ${{ matrix.contract }}
-    runs-on: ubuntu-latest
+    runs-on: cloudwalk-k8s-runner
     timeout-minutes: 45
 
     concurrency:
@@ -84,6 +84,6 @@ jobs:
       - name: Run e2e tests
         run: just contracts-test-stratus-rocks --${{ matrix.contract }}
         env:
-          CARGO_PROFILE_RELEASE_DEBUG: 0 
-          RUST_LOG: off 
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          RUST_LOG: off
           RELEASE: 1

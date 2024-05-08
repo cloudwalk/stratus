@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
     report_comment_tags:
-        runs-on: ubuntu-latest
+        runs-on: cloudwalk-k8s-runner
         timeout-minutes: 10
         steps:
             - name: Checkout code
@@ -39,4 +39,3 @@ jobs:
               run: ruby utils/slack-notifiers/comments.rb
               env:
                   SLACK_WEBHOOK_URL: ${{ secrets.STRATUS_SLACK_WEBHOOK_URL }}
-                  
