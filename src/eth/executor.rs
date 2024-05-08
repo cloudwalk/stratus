@@ -317,12 +317,16 @@ impl Executor {
                 // mine and commit block
                 let miner = self.miner.lock().await;
                 let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+
                 match self.storage.commit_to_perm(block).await {
-                    Ok(()) => {}
+                    // success: break with execution
+                    Ok(()) => break execution,
+                    // conflict: try again
                     Err(StorageError::Conflict(conflicts)) => {
                         tracing::warn!(?conflicts, "storage conflict detected when saving block");
                         continue;
                     }
+                    // unexpected error: break with error
                     Err(e) => {
                         #[cfg(feature = "metrics")]
                         metrics::inc_executor_transact(start.elapsed(), false);
