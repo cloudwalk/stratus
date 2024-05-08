@@ -114,13 +114,16 @@ impl RocksStorageState {
     }
 
     pub async fn sync_data(&self) -> anyhow::Result<()> {
+        tracing::info!("starting sync_data");
         let account_block_number = self.accounts.get_current_block_number();
         let slots_block_number = self.account_slots.get_current_block_number();
         let slots_history_block_number = self.account_slots_history.get_index_block_number();
         let accounts_history_block_number = self.accounts_history.get_index_block_number();
         let logs_block_number = self.logs.get_index_block_number();
         let transactions_block_number = self.transactions.get_index_block_number();
+
         if let Some((last_block_number, _)) = self.blocks_by_number.last() {
+            tracing::info!("last_block_number {:?}", last_block_number);
             if account_block_number != slots_block_number {
                 warn!(
                     "block numbers are not in sync {:?} {:?} {:?} {:?} {:?} {:?}",
@@ -450,6 +453,11 @@ impl RocksStorageState {
     }
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
+        if address.is_coinbase() {
+            //XXX temporary, we will reload the database later without it
+            return None;
+        }
+
         match point_in_time {
             StoragePointInTime::Present => self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
                 index: *index,
@@ -474,6 +482,11 @@ impl RocksStorageState {
     }
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
+        if address.is_coinbase() || *address == Address::BRLC {
+            //XXX temporary, we will reload the database later without it
+            return None;
+        }
+
         match point_in_time {
             StoragePointInTime::Present => match self.accounts.get(&((*address).into())) {
                 Some(inner_account) => {

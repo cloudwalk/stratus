@@ -40,6 +40,7 @@ impl Address {
 
     /// Special address that receives the block reward.
     pub const COINBASE: Address = Address(H160(hex!("00000000000000000000000000000000000000ff")));
+    pub const BRLC: Address = Address(H160(hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53")));
 
     /// Creates a new address from the given bytes.
     pub const fn new(bytes: [u8; 20]) -> Self {
