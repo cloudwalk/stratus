@@ -36,7 +36,11 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let chain = BlockchainClient::new(&config.external_rpc).await?;
 
-    run_importer_online(executor, miner, storage, chain).await
+    let result = run_importer_online(executor, miner, storage, chain).await;
+    if let Err(ref e) = result {
+        tracing::error!(reason = ?e, "importer-online failed");
+    }
+    result
 }
 
 pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>, storage: Arc<StratusStorage>, chain: BlockchainClient) -> anyhow::Result<()> {

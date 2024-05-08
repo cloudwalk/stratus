@@ -89,7 +89,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let _ = storage_thread.spawn(move || {
         let _tokio_guard = storage_tokio.enter();
 
-        storage_tokio.block_on(execute_external_rpc_storage_loader(
+        let result = storage_tokio.block_on(execute_external_rpc_storage_loader(
             rpc_storage,
             storage_cancellation,
             config.blocks_by_fetch,
@@ -97,7 +97,10 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
             block_start,
             block_end,
             backlog_tx,
-        ))
+        ));
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "storage-loader failed");
+        }
     });
 
     // execute thread: block importer
@@ -106,7 +109,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let importer_cancellation = cancellation.clone();
     let importer_join = importer_thread.spawn(move || {
         let _tokio_guard = importer_tokio.enter();
-        importer_tokio.block_on(execute_block_importer(
+        let result = importer_tokio.block_on(execute_block_importer(
             executor,
             miner,
             stratus_storage,
@@ -114,7 +117,10 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
             importer_cancellation,
             backlog_rx,
             block_snapshots,
-        ))
+        ));
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "block-importer failed");
+        }
     })?;
 
     let _ = importer_join.join();
@@ -129,7 +135,6 @@ fn signal_handler(cancellation: CancellationToken) {
                 tracing::info!("shutting down");
                 cancellation.cancel();
             }
-
             Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
         }
     });
@@ -177,6 +182,7 @@ async fn execute_block_importer(
             // re-execute and mine
             executor.reexecute_external(&block, &receipts).await?;
             let mined_block = miner.mine_external(&block).await?;
+            storage.temp.remove_executions_before(mined_block.transactions.len()).await?;
 
             // export to csv OR permanent storage
             match csv {
