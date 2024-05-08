@@ -33,7 +33,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         config.address,
         config.executor.chain_id.into(),
     );
-    let importer_task = run_importer_online(executor, storage, chain);
+    let importer_task = run_importer_online(executor, miner, storage, chain);
 
     // await both services to finish
     try_join!(rpc_task, importer_task)?;

@@ -78,28 +78,6 @@ impl Executor {
     // External transactions
     // -------------------------------------------------------------------------
 
-    /// Re-executes an external block locally and imports it to the permanent storage.
-    ///
-    /// TODO: this method will be removed.
-    #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_perm(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
-        // import block
-        let miner = self.miner.lock().await;
-        self.reexecute_external(block, receipts).await?;
-        let mut block = miner.mine_external(block).await?;
-
-        // import relay failed transactions
-        if let Some(relay) = &self.relayer {
-            for (tx, ex) in relay.drain_failed_transactions().await {
-                block.push_execution(tx, ex);
-            }
-        }
-
-        // commit block
-        miner.commit(block.clone()).await?;
-        Ok(block)
-    }
-
     /// Re-executes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
     pub async fn reexecute_external(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
@@ -301,36 +279,41 @@ impl Executor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let execution = if let Some(relayer) = &self.relayer {
-            let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-            let execution = self.execute_in_evm(evm_input).await?.execution;
-            relayer.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-            execution
-        } else {
-            // executes transaction until no more conflicts
-            // TODO: must have a stop condition like timeout or max number of retries
-            loop {
-                // execute and check conflicts before mining block
+        let execution = match &self.relayer {
+            // relayer present
+            Some(relayer) => {
                 let evm_input = EvmInput::from_eth_transaction(transaction.clone());
                 let execution = self.execute_in_evm(evm_input).await?.execution;
+                relayer.forward(transaction, execution.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+                execution
+            }
+            // relayer not present
+            None => {
+                // executes transaction until no more conflicts
+                // TODO: must have a stop condition like timeout or max number of retries
+                loop {
+                    // execute and check conflicts before mining block
+                    let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+                    let execution = self.execute_in_evm(evm_input).await?.execution;
 
-                // mine and commit block
-                let miner = self.miner.lock().await;
-                let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+                    // mine and commit block
+                    let miner = self.miner.lock().await;
+                    let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
 
-                match self.storage.commit_to_perm(block).await {
-                    // success: break with execution
-                    Ok(()) => break execution,
-                    // conflict: try again
-                    Err(StorageError::Conflict(conflicts)) => {
-                        tracing::warn!(?conflicts, "storage conflict detected when saving block");
-                        continue;
-                    }
-                    // unexpected error: break with error
-                    Err(e) => {
-                        #[cfg(feature = "metrics")]
-                        metrics::inc_executor_transact(start.elapsed(), false);
-                        return Err(e.into());
+                    match self.storage.commit_to_perm(block).await {
+                        // success: break with execution
+                        Ok(()) => break execution,
+                        // conflict: try again
+                        Err(StorageError::Conflict(conflicts)) => {
+                            tracing::warn!(?conflicts, "storage conflict detected when saving block");
+                            continue;
+                        }
+                        // unexpected error: break with error
+                        Err(e) => {
+                            #[cfg(feature = "metrics")]
+                            metrics::inc_executor_transact(start.elapsed(), false);
+                            return Err(e.into());
+                        }
                     }
                 }
             }

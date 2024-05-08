@@ -93,6 +93,11 @@ impl EvmExecution {
         matches!(self.result, ExecutionResult::Success { .. })
     }
 
+    /// Checks if the current transaction was completed with a failure (reverted or halted).
+    pub fn is_failure(&self) -> bool {
+        not(self.is_success())
+    }
+
     /// Returns the address of the deployed contract if the transaction is a deployment.
     pub fn contract_address(&self) -> Option<Address> {
         if let Some(contract_address) = &self.deployed_contract_address {
