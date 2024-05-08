@@ -318,7 +318,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
     let (result, output, logs, gas) = parse_revm_result(revm_result.result);
     let changes = parse_revm_state(revm_result.state, execution_changes);
 
-    tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
+    tracing::debug!(?result, %gas, output_len = %output.len(), %output, "evm executed");
     EvmExecution {
         block_timestamp: input.block_timestamp,
         execution_costs_applied: false,

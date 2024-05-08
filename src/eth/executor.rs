@@ -84,7 +84,7 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        tracing::info!(number = %block.number(), "re-executing external block");
+        tracing::debug!(number = %block.number(), "re-executing external block");
 
         let storage = &self.storage;
 
