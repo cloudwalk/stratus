@@ -323,27 +323,25 @@ impl StratusStorage {
     }
 
     /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
+    #[allow(clippy::let_and_return)]
     #[tracing::instrument(skip_all)]
-    pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub async fn save_block_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "metrics")]
-        let start = metrics::now();
-        #[cfg(feature = "metrics")]
-        let label_size_by_tx = block.label_size_by_transactions();
-        #[cfg(feature = "metrics")]
-        let label_size_by_gas = block.label_size_by_gas();
-        #[cfg(feature = "metrics")]
-        let gas_used = block.header.gas_used.as_u64();
+        let (start, label_size_by_tx, label_size_by_gas, gas_used) = (
+            metrics::now(),
+            block.label_size_by_transactions(),
+            block.label_size_by_gas(),
+            block.header.gas_used.as_u64(),
+        );
 
         // save block to permanent storage and clears temporary storage
-        let next_number = block.number().next();
         let result = self.perm.save_block(block).await;
-        self.reset_temp().await?;
-        self.set_active_block_number(next_number).await?;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
-        #[cfg(feature = "metrics")]
-        metrics::inc_n_storage_gas_total(gas_used);
+        {
+            metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
+            metrics::inc_n_storage_gas_total(gas_used);
+        }
 
         result
     }

@@ -84,7 +84,7 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        tracing::info!(number = %block.number(), "importing external block");
+        tracing::info!(number = %block.number(), "re-executing external block");
 
         let storage = &self.storage;
 
@@ -128,7 +128,7 @@ impl Executor {
                             // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
                             let mut reexecute = false;
 
-                            let prev_txs = storage.temp.read_executions().await;
+                            let prev_txs = storage.temp.read_executions().await?;
                             for prev_tx in prev_txs {
                                 let prev_execution = &prev_tx.execution;
                                 if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
@@ -300,7 +300,7 @@ impl Executor {
                     let miner = self.miner.lock().await;
                     let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
 
-                    match self.storage.commit_to_perm(block).await {
+                    match self.storage.save_block_to_perm(block).await {
                         // success: break with execution
                         Ok(()) => break execution,
                         // conflict: try again

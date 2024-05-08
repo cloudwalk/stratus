@@ -9,12 +9,14 @@ use crate::eth::primitives::TransactionExecution;
 
 /// Temporary storage (in-between blocks) operations
 #[async_trait]
-pub trait TemporaryStorage: Send + Sync {
-    /// Sets the block number activelly being mined.
-    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+pub trait TemporaryStorage: Send + Sync + TemporaryStorageExecutionOps {
+    // -------------------------------------------------------------------------
+    // Executions
+    // -------------------------------------------------------------------------
 
-    // Retrieves the block number activelly being mined.
-    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
+    // -------------------------------------------------------------------------
+    // Accounts and Slots
+    // -------------------------------------------------------------------------
 
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
@@ -22,18 +24,35 @@ pub trait TemporaryStorage: Send + Sync {
     /// Retrieves an slot from the storage. Returns Option when not found.
     async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
 
-    /// TODO: temporary stuff while block-per-second is being implemented.
-    async fn read_executions(&self) -> Vec<TransactionExecution>;
+    // -------------------------------------------------------------------------
+    // Block number
+    // -------------------------------------------------------------------------
 
-    /// TODO: temporary stuff while block-per-second is being implemented.
-    async fn reset_executions(&self);
+    /// Sets the block number activelly being mined.
+    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
-    /// Saves a transaction and its execution result.
-    async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()>;
+    // Retrieves the block number activelly being mined.
+    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
 
-    /// If necessary, flushes temporary state to durable storage.
-    async fn flush(&self) -> anyhow::Result<()>;
+    // -------------------------------------------------------------------------
+    // General state
+    // -------------------------------------------------------------------------
 
     /// Resets to default empty state.
     async fn reset(&self) -> anyhow::Result<()>;
+
+    /// If necessary, flushes temporary state to durable storage.
+    async fn flush(&self) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+pub trait TemporaryStorageExecutionOps {
+    /// Saves an executed transaction.
+    async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
+
+    /// Reads all executed transactions.
+    async fn read_executions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
+
+    /// Removes all executed transactions before the specified index.
+    async fn remove_executions_before(&self, index: usize) -> anyhow::Result<()>;
 }

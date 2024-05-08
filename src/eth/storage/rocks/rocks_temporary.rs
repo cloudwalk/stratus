@@ -12,17 +12,18 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::temporary_storage::TemporaryStorageExecutionOps;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
-pub struct RocksTemporary {
+pub struct RocksTemporaryStorage {
     temp: InMemoryTemporaryStorage,
     db: RocksStorageState,
     active_block: AtomicU64,
 }
 
-impl RocksTemporary {
+impl RocksTemporaryStorage {
     pub async fn new() -> anyhow::Result<Self> {
         tracing::info!("creating rocks temporary storage");
         let db = RocksStorageState::new();
@@ -38,7 +39,23 @@ impl RocksTemporary {
 }
 
 #[async_trait]
-impl TemporaryStorage for RocksTemporary {
+impl TemporaryStorageExecutionOps for RocksTemporaryStorage {
+    async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        self.temp.save_execution(tx).await?;
+        Ok(())
+    }
+
+    async fn read_executions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
+        self.temp.read_executions().await
+    }
+
+    async fn remove_executions_before(&self, index: usize) -> anyhow::Result<()> {
+        self.temp.remove_executions_before(index).await
+    }
+}
+
+#[async_trait]
+impl TemporaryStorage for RocksTemporaryStorage {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.active_block.store(number.as_u64(), Ordering::SeqCst);
         self.temp.set_active_block_number(number).await
@@ -76,21 +93,6 @@ impl TemporaryStorage for RocksTemporary {
         }
 
         Ok(self.db.read_slot(address, index, &StoragePointInTime::Present))
-    }
-
-    /// TODO: temporary stuff while block-per-second is being implemented.
-    async fn read_executions(&self) -> Vec<TransactionExecution> {
-        self.temp.read_executions().await
-    }
-
-    /// TODO: temporary stuff while block-per-second is being implemented.
-    async fn reset_executions(&self) {
-        self.temp.reset_executions().await;
-    }
-
-    async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
-        self.temp.save_execution(transaction_execution).await?;
-        Ok(())
     }
 
     async fn flush(&self) -> anyhow::Result<()> {

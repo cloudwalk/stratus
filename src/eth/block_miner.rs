@@ -51,12 +51,10 @@ impl BlockMiner {
     /// TODO: external_block must come from storage.
     /// TODO: validate if transactions really belong to the specified block.
     pub async fn mine_external(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
-        // TODO: draining executions must be atomic instead of 2 calls
-        let txs = self.storage.temp.read_executions().await;
-        self.storage.temp.reset_executions().await;
+        let txs = self.storage.temp.read_executions().await?;
 
-        // mine external transactions.
-        // fails if finds a transaction that is not external.
+        // mine external transactions
+        // fails if finds a transaction that is not external
         let mut mined_txs = Vec::with_capacity(txs.len());
         for tx in txs {
             let TransactionKind::External(external_tx, external_receipt) = tx.kind else {
@@ -77,14 +75,11 @@ impl BlockMiner {
     /// TODO: external_block must come from storage.
     /// TODO: validate if transactions really belong to the specified block.
     pub async fn mine_mixed(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
-        // TODO: draining executions must be atomic instead of 2 calls
-        let txs = self.storage.temp.read_executions().await;
-        self.storage.temp.reset_executions().await;
-
-        let mut mined_txs = Vec::with_capacity(txs.len());
-        let mut failed_txs = Vec::new();
+        let txs = self.storage.temp.read_executions().await?;
 
         // mine external transactions
+        let mut mined_txs = Vec::with_capacity(txs.len());
+        let mut failed_txs = Vec::new();
         for tx in txs {
             match tx.kind {
                 TransactionKind::External(external_tx, external_receipt) => {
@@ -199,17 +194,20 @@ impl BlockMiner {
         }
 
         // TODO: calculate size, state_root, receipts_root, parent_hash
-
         Ok(block)
     }
 
-    /// Persists a mined block to permanent storage.
+    /// Persists a mined block to permanent storage and prepares new block.
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
         let block_number = *block.number();
 
-        // persist
-        self.storage.commit_to_perm(block.clone()).await?;
-        self.storage.set_mined_block_number(block_number).await?; // TODO: commit_to_perm should set the miner block number
+        // persist block
+        self.storage.save_block_to_perm(block.clone()).await?;
+        self.storage.set_mined_block_number(block_number).await?;
+
+        // prepare new block to be mined
+        self.storage.set_active_block_number(block_number.next()).await?;
+        self.storage.reset_temp().await?;
 
         // notify
         let logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();

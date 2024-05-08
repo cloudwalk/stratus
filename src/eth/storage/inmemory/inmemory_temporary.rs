@@ -13,18 +13,19 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::temporary_storage::TemporaryStorageExecutionOps;
 use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug, Default)]
 pub struct InMemoryTemporaryStorageState {
-    pub transaction_executions: Vec<TransactionExecution>,
+    pub tx_executions: Vec<TransactionExecution>,
     pub accounts: HashMap<Address, InMemoryTemporaryAccount>,
     pub active_block_number: Option<BlockNumber>,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
-        self.transaction_executions.clear();
+        self.tx_executions.clear();
         self.accounts.clear();
         self.active_block_number = None;
     }
@@ -57,6 +58,70 @@ impl InMemoryTemporaryStorage {
     /// Locks inner state for writing.
     pub async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
         self.state.write().await
+    }
+}
+
+#[async_trait]
+impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
+    async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        let mut state = self.lock_write().await;
+
+        // save account changes
+        let changes = tx.execution.changes_to_persist();
+        for change in changes {
+            let account = state
+                .accounts
+                .entry(change.address)
+                .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
+
+            // account basic info
+            if let Some(nonce) = change.nonce.take() {
+                account.info.nonce = nonce;
+            }
+            if let Some(balance) = change.balance.take() {
+                account.info.balance = balance;
+            }
+
+            // bytecode (todo: where is code_hash?)
+            if let Some(Some(bytecode)) = change.bytecode.take() {
+                account.info.bytecode = Some(bytecode);
+            }
+            if let Some(indexes) = change.static_slot_indexes.take() {
+                account.info.static_slot_indexes = indexes;
+            }
+            if let Some(indexes) = change.mapping_slot_indexes.take() {
+                account.info.mapping_slot_indexes = indexes;
+            }
+
+            // slots
+            for (_, slot) in change.slots {
+                if let Some(slot) = slot.take() {
+                    account.slots.insert(slot.index, slot);
+                }
+            }
+        }
+
+        // save execution
+        state.tx_executions.push(tx);
+
+        Ok(())
+    }
+
+    async fn read_executions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
+        let state = self.lock_read().await;
+        Ok(state.tx_executions.clone())
+    }
+
+    async fn remove_executions_before(&self, index: usize) -> anyhow::Result<()> {
+        if index == 0 {
+            return Ok(());
+        }
+
+        let mut state = self.lock_write().await;
+        tracing::debug!(len = state.tx_executions.len(), index = %index, "removing executions");
+        let _ = state.tx_executions.drain(..index - 1);
+
+        Ok(())
     }
 }
 
@@ -120,62 +185,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                 Ok(None)
             }
         }
-    }
-
-    /// TODO: temporary stuff while block-per-second is being implemented.
-    async fn read_executions(&self) -> Vec<TransactionExecution> {
-        let state = self.lock_read().await;
-        state.transaction_executions.clone()
-    }
-
-    /// TODO: temporary stuff while block-per-second is being implemented.
-    async fn reset_executions(&self) {
-        let mut state = self.lock_write().await;
-        state.transaction_executions.clear();
-    }
-
-    async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
-        let mut state = self.lock_write().await;
-
-        // save account changes
-        let changes = transaction_execution.execution.changes_to_persist();
-        for change in changes {
-            let account = state
-                .accounts
-                .entry(change.address)
-                .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
-
-            // account basic info
-            if let Some(nonce) = change.nonce.take() {
-                account.info.nonce = nonce;
-            }
-            if let Some(balance) = change.balance.take() {
-                account.info.balance = balance;
-            }
-
-            // bytecode (todo: where is code_hash?)
-            if let Some(Some(bytecode)) = change.bytecode.take() {
-                account.info.bytecode = Some(bytecode);
-            }
-            if let Some(indexes) = change.static_slot_indexes.take() {
-                account.info.static_slot_indexes = indexes;
-            }
-            if let Some(indexes) = change.mapping_slot_indexes.take() {
-                account.info.mapping_slot_indexes = indexes;
-            }
-
-            // slots
-            for (_, slot) in change.slots {
-                if let Some(slot) = slot.take() {
-                    account.slots.insert(slot.index, slot);
-                }
-            }
-        }
-
-        // save executions
-        state.transaction_executions.push(transaction_execution);
-
-        Ok(())
     }
 
     async fn flush(&self) -> anyhow::Result<()> {
