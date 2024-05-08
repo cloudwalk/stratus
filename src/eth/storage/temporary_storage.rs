@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
@@ -47,6 +48,12 @@ pub trait TemporaryStorage: Send + Sync + TemporaryStorageExecutionOps {
 
 #[async_trait]
 pub trait TemporaryStorageExecutionOps {
+    /// Sets the external block being re-executed.
+    async fn set_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
+
+    /// Reads an external block being re-executed.
+    async fn read_external_block(&self) -> anyhow::Result<Option<ExternalBlock>>;
+
     /// Saves an executed transaction.
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
 

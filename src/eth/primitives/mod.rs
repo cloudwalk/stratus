@@ -177,6 +177,8 @@ pub use slot_value::SlotValue;
 pub use storage_point_in_time::StoragePointInTime;
 pub use transaction_execution::TransactionExecution;
 pub use transaction_input::TransactionInput;
+pub use transaction_kind::ExternalTransactionExecution;
+pub use transaction_kind::LocalTransactionExecution;
 pub use transaction_kind::TransactionKind;
 pub use transaction_mined::TransactionMined;
 pub use unix_time::UnixTime;
