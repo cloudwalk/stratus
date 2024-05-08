@@ -37,9 +37,6 @@ use crate::eth::TransactionRelayer;
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
-/// Number of events in the backlog.
-const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
-
 pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
 pub struct Executor {
     /// Channel to send transactions to background EVMs.
@@ -56,10 +53,6 @@ pub struct Executor {
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
-
-    /// Broadcast channels for notifying subscribers about new blocks and logs.
-    block_notifier: broadcast::Sender<Block>,
-    log_notifier: broadcast::Sender<LogMined>,
 }
 
 impl Executor {
@@ -72,14 +65,11 @@ impl Executor {
         num_evms: usize,
     ) -> Self {
         tracing::info!(%num_evms, "creating executor");
-
         Self {
             evm_tx,
             num_evms,
             miner: Mutex::new(miner),
             storage,
-            block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
-            log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             relayer,
         }
     }
@@ -311,15 +301,15 @@ impl Executor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let execution = if let Some(relay) = &self.relayer {
+        let execution = if let Some(relayer) = &self.relayer {
             let evm_input = EvmInput::from_eth_transaction(transaction.clone());
             let execution = self.execute_in_evm(evm_input).await?.execution;
-            relay.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+            relayer.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
             execution
         } else {
             // executes transaction until no more conflicts
             // TODO: must have a stop condition like timeout or max number of retries
-            let (execution, block) = loop {
+            loop {
                 // execute and check conflicts before mining block
                 let evm_input = EvmInput::from_eth_transaction(transaction.clone());
                 let execution = self.execute_in_evm(evm_input).await?.execution;
@@ -327,7 +317,7 @@ impl Executor {
                 // mine and commit block
                 let miner = self.miner.lock().await;
                 let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-                match self.storage.commit_to_perm(block.clone()).await {
+                match self.storage.commit_to_perm(block).await {
                     Ok(()) => {}
                     Err(StorageError::Conflict(conflicts)) => {
                         tracing::warn!(?conflicts, "storage conflict detected when saving block");
@@ -338,22 +328,8 @@ impl Executor {
                         metrics::inc_executor_transact(start.elapsed(), false);
                         return Err(e.into());
                     }
-                };
-                break (execution, block);
-            };
-
-            // notify new blocks
-            // TODO: remove notifications from here because miner will send notifications
-            let _ = self.block_notifier.send(block.clone());
-
-            // notify transaction logs
-            // TODO: remove notifications from here because miner will send notifications
-            for trx in block.transactions {
-                for log in trx.logs {
-                    let _ = self.log_notifier.send(log);
                 }
             }
-            execution
         };
 
         #[cfg(feature = "metrics")]
@@ -389,28 +365,9 @@ impl Executor {
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
         let miner = self.miner.lock().await;
         let block = miner.mine_empty().await?;
-        miner.commit(block.clone()).await?;
-
-        // TODO: remove notifications from here because miner will send notifications
-        if let Err(e) = self.block_notifier.send(block) {
-            tracing::error!(reason = ?e, "failed to send block notification");
-        };
+        miner.commit(block).await?;
 
         Ok(())
-    }
-
-    // -------------------------------------------------------------------------
-    // Subscriptions
-    // -------------------------------------------------------------------------
-
-    /// Subscribe to new blocks events.
-    pub fn subscribe_to_new_heads(&self) -> broadcast::Receiver<Block> {
-        self.block_notifier.subscribe()
-    }
-
-    /// Subscribe to new logs events.
-    pub fn subscribe_to_logs(&self) -> broadcast::Receiver<LogMined> {
-        self.log_notifier.subscribe()
     }
 
     // -------------------------------------------------------------------------

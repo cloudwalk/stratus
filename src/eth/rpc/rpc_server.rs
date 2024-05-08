@@ -56,9 +56,9 @@ pub async fn serve_rpc(
 ) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
-    let subscriptions_cleaner_handle = Arc::clone(&subs).spawn_subscriptions_cleaner();
-    let logs_notifier_handle = Arc::clone(&subs).spawn_logs_notifier(executor.subscribe_to_logs());
-    let heads_notifier_handle = Arc::clone(&subs).spawn_new_heads_notifier(executor.subscribe_to_new_heads());
+    let handle_sub_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();
+    let handle_new_heads_notifier = Arc::clone(&subs).spawn_new_heads_notifier(miner.notifier_blocks.subscribe());
+    let handle_logs_notifier = Arc::clone(&subs).spawn_logs_notifier(miner.notifier_logs.subscribe());
 
     // configure context
     let ctx = RpcContext {
@@ -94,13 +94,13 @@ pub async fn serve_rpc(
     let _server_handle = server.start(module);
 
     tokio::select! {
-        _ = subscriptions_cleaner_handle => {
+        _ = handle_sub_cleaner => {
             tracing::info!("subscriptions cleaner stopped");
         }
-        _ = logs_notifier_handle => {
+        _ = handle_logs_notifier => {
             tracing::info!("logs notifier stopped");
         }
-        _ = heads_notifier_handle => {
+        _ = handle_new_heads_notifier => {
             tracing::info!("heads notifier stopped");
         }
     }
