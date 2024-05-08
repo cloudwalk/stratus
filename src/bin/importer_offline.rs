@@ -52,7 +52,6 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let miner = config.miner.init(Arc::clone(&stratus_storage));
     let executor = config.executor.init(Arc::clone(&stratus_storage), Arc::clone(&miner), None).await;
 
-
     // init block snapshots to export
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
 
@@ -176,7 +175,7 @@ async fn execute_block_importer(
             let start = metrics::now();
 
             // re-execute and mine
-            executor.reexecute_external_transactions(&block, &receipts).await?;
+            executor.reexecute_external(&block, &receipts).await?;
             let mined_block = miner.mine_external(&block).await?;
 
             // export to csv OR permanent storage

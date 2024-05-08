@@ -69,7 +69,7 @@ impl Executor {
         miner: Arc<BlockMiner>,
         relayer: Option<Arc<TransactionRelayer>>,
         evm_tx: crossbeam_channel::Sender<EvmTask>,
-        num_evms: usize
+        num_evms: usize,
     ) -> Self {
         tracing::info!(%num_evms, "creating executor");
 
@@ -94,7 +94,7 @@ impl Executor {
     #[tracing::instrument(skip_all)]
     pub async fn import_external_to_perm(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
-        self.reexecute_external_transactions(block, receipts).await?;
+        self.reexecute_external(block, receipts).await?;
         let mut block = self.miner.mine_external(block).await?;
 
         // import relay failed transactions
@@ -111,7 +111,7 @@ impl Executor {
 
     /// Re-executes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
-    pub async fn reexecute_external_transactions(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
+    pub async fn reexecute_external(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
