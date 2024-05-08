@@ -3,6 +3,7 @@ use std::sync::Arc;
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
+use tokio::sync::broadcast;
 
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
@@ -20,13 +21,23 @@ use crate::log_and_err;
 
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
+
+    /// Broadcasts new mined blocks events.
+    pub notifier_blocks: broadcast::Sender<Block>,
+
+    /// Broadcasts transaction logs events.
+    pub notifier_logs: broadcast::Sender<LogMined>,
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>) -> Self {
         tracing::info!("creating block miner");
-        Self { storage }
+        Self {
+            storage,
+            notifier_blocks: broadcast::channel(u16::MAX as usize).0,
+            notifier_logs: broadcast::channel(u16::MAX as usize).0,
+        }
     }
 
     /// Mine a block with no transactions.
@@ -144,14 +155,21 @@ impl BlockMiner {
         Ok(block)
     }
 
-    /// Persist a mined block to permanent storage.
+    /// Persists a mined block to permanent storage.
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
         let block_number = *block.number();
 
-        self.storage.commit_to_perm(block).await?;
+        // persist
+        self.storage.commit_to_perm(block.clone()).await?;
         self.storage.set_mined_block_number(block_number).await?; // TODO: commit_to_perm should set the miner block number
 
-        // TODO: notify subscribers
+        // notify
+        let logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
+        for log in logs {
+            let _ = self.notifier_logs.send(log);
+        }
+        let _ = self.notifier_blocks.send(block);
+
         Ok(())
     }
 }
