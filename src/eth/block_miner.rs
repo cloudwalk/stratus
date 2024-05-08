@@ -30,14 +30,12 @@ impl BlockMiner {
     }
 
     /// Mine a block with no transactions.
-    pub async fn mine_empty(&mut self) -> anyhow::Result<Block> {
+    pub async fn mine_empty(&self) -> anyhow::Result<Block> {
         let number = self.storage.increment_block_number().await?;
         Ok(Block::new_at_now(number))
     }
 
-    /// Mine a block from an external imported block.
-    ///
-    /// Note: all transactions must be external transactions.
+    /// Mine a block from an external block.
     pub async fn mine_external(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
         let transactions = self.storage.temp.read_executions().await;
         self.storage.temp.reset_executions().await;
@@ -62,7 +60,7 @@ impl BlockMiner {
     /// Mine one block with a single transaction.
     /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
     /// enabling consistent processing for both single and multiple transaction scenarios.
-    pub async fn mine_with_one_transaction(&mut self, input: TransactionInput, execution: EvmExecution) -> anyhow::Result<Block> {
+    pub async fn mine_with_one_transaction(&self, input: TransactionInput, execution: EvmExecution) -> anyhow::Result<Block> {
         let transactions = NonEmpty::new((input, execution));
         self.mine_with_many_transactions(transactions).await
     }
@@ -72,7 +70,7 @@ impl BlockMiner {
     /// and finalizing the block. It is used both directly for multiple transactions and indirectly by `mine_with_one_transaction`.
     ///
     /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
-    pub async fn mine_with_many_transactions(&mut self, transactions: NonEmpty<(TransactionInput, EvmExecution)>) -> anyhow::Result<Block> {
+    pub async fn mine_with_many_transactions(&self, transactions: NonEmpty<(TransactionInput, EvmExecution)>) -> anyhow::Result<Block> {
         // init block
         let number = self.storage.increment_block_number().await?;
         let block_timestamp = transactions
@@ -144,5 +142,16 @@ impl BlockMiner {
         // TODO: calculate size, state_root, receipts_root, parent_hash
 
         Ok(block)
+    }
+
+    /// Persist a mined block to permanent storage.
+    pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
+        let block_number = *block.number();
+
+        self.storage.commit_to_perm(block).await?;
+        self.storage.set_mined_block_number(block_number).await?; // TODO: commit_to_perm should set the miner block number
+
+        // TODO: notify subscribers
+        Ok(())
     }
 }

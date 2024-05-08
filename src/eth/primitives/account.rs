@@ -8,6 +8,7 @@
 //! tracking account states and differentiating between standard accounts and
 //! contract accounts.
 
+use display_json::DebugAsJson;
 use itertools::Itertools;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
@@ -25,7 +26,7 @@ use crate::ext::OptionExt;
 /// Ethereum account (wallet or contract).
 ///
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
-#[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
 pub struct Account {
     /// Immutable address of the account.
     pub address: Address,

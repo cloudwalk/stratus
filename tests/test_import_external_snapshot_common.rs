@@ -154,10 +154,10 @@ pub async fn execute_test(
     // init executor and execute
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage)));
     let relayer = config.relayer.init(Arc::clone(&storage)).await.unwrap();
-    let executor = config.executor.init(Arc::clone(&storage), relayer).await;
     let miner = config.miner.init(Arc::clone(&storage));
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
 
-    executor.import_external_to_perm(&miner, &block, &receipts).await.unwrap();
+    executor.import_external_to_perm(&block, &receipts).await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
     tokio::time::sleep(Duration::from_secs(5)).await;

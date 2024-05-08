@@ -1186,6 +1186,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "display_json"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e8619be5104f2a5fe15929a69a960db3dc3f71a879f15e1c4255083d9b57a1c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "dotenv"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5210,6 +5223,7 @@ dependencies = [
  "csv",
  "derive-new",
  "derive_more",
+ "display_json",
  "dotenvy",
  "ethabi",
  "ethereum-types",
