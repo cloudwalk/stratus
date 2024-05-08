@@ -24,6 +24,7 @@ use stratus::ext::not;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::log_and_err;
+use stratus::utils::with_unique_logging_context;
 use stratus::GlobalServices;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
@@ -143,6 +144,7 @@ fn signal_handler(cancellation: CancellationToken) {
 // -----------------------------------------------------------------------------
 // Block importer
 // -----------------------------------------------------------------------------
+#[tracing::instrument(name = "[Importer]", skip_all)]
 async fn execute_block_importer(
     // services
     executor: Arc<Executor>,
@@ -176,29 +178,34 @@ async fn execute_block_importer(
         // imports block transactions
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
-            #[cfg(feature = "metrics")]
-            let start = metrics::now();
+            with_unique_logging_context(async {
+                #[cfg(feature = "metrics")]
+                let start = metrics::now();
 
-            // re-execute block
-            executor.reexecute_external(&block, &receipts).await?;
+                // re-execute block
+                executor.reexecute_external(&block, &receipts).await?;
 
-            // mine block
-            let mined_block = miner.mine_external().await?;
-            storage.temp.remove_executions_before(mined_block.transactions.len()).await?;
+                // mine block
+                let mined_block = miner.mine_external().await?;
+                storage.temp.remove_executions_before(mined_block.transactions.len()).await?;
 
-            // export to csv OR permanent storage
-            match csv {
-                Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
-                None => miner.commit(mined_block.clone()).await?,
-            };
+                // export to csv OR permanent storage
+                match csv {
+                    Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
+                    None => miner.commit(mined_block.clone()).await?,
+                };
 
-            // export snapshot for tests
-            if blocks_to_export_snapshot.contains(mined_block.number()) {
-                export_snapshot(&block, &receipts, &mined_block)?;
-            }
+                // export snapshot for tests
+                if blocks_to_export_snapshot.contains(mined_block.number()) {
+                    export_snapshot(&block, &receipts, &mined_block)?;
+                }
 
-            #[cfg(feature = "metrics")]
-            metrics::inc_import_offline(start.elapsed());
+                #[cfg(feature = "metrics")]
+                metrics::inc_import_offline(start.elapsed());
+
+                anyhow::Ok(())
+            })
+            .await?;
         }
     };
 
@@ -209,6 +216,7 @@ async fn execute_block_importer(
 // -----------------------------------------------------------------------------
 // Block loader
 // -----------------------------------------------------------------------------
+#[tracing::instrument(name = "[RPC]", skip_all, fields(start, end, block_by_fetch))]
 async fn execute_external_rpc_storage_loader(
     // services
     rpc_storage: Arc<dyn ExternalRpcStorage>,
@@ -226,7 +234,11 @@ async fn execute_external_rpc_storage_loader(
     let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (blocks_by_fetch - 1), end);
-        tasks.push(load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end));
+
+        let task = load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end);
+        let task = with_unique_logging_context(task);
+        tasks.push(task);
+
         start += blocks_by_fetch;
     }
 
