@@ -37,7 +37,7 @@ use crate::eth::storage::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
 #[cfg(feature = "rocks")]
-use crate::eth::storage::RocksTemporary;
+use crate::eth::storage::RocksTemporaryStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
@@ -156,7 +156,7 @@ impl StratusStorageConfig {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                storage.commit_to_perm(Block::genesis()).await?;
+                storage.save_block_to_perm(Block::genesis()).await?;
             }
         }
 
@@ -630,7 +630,7 @@ impl TemporaryStorageConfig {
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
             #[cfg(feature = "rocks")]
-            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new().await?)),
+            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporaryStorage::new().await?)),
         }
     }
 }
