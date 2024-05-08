@@ -6,6 +6,7 @@
 //! facilitates flexible EVM integrations, enabling the project to adapt to different blockchain environments
 //! or requirements while maintaining a consistent execution interface.
 
+use display_json::DebugAsJson;
 use itertools::Itertools;
 
 use crate::eth::primitives::Address;
@@ -43,7 +44,7 @@ pub trait Evm {
 pub type EvmInputSlotKeys = Vec<Vec<u8>>;
 
 /// EVM configuration.
-#[derive(Debug, Clone)]
+#[derive(DebugAsJson, Clone, serde::Serialize)]
 pub struct EvmConfig {
     /// Chain ID of the EVM.
     pub chain_id: ChainId,

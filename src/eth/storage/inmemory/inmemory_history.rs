@@ -11,7 +11,7 @@ pub struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
 where
     T: Clone + Debug + serde::Serialize;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, derive_new::new)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, derive_new::new)]
 pub struct InMemoryHistoryValue<T> {
     pub block_number: BlockNumber,
     pub value: T,

@@ -1,7 +1,6 @@
 //! Application configuration.
 
 use std::cmp::max;
-use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -10,6 +9,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use clap::Parser;
+use display_json::DebugAsJson;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
@@ -68,7 +68,7 @@ pub trait WithCommonConfig {
 }
 
 /// Configuration that can be used by any binary.
-#[derive(Clone, Parser, Debug)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
     /// Number of threads to execute global async tasks.
@@ -127,7 +127,7 @@ impl CommonConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct StratusStorageConfig {
     #[clap(flatten)]
     pub temp_storage: TemporaryStorageConfig,
@@ -184,7 +184,7 @@ impl StratusStorageConfig {
 // Config: Executor
 // -----------------------------------------------------------------------------
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "chain-id", env = "CHAIN_ID")]
@@ -250,7 +250,7 @@ impl ExecutorConfig {
 // -----------------------------------------------------------------------------
 // Config: Miner
 // -----------------------------------------------------------------------------
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct MinerConfig {}
 
 impl MinerConfig {
@@ -263,7 +263,7 @@ impl MinerConfig {
 // -----------------------------------------------------------------------------
 // Config: Relayer
 // -----------------------------------------------------------------------------
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct RelayerConfig {
     /// RPC address to forward transactions to.
     #[arg(long = "forward-to", env = "FORWARD_TO")]
@@ -290,7 +290,7 @@ impl RelayerConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for main Stratus service.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct StratusConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
@@ -324,7 +324,7 @@ impl WithCommonConfig for StratusConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `rpc-downlaoder` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RpcDownloaderConfig {
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
@@ -357,7 +357,7 @@ impl WithCommonConfig for RpcDownloaderConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `importer-offline` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(Parser, DebugAsJson, derive_more::Deref, serde::Serialize)]
 pub struct ImporterOfflineConfig {
     /// Initial block number to be imported.
     #[arg(long = "block-start", env = "BLOCK_START")]
@@ -411,7 +411,7 @@ impl WithCommonConfig for ImporterOfflineConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `importer-online` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct ImporterOnlineConfig {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
@@ -440,7 +440,7 @@ impl WithCommonConfig for ImporterOnlineConfig {
     }
 }
 
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RunWithImporterConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
@@ -478,7 +478,7 @@ impl WithCommonConfig for RunWithImporterConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `state-validator` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct StateValidatorConfig {
     /// How many slots to validate per batch. 0 means every slot.
     #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
@@ -519,7 +519,7 @@ impl WithCommonConfig for StateValidatorConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for integration tests.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct IntegrationTestConfig {
     #[deref]
     #[clap(flatten)]
@@ -552,7 +552,7 @@ impl WithCommonConfig for IntegrationTestConfig {
 // -----------------------------------------------------------------------------
 
 /// External RPC storage configuration.
-#[derive(Parser, Debug)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct ExternalRpcStorageConfig {
     /// External RPC storage implementation.
     #[arg(long = "external-rpc-storage", env = "EXTERNAL_RPC_STORAGE")]
@@ -567,7 +567,7 @@ pub struct ExternalRpcStorageConfig {
     pub external_rpc_storage_timeout_millis: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum ExternalRpcStorageKind {
     Postgres { url: String },
 }
@@ -606,14 +606,14 @@ impl FromStr for ExternalRpcStorageKind {
 // -----------------------------------------------------------------------------
 
 /// Temporary storage configuration.
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct TemporaryStorageConfig {
     /// Temporary storage implementation.
     #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
     pub temp_storage_kind: TemporaryStorageKind,
 }
 
-#[derive(Clone, Debug)]
+#[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum TemporaryStorageKind {
     InMemory,
     #[cfg(feature = "rocks")]
@@ -651,7 +651,7 @@ impl FromStr for TemporaryStorageKind {
 // -----------------------------------------------------------------------------
 
 /// Permanent storage configuration.
-#[derive(Clone, Parser, Debug)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct PermanentStorageConfig {
     /// Permamenent storage implementation.
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
@@ -666,7 +666,7 @@ pub struct PermanentStorageConfig {
     pub perm_storage_timeout_millis: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum PermanentStorageKind {
     InMemory,
     #[cfg(feature = "rocks")]
@@ -717,7 +717,7 @@ impl FromStr for PermanentStorageKind {
 // -----------------------------------------------------------------------------
 
 /// See: <https://prometheus.io/docs/practices/histograms/>
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(DebugAsJson, Clone, Copy, Eq, PartialEq, serde::Serialize)]
 pub enum MetricsHistogramKind {
     /// Quantiles are calculated on client-side based on recent data kept in-memory.
     ///
@@ -746,7 +746,7 @@ impl FromStr for MetricsHistogramKind {
 // Enum: ValidatorMethodConfig
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, Debug, strum::Display)]
+#[derive(DebugAsJson, Clone, strum::Display, serde::Serialize)]
 pub enum ValidatorMethodConfig {
     Rpc { url: String },
     CompareTables,
