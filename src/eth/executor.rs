@@ -49,7 +49,7 @@ pub struct Executor {
     num_evms: usize,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
-    miner: Arc<BlockMiner>,
+    miner: Mutex<Arc<BlockMiner>>,
 
     /// Provider for sending rpc calls to substrate
     relayer: Option<Arc<TransactionRelayer>>,
@@ -76,7 +76,7 @@ impl Executor {
         Self {
             evm_tx,
             num_evms,
-            miner,
+            miner: Mutex::new(miner),
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
@@ -94,8 +94,9 @@ impl Executor {
     #[tracing::instrument(skip_all)]
     pub async fn import_external_to_perm(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
+        let miner = self.miner.lock().await;
         self.reexecute_external(block, receipts).await?;
-        let mut block = self.miner.mine_external(block).await?;
+        let mut block = miner.mine_external(block).await?;
 
         // import relay failed transactions
         if let Some(relay) = &self.relayer {
@@ -105,7 +106,7 @@ impl Executor {
         }
 
         // commit block
-        self.miner.commit(block.clone()).await?;
+        miner.commit(block.clone()).await?;
         Ok(block)
     }
 
@@ -324,7 +325,8 @@ impl Executor {
                 let execution = self.execute_in_evm(evm_input).await?.execution;
 
                 // mine and commit block
-                let block = self.miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+                let miner = self.miner.lock().await;
+                let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
                 match self.storage.commit_to_perm(block.clone()).await {
                     Ok(()) => {}
                     Err(StorageError::Conflict(conflicts)) => {
@@ -385,8 +387,9 @@ impl Executor {
 
     #[cfg(feature = "dev")]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
-        let block = self.miner.mine_empty().await?;
-        self.miner.commit(block.clone()).await?;
+        let miner = self.miner.lock().await;
+        let block = miner.mine_empty().await?;
+        miner.commit(block.clone()).await?;
 
         // TODO: remove notifications from here because miner will send notifications
         if let Err(e) = self.block_notifier.send(block) {
