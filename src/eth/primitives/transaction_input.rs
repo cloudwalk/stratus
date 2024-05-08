@@ -6,6 +6,7 @@
 //! transactions, providing a comprehensive interface for transaction data.
 
 use anyhow::anyhow;
+use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use ethers_core::types::OtherFields;
@@ -27,7 +28,7 @@ use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
     /// TODO: Optional for external/older transactions, but it should be required for newer transactions.
     ///

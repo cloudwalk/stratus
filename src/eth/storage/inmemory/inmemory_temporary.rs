@@ -65,6 +65,7 @@ impl InMemoryTemporaryStorage {
 impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
+        tracing::debug!(hash = %tx.hash(), tx_executions_len = %state.tx_executions.len(), "saving execution");
 
         // save account changes
         let changes = tx.execution.changes_to_persist();
@@ -108,6 +109,7 @@ impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
     }
 
     async fn read_executions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
+        tracing::debug!("reading executions");
         let state = self.lock_read().await;
         Ok(state.tx_executions.clone())
     }
@@ -118,7 +120,7 @@ impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
         }
 
         let mut state = self.lock_write().await;
-        tracing::debug!(len = state.tx_executions.len(), index = %index, "removing executions");
+        tracing::debug!(tx_executions_len = %state.tx_executions.len(), index = %index, "removing executions");
         let _ = state.tx_executions.drain(..index - 1);
 
         Ok(())
