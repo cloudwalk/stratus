@@ -159,7 +159,7 @@ pub async fn execute_test(
 
     // execute and mine
     executor.reexecute_external(&block, &receipts).await.unwrap();
-    let mined_block = miner.mine_external(&block).await.unwrap();
+    let mined_block = miner.mine_external().await.unwrap();
     miner.commit(mined_block).await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)

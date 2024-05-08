@@ -2,6 +2,7 @@
 
 use display_json::DebugAsJson;
 
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::TransactionInput;
@@ -14,3 +15,6 @@ pub enum TransactionKind {
     /// Transaction that imported from external source.
     External(ExternalTransaction, ExternalReceipt),
 }
+
+pub type LocalTransactionExecution = (TransactionInput, EvmExecution);
+pub type ExternalTransactionExecution = (ExternalTransaction, ExternalReceipt, EvmExecution);

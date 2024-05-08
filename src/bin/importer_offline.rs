@@ -179,9 +179,11 @@ async fn execute_block_importer(
             #[cfg(feature = "metrics")]
             let start = metrics::now();
 
-            // re-execute and mine
+            // re-execute block
             executor.reexecute_external(&block, &receipts).await?;
-            let mined_block = miner.mine_external(&block).await?;
+
+            // mine block
+            let mined_block = miner.mine_external().await?;
             storage.temp.remove_executions_before(mined_block.transactions.len()).await?;
 
             // export to csv OR permanent storage

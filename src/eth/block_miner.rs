@@ -7,11 +7,15 @@ use tokio::sync::broadcast;
 
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
+use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionKind;
 use crate::eth::primitives::TransactionMined;
@@ -47,63 +51,37 @@ impl BlockMiner {
     }
 
     /// Mine a block from an external block.
-    ///
-    /// TODO: external_block must come from storage.
-    /// TODO: validate if transactions really belong to the specified block.
-    pub async fn mine_external(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
-        let txs = self.storage.temp.read_executions().await?;
+    pub async fn mine_external(&self) -> anyhow::Result<Block> {
+        // retrieve data
+        let (external_block, txs) = read_external_block_and_executions(&self.storage).await?;
+        let (local_txs, external_txs) = partition_transactions(txs);
 
-        // mine external transactions
-        // fails if finds a transaction that is not external
-        let mut mined_txs = Vec::with_capacity(txs.len());
-        for tx in txs {
-            let TransactionKind::External(external_tx, external_receipt) = tx.kind else {
-                return log_and_err!("cannot mine external block because one of the transactions is not an external transaction");
-            };
-            let mined_tx = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
-            mined_txs.push(mined_tx);
+        // validate
+        if not(local_txs.is_empty()) {
+            return log_and_err!("cannot mine external block because one of the transactions is not an external transaction");
         }
 
-        Ok(Block {
-            header: BlockHeader::try_from(external_block)?,
-            transactions: mined_txs,
-        })
+        // mine external transactions
+        let mined_txs = mine_external_transactions(external_block.number(), external_txs)?;
+        block_from_external(external_block, mined_txs)
     }
 
     /// Mine a block from an external block and local failed transactions.
-    ///
-    /// TODO: external_block must come from storage.
-    /// TODO: validate if transactions really belong to the specified block.
-    pub async fn mine_mixed(&self, external_block: &ExternalBlock) -> anyhow::Result<Block> {
-        let txs = self.storage.temp.read_executions().await?;
+    pub async fn mine_mixed(&self) -> anyhow::Result<Block> {
+        // retrieve data
+        let (external_block, txs) = read_external_block_and_executions(&self.storage).await?;
+        let (local_txs, external_txs) = partition_transactions(txs);
 
         // mine external transactions
-        let mut mined_txs = Vec::with_capacity(txs.len());
-        let mut failed_txs = Vec::new();
-        for tx in txs {
-            match tx.kind {
-                TransactionKind::External(external_tx, external_receipt) => {
-                    let mined_tx = TransactionMined::from_external(external_tx, external_receipt, tx.execution)?;
-                    mined_txs.push(mined_tx);
-                }
-                TransactionKind::Local(tx_input) => {
-                    failed_txs.push((tx_input, tx.execution));
-                }
-            }
-        }
+        let mined_txs = mine_external_transactions(external_block.number(), external_txs)?;
+        let mut block = block_from_external(external_block, mined_txs)?;
 
-        let mut block = Block {
-            header: BlockHeader::try_from(external_block)?,
-            transactions: mined_txs,
-        };
-
-        // mine failed transactions
-        // fails if finds a local transaction that is not a failure
-        for (failed_tx_input, failed_tx_execution) in failed_txs {
-            if failed_tx_execution.is_success() {
+        // mine local transactions
+        for (tx, execution) in local_txs {
+            if execution.is_success() {
                 return log_and_err!("cannot mine mixed block because one of the local execution is not a failure");
             }
-            block.push_execution(failed_tx_input, failed_tx_execution);
+            block.push_execution(tx, execution);
         }
 
         Ok(block)
@@ -218,4 +196,57 @@ impl BlockMiner {
 
         Ok(())
     }
+}
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+async fn read_external_block_and_executions(storage: &StratusStorage) -> anyhow::Result<(ExternalBlock, Vec<TransactionExecution>)> {
+    let block = match storage.temp.read_external_block().await {
+        Ok(Some(block)) => block,
+        Ok(None) => return log_and_err!("no active external block being re-executed"),
+        Err(e) => return Err(e),
+    };
+    let txs = storage.temp.read_executions().await?;
+
+    Ok((block, txs))
+}
+
+fn partition_transactions(
+    txs: Vec<TransactionExecution>,
+) -> (Vec<LocalTransactionExecution>, Vec<ExternalTransactionExecution>) {
+    let mut local_txs = Vec::with_capacity(txs.len());
+    let mut external_txs = Vec::with_capacity(txs.len());
+
+    for tx in txs {
+        match tx.kind {
+            TransactionKind::Local(tx_input) => local_txs.push((tx_input, tx.execution)),
+            TransactionKind::External(external_tx, external_receipt) => {
+                external_txs.push((external_tx, external_receipt, tx.execution));
+            }
+        }
+    }
+    (local_txs, external_txs)
+}
+
+fn mine_external_transactions(
+    block_number: BlockNumber,
+    txs: Vec<ExternalTransactionExecution>,
+) -> anyhow::Result<Vec<TransactionMined>> {
+    let mut mined_txs = Vec::with_capacity(txs.len());
+    for (tx, receipt, execution) in txs {
+        if tx.block_number() != block_number {
+            return log_and_err!("cannot mine external block because one of the transactions does not belong to the external block");
+        }
+        mined_txs.push(TransactionMined::from_external(tx, receipt, execution)?);
+    }
+    Ok(mined_txs)
+}
+
+fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<TransactionMined>) -> anyhow::Result<Block> {
+    Ok(Block {
+        header: BlockHeader::try_from(&external_block)?,
+        transactions: mined_txs,
+    })
 }

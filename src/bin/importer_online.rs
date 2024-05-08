@@ -74,9 +74,11 @@ async fn import(executor: &Executor, miner: &BlockMiner, chain: &BlockchainClien
     let receipts = futures::stream::iter(receipts).buffered(RECEIPTS_PARALELLISM).try_collect::<Vec<_>>().await?;
     let receipts: ExternalReceipts = receipts.into();
 
-    // import block
+    // re-execute block
     executor.reexecute_external(&block, &receipts).await?;
-    let mined_block = miner.mine_mixed(&block).await?;
+
+    // mine block
+    let mined_block = miner.mine_mixed().await?;
     miner.commit(mined_block).await?;
 
     // track metrics

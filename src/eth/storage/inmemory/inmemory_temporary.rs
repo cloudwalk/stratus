@@ -10,6 +10,7 @@ use tokio::sync::RwLockWriteGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
@@ -18,13 +19,22 @@ use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug, Default)]
 pub struct InMemoryTemporaryStorageState {
+    /// External block being re-executed.
+    pub external_block: Option<ExternalBlock>,
+
+    /// Pending transactions executions during block execution.
     pub tx_executions: Vec<TransactionExecution>,
+
+    /// Pending accounts modified during block execution.
     pub accounts: HashMap<Address, InMemoryTemporaryAccount>,
+
+    /// Pending slots modified during block execution.
     pub active_block_number: Option<BlockNumber>,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
+        self.external_block = None;
         self.tx_executions.clear();
         self.accounts.clear();
         self.active_block_number = None;
@@ -63,6 +73,17 @@ impl InMemoryTemporaryStorage {
 
 #[async_trait]
 impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
+    async fn set_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+        let mut state = self.lock_write().await;
+        state.external_block = Some(block);
+        Ok(())
+    }
+
+    async fn read_external_block(&self) -> anyhow::Result<Option<ExternalBlock>> {
+        let state = self.lock_read().await;
+        Ok(state.external_block.clone())
+    }
+
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
         tracing::debug!(hash = %tx.hash(), tx_executions_len = %state.tx_executions.len(), "saving execution");

@@ -89,6 +89,7 @@ impl Executor {
         let storage = &self.storage;
 
         // track active block number
+        storage.temp.set_external_block(block.clone()).await?;
         storage.set_active_block_number(block.number()).await?;
 
         // execute mixing serial and parallel approaches
