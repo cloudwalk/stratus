@@ -213,9 +213,7 @@ async fn read_external_block_and_executions(storage: &StratusStorage) -> anyhow:
     Ok((block, txs))
 }
 
-fn partition_transactions(
-    txs: Vec<TransactionExecution>,
-) -> (Vec<LocalTransactionExecution>, Vec<ExternalTransactionExecution>) {
+fn partition_transactions(txs: Vec<TransactionExecution>) -> (Vec<LocalTransactionExecution>, Vec<ExternalTransactionExecution>) {
     let mut local_txs = Vec::with_capacity(txs.len());
     let mut external_txs = Vec::with_capacity(txs.len());
 
@@ -230,10 +228,7 @@ fn partition_transactions(
     (local_txs, external_txs)
 }
 
-fn mine_external_transactions(
-    block_number: BlockNumber,
-    txs: Vec<ExternalTransactionExecution>,
-) -> anyhow::Result<Vec<TransactionMined>> {
+fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransactionExecution>) -> anyhow::Result<Vec<TransactionMined>> {
     let mut mined_txs = Vec::with_capacity(txs.len());
     for (tx, receipt, execution) in txs {
         if tx.block_number() != block_number {
