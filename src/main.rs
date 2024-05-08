@@ -13,8 +13,8 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // init services
     let storage = config.stratus_storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
-    let executor = config.executor.init(Arc::clone(&storage), relayer).await;
     let miner = config.miner.init(Arc::clone(&storage));
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
 
     // start rpc server
     serve_rpc(storage, executor, miner, config.address, config.executor.chain_id.into()).await?;
