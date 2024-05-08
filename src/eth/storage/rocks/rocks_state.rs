@@ -482,7 +482,7 @@ impl RocksStorageState {
     }
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
-        if address.is_coinbase() {
+        if address.is_coinbase() || address.is_zero() {
             //XXX temporary, we will reload the database later without it
             return None;
         }
