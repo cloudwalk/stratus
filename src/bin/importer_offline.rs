@@ -49,8 +49,9 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let stratus_storage = config.stratus_storage.init().await?;
-    let executor = config.executor.init(Arc::clone(&stratus_storage), None).await;
     let miner = config.miner.init(Arc::clone(&stratus_storage));
+    let executor = config.executor.init(Arc::clone(&stratus_storage), Arc::clone(&miner), None).await;
+
 
     // init block snapshots to export
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
@@ -177,17 +178,11 @@ async fn execute_block_importer(
             // re-execute and mine
             executor.reexecute_external_transactions(&block, &receipts).await?;
             let mined_block = miner.mine_external(&block).await?;
-            let mined_block_number = mined_block.number();
 
             // export to csv OR permanent storage
             match csv {
-                Some(ref mut csv) => {
-                    import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?;
-                }
-                None => {
-                    storage.commit_to_perm(mined_block.clone()).await?;
-                    storage.set_mined_block_number(*mined_block_number).await?; // TODO: commit_to_perm should set the miner block number
-                }
+                Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
+                None => miner.commit(mined_block.clone()).await?,
             };
 
             // export snapshot for tests

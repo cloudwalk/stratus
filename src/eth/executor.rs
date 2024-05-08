@@ -49,7 +49,7 @@ pub struct Executor {
     num_evms: usize,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
-    miner: Mutex<BlockMiner>,
+    miner: Arc<BlockMiner>,
 
     /// Provider for sending rpc calls to substrate
     relayer: Option<Arc<TransactionRelayer>>,
@@ -64,13 +64,19 @@ pub struct Executor {
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(storage: Arc<StratusStorage>, relayer: Option<Arc<TransactionRelayer>>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
+    pub fn new(
+        storage: Arc<StratusStorage>,
+        miner: Arc<BlockMiner>,
+        relayer: Option<Arc<TransactionRelayer>>,
+        evm_tx: crossbeam_channel::Sender<EvmTask>,
+        num_evms: usize
+    ) -> Self {
         tracing::info!(%num_evms, "creating executor");
 
         Self {
             evm_tx,
             num_evms,
-            miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
+            miner,
             storage,
             block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
@@ -86,10 +92,10 @@ impl Executor {
     ///
     /// TODO: this method will be removed.
     #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_perm(&self, miner: &BlockMiner, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
+    pub async fn import_external_to_perm(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
         // import block
         self.reexecute_external_transactions(block, receipts).await?;
-        let mut block = miner.mine_external(block).await?;
+        let mut block = self.miner.mine_external(block).await?;
 
         // import relay failed transactions
         if let Some(relay) = &self.relayer {
@@ -99,13 +105,7 @@ impl Executor {
         }
 
         // commit block
-        self.storage.set_mined_block_number(*block.number()).await?;
-        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
-            let json_block = serde_json::to_string(&block).unwrap();
-            tracing::error!(reason = ?e, %json_block);
-            return Err(e.into());
-        };
-
+        self.miner.commit(block.clone()).await?;
         Ok(block)
     }
 
@@ -324,8 +324,7 @@ impl Executor {
                 let execution = self.execute_in_evm(evm_input).await?.execution;
 
                 // mine and commit block
-                let mut miner_lock = self.miner.lock().await;
-                let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+                let block = self.miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
                 match self.storage.commit_to_perm(block.clone()).await {
                     Ok(()) => {}
                     Err(StorageError::Conflict(conflicts)) => {
@@ -342,9 +341,11 @@ impl Executor {
             };
 
             // notify new blocks
+            // TODO: remove notifications from here because miner will send notifications
             let _ = self.block_notifier.send(block.clone());
 
             // notify transaction logs
+            // TODO: remove notifications from here because miner will send notifications
             for trx in block.transactions {
                 for log in trx.logs {
                     let _ = self.log_notifier.send(log);
@@ -384,11 +385,11 @@ impl Executor {
 
     #[cfg(feature = "dev")]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
-        let mut miner_lock = self.miner.lock().await;
-        let block = miner_lock.mine_empty().await?;
-        self.storage.commit_to_perm(block.clone()).await?;
+        let block = self.miner.mine_empty().await?;
+        self.miner.commit(block.clone()).await?;
 
-        if let Err(e) = self.block_notifier.send(block.clone()) {
+        // TODO: remove notifications from here because miner will send notifications
+        if let Err(e) = self.block_notifier.send(block) {
             tracing::error!(reason = ?e, "failed to send block notification");
         };
 

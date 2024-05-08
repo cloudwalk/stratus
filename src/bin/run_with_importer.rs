@@ -21,8 +21,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     // init services
     let storage = config.stratus_storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
-    let executor = config.executor.init(Arc::clone(&storage), relayer).await;
     let miner = config.miner.init(Arc::clone(&storage));
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let chain = BlockchainClient::new(&config.external_rpc).await?;
 
     // run rpc and importer-online in parallel
@@ -33,9 +33,9 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         config.address,
         config.executor.chain_id.into(),
     );
-    let importer_task = run_importer_online(executor, miner, storage, chain);
+    let importer_task = run_importer_online(executor, storage, chain);
 
-    // await one of the two services to stop
+    // await both services to finish
     try_join!(rpc_task, importer_task)?;
     debug!("rpc and importer tasks finished");
 
