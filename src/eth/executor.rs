@@ -129,7 +129,7 @@ impl Executor {
         // execute parallel executions
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                tx_parallel_executions.push(self.reexecute_external(tx, receipt, block));
+                tx_parallel_executions.push(self.reexecute_external_tx(tx, receipt, block));
             }
         }
         let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.num_evms);
@@ -139,7 +139,7 @@ impl Executor {
             match tx_route {
                 // serial: execute now
                 ParallelExecutionRoute::Serial(tx, receipt) => {
-                    let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
+                    let evm_result = self.reexecute_external_tx(tx, receipt, block).await.2?;
 
                     // persist state
                     let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
@@ -184,7 +184,7 @@ impl Executor {
                     // re-execute if necessary
                     let (tx, receipt, evm_result) = match decision {
                         ParallelExecutionDecision::Proceed(tx, receipt, evm_result) => (tx, receipt, evm_result),
-                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external(tx, receipt, block).await {
+                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external_tx(tx, receipt, block).await {
                             (tx, receipt, Ok(evm_result)) => (tx, receipt, evm_result),
                             (.., Err(e)) => return Err(e),
                         },
@@ -216,7 +216,7 @@ impl Executor {
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
-    pub async fn reexecute_external<'a, 'b>(
+    async fn reexecute_external_tx<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
