@@ -24,10 +24,13 @@ use stratus::ext::not;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::log_and_err;
+use stratus::utils::new_context_id;
 use stratus::GlobalServices;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tracing::info_span;
+use tracing::Instrument;
 
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
@@ -143,6 +146,7 @@ fn signal_handler(cancellation: CancellationToken) {
 // -----------------------------------------------------------------------------
 // Block importer
 // -----------------------------------------------------------------------------
+#[tracing::instrument(name = "[Importer]", skip_all)]
 async fn execute_block_importer(
     // services
     executor: Arc<Executor>,
@@ -176,29 +180,37 @@ async fn execute_block_importer(
         // imports block transactions
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
-            #[cfg(feature = "metrics")]
-            let start = metrics::now();
+            let span = info_span!("re-executing block", context_id = new_context_id());
 
-            // re-execute block
-            executor.reexecute_external(&block, &receipts).await?;
+            async {
+                #[cfg(feature = "metrics")]
+                let start = metrics::now();
 
-            // mine block
-            let mined_block = miner.mine_external().await?;
-            storage.temp.remove_executions_before(mined_block.transactions.len()).await?;
+                // re-execute block
+                executor.reexecute_external(&block, &receipts).await?;
 
-            // export to csv OR permanent storage
-            match csv {
-                Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
-                None => miner.commit(mined_block.clone()).await?,
-            };
+                // mine block
+                let mined_block = miner.mine_external().await?;
+                storage.temp.remove_executions_before(mined_block.transactions.len()).await?;
 
-            // export snapshot for tests
-            if blocks_to_export_snapshot.contains(mined_block.number()) {
-                export_snapshot(&block, &receipts, &mined_block)?;
+                // export to csv OR permanent storage
+                match csv {
+                    Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
+                    None => miner.commit(mined_block.clone()).await?,
+                };
+
+                // export snapshot for tests
+                if blocks_to_export_snapshot.contains(mined_block.number()) {
+                    export_snapshot(&block, &receipts, &mined_block)?;
+                }
+
+                #[cfg(feature = "metrics")]
+                metrics::inc_import_offline(start.elapsed());
+
+                anyhow::Ok(())
             }
-
-            #[cfg(feature = "metrics")]
-            metrics::inc_import_offline(start.elapsed());
+            .instrument(span)
+            .await?;
         }
     };
 
@@ -209,6 +221,7 @@ async fn execute_block_importer(
 // -----------------------------------------------------------------------------
 // Block loader
 // -----------------------------------------------------------------------------
+#[tracing::instrument(name = "[RPC]", skip_all, fields(start, end, block_by_fetch))]
 async fn execute_external_rpc_storage_loader(
     // services
     rpc_storage: Arc<dyn ExternalRpcStorage>,
@@ -226,7 +239,13 @@ async fn execute_external_rpc_storage_loader(
     let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (blocks_by_fetch - 1), end);
-        tasks.push(load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end));
+
+        let span = info_span!("fetching block", context_id = new_context_id());
+
+        let task = load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end);
+        let task = task.instrument(span);
+        tasks.push(task);
+
         start += blocks_by_fetch;
     }
 
