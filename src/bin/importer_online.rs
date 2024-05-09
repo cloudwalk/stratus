@@ -1,12 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use futures::future::try_join_all;
 
-use tokio::task::JoinHandle;
-
-use futures::StreamExt;
-use futures::TryStreamExt;
 use serde::Deserialize;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
@@ -22,11 +17,9 @@ use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
 use stratus::GlobalServices;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
-
-/// Number of transactions receipts that can be fetched in parallel.
-const RECEIPTS_PARALELLISM: usize = 10;
 
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
@@ -49,7 +42,6 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 }
 
 pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>, storage: Arc<StratusStorage>, chain: BlockchainClient) -> anyhow::Result<()> {
-
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
     let (data_tx, mut data_rx) = mpsc::channel(100);
@@ -86,7 +78,7 @@ async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: Blockchain
 
     // This task will handle the ordered sending of blocks and receipts
     {
-        let buffered_data = buffered_data.clone();
+        let buffered_data = Arc::clone(&buffered_data);
         tokio::spawn(async move {
             let mut next_block_number = number;
             loop {
@@ -102,9 +94,10 @@ async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: Blockchain
     loop {
         let mut handles = Vec::new();
         // Spawn tasks for concurrent fetching
-        for _ in 0..4 { // Number of concurrent fetch tasks
+        for _ in 0..4 {
+            // Number of concurrent fetch tasks
             let chain = chain.clone();
-            let buffered_data = buffered_data.clone();
+            let buffered_data = Arc::clone(&buffered_data);
             handles.push(tokio::spawn(async move {
                 let block = fetch_block(&chain, number).await.unwrap();
                 let receipts = fetch_receipts_in_parallel(&chain, &block).await;
@@ -123,7 +116,11 @@ async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: Blockchain
 // This is an example helper function to fetch receipts in parallel
 async fn fetch_receipts_in_parallel(chain: &BlockchainClient, block: &ExternalBlock) -> Vec<ExternalReceipt> {
     let receipts_futures = block.transactions.iter().map(|tx| fetch_receipt(chain, tx.hash()));
-    futures::future::join_all(receipts_futures).await.into_iter().collect::<Result<Vec<_>, _>>().unwrap()
+    futures::future::join_all(receipts_futures)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 #[tracing::instrument(skip_all)]
