@@ -116,11 +116,17 @@ impl RocksStorageState {
     pub async fn sync_data(&self) -> anyhow::Result<()> {
         tracing::info!("starting sync_data");
         let account_block_number = self.accounts.get_current_block_number();
+        tracing::info!("account_block_number {:?}", account_block_number);
         let slots_block_number = self.account_slots.get_current_block_number();
+        tracing::info!("slots_block_number {:?}", slots_block_number);
         let slots_history_block_number = self.account_slots_history.get_index_block_number();
+        tracing::info!("slots_history_block_number {:?}", slots_history_block_number);
         let accounts_history_block_number = self.accounts_history.get_index_block_number();
+        tracing::info!("accounts_history_block_number {:?}", accounts_history_block_number);
         let logs_block_number = self.logs.get_index_block_number();
+        tracing::info!("logs_block_number {:?}", logs_block_number);
         let transactions_block_number = self.transactions.get_index_block_number();
+        tracing::info!("transactions_block_number {:?}", transactions_block_number);
 
         if let Some((last_block_number, _)) = self.blocks_by_number.last() {
             tracing::info!("last_block_number {:?}", last_block_number);
