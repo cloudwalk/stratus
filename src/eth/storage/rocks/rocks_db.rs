@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Result;
@@ -36,7 +37,7 @@ pub struct RocksDb<K, V> {
 }
 
 impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
-    pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Self> {
+    pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Arc<Self>> {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
@@ -162,13 +163,20 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             }
         }
         opts.set_block_based_table_factory(&block_based_options);
-        let db = DB::open(&opts, db_path)?;
+        let db = match DB::open(&opts, db_path) {
+            Ok(db) => db,
+            Err(e) => {
+                tracing::error!("Failed to open RocksDB: {}", e);
+                DB::repair(&opts, db_path)?;
+                DB::open(&opts, db_path)?
+            }
+        }; //XXX in case of corruption, use DB
 
-        Ok(RocksDb {
+        Ok(Arc::new(RocksDb {
             db,
             opts,
             _marker: PhantomData,
-        })
+        }))
     }
 
     pub fn backup_path(&self) -> anyhow::Result<String> {
