@@ -21,7 +21,7 @@ use crate::log_and_err;
 /// Default timeout for blockchain operations.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockchainClient {
     http: HttpClient,
     pub url: String,

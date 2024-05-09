@@ -1,5 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use futures::future::try_join_all;
+
+use tokio::task::JoinHandle;
 
 use futures::StreamExt;
 use futures::TryStreamExt;
@@ -64,25 +68,34 @@ pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>
 }
 
 async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: BlockchainClient, data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>) {
+    let mut tasks: HashMap<BlockNumber, JoinHandle<anyhow::Result<(ExternalBlock, ExternalReceipts)>>> = HashMap::new();
+
     loop {
-        number = number.next();
-        // fetch block and receipts
-        let block = fetch_block(&chain, number).await.unwrap();
+        let next_number = number.next();
+        let chain_clone = chain.clone();
+        let task = tokio::spawn(async move {
+            let block = fetch_block(&chain_clone, next_number).await?;
+            let receipts = fetch_receipts_concurrent(&chain_clone, &block).await?;
+            Ok((block, receipts))
+        });
+        tasks.insert(next_number, task);
+        number = next_number;
 
-        // fetch receipts in parallel
-        let mut receipts = Vec::with_capacity(block.transactions.len());
-        for tx in &block.transactions {
-            receipts.push(fetch_receipt(&chain, tx.hash()));
+        if let Some(task) = tasks.remove(&number) {
+            if let Ok(Ok((block, receipts))) = task.await {
+                data_tx.send((block, receipts)).await.expect("Failed to send block and receipts");
+            }
         }
-        let receipts = futures::stream::iter(receipts).buffered(RECEIPTS_PARALELLISM).try_collect::<Vec<_>>().await.unwrap();
-
-        data_tx.send((block, receipts.clone().into())).await.expect("Failed to send block and receipts");
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
     }
 }
 
+async fn fetch_receipts_concurrent(chain: &BlockchainClient, block: &ExternalBlock) -> anyhow::Result<ExternalReceipts> {
+    let receipts_futures = block.transactions.iter().map(|tx| {
+        fetch_receipt(chain, tx.hash())
+    });
+    let receipts: Vec<_> = try_join_all(receipts_futures).await?;
+    Ok(receipts.into()) // Assuming ExternalReceipts can be constructed from Vec<Receipt>
+}
 
 #[tracing::instrument(skip_all)]
 async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::Result<ExternalBlock> {
