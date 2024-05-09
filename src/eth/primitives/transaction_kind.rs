@@ -1,14 +1,20 @@
 #![allow(clippy::large_enum_variant)]
 
+use display_json::DebugAsJson;
+
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::TransactionInput;
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize)]
 pub enum TransactionKind {
     /// Transaction that was sent directly to Stratus.
-    Stratus(TransactionInput),
+    Local(TransactionInput),
 
     /// Transaction that imported from external source.
     External(ExternalTransaction, ExternalReceipt),
 }
+
+pub type LocalTransactionExecution = (TransactionInput, EvmExecution);
+pub type ExternalTransactionExecution = (ExternalTransaction, ExternalReceipt, EvmExecution);

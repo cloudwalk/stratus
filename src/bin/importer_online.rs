@@ -37,11 +37,15 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let storage = config.stratus_storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
-    let executor = config.executor.init(Arc::clone(&storage), relayer).await;
     let miner = config.miner.init(Arc::clone(&storage));
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let chain = BlockchainClient::new(&config.external_rpc).await?;
 
-    run_importer_online(executor, miner, storage, chain).await
+    let result = run_importer_online(executor, miner, storage, chain).await;
+    if let Err(ref e) = result {
+        tracing::error!(reason = ?e, "importer-online failed");
+    }
+    result
 }
 
 pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>, storage: Arc<StratusStorage>, chain: BlockchainClient) -> anyhow::Result<()> {
@@ -58,10 +62,16 @@ pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        executor.import_external_to_perm(&miner, &block, &receipts).await?;
+        executor.reexecute_external(&block, &receipts).await?;
+
+        // mine block
+        let mined_block = miner.mine_mixed().await?;
+        miner.commit(mined_block).await?;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_import_online(start.elapsed());
+        metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
+        #[cfg(feature = "metrics")]
+        metrics::inc_import_online_mined_block(start.elapsed());
     }
 
     Ok(())

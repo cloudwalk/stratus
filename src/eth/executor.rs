@@ -37,9 +37,6 @@ use crate::eth::TransactionRelayer;
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
-/// Number of events in the backlog.
-const NOTIFIER_CAPACITY: usize = u16::MAX as usize;
-
 pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
 pub struct Executor {
     /// Channel to send transactions to background EVMs.
@@ -49,31 +46,30 @@ pub struct Executor {
     num_evms: usize,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
-    miner: Mutex<BlockMiner>,
+    miner: Mutex<Arc<BlockMiner>>,
 
     /// Provider for sending rpc calls to substrate
     relayer: Option<Arc<TransactionRelayer>>,
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
-
-    /// Broadcast channels for notifying subscribers about new blocks and logs.
-    block_notifier: broadcast::Sender<Block>,
-    log_notifier: broadcast::Sender<LogMined>,
 }
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(storage: Arc<StratusStorage>, relayer: Option<Arc<TransactionRelayer>>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
+    pub fn new(
+        storage: Arc<StratusStorage>,
+        miner: Arc<BlockMiner>,
+        relayer: Option<Arc<TransactionRelayer>>,
+        evm_tx: crossbeam_channel::Sender<EvmTask>,
+        num_evms: usize,
+    ) -> Self {
         tracing::info!(%num_evms, "creating executor");
-
         Self {
             evm_tx,
             num_evms,
-            miner: Mutex::new(BlockMiner::new(Arc::clone(&storage))),
+            miner: Mutex::new(miner),
             storage,
-            block_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
-            log_notifier: broadcast::channel(NOTIFIER_CAPACITY).0,
             relayer,
         }
     }
@@ -82,44 +78,18 @@ impl Executor {
     // External transactions
     // -------------------------------------------------------------------------
 
-    /// Re-executes an external block locally and imports it to the permanent storage.
-    ///
-    /// TODO: this method will be removed.
-    #[tracing::instrument(skip_all)]
-    pub async fn import_external_to_perm(&self, miner: &BlockMiner, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<Block> {
-        // import block
-        self.reexecute_external_transactions(block, receipts).await?;
-        let mut block = miner.mine_external(block).await?;
-
-        // import relay failed transactions
-        if let Some(relay) = &self.relayer {
-            for (tx, ex) in relay.drain_failed_transactions().await {
-                block.push_execution(tx, ex);
-            }
-        }
-
-        // commit block
-        self.storage.set_mined_block_number(*block.number()).await?;
-        if let Err(e) = self.storage.commit_to_perm(block.clone()).await {
-            let json_block = serde_json::to_string(&block).unwrap();
-            tracing::error!(reason = ?e, %json_block);
-            return Err(e.into());
-        };
-
-        Ok(block)
-    }
-
     /// Re-executes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
-    pub async fn reexecute_external_transactions(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
+    pub async fn reexecute_external(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        tracing::info!(number = %block.number(), "importing external block");
+        tracing::info!(number = %block.number(), "re-executing external block");
 
         let storage = &self.storage;
 
         // track active block number
+        storage.temp.set_external_block(block.clone()).await?;
         storage.set_active_block_number(block.number()).await?;
 
         // execute mixing serial and parallel approaches
@@ -129,7 +99,7 @@ impl Executor {
         // execute parallel executions
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                tx_parallel_executions.push(self.reexecute_external(tx, receipt, block));
+                tx_parallel_executions.push(self.reexecute_external_tx(tx, receipt, block));
             }
         }
         let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.num_evms);
@@ -139,7 +109,7 @@ impl Executor {
             match tx_route {
                 // serial: execute now
                 ParallelExecutionRoute::Serial(tx, receipt) => {
-                    let evm_result = self.reexecute_external(tx, receipt, block).await.2?;
+                    let evm_result = self.reexecute_external_tx(tx, receipt, block).await.2?;
 
                     // persist state
                     let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
@@ -159,7 +129,7 @@ impl Executor {
                             // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
                             let mut reexecute = false;
 
-                            let prev_txs = storage.temp.read_executions().await;
+                            let prev_txs = storage.temp.read_executions().await?;
                             for prev_tx in prev_txs {
                                 let prev_execution = &prev_tx.execution;
                                 if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
@@ -184,7 +154,7 @@ impl Executor {
                     // re-execute if necessary
                     let (tx, receipt, evm_result) = match decision {
                         ParallelExecutionDecision::Proceed(tx, receipt, evm_result) => (tx, receipt, evm_result),
-                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external(tx, receipt, block).await {
+                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external_tx(tx, receipt, block).await {
                             (tx, receipt, Ok(evm_result)) => (tx, receipt, evm_result),
                             (.., Err(e)) => return Err(e),
                         },
@@ -216,7 +186,7 @@ impl Executor {
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
-    pub async fn reexecute_external<'a, 'b>(
+    async fn reexecute_external_tx<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
@@ -310,47 +280,44 @@ impl Executor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let execution = if let Some(relay) = &self.relayer {
-            let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-            let execution = self.execute_in_evm(evm_input).await?.execution;
-            relay.forward_transaction(execution.clone(), transaction).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-            execution
-        } else {
-            // executes transaction until no more conflicts
-            // TODO: must have a stop condition like timeout or max number of retries
-            let (execution, block) = loop {
-                // execute and check conflicts before mining block
+        let execution = match &self.relayer {
+            // relayer present
+            Some(relayer) => {
                 let evm_input = EvmInput::from_eth_transaction(transaction.clone());
                 let execution = self.execute_in_evm(evm_input).await?.execution;
+                relayer.forward(transaction, execution.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+                execution
+            }
+            // relayer not present
+            None => {
+                // executes transaction until no more conflicts
+                // TODO: must have a stop condition like timeout or max number of retries
+                loop {
+                    // execute and check conflicts before mining block
+                    let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+                    let execution = self.execute_in_evm(evm_input).await?.execution;
 
-                // mine and commit block
-                let mut miner_lock = self.miner.lock().await;
-                let block = miner_lock.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-                match self.storage.commit_to_perm(block.clone()).await {
-                    Ok(()) => {}
-                    Err(StorageError::Conflict(conflicts)) => {
-                        tracing::warn!(?conflicts, "storage conflict detected when saving block");
-                        continue;
+                    // mine and commit block
+                    let miner = self.miner.lock().await;
+                    let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+
+                    match self.storage.save_block_to_perm(block).await {
+                        // success: break with execution
+                        Ok(()) => break execution,
+                        // conflict: try again
+                        Err(StorageError::Conflict(conflicts)) => {
+                            tracing::warn!(?conflicts, "storage conflict detected when saving block");
+                            continue;
+                        }
+                        // unexpected error: break with error
+                        Err(e) => {
+                            #[cfg(feature = "metrics")]
+                            metrics::inc_executor_transact(start.elapsed(), false);
+                            return Err(e.into());
+                        }
                     }
-                    Err(e) => {
-                        #[cfg(feature = "metrics")]
-                        metrics::inc_executor_transact(start.elapsed(), false);
-                        return Err(e.into());
-                    }
-                };
-                break (execution, block);
-            };
-
-            // notify new blocks
-            let _ = self.block_notifier.send(block.clone());
-
-            // notify transaction logs
-            for trx in block.transactions {
-                for log in trx.logs {
-                    let _ = self.log_notifier.send(log);
                 }
             }
-            execution
         };
 
         #[cfg(feature = "metrics")]
@@ -384,29 +351,11 @@ impl Executor {
 
     #[cfg(feature = "dev")]
     pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
-        let mut miner_lock = self.miner.lock().await;
-        let block = miner_lock.mine_empty().await?;
-        self.storage.commit_to_perm(block.clone()).await?;
-
-        if let Err(e) = self.block_notifier.send(block.clone()) {
-            tracing::error!(reason = ?e, "failed to send block notification");
-        };
+        let miner = self.miner.lock().await;
+        let block = miner.mine_empty().await?;
+        miner.commit(block).await?;
 
         Ok(())
-    }
-
-    // -------------------------------------------------------------------------
-    // Subscriptions
-    // -------------------------------------------------------------------------
-
-    /// Subscribe to new blocks events.
-    pub fn subscribe_to_new_heads(&self) -> broadcast::Receiver<Block> {
-        self.block_notifier.subscribe()
-    }
-
-    /// Subscribe to new logs events.
-    pub fn subscribe_to_logs(&self) -> broadcast::Receiver<LogMined> {
-        self.log_notifier.subscribe()
     }
 
     // -------------------------------------------------------------------------
