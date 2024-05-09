@@ -51,8 +51,12 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>, storage: Arc<StratusStorage>, chain: BlockchainClient) -> anyhow::Result<()> {
 
     // start from last imported block
-    let number = storage.read_mined_block_number().await?;
+    let mut number = storage.read_mined_block_number().await?;
     let (data_tx, mut data_rx) = mpsc::channel(100);
+
+    if number != BlockNumber::from(0) {
+        number = number.next();
+    }
 
     tokio::spawn(async move {
         prefetch_blocks_and_receipts(number, chain, data_tx).await;
@@ -79,10 +83,6 @@ pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>
 
 async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: BlockchainClient, data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>) {
     let buffered_data = Arc::new(RwLock::new(HashMap::new()));
-
-    if number != BlockNumber::from(0) {
-        number.next();
-    }
 
     // This task will handle the ordered sending of blocks and receipts
     {
