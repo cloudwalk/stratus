@@ -1,8 +1,7 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::StreamExt;
-use futures::TryStreamExt;
 use serde::Deserialize;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
@@ -18,10 +17,9 @@ use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
 use stratus::GlobalServices;
+use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
-
-/// Number of transactions receipts that can be fetched in parallel.
-const RECEIPTS_PARALELLISM: usize = 10;
 
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
@@ -46,49 +44,83 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>, storage: Arc<StratusStorage>, chain: BlockchainClient) -> anyhow::Result<()> {
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
+    let (data_tx, mut data_rx) = mpsc::channel(100);
 
-    // keep importing forever
-    loop {
+    if number != BlockNumber::from(0) {
+        number = number.next();
+    }
+
+    tokio::spawn(async move {
+        prefetch_blocks_and_receipts(number, chain, data_tx).await;
+    });
+
+    while let Some((block, receipts)) = data_rx.recv().await {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        number = number.next();
-        import(&executor, &miner, &chain, number).await?;
+        executor.reexecute_external(&block, &receipts).await?;
+
+        // mine block
+        let mined_block = miner.mine_mixed().await?;
+        miner.commit(mined_block).await?;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_import_online(start.elapsed());
-    }
-}
-
-#[tracing::instrument(skip_all)]
-async fn import(executor: &Executor, miner: &BlockMiner, chain: &BlockchainClient, block_number: BlockNumber) -> anyhow::Result<()> {
-    #[cfg(feature = "metrics")]
-    let start = metrics::now();
-
-    // fetch block and receipts
-    let block = fetch_block(chain, block_number).await?;
-    let mut receipts = Vec::with_capacity(block.transactions.len());
-    for tx in &block.transactions {
-        receipts.push(fetch_receipt(chain, tx.hash()));
-    }
-    let receipts = futures::stream::iter(receipts).buffered(RECEIPTS_PARALELLISM).try_collect::<Vec<_>>().await?;
-    let receipts: ExternalReceipts = receipts.into();
-
-    // re-execute block
-    executor.reexecute_external(&block, &receipts).await?;
-
-    // mine block
-    let mined_block = miner.mine_mixed().await?;
-    miner.commit(mined_block).await?;
-
-    // track metrics
-    #[cfg(feature = "metrics")]
-    {
         metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
+        #[cfg(feature = "metrics")]
         metrics::inc_import_online_mined_block(start.elapsed());
     }
 
     Ok(())
+}
+
+async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: BlockchainClient, data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>) {
+    let buffered_data = Arc::new(RwLock::new(HashMap::new()));
+
+    // This task will handle the ordered sending of blocks and receipts
+    {
+        let buffered_data = Arc::clone(&buffered_data);
+        tokio::spawn(async move {
+            let mut next_block_number = number;
+            loop {
+                let mut data = buffered_data.write().await;
+                if let Some((block, receipts)) = data.remove(&next_block_number) {
+                    data_tx.send((block, receipts)).await.expect("Failed to send block and receipts");
+                    next_block_number = next_block_number.next();
+                }
+            }
+        });
+    }
+
+    loop {
+        let mut handles = Vec::new();
+        // Spawn tasks for concurrent fetching
+        for _ in 0..4 {
+            // Number of concurrent fetch tasks
+            let chain = chain.clone();
+            let buffered_data = Arc::clone(&buffered_data);
+            handles.push(tokio::spawn(async move {
+                let block = fetch_block(&chain, number).await.unwrap();
+                let receipts = fetch_receipts_in_parallel(&chain, &block).await;
+
+                let mut data = buffered_data.write().await;
+                data.insert(number, (block, receipts.clone().into()));
+            }));
+
+            number = number.next();
+        }
+
+        futures::future::join_all(handles).await;
+    }
+}
+
+// This is an example helper function to fetch receipts in parallel
+async fn fetch_receipts_in_parallel(chain: &BlockchainClient, block: &ExternalBlock) -> Vec<ExternalReceipt> {
+    let receipts_futures = block.transactions.iter().map(|tx| fetch_receipt(chain, tx.hash()));
+    futures::future::join_all(receipts_futures)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 #[tracing::instrument(skip_all)]
