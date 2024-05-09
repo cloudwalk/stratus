@@ -80,6 +80,10 @@ pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>
 async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: BlockchainClient, data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>) {
     let buffered_data = Arc::new(RwLock::new(HashMap::new()));
 
+    if number != BlockNumber::from(0) {
+        number.next();
+    }
+
     // This task will handle the ordered sending of blocks and receipts
     {
         let buffered_data = buffered_data.clone();
@@ -98,7 +102,7 @@ async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: Blockchain
     loop {
         let mut handles = Vec::new();
         // Spawn tasks for concurrent fetching
-        for _ in 0..16 { // Number of concurrent fetch tasks
+        for _ in 0..4 { // Number of concurrent fetch tasks
             let chain = chain.clone();
             let buffered_data = buffered_data.clone();
             handles.push(tokio::spawn(async move {
