@@ -10,7 +10,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
-//use tracing_subscriber::EnvFilter;
 
 /// Init application global tracing.
 pub fn init_tracing(url: Option<&String>) {
