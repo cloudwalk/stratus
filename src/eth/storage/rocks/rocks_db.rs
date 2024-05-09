@@ -501,6 +501,7 @@ mod tests {
     use std::collections::HashMap;
     use std::collections::HashSet;
     use std::fs;
+    use std::sync::Arc;
 
     use fake::Fake;
     use fake::Faker;
@@ -511,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_multi_get() {
-        let db: RocksDb<SlotIndex, SlotValue> = RocksDb::new("./data/slots_test.rocksdb", super::DbConfig::Default).unwrap();
+        let db: Arc<RocksDb<SlotIndex, SlotValue>> = RocksDb::new("./data/slots_test.rocksdb", super::DbConfig::Default).unwrap();
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
         let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)

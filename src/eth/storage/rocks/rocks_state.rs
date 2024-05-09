@@ -138,7 +138,10 @@ impl RocksStorageState {
                 let mut min_block_number = std::cmp::min(
                     std::cmp::min(
                         std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
-                        std::cmp::min(self.account_slots_history.get_index_block_number(), self.accounts_history.get_index_block_number()),
+                        std::cmp::min(
+                            self.account_slots_history.get_index_block_number(),
+                            self.accounts_history.get_index_block_number(),
+                        ),
                     ),
                     std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
                 );
@@ -165,13 +168,15 @@ impl RocksStorageState {
                     min_block_number = std::cmp::min(
                         std::cmp::min(
                             std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
-                            std::cmp::min(self.account_slots_history.get_index_block_number(), self.accounts_history.get_index_block_number()),
+                            std::cmp::min(
+                                self.account_slots_history.get_index_block_number(),
+                                self.accounts_history.get_index_block_number(),
+                            ),
                         ),
                         std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
                     );
                 }
                 self.reset_at(BlockNumber::from(min_block_number)).await?;
-
             }
         }
 
