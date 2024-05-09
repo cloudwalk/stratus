@@ -21,8 +21,11 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[cfg(feature = "metrics")]
 type HistogramInt = u32;
+#[cfg(feature = "metrics")]
 type Sum = u64;
+#[cfg(feature = "metrics")]
 type Count = u64;
 
 #[cfg(feature = "metrics")]
