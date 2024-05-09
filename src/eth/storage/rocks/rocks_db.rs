@@ -1,5 +1,7 @@
+#[cfg(feature = "metrics")]
 use std::collections::HashMap;
 use std::marker::PhantomData;
+#[cfg(feature = "metrics")]
 use std::sync::Mutex;
 
 use anyhow::anyhow;
