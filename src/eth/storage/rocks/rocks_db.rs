@@ -397,11 +397,10 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let data_count = data.count();
         let data_sum = data.sum();
 
-        let avg = if data_count - prev_count > 0 {
-            (data_sum - prev_sum) / (data_count - prev_count)
-        } else {
-            0
+        let Some(avg) = (data_sum - prev_sum).checked_div(data_count - prev_count) else {
+            return 0;
         };
+
         prev_values.insert(hist as u32, (data_sum, data_count));
         avg
     }
