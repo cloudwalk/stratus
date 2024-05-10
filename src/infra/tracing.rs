@@ -1,5 +1,7 @@
 //! Tracing services.
 
+use std::env;
+
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::runtime;
@@ -10,6 +12,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
+
+use crate::ext::not;
 
 /// Init application global tracing.
 pub fn init_tracing(url: Option<&String>) {
@@ -24,19 +28,23 @@ pub fn init_tracing(url: Option<&String>) {
 
 fn init_stdout_tracing() {
     // if tracing level not configured, set default
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "stratus=debug");
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "stratus=debug");
     }
 
-    tracing_subscriber::fmt()
-        .compact()
+    let subscriber = tracing_subscriber::fmt()
         .with_target(false)
         .with_thread_ids(true)
         .with_thread_names(true)
         .with_ansi(false)
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init()
-        .expect("failed to start tracing");
+        .with_env_filter(EnvFilter::from_default_env());
+
+    let json_logs = env::var_os("JSON_LOGS").is_some_and(|var| not(var.is_empty()));
+    if json_logs {
+        subscriber.json().init();
+    } else {
+        subscriber.compact().init();
+    }
 }
 
 // Only works if run inside the tokio runtime
