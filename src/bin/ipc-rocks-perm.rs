@@ -55,10 +55,10 @@ where
 
     loop {
         // read request
-        let request = match client.read::<PermanentStorageIpcRequest>().await {
+        let request = match client.read::<Req>().await {
             Ok(request) => request,
             Err(e) => {
-                client.write(PermanentStorageIpcResponse::Error(e.to_string())).await?;
+                client.write(Resp::Error(e.to_string())).await?;
                 continue;
             }
         };
