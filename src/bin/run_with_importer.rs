@@ -9,7 +9,6 @@ use stratus::infra::BlockchainClient;
 use stratus::utils::signal_handler;
 use stratus::GlobalServices;
 use tokio::join;
-use tracing::debug;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RunWithImporterConfig>::init();
