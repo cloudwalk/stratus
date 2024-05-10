@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use stratus::config::StratusConfig;
 use stratus::eth::rpc::serve_rpc;
+use stratus::utils::signal_handler;
 use stratus::GlobalServices;
 
 fn main() -> anyhow::Result<()> {
@@ -15,9 +16,10 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage));
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
+    let cancellation = signal_handler();
 
     // start rpc server
-    serve_rpc(storage, executor, miner, config.address, config.executor.chain_id.into()).await?;
+    serve_rpc(storage, executor, miner, config.address, config.executor.chain_id.into(), cancellation).await?;
 
     Ok(())
 }

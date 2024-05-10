@@ -6,9 +6,9 @@ use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
 use stratus::infra::BlockchainClient;
+use stratus::utils::signal_handler;
 use stratus::GlobalServices;
-use tokio::try_join;
-use tracing::debug;
+use tokio::join;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RunWithImporterConfig>::init();
@@ -24,20 +24,41 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let miner = config.miner.init(Arc::clone(&storage));
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let chain = BlockchainClient::new(&config.external_rpc).await?;
+    let rpc_storage = Arc::clone(&storage);
+    let rpc_executor = Arc::clone(&executor);
+    let rpc_miner = Arc::clone(&miner);
+
+    let cancellation = signal_handler();
+    let rpc_cancellation = cancellation.clone();
 
     // run rpc and importer-online in parallel
-    let rpc_task = serve_rpc(
-        Arc::clone(&storage),
-        Arc::clone(&executor),
-        Arc::clone(&miner),
-        config.address,
-        config.executor.chain_id.into(),
-    );
-    let importer_task = run_importer_online(executor, miner, storage, chain);
+    let rpc_task = async move {
+        let res = serve_rpc(
+            rpc_storage,
+            rpc_executor,
+            rpc_miner,
+            config.address,
+            config.executor.chain_id.into(),
+            rpc_cancellation.clone(),
+        )
+        .await;
+        tracing::warn!("serve_rpc finished, cancelling tasks");
+        rpc_cancellation.cancel();
+        res
+    };
+
+    let importer_task = async move {
+        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone()).await;
+        tracing::warn!("run_importer_online finished, cancelling tasks");
+        cancellation.cancel();
+        res
+    };
 
     // await both services to finish
-    try_join!(rpc_task, importer_task)?;
-    debug!("rpc and importer tasks finished");
+    let (rpc_result, importer_result) = join!(rpc_task, importer_task);
+    tracing::debug!(?rpc_result, ?importer_result, "rpc and importer tasks finished");
+    rpc_result?;
+    importer_result?;
 
     Ok(())
 }
