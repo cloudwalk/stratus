@@ -12,6 +12,7 @@ COPY Cargo.lock /app/Cargo.lock
 RUN apt update
 RUN apt-get install -y libclang-dev cmake
 
+ENV CARGO_PROFILE_RELEASE_DEBUG=1
 RUN cargo build --release --bin run-with-importer --features metrics,rocks
 
 # Runtime
