@@ -55,7 +55,7 @@ pub async fn serve_rpc(
     // config
     address: SocketAddr,
     chain_id: ChainId,
-    cancellation: CancellationToken
+    cancellation: CancellationToken,
 ) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
@@ -104,7 +104,12 @@ pub async fn serve_rpc(
     };
 
     // await server and subscriptions to stop
-    let _ = join!(handle_rpc_server.stopped(), handle_logs_notifier, handle_new_heads_notifier, cancellation_future);
+    let _ = join!(
+        handle_rpc_server.stopped(),
+        handle_logs_notifier,
+        handle_new_heads_notifier,
+        cancellation_future
+    );
 
     Ok(())
 }

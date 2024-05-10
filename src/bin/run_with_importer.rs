@@ -34,7 +34,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         Arc::clone(&miner),
         config.address,
         config.executor.chain_id.into(),
-        cancellation.clone()
+        cancellation.clone(),
     );
     let importer_task = run_importer_online(executor, miner, storage, chain, cancellation);
 
