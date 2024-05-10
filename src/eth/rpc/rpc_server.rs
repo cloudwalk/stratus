@@ -15,6 +15,7 @@ use jsonrpsee::types::Params;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::Value as JsonValue;
+use tokio_util::sync::CancellationToken;
 
 use crate::eth::primitives::Address;
 #[cfg(feature = "dev")]
@@ -54,6 +55,7 @@ pub async fn serve_rpc(
     // config
     address: SocketAddr,
     chain_id: ChainId,
+    cancellation: CancellationToken
 ) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
@@ -93,9 +95,16 @@ pub async fn serve_rpc(
         .build(address)
         .await?;
     let handle_rpc_server = server.start(module);
+    let handle_clone = handle_rpc_server.clone();
+
+    let cancellation_future = async move {
+        cancellation.cancelled().await;
+        tracing::info!("serve_rpc task cancelled, stopping rpc server");
+        handle_clone.stop()
+    };
 
     // await server and subscriptions to stop
-    let _ = join!(handle_rpc_server.stopped(), handle_logs_notifier, handle_new_heads_notifier);
+    let _ = join!(handle_rpc_server.stopped(), handle_logs_notifier, handle_new_heads_notifier, cancellation_future);
 
     Ok(())
 }
