@@ -55,15 +55,16 @@ impl Default for RocksStorageState {
     fn default() -> Self {
         let (tx, rx) = mpsc::channel::<()>(1);
 
+        //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
         let state = Self {
-            accounts: Arc::new(RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap()),
-            accounts_history: Arc::new(RocksDb::new("./data/accounts_history.rocksdb", DbConfig::FastWriteSST).unwrap()),
-            account_slots: Arc::new(RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap()),
-            account_slots_history: Arc::new(RocksDb::new("./data/account_slots_history.rocksdb", DbConfig::FastWriteSST).unwrap()),
-            transactions: Arc::new(RocksDb::new("./data/transactions.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-            blocks_by_number: Arc::new(RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
-            blocks_by_hash: Arc::new(RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap()), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
-            logs: Arc::new(RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap()),
+            accounts: RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap(),
+            accounts_history: RocksDb::new("./data/accounts_history.rocksdb", DbConfig::FastWriteSST).unwrap(),
+            account_slots: RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap(),
+            account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb", DbConfig::FastWriteSST).unwrap(),
+            transactions: RocksDb::new("./data/transactions.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_number: RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            logs: RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
             backup_trigger: Arc::new(tx),
         };
 
@@ -115,42 +116,65 @@ impl RocksStorageState {
 
     pub async fn sync_data(&self) -> anyhow::Result<()> {
         tracing::info!("starting sync_data");
-        let account_block_number = self.accounts.get_current_block_number();
-        tracing::info!("account_block_number {:?}", account_block_number);
-        let slots_block_number = self.account_slots.get_current_block_number();
-        tracing::info!("slots_block_number {:?}", slots_block_number);
-        let slots_history_block_number = self.account_slots_history.get_index_block_number();
-        tracing::info!("slots_history_block_number {:?}", slots_history_block_number);
-        let accounts_history_block_number = self.accounts_history.get_index_block_number();
-        tracing::info!("accounts_history_block_number {:?}", accounts_history_block_number);
-        let logs_block_number = self.logs.get_index_block_number();
-        tracing::info!("logs_block_number {:?}", logs_block_number);
-        let transactions_block_number = self.transactions.get_index_block_number();
-        tracing::info!("transactions_block_number {:?}", transactions_block_number);
+        tracing::info!("account_block_number {:?}", self.accounts.get_current_block_number());
+        tracing::info!("slots_block_number {:?}", self.account_slots.get_current_block_number());
+        tracing::info!("slots_history_block_number {:?}", self.account_slots_history.get_index_block_number());
+        tracing::info!("accounts_history_block_number {:?}", self.accounts_history.get_index_block_number());
+        tracing::info!("logs_block_number {:?}", self.logs.get_index_block_number());
+        tracing::info!("transactions_block_number {:?}", self.transactions.get_index_block_number());
 
         if let Some((last_block_number, _)) = self.blocks_by_number.last() {
             tracing::info!("last_block_number {:?}", last_block_number);
-            if account_block_number != slots_block_number {
+            if self.accounts.get_current_block_number() != self.account_slots.get_current_block_number() {
                 warn!(
                     "block numbers are not in sync {:?} {:?} {:?} {:?} {:?} {:?}",
-                    account_block_number,
-                    slots_block_number,
-                    slots_history_block_number,
-                    accounts_history_block_number,
-                    logs_block_number,
-                    transactions_block_number
+                    self.accounts.get_current_block_number(),
+                    self.account_slots.get_current_block_number(),
+                    self.account_slots_history.get_index_block_number(),
+                    self.accounts_history.get_index_block_number(),
+                    self.logs.get_index_block_number(),
+                    self.transactions.get_index_block_number(),
                 );
-                let min_block_number = std::cmp::min(
+                let mut min_block_number = std::cmp::min(
                     std::cmp::min(
-                        std::cmp::min(account_block_number, slots_block_number),
-                        std::cmp::min(slots_history_block_number, accounts_history_block_number),
+                        std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
+                        std::cmp::min(
+                            self.account_slots_history.get_index_block_number(),
+                            self.accounts_history.get_index_block_number(),
+                        ),
                     ),
-                    std::cmp::min(logs_block_number, transactions_block_number),
+                    std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
                 );
 
                 let last_secure_block_number = last_block_number.inner_value().as_u64() - 5000;
                 if last_secure_block_number > min_block_number {
-                    panic!("block numbers is too far away from the last secure block number, please resync the data from the last secure block number");
+                    self.accounts.restore().unwrap();
+                    tracing::warn!("accounts restored");
+                    self.accounts_history.restore().unwrap();
+                    tracing::warn!("accounts_history restored");
+                    self.account_slots.restore().unwrap();
+                    tracing::warn!("account_slots restored");
+                    self.account_slots_history.restore().unwrap();
+                    tracing::warn!("account_slots_history restored");
+                    self.transactions.restore().unwrap();
+                    tracing::warn!("transactions restored");
+                    self.blocks_by_number.restore().unwrap();
+                    tracing::warn!("blocks_by_number restored");
+                    self.blocks_by_hash.restore().unwrap();
+                    tracing::warn!("blocks_by_hash restored");
+                    self.logs.restore().unwrap();
+                    tracing::warn!("logs restored");
+
+                    min_block_number = std::cmp::min(
+                        std::cmp::min(
+                            std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
+                            std::cmp::min(
+                                self.account_slots_history.get_index_block_number(),
+                                self.accounts_history.get_index_block_number(),
+                            ),
+                        ),
+                        std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
+                    );
                 }
                 self.reset_at(BlockNumber::from(min_block_number)).await?;
             }
