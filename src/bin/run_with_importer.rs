@@ -45,10 +45,10 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     };
 
     // await both services to finish
-    let (rpc_res, importer_res) = join!(rpc_task, importer_task);
-    debug!("rpc and importer tasks finished");
-    rpc_res?;
-    importer_res?;
+    let (rpc_result, importer_result) = join!(rpc_task, importer_task);
+    tracing::debug!(?rpc_result, ?importer_result, "rpc and importer tasks finished");
+    rpc_result?;
+    importer_result?;
 
     Ok(())
 }
