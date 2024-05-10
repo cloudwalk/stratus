@@ -25,6 +25,7 @@ use stratus::ext::not;
 use stratus::infra::metrics;
 use stratus::log_and_err;
 use stratus::utils::new_context_id;
+use stratus::utils::signal_handler;
 use stratus::GlobalServices;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
@@ -73,8 +74,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
-    let cancellation = CancellationToken::new();
-    signal_handler(cancellation.clone());
+    let cancellation = signal_handler();
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
@@ -129,18 +129,6 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let _ = importer_join.join();
 
     Ok(())
-}
-
-fn signal_handler(cancellation: CancellationToken) {
-    tokio::spawn(async move {
-        match tokio::signal::ctrl_c().await {
-            Ok(()) => {
-                tracing::info!("shutting down");
-                cancellation.cancel();
-            }
-            Err(err) => tracing::error!("Unable to listen for shutdown signal: {}", err),
-        }
-    });
 }
 
 // -----------------------------------------------------------------------------

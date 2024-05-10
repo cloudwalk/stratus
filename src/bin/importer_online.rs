@@ -16,10 +16,12 @@ use stratus::eth::Executor;
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
+use stratus::utils::signal_handler;
 use stratus::GlobalServices;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
@@ -33,15 +35,22 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let miner = config.miner.init(Arc::clone(&storage));
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let chain = BlockchainClient::new(&config.external_rpc).await?;
+    let cancellation: CancellationToken = signal_handler();
 
-    let result = run_importer_online(executor, miner, storage, chain).await;
+    let result = run_importer_online(executor, miner, storage, chain, cancellation).await;
     if let Err(ref e) = result {
         tracing::error!(reason = ?e, "importer-online failed");
     }
     result
 }
 
-pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>, storage: Arc<StratusStorage>, chain: BlockchainClient) -> anyhow::Result<()> {
+pub async fn run_importer_online(
+    executor: Arc<Executor>,
+    miner: Arc<BlockMiner>,
+    storage: Arc<StratusStorage>,
+    chain: BlockchainClient,
+    cancellation: CancellationToken,
+) -> anyhow::Result<()> {
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
     let (data_tx, mut data_rx) = mpsc::channel(100);
@@ -50,11 +59,17 @@ pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>
         number = number.next();
     }
 
+    let task_cancellation = cancellation.clone();
     tokio::spawn(async move {
-        prefetch_blocks_and_receipts(number, chain, data_tx).await;
+        prefetch_blocks_and_receipts(number, chain, data_tx, task_cancellation).await;
     });
 
     while let Some((block, receipts)) = data_rx.recv().await {
+        if cancellation.is_cancelled() {
+            tracing::info!("run_importer_online task cancelled, exiting");
+            break;
+        }
+
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -73,7 +88,12 @@ pub async fn run_importer_online(executor: Arc<Executor>, miner: Arc<BlockMiner>
     Ok(())
 }
 
-async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: BlockchainClient, data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>) {
+async fn prefetch_blocks_and_receipts(
+    mut number: BlockNumber,
+    chain: BlockchainClient,
+    data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>,
+    cancellation: CancellationToken,
+) {
     let buffered_data = Arc::new(RwLock::new(HashMap::new()));
 
     // This task will handle the ordered sending of blocks and receipts
@@ -82,6 +102,10 @@ async fn prefetch_blocks_and_receipts(mut number: BlockNumber, chain: Blockchain
         tokio::spawn(async move {
             let mut next_block_number = number;
             loop {
+                if cancellation.is_cancelled() {
+                    tracing::info!("prefetch_blocks_and_receipts task cancelled, closing channel");
+                    break;
+                }
                 let mut data = buffered_data.write().await;
                 if let Some((block, receipts)) = data.remove(&next_block_number) {
                     data_tx.send((block, receipts)).await.expect("Failed to send block and receipts");
