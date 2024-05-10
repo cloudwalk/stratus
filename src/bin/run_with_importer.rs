@@ -36,7 +36,12 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         config.executor.chain_id.into(),
         cancellation.clone(),
     );
-    let importer_task = run_importer_online(executor, miner, storage, chain, cancellation);
+
+    let importer_task = async move {
+        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone()).await;
+        cancellation.cancel();
+        res
+    };
 
     // await both services to finish
     try_join!(rpc_task, importer_task)?;
