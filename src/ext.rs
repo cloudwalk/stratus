@@ -81,7 +81,6 @@ macro_rules! log_and_err {
     // without reason: generate a new error using provided message
     (payload = $payload:expr, $msg:expr) => {
         {
-            use anyhow::Context;
             use anyhow::anyhow;
             tracing::error!(payload = ?$payload, message = %$msg);
             let message = format!("{} | payload={:?}", $msg, $payload);

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use display_json::DebugAsJson;
 
 use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
@@ -69,4 +70,24 @@ pub trait PermanentStorage: Send + Sync {
 
     /// Retrieves a random sample of slots, from the provided start and end blocks.
     async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
+}
+
+// -----------------------------------------------------------------------------
+// IPC: Request
+// -----------------------------------------------------------------------------
+
+#[derive(DebugAsJson, serde::Deserialize, serde::Serialize)]
+pub enum PermanentStorageIpcRequest {
+    ReadBlock(BlockSelection),
+    ReadMinedBlockNumber,
+}
+
+// -----------------------------------------------------------------------------
+// IPC: Response
+// -----------------------------------------------------------------------------
+#[derive(DebugAsJson, serde::Deserialize, serde::Serialize)]
+pub enum PermanentStorageIpcResponse {
+    ReadBlock(Option<Block>),
+    ReadMinedBlockNumber(BlockNumber),
+    Error(String),
 }

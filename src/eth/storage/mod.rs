@@ -3,6 +3,7 @@
 mod csv;
 mod external_rpc_storage;
 mod inmemory;
+mod ipc;
 mod permanent_storage;
 mod postgres_external_rpc;
 mod postgres_permanent;
@@ -18,7 +19,10 @@ pub use external_rpc_storage::ExternalRpcStorage;
 pub use inmemory::InMemoryPermanentStorage;
 pub use inmemory::InMemoryPermanentStorageState;
 pub use inmemory::InMemoryTemporaryStorage;
+pub use ipc::IpcPermanentStorage;
 pub use permanent_storage::PermanentStorage;
+pub use permanent_storage::PermanentStorageIpcRequest;
+pub use permanent_storage::PermanentStorageIpcResponse;
 pub use postgres_external_rpc::PostgresExternalRpcStorage;
 pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
 pub use postgres_permanent::PostgresPermanentStorage;

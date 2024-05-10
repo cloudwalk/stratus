@@ -1,0 +1,85 @@
+use std::fs;
+use std::sync::Arc;
+
+use futures::StreamExt;
+use parity_tokio_ipc::Endpoint;
+use stratus::config::IpcRocksConfig;
+use stratus::eth::storage::PermanentStorage;
+use stratus::eth::storage::PermanentStorageIpcRequest;
+use stratus::eth::storage::PermanentStorageIpcResponse;
+use stratus::eth::storage::RocksPermanentStorage;
+use stratus::infra::IpcClient;
+use stratus::GlobalServices;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+
+fn main() -> anyhow::Result<()> {
+    let global_services = GlobalServices::<IpcRocksConfig>::init();
+    global_services.runtime.block_on(run(global_services.config))
+}
+
+async fn run(_: IpcRocksConfig) -> anyhow::Result<()> {
+    let socket = "./data/perm-storage.sock".to_string();
+    tracing::info!(%socket, "starting rocksdb ipc server");
+
+    // init rocksdb storage
+    let rocks = Arc::new(RocksPermanentStorage::new().await?);
+
+    // init socket endpoint
+    let _ = fs::remove_file(&socket);
+    let socket = Endpoint::new(socket).incoming()?;
+
+    socket
+        .for_each(|connection| async {
+            let rocks = Arc::clone(&rocks);
+            match connection {
+                Ok(stream) => {
+                    tracing::info!("client connected");
+                    tokio::spawn(handle_client(stream, rocks));
+                }
+                Err(e) => {
+                    tracing::error!(reason = ?e, "failed to accept accepting connection");
+                }
+            }
+        })
+        .await;
+
+    Ok(())
+}
+
+async fn handle_client<T>(stream: T, rocks: Arc<RocksPermanentStorage>) -> anyhow::Result<()>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut client = IpcClient::new(stream);
+
+    loop {
+        // read request
+        let request = match client.read::<PermanentStorageIpcRequest>().await {
+            Ok(request) => request,
+            Err(e) => {
+                client.write(PermanentStorageIpcResponse::Error(e.to_string())).await?;
+                continue;
+            }
+        };
+
+        // handle request
+        let response = match request {
+            PermanentStorageIpcRequest::ReadBlock(selection) => match rocks.read_block(&selection).await {
+                Ok(block) => Ok(PermanentStorageIpcResponse::ReadBlock(block)),
+                Err(e) => Err(e),
+            },
+            PermanentStorageIpcRequest::ReadMinedBlockNumber => match rocks.read_mined_block_number().await {
+                Ok(number) => Ok(PermanentStorageIpcResponse::ReadMinedBlockNumber(number)),
+                Err(e) => Err(e),
+            },
+        };
+
+        // send response
+        let response = match response {
+            Ok(response) => response,
+            Err(e) => PermanentStorageIpcResponse::Error(e.to_string()),
+        };
+        client.write(response).await?;
+    }
+}

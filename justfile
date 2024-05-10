@@ -2,8 +2,8 @@ import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
-export RUST_BACKTRACE := "1"
-export RUST_LOG := env("RUST_LOG", "stratus=info,rpc-downloader=info,importer-offline=info,importer-online=info,state-validator=info")
+export RUST_BACKTRACE := "0"
+export RUST_LOG := env("RUST_LOG", "stratus=info,rpc_downloader=info,importer_offline=info,importer_online=info,state_validator=info,ipc_rocks_perm=info")
 
 # Global arguments that can be passed to receipts.
 feature_flags := "dev," + env("FEATURES", "")
@@ -136,6 +136,11 @@ alias importer-offline-rocks := bin-importer-offline-rocks
 bin-importer-online *args="":
     cargo run --bin importer-online {{release_flag}} --features dev -- {{args}}
 alias importer-online := bin-importer-online
+
+# Bin: RocksDB permanent storage as a separate process
+bin-ipc-rocks-perm *args="":
+    cargo run --bin ipc-rocks-perm {{release_flag}} --features dev -- {{args}}
+alias rocks-perm := bin-ipc-rocks-perm
 
 # Bin: Validate Stratus storage slots matches reference slots
 bin-state-validator *args="":

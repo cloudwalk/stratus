@@ -30,7 +30,7 @@ pub struct BlockchainClient {
 impl BlockchainClient {
     /// Creates a new RPC client.
     pub async fn new(url: &str) -> anyhow::Result<Self> {
-        tracing::info!(%url, "starting blockchain client");
+        tracing::info!(%url, "creating blockchain client");
 
         // build provider
         let http = match HttpClientBuilder::default().request_timeout(DEFAULT_TIMEOUT).build(url) {

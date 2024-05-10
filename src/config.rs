@@ -29,6 +29,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
+use crate::eth::storage::IpcPermanentStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
@@ -442,6 +443,10 @@ impl WithCommonConfig for ImporterOnlineConfig {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Config: RunWithImporter
+// -----------------------------------------------------------------------------
+
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RunWithImporterConfig {
     /// JSON-RPC binding address.
@@ -511,39 +516,6 @@ pub struct StateValidatorConfig {
 }
 
 impl WithCommonConfig for StateValidatorConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: Test
-// -----------------------------------------------------------------------------
-
-/// Configuration for integration tests.
-#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-pub struct IntegrationTestConfig {
-    #[deref]
-    #[clap(flatten)]
-    pub common: CommonConfig,
-
-    #[clap(flatten)]
-    pub executor: ExecutorConfig,
-
-    #[clap(flatten)]
-    pub relayer: RelayerConfig,
-
-    #[clap(flatten)]
-    pub miner: MinerConfig,
-
-    #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
-
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
-}
-
-impl WithCommonConfig for IntegrationTestConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
@@ -671,6 +643,7 @@ pub struct PermanentStorageConfig {
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum PermanentStorageKind {
     InMemory,
+    Ipc,
     #[cfg(feature = "rocks")]
     Rocks,
     Postgres {
@@ -685,8 +658,11 @@ impl PermanentStorageConfig {
 
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
+            PermanentStorageKind::Ipc => Arc::new(IpcPermanentStorage::new().await?),
+
             #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
+
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
@@ -706,11 +682,63 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            "ipc" => Ok(Self::Ipc),
             #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: IpcRocks
+// -----------------------------------------------------------------------------
+
+/// RocksDB IPC server configuration.
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct IpcRocksConfig {
+    #[deref]
+    #[clap(flatten)]
+    common: CommonConfig,
+}
+
+impl WithCommonConfig for IpcRocksConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: Test
+// -----------------------------------------------------------------------------
+
+/// Configuration for integration tests.
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct IntegrationTestConfig {
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub relayer: RelayerConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub stratus_storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub rpc_storage: ExternalRpcStorageConfig,
+}
+
+impl WithCommonConfig for IntegrationTestConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
     }
 }
 

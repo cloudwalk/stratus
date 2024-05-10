@@ -60,7 +60,7 @@ impl TransactionRelayer {
                     "substrate_receipt": receipt
                 }
             );
-            file.write_all(json.to_string().as_bytes()).await?;
+            let _ = file.write(json.to_string().as_bytes()).await?;
             return Err(anyhow!("transaction succeeded in stratus but failed in substrate"));
         }
 

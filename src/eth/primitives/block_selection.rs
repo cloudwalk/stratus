@@ -11,12 +11,15 @@
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
 pub enum BlockSelection {
     /// Retrieve the most recent block.
+    #[serde(rename = "latest")]
     Latest,
 
     /// Retrieve the most early block.
+    #[serde(rename = "earliest")]
     Earliest,
 
     /// Retrieve a block by its hash.

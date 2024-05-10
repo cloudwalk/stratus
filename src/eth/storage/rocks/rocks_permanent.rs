@@ -46,7 +46,7 @@ pub struct RocksPermanentStorage {
 
 impl RocksPermanentStorage {
     pub async fn new() -> anyhow::Result<Self> {
-        tracing::info!("creating rocksdb storage");
+        tracing::info!("creating rocksdb permanent storage");
 
         let state = RocksStorageState::new();
         state.sync_data().await?;
