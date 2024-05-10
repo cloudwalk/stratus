@@ -24,17 +24,28 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let miner = config.miner.init(Arc::clone(&storage));
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let chain = BlockchainClient::new(&config.external_rpc).await?;
+    let rpc_storage = Arc::clone(&storage);
+    let rpc_executor = Arc::clone(&executor);
+    let rpc_miner = Arc::clone(&miner);
+
     let cancellation = signal_handler();
+    let rpc_cancellation = cancellation.clone();
 
     // run rpc and importer-online in parallel
-    let rpc_task = serve_rpc(
-        Arc::clone(&storage),
-        Arc::clone(&executor),
-        Arc::clone(&miner),
-        config.address,
-        config.executor.chain_id.into(),
-        cancellation.clone(),
-    );
+    let rpc_task = async move {
+        let res = serve_rpc(
+            rpc_storage,
+            rpc_executor,
+            rpc_miner,
+            config.address,
+            config.executor.chain_id.into(),
+            rpc_cancellation.clone(),
+        )
+        .await;
+        tracing::warn!("serve_rpc finished, cancelling tasks");
+        rpc_cancellation.cancel();
+        res
+    };
 
     let importer_task = async move {
         let res = run_importer_online(executor, miner, storage, chain, cancellation.clone()).await;
