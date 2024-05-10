@@ -8,7 +8,7 @@ use stratus::eth::rpc::serve_rpc;
 use stratus::infra::BlockchainClient;
 use stratus::utils::signal_handler;
 use stratus::GlobalServices;
-use tokio::try_join;
+use tokio::join;
 use tracing::debug;
 
 fn main() -> anyhow::Result<()> {
@@ -45,8 +45,10 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     };
 
     // await both services to finish
-    try_join!(rpc_task, importer_task)?;
+    let (rpc_res, importer_res) = join!(rpc_task, importer_task);
     debug!("rpc and importer tasks finished");
+    rpc_res?;
+    importer_res?;
 
     Ok(())
 }

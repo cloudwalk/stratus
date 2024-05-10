@@ -106,7 +106,7 @@ pub async fn serve_rpc(
     select! {
         _ = rpc_server_future => {
             tracing::warn!("rpc_server_future finished, cancelling tasks");
-            cancellation.cancel()
+            cancellation.cancel();
         },
         _ = cancellation.cancelled() => {
             tracing::info!("serve_rpc task cancelled, stopping rpc server");
