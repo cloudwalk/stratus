@@ -57,7 +57,7 @@ pub async fn serve_rpc(
 ) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
-    let _ = Arc::clone(&subs).spawn_subscriptions_cleaner();
+    let _handle_subs_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();
     let handle_new_heads_notifier = Arc::clone(&subs).spawn_new_heads_notifier(miner.notifier_blocks.subscribe());
     let handle_logs_notifier = Arc::clone(&subs).spawn_logs_notifier(miner.notifier_logs.subscribe());
 
