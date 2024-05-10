@@ -1,3 +1,6 @@
+use tokio::select;
+use tokio::signal::unix::signal;
+use tokio::signal::unix::SignalKind;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -9,13 +12,18 @@ pub fn signal_handler() -> CancellationToken {
     let cancellation = CancellationToken::new();
     let task_cancellation = cancellation.clone();
     tokio::spawn(async move {
-        match tokio::signal::ctrl_c().await {
-            Ok(()) => {
-                tracing::info!("stop signal received, shutting down");
-                task_cancellation.cancel();
+        let mut sigterm = signal(SignalKind::terminate()).expect("unable to listen for SIGTERM");
+        let mut sigint = signal(SignalKind::interrupt()).expect("unable to listen for SIGTERM");
+        select! {
+            _ = sigterm.recv() => {
+                tracing::info!("SIGTERM received, cancelling tasks");
             }
-            Err(err) => tracing::error!("unable to listen for shutdown signal: {}", err),
+
+            _ = sigint.recv() => {
+                tracing::info!("SIGINT signal received, shutting down");
+            }
         }
+        task_cancellation.cancel();
     });
     cancellation
 }
