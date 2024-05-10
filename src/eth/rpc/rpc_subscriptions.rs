@@ -62,7 +62,10 @@ impl RpcSubscriptions {
     pub fn spawn_new_heads_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<Block>) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
             loop {
-                let block = rx.recv().await.expect("newHeads notifier channel should never be closed");
+                let Ok(block) = rx.recv().await else {
+                    tracing::warn!("stopping subscription blocks notifier because tx channel was closed");
+                    break;
+                };
                 let msg = SubscriptionMessage::from(block.header);
 
                 let new_heads_subs = self.new_heads.read().await;
@@ -70,6 +73,7 @@ impl RpcSubscriptions {
                     notify(sub, msg.clone()).await;
                 }
             }
+            Ok(())
         })
     }
 
@@ -77,7 +81,10 @@ impl RpcSubscriptions {
     pub fn spawn_logs_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
             loop {
-                let log = rx.recv().await.expect("logs notifier channel should never be closed");
+                let Ok(log) = rx.recv().await else {
+                    tracing::warn!("stopping subscription logs notifier because tx channel was closed");
+                    break;
+                };
 
                 let logs_subs = self.logs.read().await;
                 let logs_interested_subs = logs_subs.values().filter(|(_, filter)| filter.matches(&log)).collect_vec();
@@ -87,6 +94,7 @@ impl RpcSubscriptions {
                     notify(&sub.0, msg.clone()).await;
                 }
             }
+            Ok(())
         })
     }
 

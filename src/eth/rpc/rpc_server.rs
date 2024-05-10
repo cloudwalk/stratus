@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use ethereum_types::U256;
+use futures::join;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
@@ -56,7 +57,7 @@ pub async fn serve_rpc(
 ) -> anyhow::Result<()> {
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
-    let handle_sub_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();
+    let _ = Arc::clone(&subs).spawn_subscriptions_cleaner();
     let handle_new_heads_notifier = Arc::clone(&subs).spawn_new_heads_notifier(miner.notifier_blocks.subscribe());
     let handle_logs_notifier = Arc::clone(&subs).spawn_logs_notifier(miner.notifier_logs.subscribe());
 
@@ -91,19 +92,10 @@ pub async fn serve_rpc(
         .set_id_provider(RandomStringIdProvider::new(8))
         .build(address)
         .await?;
-    let _server_handle = server.start(module);
+    let handle_rpc_server = server.start(module);
 
-    tokio::select! {
-        _ = handle_sub_cleaner => {
-            tracing::info!("subscriptions cleaner stopped");
-        }
-        _ = handle_logs_notifier => {
-            tracing::info!("logs notifier stopped");
-        }
-        _ = handle_new_heads_notifier => {
-            tracing::info!("heads notifier stopped");
-        }
-    }
+    // await server and subscriptions to stop
+    let _ = join!(handle_rpc_server.stopped(), handle_logs_notifier, handle_new_heads_notifier);
 
     Ok(())
 }
