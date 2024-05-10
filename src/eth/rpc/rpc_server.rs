@@ -104,7 +104,10 @@ pub async fn serve_rpc(
 
     // await server and subscriptions to stop
     select! {
-        _ = rpc_server_future => cancellation.cancel(),
+        _ = rpc_server_future => {
+            tracing::warn!("rpc_server_future finished, cancelling tasks");
+            cancellation.cancel()
+        },
         _ = cancellation.cancelled() => {
             tracing::info!("serve_rpc task cancelled, stopping rpc server");
             let _ = handle_clone.stop();

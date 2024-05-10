@@ -39,6 +39,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     let importer_task = async move {
         let res = run_importer_online(executor, miner, storage, chain, cancellation.clone()).await;
+        tracing::warn!("run_importer_online finished, cancelling tasks");
         cancellation.cancel();
         res
     };
