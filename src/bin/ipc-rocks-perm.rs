@@ -5,8 +5,8 @@ use futures::StreamExt;
 use parity_tokio_ipc::Endpoint;
 use stratus::config::IpcRocksConfig;
 use stratus::eth::storage::PermanentStorage;
-use stratus::eth::storage::PermanentStorageIpcRequest;
-use stratus::eth::storage::PermanentStorageIpcResponse;
+use stratus::eth::storage::PermanentStorageIpcRequest as Req;
+use stratus::eth::storage::PermanentStorageIpcResponse as Resp;
 use stratus::eth::storage::RocksPermanentStorage;
 use stratus::infra::IpcClient;
 use stratus::GlobalServices;
@@ -65,20 +65,14 @@ where
 
         // handle request
         let response = match request {
-            PermanentStorageIpcRequest::ReadBlock(selection) => match rocks.read_block(&selection).await {
-                Ok(block) => Ok(PermanentStorageIpcResponse::ReadBlock(block)),
-                Err(e) => Err(e),
-            },
-            PermanentStorageIpcRequest::ReadMinedBlockNumber => match rocks.read_mined_block_number().await {
-                Ok(number) => Ok(PermanentStorageIpcResponse::ReadMinedBlockNumber(number)),
-                Err(e) => Err(e),
-            },
+            Req::ReadBlock(selection) => rocks.read_block(&selection).await.map(|block| Resp::ReadBlock(block)),
+            Req::ReadMinedBlockNumber => rocks.read_mined_block_number().await.map(|number| Resp::ReadMinedBlockNumber(number)),
         };
 
         // send response
         let response = match response {
             Ok(response) => response,
-            Err(e) => PermanentStorageIpcResponse::Error(e.to_string()),
+            Err(e) => Resp::Error(e.to_string()),
         };
         client.write(response).await?;
     }
