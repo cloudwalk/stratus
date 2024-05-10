@@ -13,7 +13,7 @@ use crate::eth::primitives::LogTopic;
 use crate::ext::not;
 use crate::gen_newtype_from;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct LogFilter {
     pub from_block: BlockNumber,
     pub to_block: Option<BlockNumber>,
@@ -51,7 +51,7 @@ impl LogFilter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct LogFilterTopicCombination(Vec<(usize, LogTopic)>);
 
 gen_newtype_from!(self = LogFilterTopicCombination, other = Vec<(usize, LogTopic)>);

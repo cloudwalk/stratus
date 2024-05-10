@@ -8,6 +8,7 @@ use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::PermanentStorageIpcRequest as Req;
 use stratus::eth::storage::PermanentStorageIpcResponse as Resp;
 use stratus::eth::storage::RocksPermanentStorage;
+use stratus::eth::storage::StorageError;
 use stratus::infra::IpcClient;
 use stratus::GlobalServices;
 use tokio::io::AsyncRead;
@@ -65,8 +66,21 @@ where
 
         // handle request
         let response = match request {
+            Req::ReadAccount(address, point_in_time) => rocks.read_account(&address, &point_in_time).await.map(|account| Resp::ReadAccount(account)),
             Req::ReadBlock(selection) => rocks.read_block(&selection).await.map(|block| Resp::ReadBlock(block)),
             Req::ReadMinedBlockNumber => rocks.read_mined_block_number().await.map(|number| Resp::ReadMinedBlockNumber(number)),
+            Req::ReadSlot(address, index, point_in_time) => rocks.read_slot(&address, &index, &point_in_time).await.map(|number| Resp::ReadSlot(number)),
+            Req::SaveAccounts(accounts) => rocks.save_accounts(accounts).await.map(|_| Resp::SaveAccounts(())),
+            Req::SaveBlock(accounts) => match rocks.save_block(accounts).await {
+                Ok(_) => Ok(Resp::SaveBlock(None)),
+                Err(StorageError::Conflict(conflicts)) => Ok(Resp::SaveBlock(Some(conflicts))),
+                Err(StorageError::Generic(e)) => Err(e),
+            },
+            Req::SetMinedBlockNumber(number) => rocks.set_mined_block_number(number).await.map(|_| Resp::SetMinedBlockNumber(())),
+            req => {
+                tracing::error!(?req, "unhandle request");
+                Ok(Resp::Error("unhandled request".to_string()))
+            }
         };
 
         // send response

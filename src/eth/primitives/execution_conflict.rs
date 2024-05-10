@@ -6,7 +6,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionConflicts(pub NonEmpty<ExecutionConflict>);
 
 #[derive(Debug, Default)]
@@ -43,7 +43,7 @@ impl ExecutionConflictsBuilder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum ExecutionConflict {
     /// Account nonce mismatch.
     Nonce { address: Address, expected: Nonce, actual: Nonce },

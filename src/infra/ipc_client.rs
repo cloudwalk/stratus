@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWrite;
@@ -22,17 +24,16 @@ where
 
     pub async fn write<T>(&mut self, payload: T) -> anyhow::Result<()>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + Debug,
     {
-        tracing::debug!("writing ipc payload");
+        tracing::debug!(?payload, "writing payload");
 
         let payload = serde_json::to_vec(&payload).unwrap();
-
         if let Err(e) = self.conn.write_u32(payload.len() as u32).await {
-            return log_and_err!(reason = e, "failed to write ipc payload length");
+            return log_and_err!(reason = e, "failed to write payload length");
         };
         if let Err(e) = self.conn.write_all(&payload).await {
-            return log_and_err!(reason = e, "failed to write ipc payload");
+            return log_and_err!(reason = e, "failed to write payload");
         }
         Ok(())
     }
@@ -41,16 +42,13 @@ where
     where
         T: serde::de::DeserializeOwned,
     {
-        tracing::debug!("reading ipc payload length");
         let payload_len = match self.conn.read_u32().await {
             Ok(len) => len,
-            Err(e) => return log_and_err!(reason = e, "failed to read ipc payload length"),
+            Err(e) => return log_and_err!(reason = e, "failed to read payload length"),
         };
-
-        tracing::debug!(bytes = &payload_len, "reading ipc payload");
         let mut payload = vec![0; payload_len as usize];
         if let Err(e) = self.conn.read_exact(&mut payload).await {
-            return log_and_err!(reason = e, "failed to read ipc payload");
+            return log_and_err!(reason = e, "failed to read payload");
         }
 
         match serde_json::from_slice(&payload) {

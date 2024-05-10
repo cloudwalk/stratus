@@ -493,13 +493,6 @@ impl RocksStorageState {
             return None;
         }
 
-        if *address == Address::BRLC {
-            let inner_account = self.accounts.get(&((*address).into())).unwrap();
-            let account = inner_account.to_account(address);
-            tracing::trace!(%address, ?account, "account found");
-            return Some(account);
-        }
-
         match point_in_time {
             StoragePointInTime::Present => match self.accounts.get(&((*address).into())) {
                 Some(inner_account) => {

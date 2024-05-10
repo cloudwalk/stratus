@@ -9,6 +9,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -78,8 +79,19 @@ pub trait PermanentStorage: Send + Sync {
 
 #[derive(DebugAsJson, serde::Deserialize, serde::Serialize)]
 pub enum PermanentStorageIpcRequest {
+    IncrementBlockNumber,
+    ReadAccount(Address, StoragePointInTime),
     ReadBlock(BlockSelection),
+    ReadLogs(LogFilter),
     ReadMinedBlockNumber,
+    ReadMinedTransaction(Hash),
+    ReadSlot(Address, SlotIndex, StoragePointInTime),
+    ReadSlots(Address, SlotIndexes, StoragePointInTime),
+    ReadSlotsSample(BlockNumber, BlockNumber, u64, u64),
+    ResetAt(BlockNumber),
+    SaveAccounts(Vec<Account>),
+    SaveBlock(Block),
+    SetMinedBlockNumber(BlockNumber),
 }
 
 // -----------------------------------------------------------------------------
@@ -87,7 +99,19 @@ pub enum PermanentStorageIpcRequest {
 // -----------------------------------------------------------------------------
 #[derive(DebugAsJson, serde::Deserialize, serde::Serialize)]
 pub enum PermanentStorageIpcResponse {
+    IncrementBlockNumber(BlockNumber),
+    ReadAccount(Option<Account>),
     ReadBlock(Option<Block>),
+    ReadLogs(Vec<LogMined>),
     ReadMinedBlockNumber(BlockNumber),
+    ReadMinedTransaction(Option<TransactionMined>),
+    ReadSlot(Option<Slot>),
+    ReadSlots(HashMap<SlotIndex, SlotValue>),
+    ReadSlotsSample(Vec<SlotSample>),
+    ResetAt(()),
+    SaveAccounts(()),
+    SaveBlock(Option<ExecutionConflicts>),
+    SetMinedBlockNumber(()),
+
     Error(String),
 }

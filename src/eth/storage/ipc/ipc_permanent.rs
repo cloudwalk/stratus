@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::Ok;
+use anyhow::anyhow;
 use async_trait::async_trait;
 use parity_tokio_ipc::Connection;
 use parity_tokio_ipc::Endpoint;
@@ -23,8 +23,8 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::PermanentStorageIpcRequest;
-use crate::eth::storage::PermanentStorageIpcResponse;
+use crate::eth::storage::PermanentStorageIpcRequest as Req;
+use crate::eth::storage::PermanentStorageIpcResponse as Resp;
 use crate::eth::storage::StorageError;
 use crate::infra::IpcClient;
 use crate::log_and_err;
@@ -43,15 +43,15 @@ impl IpcPermanentStorage {
         Ok(Self { client: Mutex::new(client) })
     }
 
-    async fn request(&self, request: PermanentStorageIpcRequest) -> anyhow::Result<PermanentStorageIpcResponse> {
+    async fn request(&self, request: Req) -> anyhow::Result<Resp> {
         let mut client = self.client.lock().await;
 
         // request / response
         client.write(request).await?;
-        let response = client.read::<PermanentStorageIpcResponse>().await?;
+        let response = client.read::<Resp>().await?;
 
         // handle response error
-        if let PermanentStorageIpcResponse::Error(e) = response {
+        if let Resp::Error(e) = response {
             return log_and_err!(payload = e, "error response from ipc permanent storage");
         }
 
@@ -69,14 +69,18 @@ impl PermanentStorage for IpcPermanentStorage {
         Ok(())
     }
 
-    async fn set_mined_block_number(&self, _number: BlockNumber) -> anyhow::Result<()> {
-        todo!()
+    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        let req = Req::SetMinedBlockNumber(number);
+        match self.request(req).await? {
+            Resp::SetMinedBlockNumber(_) => Ok(()),
+            resp => return log_and_err!(payload = resp, "unexpected response"),
+        }
     }
 
     async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let request = PermanentStorageIpcRequest::ReadMinedBlockNumber;
-        match self.request(request).await? {
-            PermanentStorageIpcResponse::ReadMinedBlockNumber(number) => Ok(number),
+        let req = Req::ReadMinedBlockNumber;
+        match self.request(req).await? {
+            Resp::ReadMinedBlockNumber(number) => Ok(number),
             resp => return log_and_err!(payload = resp, "unexpected response"),
         }
     }
@@ -85,12 +89,20 @@ impl PermanentStorage for IpcPermanentStorage {
         todo!()
     }
 
-    async fn read_account(&self, _address: &Address, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        todo!()
+    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+        let req = Req::ReadAccount(*address, *point_in_time);
+        match self.request(req).await? {
+            Resp::ReadAccount(account) => Ok(account),
+            resp => return log_and_err!(payload = resp, "unexpected response"),
+        }
     }
 
-    async fn read_slot(&self, _address: &Address, _index: &SlotIndex, _point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        todo!()
+    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+        let req = Req::ReadSlot(*address, *index, *point_in_time);
+        match self.request(req).await? {
+            Resp::ReadSlot(slot) => Ok(slot),
+            resp => return log_and_err!(payload = resp, "unexpected response"),
+        }
     }
 
     async fn read_slots(
@@ -103,9 +115,9 @@ impl PermanentStorage for IpcPermanentStorage {
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
-        let request = PermanentStorageIpcRequest::ReadBlock(selection.clone());
-        match self.request(request).await? {
-            PermanentStorageIpcResponse::ReadBlock(block) => Ok(block),
+        let req = Req::ReadBlock(selection.clone());
+        match self.request(req).await? {
+            Resp::ReadBlock(block) => Ok(block),
             resp => return log_and_err!(payload = resp, "unexpected response"),
         }
     }
@@ -118,19 +130,36 @@ impl PermanentStorage for IpcPermanentStorage {
         todo!()
     }
 
-    async fn save_block(&self, _block: Block) -> anyhow::Result<(), StorageError> {
-        todo!()
+    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+        let req = Req::SaveBlock(block);
+        match self.request(req).await? {
+            Resp::SaveBlock(None) => Ok(()),
+            Resp::SaveBlock(Some(conflicts)) => Err(StorageError::Conflict(conflicts)),
+            resp => Err(StorageError::Generic(anyhow!(format!("unexpected response | payload={:?}", resp)))),
+        }
     }
 
-    async fn save_accounts(&self, _accounts: Vec<Account>) -> anyhow::Result<()> {
-        todo!()
+    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        let req = Req::SaveAccounts(accounts);
+        match self.request(req).await? {
+            Resp::SaveAccounts(_) => Ok(()),
+            resp => return log_and_err!(payload = resp, "unexpected response"),
+        }
     }
 
-    async fn reset_at(&self, _number: BlockNumber) -> anyhow::Result<()> {
-        todo!()
+    async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()> {
+        let req = Req::ResetAt(number);
+        match self.request(req).await? {
+            Resp::ResetAt(_) => Ok(()),
+            resp => return log_and_err!(payload = resp, "unexpected response"),
+        }
     }
 
-    async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        todo!()
+    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        let req = Req::ReadSlotsSample(start, end, max_samples, seed);
+        match self.request(req).await? {
+            Resp::ReadSlotsSample(samples) => Ok(samples),
+            resp => return log_and_err!(payload = resp, "unexpected response"),
+        }
     }
 }
