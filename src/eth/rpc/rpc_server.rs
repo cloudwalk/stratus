@@ -89,7 +89,7 @@ pub async fn serve_rpc(
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
     let http_middleware = tower::ServiceBuilder::new()
-        .layer(ProxyGetRequestLayer::new("/startup" , "startup").unwrap())
+        .layer(ProxyGetRequestLayer::new("/startup", "startup").unwrap())
         .layer(ProxyGetRequestLayer::new("/readiness", "readiness").unwrap())
         .layer(ProxyGetRequestLayer::new("/liveness", "liveness").unwrap());
 
