@@ -203,7 +203,7 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
 
 #[derive(Debug, Deserialize, Default)]
 struct NetListeningParams {
-    probe_type: Option<String>,  // This will be optional
+    probe_type: Option<String>, // This will be optional
 }
 
 // Status
