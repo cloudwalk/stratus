@@ -14,6 +14,8 @@ use jsonrpsee::server::Server;
 use jsonrpsee::types::Params;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
+use serde::Deserialize;
+use serde_json::json;
 use serde_json::Value as JsonValue;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
@@ -199,9 +201,24 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
     Ok(serde_json::to_value(timestamp).unwrap())
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct NetListeningParams {
+    probe_type: Option<String>, // This will be optional
+}
+
 // Status
-async fn net_listening(_: Params<'_>, _: Arc<RpcContext>) -> bool {
-    true
+async fn net_listening(params: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let (_, probe_params) = next_rpc_param_or_default::<NetListeningParams>(params.sequence())?;
+
+    // Log the probe type if it's provided
+    match probe_params.probe_type.as_deref() {
+        Some("liveness") => tracing::info!("Performing liveness check"),
+        Some("startup") => tracing::info!("Performing startup check"),
+        Some("readiness") => tracing::info!("Performing readiness check"), //TODO if it falls out of sync with substrate, we need to switch ready to false until its back again
+        _ => tracing::info!("General check or unspecified probe type"),
+    }
+
+    Ok(json!(true))
 }
 
 // Blockchain
