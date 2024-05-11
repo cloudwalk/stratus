@@ -14,7 +14,6 @@ use jsonrpsee::server::Server;
 use jsonrpsee::types::Params;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
-use serde::Deserialize;
 use serde_json::json;
 use serde_json::Value as JsonValue;
 use tokio::select;
