@@ -88,7 +88,10 @@ pub async fn serve_rpc(
 
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
-    let http_middleware = tower::ServiceBuilder::new().layer(ProxyGetRequestLayer::new("/health", "net_listening").unwrap());
+    let http_middleware = tower::ServiceBuilder::new()
+        .layer(ProxyGetRequestLayer::new("/startup" , "startup").unwrap())
+        .layer(ProxyGetRequestLayer::new("/readiness", "readiness").unwrap())
+        .layer(ProxyGetRequestLayer::new("/liveness", "liveness").unwrap());
 
     // serve module
     let server = Server::builder()
@@ -132,6 +135,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     // blockchain
     module.register_async_method("net_version", net_version)?;
     module.register_async_method("net_listening", net_listening)?;
+    module.register_async_method("startup", startup)?;
+    module.register_async_method("readiness", readiness)?;
+    module.register_async_method("liveness", liveness)?;
     module.register_async_method("eth_chainId", eth_chain_id)?;
     module.register_async_method("web3_clientVersion", web3_client_version)?;
 
@@ -201,23 +207,20 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
     Ok(serde_json::to_value(timestamp).unwrap())
 }
 
-#[derive(Debug, Deserialize, Default)]
-struct NetListeningParams {
-    probe_type: Option<String>, // This will be optional
+// Status
+async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    readiness(params, arc).await
 }
 
-// Status
-async fn net_listening(params: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    let (_, probe_params) = next_rpc_param_or_default::<NetListeningParams>(params.sequence())?;
+async fn startup(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(json!(true))
+}
 
-    // Log the probe type if it's provided
-    match probe_params.probe_type.as_deref() {
-        Some("liveness") => tracing::info!("Performing liveness check"),
-        Some("startup") => tracing::info!("Performing startup check"),
-        Some("readiness") => tracing::info!("Performing readiness check"), //TODO if it falls out of sync with substrate, we need to switch ready to false until its back again
-        _ => tracing::info!("General check or unspecified probe type"),
-    }
+async fn readiness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(json!(true))
+}
 
+async fn liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
