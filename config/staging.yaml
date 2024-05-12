@@ -56,12 +56,28 @@ kubernetes:
                 - stratus-api.services.staging.cloudwalk.network
           - containerPort: 9000
             name: metrics
-        healthcheck:
-          initialDelaySeconds: 10
-          interval: 10
-          path: /health
+      livenessProbe:
+        httpGet:
+          path: /liveness
           port: 3000
-          timeoutSeconds: 5
+        initialDelaySeconds: 15
+        periodSeconds: 10
+        timeoutSeconds: 5
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: 3000
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        timeoutSeconds: 5
+      startupProbe:
+        httpGet:
+          path: /startup
+          port: 3000
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        failureThreshold: 60
+        timeoutSeconds: 5
       volumeClaims:
       - name: rocksdata
         storageClass: premium-rwo
