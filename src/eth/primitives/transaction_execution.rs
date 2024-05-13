@@ -5,36 +5,49 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::TransactionKind;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(DebugAsJson, Clone, serde::Serialize)]
-pub struct TransactionExecution {
-    pub kind: TransactionKind,
-    pub result: EvmExecutionResult,
+pub enum TransactionExecution {
+    /// Transaction that was sent directly to Stratus.
+    Local(LocalTransactionExecution),
+
+    /// Transaction that imported from external source.
+    External(ExternalTransactionExecution),
 }
 
 impl TransactionExecution {
     /// Creates a new transaction execution from a local transaction.
-    pub fn from_local(tx: TransactionInput, result: EvmExecutionResult) -> Self {
-        Self {
-            kind: TransactionKind::new_local(tx),
-            result,
-        }
-    }
-
-    /// Creates a new transaction execution from an external transaction and its receipt.
-    pub fn from_external(tx: ExternalTransaction, receipt: ExternalReceipt, execution: EvmExecutionResult) -> Self {
-        Self {
-            kind: TransactionKind::new_external(tx, receipt),
-            result: execution,
-        }
+    pub fn new_local(tx: TransactionInput, result: EvmExecutionResult) -> Self {
+        Self::Local(LocalTransactionExecution { input: tx, result })
     }
 
     /// Returns the transaction hash.
     pub fn hash(&self) -> Hash {
-        match self.kind {
-            TransactionKind::Local(ref tx) => tx.hash,
-            TransactionKind::External(ref tx, _) => tx.hash(),
+        match self {
+            Self::Local(LocalTransactionExecution { input, .. }) => input.hash,
+            Self::External(ExternalTransactionExecution { tx, .. }) => tx.hash(),
         }
     }
+
+    /// Returns the execution result.
+    pub fn result(&self) -> &EvmExecutionResult {
+        match self {
+            Self::Local(LocalTransactionExecution { result, .. }) => result,
+            Self::External(ExternalTransactionExecution { result, .. }) => result,
+        }
+    }
+}
+
+#[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize)]
+pub struct LocalTransactionExecution {
+    pub input: TransactionInput,
+    pub result: EvmExecutionResult,
+}
+
+#[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize)]
+pub struct ExternalTransactionExecution {
+    pub tx: ExternalTransaction,
+    pub receipt: ExternalReceipt,
+    pub result: EvmExecutionResult,
 }

@@ -17,7 +17,6 @@ use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::TransactionKind;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -77,11 +76,11 @@ impl BlockMiner {
         let mut block = block_from_external(external_block, mined_txs)?;
 
         // mine local transactions
-        for (tx, execution) in local_txs {
-            if execution.is_success() {
+        for tx in local_txs {
+            if tx.result.is_success() {
                 return log_and_err!("cannot mine mixed block because one of the local execution is a success");
             }
-            block.push_execution(tx, execution);
+            block.push_execution(tx.input, tx.result);
         }
 
         Ok(block)
@@ -219,10 +218,12 @@ fn partition_transactions(txs: Vec<TransactionExecution>) -> (Vec<LocalTransacti
     let mut external_txs = Vec::with_capacity(txs.len());
 
     for tx in txs {
-        match tx.kind {
-            TransactionKind::Local(tx_input) => local_txs.push((tx_input, tx.result)),
-            TransactionKind::External(external_tx, external_receipt) => {
-                external_txs.push((external_tx, external_receipt, tx.result));
+        match tx {
+            TransactionExecution::Local(tx) => {
+                local_txs.push(tx);
+            }
+            TransactionExecution::External(tx) => {
+                external_txs.push(tx);
             }
         }
     }
@@ -231,11 +232,11 @@ fn partition_transactions(txs: Vec<TransactionExecution>) -> (Vec<LocalTransacti
 
 fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransactionExecution>) -> anyhow::Result<Vec<TransactionMined>> {
     let mut mined_txs = Vec::with_capacity(txs.len());
-    for (tx, receipt, evm_result) in txs {
-        if tx.block_number() != block_number {
+    for tx in txs {
+        if tx.tx.block_number() != block_number {
             return log_and_err!("cannot mine external block because one of the transactions does not belong to the external block");
         }
-        mined_txs.push(TransactionMined::from_external(tx, receipt, evm_result.execution)?);
+        mined_txs.push(TransactionMined::from_external(tx.tx, tx.receipt, tx.result.execution)?);
     }
     Ok(mined_txs)
 }

@@ -135,12 +135,13 @@ impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
         tracing::debug!(hash = %tx.hash(), tx_executions_len = %state.tx_executions.len(), "saving execution");
 
         // check conflicts
-        if let Some(conflicts) = state.check_conflicts(&tx.result.execution) {
+        let execution = &tx.result().execution;
+        if let Some(conflicts) = state.check_conflicts(execution) {
             return Err(StorageError::Conflict(conflicts)).context("execution conflicts with current state");
         }
 
         // save account changes
-        let changes = tx.result.execution.changes.values();
+        let changes = execution.changes.values();
         for change in changes {
             let account = state
                 .accounts
