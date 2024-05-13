@@ -139,7 +139,7 @@ impl Executor {
             // track transaction metrics
             #[cfg(feature = "metrics")]
             {
-                block_metrics += tx_execution.tx_metrics;
+                block_metrics += tx_execution.result.metrics;
             }
 
             // persist state
