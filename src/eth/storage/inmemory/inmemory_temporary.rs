@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
@@ -10,12 +11,48 @@ use tokio::sync::RwLockWriteGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::temporary_storage::TemporaryStorageExecutionOps;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
+
+#[derive(Debug)]
+pub struct InMemoryTemporaryStorage {
+    pub state: RwLock<InMemoryTemporaryStorageState>,
+}
+
+impl InMemoryTemporaryStorage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Locks inner state for reading.
+    pub async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
+        self.state.read().await
+    }
+
+    /// Locks inner state for writing.
+    pub async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
+        self.state.write().await
+    }
+}
+
+impl Default for InMemoryTemporaryStorage {
+    fn default() -> Self {
+        tracing::info!("creating inmemory temporary storage");
+        Self { state: Default::default() }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Inner State
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Default)]
 pub struct InMemoryTemporaryStorageState {
@@ -39,35 +76,45 @@ impl InMemoryTemporaryStorageState {
         self.accounts.clear();
         self.active_block_number = None;
     }
-}
 
-#[derive(Debug)]
-pub struct InMemoryTemporaryStorage {
-    pub state: RwLock<InMemoryTemporaryStorageState>,
-}
+    /// Checks if a new execution conflicts with the current state.
+    fn check_conflicts(&self, execution: &EvmExecution) -> Option<ExecutionConflicts> {
+        let mut conflicts = ExecutionConflictsBuilder::default();
 
-impl InMemoryTemporaryStorage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
+        for (address, change) in &execution.changes {
+            let account = match self.accounts.get(address) {
+                Some(account) => account,
+                None => continue,
+            };
+            // check account info conflicts
+            if let Some(expected) = change.nonce.take_original_ref() {
+                let original = &account.info.nonce;
+                if expected != original {
+                    conflicts.add_nonce(*address, *original, *expected);
+                }
+            }
+            if let Some(expected) = change.balance.take_original_ref() {
+                let original = &account.info.balance;
+                if expected != original {
+                    conflicts.add_balance(*address, *original, *expected);
+                }
+            }
 
-impl Default for InMemoryTemporaryStorage {
-    fn default() -> Self {
-        tracing::info!("creating inmemory temporary storage");
-        Self { state: Default::default() }
-    }
-}
+            // check slots conflicts
+            for (slot_index, slot_change) in &change.slots {
+                let original = match account.slots.get(slot_index) {
+                    Some(slot) => slot,
+                    None => continue,
+                };
+                if let Some(expected) = slot_change.take_original_ref() {
+                    if expected.value != original.value {
+                        conflicts.add_slot(*address, *slot_index, original.value, expected.value);
+                    }
+                }
+            }
+        }
 
-impl InMemoryTemporaryStorage {
-    /// Locks inner state for reading.
-    pub async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
-        self.state.read().await
-    }
-
-    /// Locks inner state for writing.
-    pub async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
-        self.state.write().await
+        conflicts.build()
     }
 }
 
@@ -87,6 +134,11 @@ impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
         tracing::debug!(hash = %tx.hash(), tx_executions_len = %state.tx_executions.len(), "saving execution");
+
+        // check conflicts
+        if let Some(conflicts) = state.check_conflicts(&tx.execution) {
+            return Err(StorageError::Conflict(conflicts)).context("execution conflicts with current state");
+        }
 
         // save account changes
         let changes = tx.execution.changes_to_persist();
