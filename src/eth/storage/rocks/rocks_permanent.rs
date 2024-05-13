@@ -185,7 +185,7 @@ impl PermanentStorage for RocksPermanentStorage {
         self.state.read_logs(filter)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
             self.state.export_metrics();
@@ -193,7 +193,7 @@ impl PermanentStorage for RocksPermanentStorage {
         // check conflicts before persisting any state changes
         let account_changes = block.compact_account_changes();
         if let Some(conflicts) = Self::check_conflicts(&self.state, &account_changes) {
-            return Err(StorageError::Conflict(conflicts));
+            return Err(StorageError::Conflict(conflicts)).context("storage conflict");
         }
 
         let mut futures = Vec::with_capacity(9);

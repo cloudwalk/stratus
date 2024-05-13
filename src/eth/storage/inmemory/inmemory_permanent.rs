@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use rand::rngs::StdRng;
@@ -126,7 +127,7 @@ impl InMemoryPermanentStorage {
         state.logs.clear();
     }
 
-    async fn check_conflicts(state: &InMemoryPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
+    fn check_conflicts(state: &InMemoryPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for change in account_changes {
@@ -318,13 +319,13 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
 
         // check conflicts before persisting any state changes
         let account_changes = block.compact_account_changes();
-        if let Some(conflicts) = Self::check_conflicts(&state, &account_changes).await {
-            return Err(StorageError::Conflict(conflicts));
+        if let Some(conflicts) = Self::check_conflicts(&state, &account_changes) {
+            return Err(StorageError::Conflict(conflicts)).context("storage conflict");
         }
 
         // save block

@@ -1,3 +1,4 @@
+use display_json::DebugAsJson;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::Address;
@@ -6,7 +7,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
 
-#[derive(Debug)]
+#[derive(DebugAsJson, serde::Serialize)]
 pub struct ExecutionConflicts(pub NonEmpty<ExecutionConflict>);
 
 #[derive(Debug, Default)]
@@ -43,7 +44,7 @@ impl ExecutionConflictsBuilder {
     }
 }
 
-#[derive(Debug)]
+#[derive(DebugAsJson, serde::Serialize)]
 pub enum ExecutionConflict {
     /// Account nonce mismatch.
     Nonce { address: Address, expected: Nonce, actual: Nonce },

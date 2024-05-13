@@ -348,7 +348,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         Ok(evm_result) if evm_result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(evm_result) => Err(RpcError::Response(rpc_internal_error(hex_data(evm_result.execution.output)))),
+        Ok(evm_result) => Err(RpcError::Response(rpc_internal_error(hex_data(evm_result.execution().output.clone())))),
 
         // internal error
         Err(e) => {

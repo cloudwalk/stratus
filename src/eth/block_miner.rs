@@ -5,7 +5,6 @@ use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 use tokio::sync::broadcast;
 
-use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -16,7 +15,6 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -57,7 +55,7 @@ impl BlockMiner {
 
         // validate
         if not(local_txs.is_empty()) {
-            return log_and_err!("cannot mine external block because one of the transactions is not an external transaction");
+            return log_and_err!("cannot mine external block because one of the transactions is a local transaction");
         }
 
         // mine external transactions
@@ -77,7 +75,7 @@ impl BlockMiner {
 
         // mine local transactions
         for tx in local_txs {
-            if tx.result.is_success() {
+            if tx.is_success() {
                 return log_and_err!("cannot mine mixed block because one of the local execution is a success");
             }
             block.push_execution(tx.input, tx.result);
@@ -86,14 +84,32 @@ impl BlockMiner {
         Ok(block)
     }
 
+    /// Mine a block from local transactions.
+    pub async fn mine_local(&self) -> anyhow::Result<Block> {
+        // retrieve data
+        let txs = self.storage.temp.read_executions().await?;
+        let (local_txs, external_txs) = partition_transactions(txs);
+
+        // validate
+        if not(external_txs.is_empty()) {
+            return log_and_err!("cannot mine local block because one of the transactions is an external transaction");
+        }
+
+        // mine local transactions
+        match NonEmpty::from_vec(local_txs) {
+            Some(txs) => self.mine_with_many_transactions(txs).await,
+            None => self.mine_empty().await,
+        }
+    }
+
     /// Mine one block with a single transaction.
     /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
     /// enabling consistent processing for both single and multiple transaction scenarios.
     ///
     /// TODO: remove
-    pub async fn mine_with_one_transaction(&self, input: TransactionInput, evm_result: EvmExecutionResult) -> anyhow::Result<Block> {
-        let transactions = NonEmpty::new((input, evm_result));
-        self.mine_with_many_transactions(transactions).await
+    pub async fn mine_with_one_transaction(&self, tx: LocalTransactionExecution) -> anyhow::Result<Block> {
+        let txs = NonEmpty::new(tx);
+        self.mine_with_many_transactions(txs).await
     }
 
     /// Mines a new block from one or more transactions.
@@ -101,25 +117,25 @@ impl BlockMiner {
     /// and finalizing the block. It is used both directly for multiple transactions and indirectly by `mine_with_one_transaction`.
     ///
     /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
-    pub async fn mine_with_many_transactions(&self, transactions: NonEmpty<(TransactionInput, EvmExecutionResult)>) -> anyhow::Result<Block> {
+    pub async fn mine_with_many_transactions(&self, txs: NonEmpty<LocalTransactionExecution>) -> anyhow::Result<Block> {
         // init block
         let number = self.storage.increment_block_number().await?;
-        let block_timestamp = transactions
-            .minimum_by(|(_, e1), (_, e2)| e1.execution.block_timestamp.cmp(&e2.execution.block_timestamp))
-            .1
+        let block_timestamp = txs
+            .minimum_by(|tx1, tx2| tx1.result.execution.block_timestamp.cmp(&tx2.result.execution.block_timestamp))
+            .result
             .execution
             .block_timestamp;
 
         let mut block = Block::new(number, block_timestamp);
-        block.transactions.reserve(transactions.len());
+        block.transactions.reserve(txs.len());
 
         // mine transactions and logs
         let mut log_index = Index::ZERO;
-        for (tx_idx, (input, evm_result)) in transactions.into_iter().enumerate() {
+        for (tx_idx, tx) in txs.into_iter().enumerate() {
             let transaction_index = Index::new(tx_idx as u64);
             // mine logs
-            let mut mined_logs: Vec<LogMined> = Vec::with_capacity(evm_result.execution.logs.len());
-            for mined_log in evm_result.execution.logs.clone() {
+            let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());
+            for mined_log in tx.result.execution.logs.clone() {
                 // calculate bloom
                 block.header.bloom.accrue(BloomInput::Raw(mined_log.address.as_ref()));
                 for topic in mined_log.topics().into_iter() {
@@ -129,7 +145,7 @@ impl BlockMiner {
                 // mine log
                 let mined_log = LogMined {
                     log: mined_log,
-                    transaction_hash: input.hash,
+                    transaction_hash: tx.input.hash,
                     transaction_index,
                     log_index,
                     block_number: block.header.number,
@@ -143,8 +159,8 @@ impl BlockMiner {
 
             // mine transaction
             let mined_transaction = TransactionMined {
-                input,
-                execution: evm_result.execution,
+                input: tx.input,
+                execution: tx.result.execution,
                 transaction_index,
                 block_number: block.header.number,
                 block_hash: block.header.hash,
