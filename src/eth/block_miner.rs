@@ -102,26 +102,36 @@ impl BlockMiner {
         }
     }
 
+    /// Mine one block with a single transaction.
+    /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
+    /// enabling consistent processing for both single and multiple transaction scenarios.
+    ///
+    /// TODO: remove
+    pub async fn mine_with_one_transaction(&self, tx: LocalTransactionExecution) -> anyhow::Result<Block> {
+        let txs = NonEmpty::new(tx);
+        self.mine_with_many_transactions(txs).await
+    }
+
     /// Mines a new block from one or more transactions.
     /// This is the core function for block creation, processing each transaction, generating the necessary logs,
     /// and finalizing the block. It is used both directly for multiple transactions and indirectly by `mine_with_one_transaction`.
     ///
     /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
-    pub async fn mine_with_many_transactions(&self, transactions: NonEmpty<LocalTransactionExecution>) -> anyhow::Result<Block> {
+    pub async fn mine_with_many_transactions(&self, txs: NonEmpty<LocalTransactionExecution>) -> anyhow::Result<Block> {
         // init block
         let number = self.storage.increment_block_number().await?;
-        let block_timestamp = transactions
+        let block_timestamp = txs
             .minimum_by(|tx1, tx2| tx1.result.execution.block_timestamp.cmp(&tx2.result.execution.block_timestamp))
             .result
             .execution
             .block_timestamp;
 
         let mut block = Block::new(number, block_timestamp);
-        block.transactions.reserve(transactions.len());
+        block.transactions.reserve(txs.len());
 
         // mine transactions and logs
         let mut log_index = Index::ZERO;
-        for (tx_idx, tx) in transactions.into_iter().enumerate() {
+        for (tx_idx, tx) in txs.into_iter().enumerate() {
             let transaction_index = Index::new(tx_idx as u64);
             // mine logs
             let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());

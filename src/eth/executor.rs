@@ -26,6 +26,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
@@ -231,23 +232,23 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(skip_all)]
-    pub async fn transact(&self, tx: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    pub async fn transact(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
         tracing::info!(
-            hash = %tx.hash,
-            nonce = %tx.nonce,
-            from = ?tx.from,
-            signer = %tx.signer,
-            to = ?tx.to,
-            data_len = %tx.input.len(),
-            data = %tx.input,
+            hash = %tx_input.hash,
+            nonce = %tx_input.nonce,
+            from = ?tx_input.from,
+            signer = %tx_input.signer,
+            to = ?tx_input.to,
+            data_len = %tx_input.input.len(),
+            data = %tx_input.input,
             "executing transaction"
         );
 
         // validate
-        if tx.signer.is_zero() {
+        if tx_input.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
@@ -255,10 +256,10 @@ impl Executor {
         let execution = match &self.relayer {
             // relayer present
             Some(relayer) => {
-                let evm_input = EvmInput::from_eth_transaction(tx.clone());
+                let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
                 let evm_result = self.execute_in_evm(evm_input).await?;
-                relayer.forward(tx.clone(), evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-                TransactionExecution::new_local(tx, evm_result)
+                relayer.forward(tx_input.clone(), evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+                TransactionExecution::new_local(tx_input, evm_result)
             }
             // relayer not present
             None => {
@@ -266,14 +267,14 @@ impl Executor {
                 // TODO: must have a stop condition like timeout or max number of retries
                 loop {
                     // execute transaction
-                    let evm_input = EvmInput::from_eth_transaction(tx.clone());
+                    let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
                     let evm_result = self.execute_in_evm(evm_input).await?;
 
-                    // save executino to temporary storage
-                    let tx_execution = TransactionExecution::new_local(tx.clone(), evm_result);
+                    // save execution to temporary storage
+                    let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
                     if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
                         if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
-                            tracing::warn!(?conflicts, "storage conflict detected when saving execution");
+                            tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
                             continue;
                         } else {
                             #[cfg(feature = "metrics")]
@@ -282,19 +283,22 @@ impl Executor {
                         }
                     }
 
-                    // TODO: mine immediatly to keep compat for now, but remove after 1 sec block is created
+                    // TODO: mine and save to permanent storage (remove soon)
                     let miner = self.miner.lock().await;
-                    let block = miner.mine_local().await?;
+                    let tx_local = LocalTransactionExecution::new(tx_input.clone(), evm_result);
+                    let block = miner.mine_with_one_transaction(tx_local).await?;
 
                     match self.storage.save_block_to_perm(block).await {
-                        // success: break with execution
                         Ok(()) => break tx_execution,
-                        // unexpected error: break with error
-                        Err(e) => {
-                            #[cfg(feature = "metrics")]
-                            metrics::inc_executor_transact(start.elapsed(), false);
-                            return Err(e);
-                        }
+                        Err(e) =>
+                            if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                                tracing::warn!(?conflicts, "permanent storage conflict detected when saving execution");
+                                continue;
+                            } else {
+                                #[cfg(feature = "metrics")]
+                                metrics::inc_executor_transact(start.elapsed(), false);
+                                return Err(e);
+                            },
                     }
                 }
             }
