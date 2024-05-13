@@ -77,7 +77,7 @@ impl BlockMiner {
 
         // mine local transactions
         for tx in local_txs {
-            if tx.result.is_success() {
+            if tx.is_success() {
                 return log_and_err!("cannot mine mixed block because one of the local execution is a success");
             }
             block.push_execution(tx.input, tx.result);

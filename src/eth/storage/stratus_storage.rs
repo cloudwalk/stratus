@@ -18,7 +18,6 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::ext::not;
 #[cfg(feature = "metrics")]
@@ -325,7 +324,7 @@ impl StratusStorage {
     /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
     #[allow(clippy::let_and_return)]
     #[tracing::instrument(skip_all)]
-    pub async fn save_block_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub async fn save_block_to_perm(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, label_size_by_tx, label_size_by_gas, gas_used) = (
             metrics::now(),

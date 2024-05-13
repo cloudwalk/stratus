@@ -231,23 +231,23 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(skip_all)]
-    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<EvmExecutionResult> {
+    pub async fn transact(&self, tx: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
         tracing::info!(
-            hash = %transaction.hash,
-            nonce = %transaction.nonce,
-            from = ?transaction.from,
-            signer = %transaction.signer,
-            to = ?transaction.to,
-            data_len = %transaction.input.len(),
-            data = %transaction.input,
+            hash = %tx.hash,
+            nonce = %tx.nonce,
+            from = ?tx.from,
+            signer = %tx.signer,
+            to = ?tx.to,
+            data_len = %tx.input.len(),
+            data = %tx.input,
             "executing transaction"
         );
 
         // validate
-        if transaction.signer.is_zero() {
+        if tx.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
@@ -255,37 +255,45 @@ impl Executor {
         let execution = match &self.relayer {
             // relayer present
             Some(relayer) => {
-                let evm_input = EvmInput::from_eth_transaction(transaction.clone());
+                let evm_input = EvmInput::from_eth_transaction(tx.clone());
                 let evm_result = self.execute_in_evm(evm_input).await?;
-                relayer.forward(transaction, evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-                evm_result
+                relayer.forward(tx.clone(), evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+                TransactionExecution::new_local(tx, evm_result)
             }
             // relayer not present
             None => {
                 // executes transaction until no more conflicts
                 // TODO: must have a stop condition like timeout or max number of retries
                 loop {
-                    // execute and check conflicts before mining block
-                    let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-                    let execution = self.execute_in_evm(evm_input).await?;
+                    // execute transaction
+                    let evm_input = EvmInput::from_eth_transaction(tx.clone());
+                    let evm_result = self.execute_in_evm(evm_input).await?;
 
-                    // mine and commit block
+                    // save executino to temporary storage
+                    let tx_execution = TransactionExecution::new_local(tx.clone(), evm_result);
+                    if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
+                        if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                            tracing::warn!(?conflicts, "storage conflict detected when saving execution");
+                            continue;
+                        } else {
+                            #[cfg(feature = "metrics")]
+                            metrics::inc_executor_transact(start.elapsed(), false);
+                            return Err(e);
+                        }
+                    }
+
+                    // TODO: mine immediatly to keep compat for now, but remove after 1 sec block is created
                     let miner = self.miner.lock().await;
-                    let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
+                    let block = miner.mine_mixed().await?;
 
                     match self.storage.save_block_to_perm(block).await {
                         // success: break with execution
-                        Ok(()) => break execution,
-                        // conflict: try again
-                        Err(StorageError::Conflict(conflicts)) => {
-                            tracing::warn!(?conflicts, "storage conflict detected when saving block");
-                            continue;
-                        }
+                        Ok(()) => break tx_execution,
                         // unexpected error: break with error
                         Err(e) => {
                             #[cfg(feature = "metrics")]
                             metrics::inc_executor_transact(start.elapsed(), false);
-                            return Err(e.into());
+                            return Err(e);
                         }
                     }
                 }

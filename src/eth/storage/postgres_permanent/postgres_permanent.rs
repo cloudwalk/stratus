@@ -526,7 +526,7 @@ impl PermanentStorage for PostgresPermanentStorage {
     // in only one transaction so that we can rollback in case of conflicts.
     // The first would be easy if sqlx supported pipelining  (https://github.com/launchbadge/sqlx/issues/408)
     // like tokio_postgres does https://docs.rs/tokio-postgres/0.4.0-rc.3/tokio_postgres/#pipelining
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         tracing::debug!(block = ?block, "saving block");
 
         let account_changes = block.compact_account_changes();
@@ -702,7 +702,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 expected: expected_modified_accounts,
                 actual: modified_accounts,
             }]));
-            return Err(error);
+            return Err(error).context("account modified count conflict");
         }
 
         if modified_slots != expected_modified_slots {
@@ -711,7 +711,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 expected: expected_modified_slots,
                 actual: modified_slots
             }]));
-            return Err(error);
+            return Err(error).context("slot modified count conflict");
         }
 
         tx.commit().await.context("failed to commit transaction")?;
