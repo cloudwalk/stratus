@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
@@ -10,12 +11,48 @@ use tokio::sync::RwLockWriteGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::temporary_storage::TemporaryStorageExecutionOps;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
+
+#[derive(Debug)]
+pub struct InMemoryTemporaryStorage {
+    pub state: RwLock<InMemoryTemporaryStorageState>,
+}
+
+impl InMemoryTemporaryStorage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Locks inner state for reading.
+    pub async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
+        self.state.read().await
+    }
+
+    /// Locks inner state for writing.
+    pub async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
+        self.state.write().await
+    }
+}
+
+impl Default for InMemoryTemporaryStorage {
+    fn default() -> Self {
+        tracing::info!("creating inmemory temporary storage");
+        Self { state: Default::default() }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Inner State
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Default)]
 pub struct InMemoryTemporaryStorageState {
@@ -39,35 +76,39 @@ impl InMemoryTemporaryStorageState {
         self.accounts.clear();
         self.active_block_number = None;
     }
-}
 
-#[derive(Debug)]
-pub struct InMemoryTemporaryStorage {
-    pub state: RwLock<InMemoryTemporaryStorageState>,
-}
+    /// Checks if a new execution conflicts with the current state.
+    fn check_conflicts(&self, execution: &EvmExecution) -> Option<ExecutionConflicts> {
+        let mut conflicts = ExecutionConflictsBuilder::default();
 
-impl InMemoryTemporaryStorage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
+        for (address, change) in &execution.changes {
+            let Some(account) = self.accounts.get(address) else { continue };
+            // check account info conflicts
+            if let Some(expected) = change.nonce.take_original_ref() {
+                let original = &account.info.nonce;
+                if expected != original {
+                    conflicts.add_nonce(*address, *original, *expected);
+                }
+            }
+            if let Some(expected) = change.balance.take_original_ref() {
+                let original = &account.info.balance;
+                if expected != original {
+                    conflicts.add_balance(*address, *original, *expected);
+                }
+            }
 
-impl Default for InMemoryTemporaryStorage {
-    fn default() -> Self {
-        tracing::info!("creating inmemory temporary storage");
-        Self { state: Default::default() }
-    }
-}
+            // check slots conflicts
+            for (slot_index, slot_change) in &change.slots {
+                if let Some(expected) = slot_change.take_original_ref() {
+                    let Some(original) = account.slots.get(slot_index) else { continue };
+                    if expected.value != original.value {
+                        conflicts.add_slot(*address, *slot_index, original.value, expected.value);
+                    }
+                }
+            }
+        }
 
-impl InMemoryTemporaryStorage {
-    /// Locks inner state for reading.
-    pub async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryTemporaryStorageState> {
-        self.state.read().await
-    }
-
-    /// Locks inner state for writing.
-    pub async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryTemporaryStorageState> {
-        self.state.write().await
+        conflicts.build()
     }
 }
 
@@ -84,12 +125,22 @@ impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
         Ok(state.external_block.clone())
     }
 
+    async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        let state = self.lock_read().await;
+        Ok(state.check_conflicts(execution))
+    }
+
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
         tracing::debug!(hash = %tx.hash(), tx_executions_len = %state.tx_executions.len(), "saving execution");
 
+        // check conflicts
+        if let Some(conflicts) = state.check_conflicts(&tx.result.execution) {
+            return Err(StorageError::Conflict(conflicts)).context("execution conflicts with current state");
+        }
+
         // save account changes
-        let changes = tx.execution.changes_to_persist();
+        let changes = tx.result.execution.changes.values();
         for change in changes {
             let account = state
                 .accounts
@@ -97,28 +148,28 @@ impl TemporaryStorageExecutionOps for InMemoryTemporaryStorage {
                 .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
 
             // account basic info
-            if let Some(nonce) = change.nonce.take() {
-                account.info.nonce = nonce;
+            if let Some(nonce) = change.nonce.take_ref() {
+                account.info.nonce = *nonce;
             }
-            if let Some(balance) = change.balance.take() {
-                account.info.balance = balance;
+            if let Some(balance) = change.balance.take_ref() {
+                account.info.balance = *balance;
             }
 
             // bytecode (todo: where is code_hash?)
-            if let Some(Some(bytecode)) = change.bytecode.take() {
-                account.info.bytecode = Some(bytecode);
+            if let Some(Some(bytecode)) = change.bytecode.take_ref() {
+                account.info.bytecode = Some(bytecode.clone());
             }
-            if let Some(indexes) = change.static_slot_indexes.take() {
-                account.info.static_slot_indexes = indexes;
+            if let Some(indexes) = change.static_slot_indexes.take_ref() {
+                account.info.static_slot_indexes = indexes.clone();
             }
-            if let Some(indexes) = change.mapping_slot_indexes.take() {
-                account.info.mapping_slot_indexes = indexes;
+            if let Some(indexes) = change.mapping_slot_indexes.take_ref() {
+                account.info.mapping_slot_indexes = indexes.clone();
             }
 
             // slots
-            for (_, slot) in change.slots {
-                if let Some(slot) = slot.take() {
-                    account.slots.insert(slot.index, slot);
+            for slot in change.slots.values() {
+                if let Some(slot) = slot.take_ref() {
+                    account.slots.insert(slot.index, *slot);
                 }
             }
         }

@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug, Default, derive_more::Add, derive_more::AddAssign)]
+use display_json::DebugAsJson;
+
+#[derive(DebugAsJson, Clone, Copy, Default, derive_more::Add, derive_more::AddAssign, serde::Serialize)]
 pub struct ExecutionMetrics {
     /// Number of account reads during EVM execution.
     pub account_reads: usize,

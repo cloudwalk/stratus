@@ -11,7 +11,6 @@ use std::fmt::Debug;
 
 use anyhow::anyhow;
 use anyhow::Ok;
-use itertools::Itertools;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -110,11 +109,6 @@ impl EvmExecution {
             }
         }
         None
-    }
-
-    /// Returns account changes to be persisted.
-    pub fn changes_to_persist(&self) -> Vec<ExecutionAccountChanges> {
-        self.changes.values().cloned().collect_vec()
     }
 
     /// Checks conflicts between two executions.

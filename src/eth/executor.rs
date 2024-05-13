@@ -19,6 +19,7 @@ use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
@@ -78,25 +79,24 @@ impl Executor {
     // External transactions
     // -------------------------------------------------------------------------
 
-    /// Re-executes an external block locally and imports it to the temporary storage.
+    /// Reexecutes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
     pub async fn reexecute_external(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        tracing::info!(number = %block.number(), "re-executing external block");
-
-        let storage = &self.storage;
+        tracing::info!(number = %block.number(), "reexecuting external block");
 
         // track active block number
+        let storage = &self.storage;
         storage.temp.set_external_block(block.clone()).await?;
         storage.set_active_block_number(block.number()).await?;
 
-        // execute mixing serial and parallel approaches
+        // determine how to execute each transaction
         let tx_routes = route_transactions(&block.transactions, receipts)?;
-        let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
 
         // execute parallel executions
+        let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
                 tx_parallel_executions.push(self.reexecute_external_tx(tx, receipt, block));
@@ -106,74 +106,47 @@ impl Executor {
 
         // execute serial transactions joining them with parallel
         for tx_route in tx_routes {
-            match tx_route {
+            let tx_execution = match tx_route {
                 // serial: execute now
                 ParallelExecutionRoute::Serial(tx, receipt) => {
-                    let evm_result = self.reexecute_external_tx(tx, receipt, block).await.2?;
-
-                    // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
-                    storage.save_execution_to_temp(tx_execution).await?;
+                    let (tx, receipt, evm_result) = self.reexecute_external_tx(tx, receipt, block).await;
+                    TransactionExecution::from_external(tx.clone(), receipt.clone(), evm_result?)
                 }
 
-                // parallel: check results and re-execute if necessary
+                // parallel: get parallel execution result and reexecute if failed because of error
                 ParallelExecutionRoute::Parallel(..) => {
-                    let evm_result = parallel_executions.next().await.unwrap();
-
-                    let decision = match evm_result {
-                        // execution success
-                        (tx, receipt, Ok(evm_result)) => {
-                            let current_execution = &evm_result.execution;
-
-                            // check conflict with all previous transactions
-                            // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
-                            let mut reexecute = false;
-
-                            let prev_txs = storage.temp.read_executions().await?;
-                            for prev_tx in prev_txs {
-                                let prev_execution = &prev_tx.execution;
-                                if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
-                                    tracing::warn!(?conflicts, "parallel execution conflicts");
-                                    reexecute = true;
-                                    break;
-                                }
+                    match parallel_executions.next().await.unwrap() {
+                        // success, check conflicts
+                        (tx, receipt, Ok(evm_result)) => match storage.temp.check_conflicts(&evm_result.execution).await? {
+                            None => TransactionExecution::from_external(tx.clone(), receipt.clone(), evm_result),
+                            Some(conflicts) => {
+                                tracing::warn!(?conflicts, "reexecuting serially because parallel execution conflicted");
+                                let (tx, receipt, evm_result) = self.reexecute_external_tx(tx, receipt, block).await;
+                                TransactionExecution::from_external(tx.clone(), receipt.clone(), evm_result?)
                             }
-                            if reexecute {
-                                ParallelExecutionDecision::Reexecute(tx, receipt)
-                            } else {
-                                ParallelExecutionDecision::Proceed(tx, receipt, evm_result)
-                            }
-                        }
-                        // execution failure
-                        (tx, receipt, Err(e)) => {
-                            tracing::warn!(reason = ?e, "parallel execution failed");
-                            ParallelExecutionDecision::Reexecute(tx, receipt)
-                        }
-                    };
-
-                    // re-execute if necessary
-                    let (tx, receipt, evm_result) = match decision {
-                        ParallelExecutionDecision::Proceed(tx, receipt, evm_result) => (tx, receipt, evm_result),
-                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external_tx(tx, receipt, block).await {
-                            (tx, receipt, Ok(evm_result)) => (tx, receipt, evm_result),
-                            (.., Err(e)) => return Err(e),
                         },
-                    };
 
-                    // track metrics
-                    #[cfg(feature = "metrics")]
-                    {
-                        block_metrics += evm_result.metrics;
+                        // failure, reexecute
+                        (tx, receipt, Err(e)) => {
+                            tracing::warn!(reason = ?e, "reexecuting serially because parallel execution errored");
+                            let (tx, receipt, evm_result) = self.reexecute_external_tx(tx, receipt, block).await;
+                            TransactionExecution::from_external(tx.clone(), receipt.clone(), evm_result?)
+                        }
                     }
-
-                    // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
-                    storage.save_execution_to_temp(tx_execution).await?;
                 }
+            };
+
+            // track transaction metrics
+            #[cfg(feature = "metrics")]
+            {
+                block_metrics += tx_execution.result.metrics;
             }
+
+            // persist state
+            storage.save_execution_to_temp(tx_execution).await?;
         }
 
-        // track metrics
+        // track block metrics
         #[cfg(feature = "metrics")]
         {
             metrics::inc_executor_external_block(start.elapsed());
@@ -195,9 +168,9 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        // re-execute transaction or create a fake execution from the failed external transaction
+        // reexecute transaction or create a fake execution from the failed external transaction
         let evm_result = if receipt.is_success() {
-            let evm_input = match EvmInput::from_external_transaction(tx, receipt, block) {
+            let evm_input = match EvmInput::from_external(tx, receipt, block) {
                 Ok(evm_input) => evm_input,
                 Err(e) => return (tx, receipt, Err(e)),
             };
@@ -220,7 +193,7 @@ impl Executor {
         // handle execution result
         match evm_result {
             Ok(mut evm_result) => {
-                // apply execution costs that were not consided when re-executing the transaction
+                // apply execution costs that were not consided when reexecuting the transaction
                 if let Err(e) = evm_result.execution.apply_execution_costs(receipt) {
                     return (tx, receipt, Err(e));
                 };
@@ -259,7 +232,7 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(skip_all)]
-    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<EvmExecution> {
+    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<EvmExecutionResult> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -284,9 +257,9 @@ impl Executor {
             // relayer present
             Some(relayer) => {
                 let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-                let execution = self.execute_in_evm(evm_input).await?.execution;
-                relayer.forward(transaction, execution.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-                execution
+                let evm_result = self.execute_in_evm(evm_input).await?;
+                relayer.forward(transaction, evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+                evm_result
             }
             // relayer not present
             None => {
@@ -295,7 +268,7 @@ impl Executor {
                 loop {
                     // execute and check conflicts before mining block
                     let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-                    let execution = self.execute_in_evm(evm_input).await?.execution;
+                    let execution = self.execute_in_evm(evm_input).await?;
 
                     // mine and commit block
                     let miner = self.miner.lock().await;
@@ -406,7 +379,7 @@ fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a
         if seen_from.contains(&tx.from) {
             route = ParallelExecutionRoute::Serial(tx, receipt);
         }
-        // failed receipts are not re-executed, so they can be executed in parallel
+        // failed receipts are not reexecuted, so they can be executed in parallel
         if receipt.is_failure() {
             route = ParallelExecutionRoute::Parallel(tx, receipt);
         }
@@ -421,7 +394,7 @@ fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a
 }
 
 /// How a transaction should be executed in a parallel execution context.
-#[derive(Debug, strum::Display)]
+#[derive(Debug, strum::Display, strum::EnumIs)]
 enum ParallelExecutionRoute<'a> {
     /// Transaction must be executed serially after all previous states are computed.
     #[strum(to_string = "Serial")]
@@ -430,14 +403,4 @@ enum ParallelExecutionRoute<'a> {
     /// Transaction can be executed in parallel with other transactions.
     #[strum(to_string = "Parallel")]
     Parallel(&'a ExternalTransaction, &'a ExternalReceipt),
-}
-
-/// What to do after a transaction was executed in parallel.
-#[derive(Debug)]
-enum ParallelExecutionDecision<'a> {
-    /// Parallel execution succeeded and can be persisted.
-    Proceed(&'a ExternalTransaction, &'a ExternalReceipt, EvmExecutionResult),
-
-    /// Parallel execution failed and must be re-executed in a serial manner.
-    Reexecute(&'a ExternalTransaction, &'a ExternalReceipt),
 }

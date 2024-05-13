@@ -29,10 +29,20 @@ use crate::ext::OptionExt;
 use crate::if_else;
 
 /// Evm execution result.
-#[derive(Debug)]
+#[derive(DebugAsJson, Clone, serde::Serialize)]
 pub struct EvmExecutionResult {
     pub execution: EvmExecution,
     pub metrics: ExecutionMetrics,
+}
+
+impl EvmExecutionResult {
+    pub fn is_success(&self) -> bool {
+        self.execution.is_success()
+    }
+
+    pub fn is_failure(&self) -> bool {
+        self.execution.is_failure()
+    }
 }
 
 /// EVM operations.
@@ -157,7 +167,7 @@ impl EvmInput {
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
     ///
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
-    pub fn from_external_transaction(tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
+    pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
         Ok(Self {
             from: tx.0.from.into(),
             to: tx.0.to.map_into(),
