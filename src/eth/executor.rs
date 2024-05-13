@@ -117,7 +117,14 @@ impl Executor {
                 ParallelExecutionRoute::Parallel(..) => {
                     match parallel_executions.next().await.unwrap() {
                         // success, check conflicts
-                        (tx, receipt, Ok(evm_result)) => TransactionExecution::from_external(tx.clone(), receipt.clone(), evm_result),
+                        (tx, receipt, Ok(evm_result)) => match storage.temp.check_conflicts(&evm_result.execution).await? {
+                            None => TransactionExecution::from_external(tx.clone(), receipt.clone(), evm_result),
+                            Some(conflicts) => {
+                                tracing::warn!(?conflicts, "reexecuting serially because parallel execution conflicted");
+                                let (tx, receipt, evm_result) = self.reexecute_external_tx(tx, receipt, block).await;
+                                TransactionExecution::from_external(tx.clone(), receipt.clone(), evm_result?)
+                            }
+                        },
 
                         // failure, reexecute
                         (tx, receipt, Err(e)) => {
