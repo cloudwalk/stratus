@@ -6,6 +6,7 @@ use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum TransactionExecution {
     /// Transaction that was sent directly to Stratus.
@@ -17,13 +18,8 @@ pub enum TransactionExecution {
 
 impl TransactionExecution {
     /// Creates a new transaction execution from a local transaction.
-    pub fn from_local(tx: TransactionInput, result: EvmExecutionResult) -> Self {
+    pub fn new_local(tx: TransactionInput, result: EvmExecutionResult) -> Self {
         Self::Local(LocalTransactionExecution { input: tx, result })
-    }
-
-    /// Creates a new transaction execution from an external transaction and its receipt.
-    pub fn from_external(tx: ExternalTransaction, receipt: ExternalReceipt, result: EvmExecutionResult) -> Self {
-        Self::External(ExternalTransactionExecution { tx, receipt, result })
     }
 
     /// Returns the transaction hash.
@@ -37,8 +33,8 @@ impl TransactionExecution {
     /// Returns the execution result.
     pub fn result(&self) -> &EvmExecutionResult {
         match self {
-            Self::Local(LocalTransactionExecution { result, .. }) => &result,
-            Self::External(ExternalTransactionExecution { result, .. }) => &result,
+            Self::Local(LocalTransactionExecution { result, .. }) => result,
+            Self::External(ExternalTransactionExecution { result, .. }) => result,
         }
     }
 }
