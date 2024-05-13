@@ -289,7 +289,10 @@ impl Executor {
                     let block = miner.mine_with_one_transaction(tx_local).await?;
 
                     match self.storage.save_block_to_perm(block).await {
-                        Ok(()) => break tx_execution,
+                        Ok(()) => {
+                            self.storage.reset_temp().await?;
+                            break tx_execution
+                        }
                         Err(e) =>
                             if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
                                 tracing::warn!(?conflicts, "permanent storage conflict detected when saving execution");
