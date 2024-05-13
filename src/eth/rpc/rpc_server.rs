@@ -345,10 +345,10 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     let hash = transaction.hash;
     match ctx.executor.transact(transaction).await {
         // result is success
-        Ok(result) if result.is_success() => Ok(hex_data(hash)),
+        Ok(evm_result) if evm_result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(result) => Err(RpcError::Response(rpc_internal_error(hex_data(result.output)))),
+        Ok(evm_result) => Err(RpcError::Response(rpc_internal_error(hex_data(evm_result.execution.output)))),
 
         // internal error
         Err(e) => {

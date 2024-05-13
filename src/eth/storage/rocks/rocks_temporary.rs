@@ -8,6 +8,8 @@ use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -47,6 +49,10 @@ impl TemporaryStorageExecutionOps for RocksTemporaryStorage {
 
     async fn read_external_block(&self) -> anyhow::Result<Option<ExternalBlock>> {
         self.temp.read_external_block().await
+    }
+
+    async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        self.temp.check_conflicts(execution).await
     }
 
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {

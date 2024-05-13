@@ -3,6 +3,8 @@ use async_trait::async_trait;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -11,10 +13,6 @@ use crate::eth::primitives::TransactionExecution;
 /// Temporary storage (in-between blocks) operations
 #[async_trait]
 pub trait TemporaryStorage: Send + Sync + TemporaryStorageExecutionOps {
-    // -------------------------------------------------------------------------
-    // Executions
-    // -------------------------------------------------------------------------
-
     // -------------------------------------------------------------------------
     // Accounts and Slots
     // -------------------------------------------------------------------------
@@ -53,6 +51,9 @@ pub trait TemporaryStorageExecutionOps {
 
     /// Reads an external block being re-executed.
     async fn read_external_block(&self) -> anyhow::Result<Option<ExternalBlock>>;
+
+    /// Checks if an execution conflicts with current storage state.
+    async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>>;
 
     /// Saves an executed transaction.
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;

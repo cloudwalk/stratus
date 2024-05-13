@@ -1,6 +1,6 @@
 use display_json::DebugAsJson;
 
-use crate::eth::primitives::EvmExecution;
+use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
@@ -10,23 +10,23 @@ use crate::eth::primitives::TransactionKind;
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub struct TransactionExecution {
     pub kind: TransactionKind,
-    pub execution: EvmExecution,
+    pub result: EvmExecutionResult,
 }
 
 impl TransactionExecution {
     /// Creates a new transaction execution from a local transaction.
-    pub fn new_local(transaction: TransactionInput, execution: EvmExecution) -> Self {
+    pub fn from_local(tx: TransactionInput, result: EvmExecutionResult) -> Self {
         Self {
-            kind: TransactionKind::new_local(transaction),
-            execution,
+            kind: TransactionKind::new_local(tx),
+            result,
         }
     }
 
     /// Creates a new transaction execution from an external transaction and its receipt.
-    pub fn new_external(transaction: ExternalTransaction, receipt: ExternalReceipt, execution: EvmExecution) -> Self {
+    pub fn from_external(tx: ExternalTransaction, receipt: ExternalReceipt, execution: EvmExecutionResult) -> Self {
         Self {
-            kind: TransactionKind::new_external(transaction, receipt),
-            execution,
+            kind: TransactionKind::new_external(tx, receipt),
+            result: execution,
         }
     }
 
