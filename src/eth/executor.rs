@@ -284,7 +284,7 @@ impl Executor {
 
                     // TODO: mine immediatly to keep compat for now, but remove after 1 sec block is created
                     let miner = self.miner.lock().await;
-                    let block = miner.mine_mixed().await?;
+                    let block = miner.mine_local().await?;
 
                     match self.storage.save_block_to_perm(block).await {
                         // success: break with execution
