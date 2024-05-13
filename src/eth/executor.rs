@@ -291,7 +291,7 @@ impl Executor {
                     match self.storage.save_block_to_perm(block).await {
                         Ok(()) => {
                             self.storage.reset_temp().await?;
-                            break tx_execution
+                            break tx_execution;
                         }
                         Err(e) =>
                             if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
