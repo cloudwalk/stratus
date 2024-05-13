@@ -136,15 +136,14 @@ impl Executor {
                 }
             };
 
-            // persist state
-            let tx_metrics = tx_execution.result.metrics;
-            storage.save_execution_to_temp(tx_execution).await?;
-
             // track transaction metrics
             #[cfg(feature = "metrics")]
             {
-                block_metrics += tx_metrics;
+                block_metrics += tx_execution.tx_metrics;
             }
+
+            // persist state
+            storage.save_execution_to_temp(tx_execution).await?;
         }
 
         // track block metrics
