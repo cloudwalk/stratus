@@ -78,7 +78,7 @@ kubernetes:
       volumeClaims:
       - name: rocksdata
         storageClass: premium-rwo
-        size: 1500Gi
+        size: 600Gi
       volumeMounts:
       - volumeName: rocksdata
         mountPath: /app/data
@@ -141,7 +141,7 @@ kubernetes:
       volumeClaims:
       - name: rocksdata
         storageClass: premium-rwo
-        size: 1500Gi
+        size: 600Gi
       volumeMounts:
       - volumeName: rocksdata
         mountPath: /app/data
