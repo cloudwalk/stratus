@@ -270,18 +270,19 @@ impl Executor {
                     let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
                     let evm_result = self.execute_in_evm(evm_input).await?;
 
-                    // save execution to temporary storage
+                    // save execution to temporary storage (not working yet)
                     let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-                    if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
-                        if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
-                            tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
-                            continue;
-                        } else {
-                            #[cfg(feature = "metrics")]
-                            metrics::inc_executor_transact(start.elapsed(), false);
-                            return Err(e);
-                        }
-                    }
+
+                    // if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
+                    //     if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                    //         tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
+                    //         continue;
+                    //     } else {
+                    //         #[cfg(feature = "metrics")]
+                    //         metrics::inc_executor_transact(start.elapsed(), false);
+                    //         return Err(e);
+                    //     }
+                    // }
 
                     // TODO: mine and save to permanent storage (remove soon)
                     let miner = self.miner.lock().await;
@@ -290,7 +291,6 @@ impl Executor {
 
                     match self.storage.save_block_to_perm(block).await {
                         Ok(()) => {
-                            self.storage.reset_temp().await?;
                             break tx_execution;
                         }
                         Err(e) =>
