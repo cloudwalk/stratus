@@ -11,10 +11,8 @@ use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
 
-use crate::eth::codegen::{self};
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
-use crate::eth::primitives::Signature4Bytes;
 use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
@@ -50,14 +48,14 @@ where
         tracing::info!(
             id = %request.id,
             %method,
-            function = %function.unwrap_or_default(),
+            function = %function.clone().unwrap_or_default(),
             params = ?request.params(),
             "rpc request"
         );
 
         // metrify request
         #[cfg(feature = "metrics")]
-        metrics::inc_rpc_requests_started(method, function);
+        metrics::inc_rpc_requests_started(method, function.clone());
 
         RpcResponse {
             id: request.id.to_string(),
@@ -71,24 +69,13 @@ where
 
 fn extract_function_from_call(params: Params) -> Option<SoliditySignature> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence()).ok()?;
-    let data = call.data;
-    extract_function_signature(data.get(..4)?.try_into().ok()?)
+    call.extract_function()
 }
 
 fn extract_function_from_transaction(params: Params) -> Option<SoliditySignature> {
     let (_, data) = next_rpc_param::<Bytes>(params.sequence()).ok()?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data).ok()?;
-    if transaction.is_contract_deployment() {
-        return Some("contract_deployment");
-    }
-    extract_function_signature(transaction.input.get(..4)?.try_into().ok()?)
-}
-
-fn extract_function_signature(id: Signature4Bytes) -> Option<SoliditySignature> {
-    match codegen::SIGNATURES_4_BYTES.get(&id) {
-        Some(signature) => Some(signature),
-        None => Some("unknown"),
-    }
+    transaction.extract_function()
 }
 
 // -----------------------------------------------------------------------------
@@ -123,7 +110,7 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
             tracing::info!(
                 id = %proj.id,
                 method = %proj.method,
-                function = %proj.function.unwrap_or_default(),
+                function = %proj.function.clone().unwrap_or_default(),
                 duration_ms = %elapsed.as_millis(),
                 success = %response.is_success(),
                 result = %response.as_result(),
@@ -132,7 +119,7 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
 
             // metrify response
             #[cfg(feature = "metrics")]
-            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.is_success());
+            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), proj.function.clone(), response.is_success());
         }
 
         response

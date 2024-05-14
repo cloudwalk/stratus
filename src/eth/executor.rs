@@ -188,6 +188,10 @@ impl Executor {
             Ok(evm_input) => evm_input,
             Err(e) => return Err((tx, receipt, e)),
         };
+
+        #[cfg(feature = "metrics")]
+        let function = evm_input.extract_function();
+
         let evm_result = self.execute_in_evm(evm_input).await;
 
         // handle reexecution result
@@ -197,6 +201,13 @@ impl Executor {
                 if let Err(e) = evm_result.execution.apply_execution_costs(receipt) {
                     return Err((tx, receipt, e));
                 };
+
+                #[cfg(feature = "metrics")]
+                {
+                    let gas_used = evm_result.execution.gas;
+                    metrics::inc_executor_external_transaction_gas(gas_used.as_u64() as usize, function.clone());
+                }
+
                 evm_result.execution.gas = match receipt.gas_used.unwrap_or_default().try_into() {
                     Ok(gas) => gas,
                     Err(e) => return Err((tx, receipt, e)),
@@ -213,7 +224,7 @@ impl Executor {
 
                 // track metrics
                 #[cfg(feature = "metrics")]
-                metrics::inc_executor_external_transaction(start.elapsed());
+                metrics::inc_executor_external_transaction(start.elapsed(), function);
 
                 Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result))
             }
@@ -235,6 +246,8 @@ impl Executor {
     pub async fn transact(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+        #[cfg(feature = "metrics")]
+        let function = tx_input.extract_function();
 
         tracing::info!(
             hash = %tx_input.hash,
@@ -271,7 +284,7 @@ impl Executor {
                             continue;
                         } else {
                             #[cfg(feature = "metrics")]
-                            metrics::inc_executor_transact(start.elapsed(), false);
+                            metrics::inc_executor_transact(start.elapsed(), false, function);
                             return Err(e);
                         }
                     }
@@ -293,7 +306,9 @@ impl Executor {
         };
 
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_transact(start.elapsed(), true);
+        metrics::inc_executor_transact(start.elapsed(), true, function.clone());
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
 
         Ok(tx_execution)
     }
@@ -303,6 +318,8 @@ impl Executor {
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+        #[cfg(feature = "metrics")]
+        let function = input.extract_function();
 
         tracing::info!(
             from = ?input.from,
@@ -317,9 +334,14 @@ impl Executor {
         let evm_result = self.execute_in_evm(evm_input).await;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_call(start.elapsed(), evm_result.is_ok());
+        metrics::inc_executor_call(start.elapsed(), evm_result.is_ok(), function.clone());
 
-        evm_result.map(|x| x.execution)
+        let execution = evm_result?.execution;
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_call_gas(execution.gas.as_u64() as usize, function.clone());
+
+        Ok(execution)
     }
 
     // -------------------------------------------------------------------------

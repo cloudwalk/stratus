@@ -4,6 +4,7 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
+#[cfg(feature = "dev")]
 use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::config::IntegrationTestConfig;
@@ -188,7 +189,10 @@ pub async fn execute_test(
                 println!("{:<70} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);
+                #[cfg(feature = "dev")]
                 println!("{:<70} = {}", query, secs.fancy_duration().truncate(2));
+                #[cfg(not(feature = "dev"))]
+                println!("{:<70} = {}", query, secs.as_millis());
             }
         }
     }
