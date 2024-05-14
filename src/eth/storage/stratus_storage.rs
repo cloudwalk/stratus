@@ -136,27 +136,30 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        match self.temp.read_account(address).await? {
-            Some(account) => {
+        // read from temp only if present
+        if point_in_time.is_present() {
+            if let Some(account) = self.temp.read_account(address).await? {
                 tracing::debug!(%address, "account found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                return Ok(account);
+            }
+        }
+
+        // always read from perm if necessary
+        match self.perm.read_account(address, point_in_time).await? {
+            Some(account) => {
+                tracing::debug!(%address, "account found in permanent storage");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
                 Ok(account)
             }
-            None => match self.perm.read_account(address, point_in_time).await? {
-                Some(account) => {
-                    tracing::debug!(%address, "account found in permanent storage");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
-                    Ok(account)
-                }
-                None => {
-                    tracing::debug!(%address, "account not found, assuming default value");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Account::new_empty(*address))
-                }
-            },
+            None => {
+                tracing::debug!(%address, "account not found, assuming default value");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
+                Ok(Account::new_empty(*address))
+            }
         }
     }
 
@@ -166,27 +169,30 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        match self.temp.read_slot(address, index).await? {
-            Some(slot) => {
+        // read from temp only if present
+        if point_in_time.is_present() {
+            if let Some(slot) = self.temp.read_slot(address, index).await? {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                return Ok(slot);
+            }
+        }
+
+        // always read from perm if necessary
+        match self.perm.read_slot(address, index, point_in_time).await? {
+            Some(slot) => {
+                tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
                 Ok(slot)
             }
-            None => match self.perm.read_slot(address, index, point_in_time).await? {
-                Some(slot) => {
-                    tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
-                    Ok(slot)
-                }
-                None => {
-                    tracing::debug!(%address, %index, "slot not found, assuming default value");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Slot::new_empty(*index))
-                }
-            },
+            None => {
+                tracing::debug!(%address, %index, "slot not found, assuming default value");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
+                Ok(Slot::new_empty(*index))
+            }
         }
     }
 
@@ -199,14 +205,16 @@ impl StratusStorage {
         let mut slots = Vec::with_capacity(slot_indexes.len());
         let mut perm_indexes = SlotIndexes::with_capacity(slot_indexes.len());
 
-        // read slots from temporary storage
-        for index in slot_indexes.iter() {
-            match self.temp.read_slot(address, index).await? {
-                Some(slot) => {
-                    slots.push(slot);
-                }
-                None => {
-                    perm_indexes.insert(*index);
+        // read from temp only if present
+        if point_in_time.is_present() {
+            for index in slot_indexes.iter() {
+                match self.temp.read_slot(address, index).await? {
+                    Some(slot) => {
+                        slots.push(slot);
+                    }
+                    None => {
+                        perm_indexes.insert(*index);
+                    }
                 }
             }
         }
