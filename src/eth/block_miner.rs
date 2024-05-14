@@ -41,12 +41,6 @@ impl BlockMiner {
         }
     }
 
-    /// Mine a block with no transactions.
-    pub async fn mine_empty(&self) -> anyhow::Result<Block> {
-        let number = self.storage.temp.finish_block().await?;
-        Ok(Block::new_at_now(number))
-    }
-
     /// Mine a block from an external block.
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
         let _ = self.storage.temp.finish_block().await?;

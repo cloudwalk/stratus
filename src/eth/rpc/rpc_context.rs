@@ -17,7 +17,7 @@ pub struct RpcContext {
 
     // services
     pub executor: Arc<Executor>,
-    pub _miner: Arc<BlockMiner>,
+    pub miner: Arc<BlockMiner>,
     pub storage: Arc<StratusStorage>,
     pub subs: Arc<RpcSubscriptions>,
 }

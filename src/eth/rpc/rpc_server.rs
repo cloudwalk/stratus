@@ -74,7 +74,7 @@ pub async fn serve_rpc(
         // services
         executor,
         storage,
-        _miner: miner,
+        miner,
 
         // subscriptions
         subs,
@@ -188,7 +188,7 @@ async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Res
 
 #[cfg(feature = "dev")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    ctx.executor.mine_empty_block().await?;
+    ctx.miner.mine_local().await?;
     Ok(serde_json::to_value(true).unwrap())
 }
 

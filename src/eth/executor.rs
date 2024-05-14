@@ -323,15 +323,6 @@ impl Executor {
         evm_result.map(|x| x.execution)
     }
 
-    #[cfg(feature = "dev")]
-    pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
-        let miner = self.miner.lock().await;
-        let block = miner.mine_empty().await?;
-        miner.commit(block).await?;
-
-        Ok(())
-    }
-
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
