@@ -80,7 +80,7 @@ impl RocksStorageState {
     }
 
     pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
-        tracing::info!("starting backup trigger listener");
+        info!("starting backup trigger listener");
         let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
         let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>::clone(&self.accounts_history);
         let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>::clone(&self.account_slots);
@@ -114,6 +114,10 @@ impl RocksStorageState {
         Ok((account_block_number.to_u64().unwrap_or(0u64)).into())
     }
 
+    /// Ensures that the DBs are at the same position.
+    ///
+    /// This method restores the DBs from the last backup to synchronize them.
+    #[tracing::instrument(skip_all)]
     pub async fn sync_data(&self) -> anyhow::Result<()> {
         tracing::info!("starting sync_data");
         tracing::info!("account_block_number {:?}", self.accounts.get_current_block_number());
@@ -124,63 +128,51 @@ impl RocksStorageState {
         tracing::info!("transactions_block_number {:?}", self.transactions.get_index_block_number());
 
         if let Some((last_block_number, _)) = self.blocks_by_number.last() {
-            tracing::info!("last_block_number {:?}", last_block_number);
-            if self.accounts.get_current_block_number() != self.account_slots.get_current_block_number() {
-                warn!(
-                    "block numbers are not in sync {:?} {:?} {:?} {:?} {:?} {:?}",
+            info!("last_block_number {:?}", last_block_number);
+
+            let get_min_block_number = || {
+                [
                     self.accounts.get_current_block_number(),
                     self.account_slots.get_current_block_number(),
-                    self.account_slots_history.get_index_block_number(),
-                    self.accounts_history.get_index_block_number(),
-                    self.logs.get_index_block_number(),
-                    self.transactions.get_index_block_number(),
-                );
-                let mut min_block_number = std::cmp::min(
-                    std::cmp::min(
-                        std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
-                        std::cmp::min(
-                            self.account_slots_history.get_index_block_number(),
-                            self.accounts_history.get_index_block_number(),
-                        ),
-                    ),
-                    std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
-                );
+                    self.account_slots_history.get_current_block_number(),
+                    self.accounts_history.get_current_block_number(),
+                    self.logs.get_current_block_number(),
+                    self.transactions.get_current_block_number(),
+                ]
+                .into_iter()
+                .min()
+                .expect("array in this expression is not empty")
+            };
+
+            if self.accounts.get_current_block_number() != self.account_slots.get_current_block_number() {
+                let mut min_block_number = get_min_block_number();
 
                 let last_secure_block_number = last_block_number.inner_value().as_u64() - 5000;
                 if last_secure_block_number > min_block_number {
-                    self.accounts.restore().unwrap();
+                    self.accounts.restore().expect("failed to restore 'accounts'");
                     tracing::warn!("accounts restored");
-                    self.accounts_history.restore().unwrap();
+                    self.accounts_history.restore().expect("failed to restore 'accounts_history'");
                     tracing::warn!("accounts_history restored");
-                    self.account_slots.restore().unwrap();
+                    self.account_slots.restore().expect("failed to restore 'account_slots'");
                     tracing::warn!("account_slots restored");
-                    self.account_slots_history.restore().unwrap();
+                    self.account_slots_history.restore().expect("failed to restore 'account_slots_history'");
                     tracing::warn!("account_slots_history restored");
-                    self.transactions.restore().unwrap();
+                    self.transactions.restore().expect("failed to restore 'transactions'");
                     tracing::warn!("transactions restored");
-                    self.blocks_by_number.restore().unwrap();
+                    self.blocks_by_number.restore().expect("failed to restore 'blocks_by_number'");
                     tracing::warn!("blocks_by_number restored");
-                    self.blocks_by_hash.restore().unwrap();
+                    self.blocks_by_hash.restore().expect("failed to restore 'blocks_by_hash'");
                     tracing::warn!("blocks_by_hash restored");
-                    self.logs.restore().unwrap();
+                    self.logs.restore().expect("failed to restore 'logs'");
                     tracing::warn!("logs restored");
 
-                    min_block_number = std::cmp::min(
-                        std::cmp::min(
-                            std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
-                            std::cmp::min(
-                                self.account_slots_history.get_index_block_number(),
-                                self.accounts_history.get_index_block_number(),
-                            ),
-                        ),
-                        std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
-                    );
+                    min_block_number = get_min_block_number();
                 }
                 self.reset_at(BlockNumber::from(min_block_number)).await?;
             }
         }
 
-        tracing::info!("data is in sync");
+        info!("data is in sync");
 
         Ok(())
     }
@@ -189,10 +181,9 @@ impl RocksStorageState {
         let tasks = vec![
             {
                 let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
-                let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     for (block_num, block_hash_vec) in self_blocks_by_hash_clone.indexed_iter_end() {
-                        if block_num <= block_number_clone.as_u64() {
+                        if block_num <= block_number.as_u64() {
                             break;
                         }
                         for block_hash in block_hash_vec {
@@ -203,34 +194,32 @@ impl RocksStorageState {
 
                     info!(
                         "Deleted blocks by hash above block number {}. This ensures synchronization with the lowest block height across nodes.",
-                        block_number_clone
+                        block_number
                     );
                 })
             },
             {
                 let self_blocks_by_number_clone = Arc::clone(&self.blocks_by_number);
-                let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
                     for (num, _) in blocks_by_number {
-                        if num <= block_number_clone.into() {
+                        if num <= block_number.into() {
                             break;
                         }
                         self_blocks_by_number_clone.delete(&num).unwrap();
                     }
                     info!(
                         "Deleted blocks by number above block number {}. Helps in reverting to a common state prior to a network fork or error.",
-                        block_number_clone
+                        block_number
                     );
                 })
             },
             {
                 let self_transactions_clone = Arc::clone(&self.transactions);
-                let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let transactions = self_transactions_clone.indexed_iter_end();
                     for (index_block_number, hash_vec) in transactions {
-                        if index_block_number <= block_number_clone.as_u64() {
+                        if index_block_number <= block_number.as_u64() {
                             break;
                         }
                         for hash in hash_vec {
@@ -240,17 +229,16 @@ impl RocksStorageState {
                     }
                     info!(
                         "Cleared transactions above block number {}. Necessary to remove transactions not confirmed in the finalized blockchain state.",
-                        block_number_clone
+                        block_number
                     );
                 })
             },
             {
                 let self_logs_clone = Arc::clone(&self.logs);
-                let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let logs = self_logs_clone.indexed_iter_end();
                     for (index_block_number, logs_vec) in logs {
-                        if index_block_number <= block_number_clone.as_u64() {
+                        if index_block_number <= block_number.as_u64() {
                             break;
                         }
                         for (hash, index) in logs_vec {
@@ -260,17 +248,16 @@ impl RocksStorageState {
                     }
                     info!(
                         "Removed logs above block number {}. Ensures log consistency with the blockchain's current confirmed state.",
-                        block_number_clone
+                        block_number
                     );
                 })
             },
             {
                 let self_accounts_history_clone = Arc::clone(&self.accounts_history);
-                let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let accounts_history = self_accounts_history_clone.indexed_iter_end();
                     for (index_block_number, accounts_history_vec) in accounts_history {
-                        if index_block_number <= block_number_clone.as_u64() {
+                        if index_block_number <= block_number.as_u64() {
                             break;
                         }
                         for (address, historic_block_number) in accounts_history_vec {
@@ -280,17 +267,16 @@ impl RocksStorageState {
                     }
                     info!(
                         "Deleted account history records above block number {}. Important for maintaining historical accuracy in account state across nodes.",
-                        block_number_clone
+                        block_number
                     );
                 })
             },
             {
                 let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
-                let block_number_clone = block_number;
                 task::spawn_blocking(move || {
                     let account_slots_history = self_account_slots_history_clone.indexed_iter_end();
                     for (index_block_number, account_slots_history_vec) in account_slots_history {
-                        if index_block_number <= block_number_clone.as_u64() {
+                        if index_block_number <= block_number.as_u64() {
                             break;
                         }
                         for (address, slot_index, historic_block_number) in account_slots_history_vec {
@@ -300,7 +286,7 @@ impl RocksStorageState {
                     }
                     info!(
                         "Cleared account slot history above block number {}. Vital for synchronizing account slot states after discrepancies.",
-                        block_number_clone
+                        block_number
                     );
                 })
             },
@@ -317,7 +303,6 @@ impl RocksStorageState {
         let accounts_task = task::spawn_blocking({
             let self_accounts_history_clone = Arc::clone(&self.accounts_history);
             let self_accounts_clone = Arc::clone(&self.accounts);
-            let block_number_clone = block_number;
             move || {
                 let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = std::collections::HashMap::new();
                 let account_histories = self_accounts_history_clone.iter_start();
@@ -335,8 +320,8 @@ impl RocksStorageState {
                     .into_iter()
                     .map(|(address, (_, account_info))| (address, account_info))
                     .collect::<Vec<_>>();
-                self_accounts_clone.insert_batch(accounts_temp_vec, Some(block_number_clone.into()));
-                info!("Accounts updated up to block number {}", block_number_clone);
+                self_accounts_clone.insert_batch(accounts_temp_vec, Some(block_number.into()));
+                info!("Accounts updated up to block number {}", block_number);
             }
         });
 
@@ -344,7 +329,6 @@ impl RocksStorageState {
         let slots_task = task::spawn_blocking({
             let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
             let self_account_slots_clone = Arc::clone(&self.account_slots);
-            let block_number_clone = block_number;
             move || {
                 let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = std::collections::HashMap::new();
                 let slot_histories = self_account_slots_history_clone.iter_start();
@@ -363,8 +347,8 @@ impl RocksStorageState {
                     .into_iter()
                     .map(|((address, slot_index), (_, slot_value))| ((address, slot_index), slot_value))
                     .collect::<Vec<_>>();
-                self_account_slots_clone.insert_batch(slots_temp_vec, Some(block_number_clone.into()));
-                info!("Slots updated up to block number {}", block_number_clone);
+                self_account_slots_clone.insert_batch(slots_temp_vec, Some(block_number.into()));
+                info!("Slots updated up to block number {}", block_number);
             }
         });
 
