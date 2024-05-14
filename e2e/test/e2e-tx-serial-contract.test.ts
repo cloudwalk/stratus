@@ -32,6 +32,8 @@ describe("Transaction: serial TestContractBalances", () => {
 
     it("Contract is deployed", async () => {
         _contract = await deployTestContractBalances();
+
+        await send("evm_mine", []);
     });
 
     it("Eth_getCode is not null for deployed contract", async () => {
