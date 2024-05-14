@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
@@ -32,12 +34,20 @@ pub struct BlockMiner {
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>) -> Self {
-        tracing::info!("creating block miner");
+        tracing::info!("starting block miner");
         Self {
             storage,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
         }
+    }
+
+    pub fn spawn_interval_miner(self: Arc<Self>, block_time: Duration) {
+        tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
+
+        let t = thread::Builder::new().name("interval-miner".into());
+        t.spawn(move || interval_miner(self, block_time))
+            .expect("spawning interval miner should not fail");
     }
 
     /// Mines external block and external transactions.
@@ -236,4 +246,34 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 
     // TODO: calculate size, state_root, receipts_root, parent_hash
     Ok(block)
+}
+
+// -----------------------------------------------------------------------------
+// Miner
+// -----------------------------------------------------------------------------
+fn interval_miner(miner: Arc<BlockMiner>, block_time: Duration) {
+    loop {
+        thread::sleep(block_time);
+        tracing::info!("mining block");
+
+        // mine
+        let block = match futures::executor::block_on(miner.mine_local()) {
+            Ok(block) => block,
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to mine block");
+                continue;
+            }
+        };
+
+        // commit
+        loop {
+            match futures::executor::block_on(miner.commit(block.clone())) {
+                Ok(_) => break,
+                Err(e) => {
+                    tracing::error!(reason = ?e, "failed to commit block");
+                    continue;
+                }
+            }
+        }
+    }
 }

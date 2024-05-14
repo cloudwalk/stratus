@@ -35,6 +35,8 @@ pub struct RpcSubscriptions {
 impl RpcSubscriptions {
     /// Spawns a new thread to clean up closed subscriptions from time to time.
     pub fn spawn_subscriptions_cleaner(self: Arc<Self>) -> JoinHandle<anyhow::Result<()>> {
+        tracing::info!("spawning rpc subscriptions cleaner");
+
         tokio::spawn(async move {
             loop {
                 let any_new_heads_closed = self.new_heads.read().await.iter().any(|(_, sub)| sub.is_closed());
@@ -60,6 +62,8 @@ impl RpcSubscriptions {
 
     /// Spawns a new thread that notifies subscribers about new created blocks.
     pub fn spawn_new_heads_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<Block>) -> JoinHandle<anyhow::Result<()>> {
+        tracing::info!("spawning rpc new heads notifier");
+
         tokio::spawn(async move {
             loop {
                 let Ok(block) = rx.recv().await else {
@@ -79,6 +83,8 @@ impl RpcSubscriptions {
 
     /// Spawns a new thread that notifies subscribers about new transactions logs.
     pub fn spawn_logs_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
+        tracing::info!("spawning rpc logs notifier");
+
         tokio::spawn(async move {
             loop {
                 let Ok(log) = rx.recv().await else {

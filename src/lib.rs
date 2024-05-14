@@ -39,14 +39,17 @@ where
             println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
         }
 
-        // init services
+        // init metrics
         #[cfg(feature = "metrics")]
         infra::init_metrics(config.common().metrics_histogram_kind);
 
+        // init sentry
         let _sentry_guard = config.common().sentry_url.as_ref().map(|sentry_url| infra::init_sentry(sentry_url));
 
+        // init tokio
         let runtime = config.common().init_runtime();
 
+        // init tracing
         runtime.block_on(async { infra::init_tracing(config.common().tracing_url.as_ref()) });
 
         Self {
