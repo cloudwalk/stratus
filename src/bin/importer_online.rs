@@ -97,6 +97,7 @@ async fn prefetch_blocks_and_receipts(
     sync_interval: u64,
 ) {
     let buffered_data = Arc::new(RwLock::new(HashMap::new()));
+    let chain_clone = chain.clone();
 
     // This task will handle the ordered sending of blocks and receipts
     {
@@ -111,18 +112,16 @@ async fn prefetch_blocks_and_receipts(
                 let mut data = buffered_data.write().await;
 
                 //if it is close to the last block, use the sync interval
-                match chain.get_current_block_number().await {
-                    Ok(current_block_number) => {
+                match chain_clone.get_current_block_number().await {
+                    Ok(current_block_number) =>
                         if current_block_number < next_block_number.next() {
                             sleep(Duration::from_millis(sync_interval)).await;
-                        }
-                    }
+                        },
                     Err(e) => {
                         tracing::error!("failed to get current block number {:?}", e);
                         sleep(Duration::from_millis(sync_interval)).await;
                     }
                 }
-
 
                 if let Some((block, receipts)) = data.remove(&next_block_number) {
                     data_tx.send((block, receipts)).await.expect("Failed to send block and receipts");
