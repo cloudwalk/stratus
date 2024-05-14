@@ -1,7 +1,5 @@
 mod test_import_external_snapshot_common;
 
-use std::time::Duration;
-
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::PostgresPermanentStorage;
 use stratus::eth::storage::PostgresPermanentStorageConfig;
@@ -21,7 +19,7 @@ fn test_import_external_snapshot_with_postgres() {
         let pg = PostgresPermanentStorage::new(PostgresPermanentStorageConfig {
             url: docker.postgres_connection_url().to_string(),
             connections: global_services.config.stratus_storage.perm_storage.perm_storage_connections,
-            acquire_timeout: Duration::from_millis(global_services.config.stratus_storage.perm_storage.perm_storage_timeout_millis),
+            acquire_timeout: global_services.config.stratus_storage.perm_storage.perm_storage_timeout,
         })
         .await
         .unwrap();

@@ -421,8 +421,8 @@ pub struct ImporterOnlineConfig {
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
 
-    #[arg(long = "sync-interval", env = "SYNC_INTERVAL", default_value = "700")]
-    pub sync_interval: u64,
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
+    pub sync_interval: Duration,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -452,6 +452,9 @@ pub struct RunWithImporterConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
+    pub sync_interval: Duration,
 
     #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
@@ -496,7 +499,7 @@ pub struct StateValidatorConfig {
     pub seed: u64,
 
     /// Validate in batches of n blocks.
-    #[arg(short = 'i', long = "inverval", env = "INVERVAL", default_value_t = 1000)]
+    #[arg(short = 'i', long = "interval", env = "INTERVAL", default_value = "1000")]
     pub interval: u64,
 
     /// What method to use when validating.
@@ -569,9 +572,9 @@ pub struct ExternalRpcStorageConfig {
     #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS")]
     pub external_rpc_storage_connections: u32,
 
-    /// External RPC storage timeout when opening a connection (in millis).
-    #[arg(long = "external-rpc-storage-timeout", env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
-    pub external_rpc_storage_timeout_millis: u64,
+    /// External RPC storage timeout when opening a connection.
+    #[arg(long = "external-rpc-storage-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
+    pub external_rpc_storage_timeout: Duration,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -589,7 +592,7 @@ impl ExternalRpcStorageConfig {
                 let config = PostgresExternalRpcStorageConfig {
                     url: url.to_owned(),
                     connections: self.external_rpc_storage_connections,
-                    acquire_timeout: Duration::from_millis(self.external_rpc_storage_timeout_millis),
+                    acquire_timeout: self.external_rpc_storage_timeout,
                 };
                 Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
             }
@@ -663,8 +666,8 @@ pub struct PermanentStorageConfig {
     pub perm_storage_connections: u32,
 
     /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "perm-storage-timeout", env = "PERM_STORAGE_TIMEOUT")]
-    pub perm_storage_timeout_millis: u64,
+    #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
+    pub perm_storage_timeout: Duration,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -690,7 +693,7 @@ impl PermanentStorageConfig {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
                     connections: self.perm_storage_connections,
-                    acquire_timeout: Duration::from_millis(self.perm_storage_timeout_millis),
+                    acquire_timeout: self.perm_storage_timeout,
                 };
                 Arc::new(PostgresPermanentStorage::new(config).await?)
             }
@@ -762,4 +765,23 @@ impl FromStr for ValidatorMethodConfig {
             s => Ok(Self::Rpc { url: s.to_string() }),
         }
     }
+}
+
+// -----------------------------------------------------------------------------
+// Parsers
+// -----------------------------------------------------------------------------
+fn parse_duration(s: &str) -> anyhow::Result<Duration> {
+    // try millis
+    let millis: Result<u64, _> = s.parse();
+    if let Ok(millis) = millis {
+        return Ok(Duration::from_millis(millis));
+    }
+
+    // try humantime
+    if let Ok(parsed) = humantime::parse_duration(s) {
+        return Ok(parsed);
+    }
+
+    // error
+    Err(anyhow!("invalid duration format: {}", s))
 }

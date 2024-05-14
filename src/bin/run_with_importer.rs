@@ -16,8 +16,6 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
-    //XXX #[cfg(feature = "rocks")]
-    //XXX stratus::eth::storage::rocks::consensus::gather_clients().await.unwrap();
     // init services
     let storage = config.stratus_storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
@@ -48,7 +46,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     };
 
     let importer_task = async move {
-        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone(), 600).await;
+        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone(), config.sync_interval).await;
         tracing::warn!("run_importer_online finished, cancelling tasks");
         cancellation.cancel();
         res

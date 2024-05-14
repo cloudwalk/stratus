@@ -50,7 +50,7 @@ pub async fn run_importer_online(
     storage: Arc<StratusStorage>,
     chain: BlockchainClient,
     cancellation: CancellationToken,
-    sync_interval: u64,
+    sync_interval: Duration,
 ) -> anyhow::Result<()> {
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
@@ -93,7 +93,7 @@ async fn prefetch_blocks_and_receipts(
     chain: BlockchainClient,
     data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>,
     cancellation: CancellationToken,
-    sync_interval: u64,
+    sync_interval: Duration,
 ) {
     let buffered_data = Arc::new(RwLock::new(HashMap::new()));
     let chain_clone = chain.clone();
@@ -114,11 +114,11 @@ async fn prefetch_blocks_and_receipts(
                 match chain_clone.get_current_block_number().await {
                     Ok(current_block_number) =>
                         if current_block_number < next_block_number.next() {
-                            sleep(Duration::from_millis(sync_interval)).await;
+                            sleep(sync_interval).await;
                         },
                     Err(e) => {
                         tracing::error!("failed to get current block number {:?}", e);
-                        sleep(Duration::from_millis(sync_interval)).await;
+                        sleep(sync_interval).await;
                     }
                 }
 
