@@ -362,6 +362,7 @@ impl StratusStorage {
         let start = metrics::now();
 
         let result_result = self.temp.reset().await;
+        #[cfg(feature = "metrics")]
         let result_set = self.set_active_block_number_as_next().await;
 
         #[cfg(feature = "metrics")]
