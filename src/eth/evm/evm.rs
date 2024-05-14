@@ -11,7 +11,6 @@ use std::borrow::Cow;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
-use crate::eth::primitives::bytes::extract_function_signature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -24,6 +23,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Signature;
 use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -139,9 +139,9 @@ impl EvmInput {
         if self.is_contract_deployment() {
             return Some(Cow::from("contract_deployment"));
         }
-        let id: [u8; 4] = self.data.get(..4)?.try_into().ok()?;
+        let sig = Signature::Function(self.data.get(..4)?.try_into().ok()?);
 
-        Some(extract_function_signature(id))
+        Some(sig.extract())
     }
 
     /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.

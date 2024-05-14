@@ -7,7 +7,6 @@
 //! various byte formats and Ethereum-specific types, playing a key role in
 //! data serialization and processing.
 
-use std::borrow::Cow;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -18,9 +17,6 @@ use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::Bytes as RevmBytes;
 use revm::primitives::Output as RevmOutput;
 
-use crate::eth::codegen;
-use crate::eth::primitives::Signature4Bytes;
-use crate::eth::primitives::SoliditySignature;
 use crate::gen_newtype_from;
 
 #[derive(Clone, Default, Eq, PartialEq, fake::Dummy, sqlx::Type)]
@@ -141,12 +137,5 @@ impl From<Bytes> for RevmBytes {
 impl From<Bytes> for RevmBytecode {
     fn from(value: Bytes) -> Self {
         to_analysed(RevmBytecode::new_raw(value.0.into()))
-    }
-}
-
-pub fn extract_function_signature(id: Signature4Bytes) -> SoliditySignature {
-    match codegen::SIGNATURES_4_BYTES.get(&id) {
-        Some(signature) => Cow::from(*signature),
-        None => Cow::from(const_hex::encode_prefixed(id)),
     }
 }

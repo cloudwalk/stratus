@@ -203,10 +203,10 @@ impl Executor {
                 };
 
                 #[cfg(feature = "metrics")]
-                let gas_used = evm_result.execution.gas;
-
-                #[cfg(feature = "metrics")]
-                metrics::inc_executor_external_transaction_gas(gas_used.as_u64() as usize, function.clone());
+                {
+                    let gas_used = evm_result.execution.gas;
+                    metrics::inc_executor_external_transaction_gas(gas_used.as_u64() as usize, function.clone());
+                }
 
                 evm_result.execution.gas = match receipt.gas_used.unwrap_or_default().try_into() {
                     Ok(gas) => gas,
