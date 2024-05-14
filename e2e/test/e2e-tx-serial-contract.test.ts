@@ -144,8 +144,11 @@ describe("Transaction: serial TestContractBalances", () => {
         let nonce = await sendGetNonce(CHARLIE.address);
         const contractOps = _contract.connect(CHARLIE.signer());
         await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
+        await send("evm_mine", []);
         await contractOps.add(CHARLIE.address, 15, { nonce: nonce++ });
+        await send("evm_mine", []);
         await contractOps.sub(CHARLIE.address, 5, { nonce: nonce++ });
+        await send("evm_mine", []);
 
         // final balance
         expect(await _contract.get(CHARLIE.address)).eq(20);
