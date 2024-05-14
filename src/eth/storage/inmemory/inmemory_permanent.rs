@@ -183,23 +183,23 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, ?point_in_time, "reading slot");
+        tracing::debug!(%address, %index, ?point_in_time, "reading slot in permanent");
 
         let state = self.lock_read().await;
         let Some(account) = state.accounts.get(address) else {
-            tracing::trace!(%address, "account not found");
+            tracing::trace!(%address, "account not found in permanent");
             return Ok(Default::default());
         };
 
         match account.slots.get(index) {
             Some(slot_history) => {
                 let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %index, ?point_in_time, %slot, "slot found");
+                tracing::trace!(%address, %index, ?point_in_time, %slot, "slot found in permanent");
                 Ok(Some(slot))
             }
 
             None => {
-                tracing::trace!(%address, %index, ?point_in_time, "slot not found");
+                tracing::trace!(%address, %index, ?point_in_time, "slot not found in permanent");
                 Ok(None)
             }
         }
@@ -279,7 +279,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let mut state = self.lock_write().await;
 
         // save block
-        tracing::debug!(number = %block.number(), "saving block");
+        tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
         let block = Arc::new(block);
         let number = block.number();
         state.blocks_by_number.insert(*number, Arc::clone(&block));

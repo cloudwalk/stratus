@@ -151,7 +151,7 @@ impl PermanentStorage for PostgresPermanentStorage {
     }
 
     async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, "reading slot");
+        tracing::debug!(%address, %index, "reading slot in permanent");
 
         // TODO: improve this conversion
         let slot_index_u8: [u8; 32] = (*index).into();

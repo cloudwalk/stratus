@@ -120,7 +120,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, "reading slot");
+        tracing::debug!(%address, %index, "reading slot in temporary");
         let states = self.lock_read().await;
         Ok(read_slot(&states, address, index))
     }
@@ -307,19 +307,19 @@ fn read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Addr
 }
 
 fn read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
-    tracing::debug!(%address, %index, "reading slot");
+    tracing::debug!(%address, %index, "reading slot in temporary");
 
     // search all
     for state in states.iter() {
         let Some(account) = state.accounts.get(address) else { continue };
         let Some(slot) = account.slots.get(index) else { continue };
 
-        tracing::trace!(%address, %index, %slot, "slot found");
+        tracing::trace!(%address, %index, %slot, "slot found in temporary");
         return Some(*slot);
     }
 
     // not found
-    tracing::trace!(%address, %index, "slot not found");
+    tracing::trace!(%address, %index, "slot not found in temporary");
     None
 }
 
