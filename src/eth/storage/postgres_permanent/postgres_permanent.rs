@@ -108,21 +108,6 @@ impl PermanentStorage for PostgresPermanentStorage {
         Ok(())
     }
 
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        tracing::debug!("incrementing block number");
-
-        let nextval = sqlx::query_file_scalar!("src/eth/storage/postgres_permanent/sql/select_current_block_number.sql")
-            .fetch_one(&self.pool)
-            .await
-            .unwrap_or_else(|err| {
-                tracing::error!(?err, "failed to get block number");
-                BigDecimal::from(0)
-            })
-            + BigDecimal::from(1);
-
-        nextval.try_into()
-    }
-
     async fn set_mined_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
         // nothing to do yet because we are not using a sequence
         Ok(())
@@ -166,7 +151,7 @@ impl PermanentStorage for PostgresPermanentStorage {
     }
 
     async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, "reading slot");
+        tracing::debug!(%address, %index, "reading slot in permanent");
 
         // TODO: improve this conversion
         let slot_index_u8: [u8; 32] = (*index).into();

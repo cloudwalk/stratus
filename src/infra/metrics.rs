@@ -116,9 +116,6 @@ metrics! {
 metrics! {
     group: storage_write,
 
-    "Time to execute storage increment_block_number operation."
-    histogram_duration storage_increment_block_number{success} [],
-
     "Time to execute storage set_active_block_number operation."
     histogram_duration storage_set_active_block_number{success} [],
 

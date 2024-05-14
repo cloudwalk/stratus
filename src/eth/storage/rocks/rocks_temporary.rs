@@ -15,7 +15,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::storage::temporary_storage::TemporaryStorageExecutionOps;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
@@ -41,50 +40,12 @@ impl RocksTemporaryStorage {
     }
 }
 
-#[async_trait]
-impl TemporaryStorageExecutionOps for RocksTemporaryStorage {
-    async fn set_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
-        self.temp.set_external_block(block).await
-    }
-
-    async fn read_external_block(&self) -> anyhow::Result<Option<ExternalBlock>> {
-        self.temp.read_external_block().await
-    }
-
-    async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        self.temp.check_conflicts(execution).await
-    }
-
-    async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
-        self.temp.save_execution(tx).await?;
-        Ok(())
-    }
-
-    async fn read_executions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
-        self.temp.read_executions().await
-    }
-
-    async fn remove_executions_before(&self, index: usize) -> anyhow::Result<()> {
-        self.temp.remove_executions_before(index).await
-    }
-}
-
+/// TODO: some methods are just delegating to inmemory and probably not working in a persistent way
 #[async_trait]
 impl TemporaryStorage for RocksTemporaryStorage {
-    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        self.active_block.store(number.as_u64(), Ordering::SeqCst);
-        self.temp.set_active_block_number(number).await
-    }
-
-    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
-        // try temporary data
-        let number = self.temp.read_active_block_number().await?;
-        if let Some(number) = number {
-            return Ok(Some(number));
-        }
-
-        Ok(Some(self.active_block.load(Ordering::SeqCst).into()))
-    }
+    // -------------------------------------------------------------------------
+    // Accounts and Slots
+    // -------------------------------------------------------------------------
 
     async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
@@ -110,14 +71,81 @@ impl TemporaryStorage for RocksTemporaryStorage {
         Ok(self.db.read_slot(address, index, &StoragePointInTime::Present))
     }
 
+    // -------------------------------------------------------------------------
+    // Block number
+    // -------------------------------------------------------------------------
+
+    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        self.active_block.store(number.as_u64(), Ordering::SeqCst);
+        self.temp.set_active_block_number(number).await
+    }
+
+    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+        // try temporary data
+        let number = self.temp.read_active_block_number().await?;
+        if let Some(number) = number {
+            return Ok(Some(number));
+        }
+
+        Ok(Some(self.active_block.load(Ordering::SeqCst).into()))
+    }
+
+    // -------------------------------------------------------------------------
+    // External block
+    // -------------------------------------------------------------------------
+
+    async fn set_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+        self.temp.set_external_block(block).await
+    }
+
+    async fn read_pending_external_block(&self) -> anyhow::Result<Option<ExternalBlock>> {
+        self.temp.read_pending_external_block().await
+    }
+
+    // -------------------------------------------------------------------------
+    // Executions
+    // -------------------------------------------------------------------------
+
+    async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        self.temp.save_execution(tx).await?;
+        Ok(())
+    }
+
+    async fn read_pending_executions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
+        self.temp.read_pending_executions().await
+    }
+
+    // -------------------------------------------------------------------------
+    // General state
+    // -------------------------------------------------------------------------
+
+    async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        self.temp.check_conflicts(execution).await
+    }
+
+    async fn finish_block(&self) -> anyhow::Result<BlockNumber> {
+        self.temp.finish_block().await
+    }
+
+    async fn reset(&self) -> anyhow::Result<()> {
+        // reset temp
+        self.temp.reset().await?;
+
+        // reset rocksdb
+        self.db.clear()?;
+
+        Ok(())
+    }
+
     async fn flush(&self) -> anyhow::Result<()> {
         // read before lock
         let Some(number) = self.read_active_block_number().await? else {
             return log_and_err!("no active block number when flushing rocksdb data");
         };
 
-        let mut temp_lock = self.temp.lock_write().await;
-        let (accounts, slots): (Vec<Account>, Vec<_>) = temp_lock
+        let temp = self.temp.lock_write().await;
+        let (accounts, slots): (Vec<Account>, Vec<_>) = temp
+            .head
             .accounts
             .values()
             .cloned()
@@ -133,18 +161,7 @@ impl TemporaryStorage for RocksTemporaryStorage {
         self.active_block.fetch_add(1, Ordering::SeqCst);
 
         // reset temporary storage state
-        temp_lock.reset();
-
-        Ok(())
-    }
-
-    async fn reset(&self) -> anyhow::Result<()> {
-        // reset temp
-        let mut temp_lock = self.temp.lock_write().await;
-        temp_lock.reset();
-
-        // reset rocksdb
-        self.db.clear()?;
+        self.temp.reset().await?;
 
         Ok(())
     }

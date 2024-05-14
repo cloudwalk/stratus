@@ -150,8 +150,11 @@ impl StratusStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let temp_storage = self.temp_storage.init().await?;
         let perm_storage = self.perm_storage.init().await?;
-        let storage = StratusStorage::new(temp_storage, perm_storage);
 
+        let storage = StratusStorage::new(temp_storage, perm_storage);
+        storage.set_active_block_number_as_next_if_not_set().await?;
+
+        // enable genesis block
         if self.enable_genesis {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
             if genesis.is_none() {
@@ -160,6 +163,7 @@ impl StratusStorageConfig {
             }
         }
 
+        // enable test accounts
         #[cfg(feature = "dev")]
         if self.enable_test_accounts {
             let mut test_accounts_to_insert = Vec::new();
