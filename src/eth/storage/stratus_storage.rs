@@ -95,6 +95,22 @@ impl StratusStorage {
         result
     }
 
+    /// Sets the active block number as the next number after the last mined block number.
+    pub async fn set_active_block_number_as_next(&self) -> anyhow::Result<()> {
+        let last_mined_block = self.perm.read_mined_block_number().await?;
+        self.temp.set_active_block_number(last_mined_block.next()).await?;
+        Ok(())
+    }
+
+    /// Sets the active block number as the next number after the last mined block number only if it is not set.
+    pub async fn set_active_block_number_as_next_if_not_set(&self) -> anyhow::Result<()> {
+        let active_block = self.read_active_block_number().await?;
+        if active_block.is_none() {
+            self.set_active_block_number_as_next().await?;
+        }
+        Ok(())
+    }
+
     /// Sets the mined block number to a specific value.
     #[allow(clippy::let_and_return)]
     #[tracing::instrument(skip_all)]
@@ -337,12 +353,13 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let result = self.temp.reset().await;
+        let result_result = self.temp.reset().await;
+        let result_set = self.set_active_block_number_as_next().await;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result.is_ok());
+        metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result_result.is_ok() && result_set.is_ok());
 
-        result
+        result_result
     }
 
     /// Resets permanent storage down to specific block_number.

@@ -246,10 +246,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         tracing::debug!("finishing active block");
 
         let mut states = self.lock_write().await;
-
-        let block_number = match states.head.active_block_number {
-            Some(number) => number,
-            None => return log_and_err!("failed to finish block because there is no active block being mined"),
+        let Some(block_number) = states.head.active_block_number else {
+            return log_and_err!("failed to finish block because there is no active block being mined");
         };
 
         // remove last state if reached limit
