@@ -40,7 +40,7 @@ impl BlockMiner {
         }
     }
 
-    /// Mines from external block and external transactions.
+    /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
@@ -60,7 +60,13 @@ impl BlockMiner {
         block_from_external(external_block, mined_txs)
     }
 
-    /// Mines from external block and external transactions.
+    /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
+    pub async fn mine_external_and_commit(&self) -> anyhow::Result<()> {
+        let block = self.mine_external().await?;
+        self.commit(block).await
+    }
+
+    /// Mines external block and external transactions.
     ///
     /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
     pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
@@ -87,7 +93,13 @@ impl BlockMiner {
         Ok(block)
     }
 
-    /// Mines from local transactions.
+    /// Same as [`Self::mine_external_mixed`], but automatically commits the block instead of returning it.
+    pub async fn mine_external_mixed_and_commit(&self) -> anyhow::Result<()> {
+        let block = self.mine_external_mixed().await?;
+        self.commit(block).await
+    }
+
+    /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
@@ -104,6 +116,12 @@ impl BlockMiner {
             Some(local_txs) => block_from_local(block.number, local_txs),
             None => Ok(Block::new_at_now(block.number)),
         }
+    }
+
+    /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
+    pub async fn mine_local_and_commit(&self) -> anyhow::Result<()> {
+        let block = self.mine_local().await?;
+        self.commit(block).await
     }
 
     /// Persists a mined block to permanent storage and prepares new block.

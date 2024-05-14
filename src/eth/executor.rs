@@ -278,8 +278,7 @@ impl Executor {
 
                     // TODO: remove automine
                     let miner = self.miner.lock().await;
-                    let block = miner.mine_local().await?;
-                    miner.commit(block).await?;
+                    miner.mine_local_and_commit().await?;
 
                     break tx_execution;
                 }
