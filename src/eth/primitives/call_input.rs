@@ -6,8 +6,10 @@
 //! the transaction data payload (`data`). It is crucial in constructing and
 //! interpreting transaction calls, especially for smart contract interactions.
 
+use crate::eth::primitives::bytes::extract_function_signature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::Wei;
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -20,4 +22,11 @@ pub struct CallInput {
 
     #[serde(default)]
     pub data: Bytes,
+}
+
+impl CallInput {
+    pub fn extract_function(&self) -> Option<SoliditySignature> {
+        let id: [u8; 4] = self.data.get(..4)?.try_into().ok()?;
+        Some(extract_function_signature(id))
+    }
 }

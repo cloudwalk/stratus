@@ -38,8 +38,9 @@ fn generate_signature_maps() {
     let mut signatures_4_bytes = phf_codegen::Map::<[u8; 4]>::new();
     let mut signatures_32_bytes = phf_codegen::Map::<[u8; 32]>::new();
     for signature_file in signature_files {
-        let signatures_content = fs::read_to_string(signature_file).expect("Reading signature file shoult not fail");
-        populate_signature_maps(&signatures_content, &mut seen, &mut signatures_4_bytes, &mut signatures_32_bytes);
+        let prefix = signature_file.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
+        let signatures_content = fs::read_to_string(&signature_file).expect("Reading signature file shoult not fail");
+        populate_signature_maps(&signatures_content, &mut seen, &mut signatures_4_bytes, &mut signatures_32_bytes, prefix);
     }
 
     // write signatures.rs file
@@ -63,6 +64,7 @@ fn populate_signature_maps(
     seen: &mut HashSet<Vec<u8>>,
     signatures_4_bytes: &mut phf_codegen::Map<[u8; 4]>,
     signatures_32_bytes: &mut phf_codegen::Map<[u8; 32]>,
+    prefix: &str,
 ) {
     for line in input.lines() {
         if let Ok((_, (id, signature))) = parse_signature(line) {
@@ -71,7 +73,7 @@ fn populate_signature_maps(
             }
             seen.insert(id.clone());
 
-            let signature = format!("\"{}\"", signature);
+            let signature = format!("\"{}::{}\"", prefix, signature);
             match id.len() {
                 4 => {
                     signatures_4_bytes.entry(id.try_into().unwrap(), &signature);

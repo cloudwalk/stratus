@@ -82,7 +82,7 @@ mod block_header;
 mod block_number;
 mod block_selection;
 mod bytecode;
-mod bytes;
+pub mod bytes;
 mod call_input;
 mod chain_id;
 mod code_hash;

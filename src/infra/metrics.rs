@@ -1,6 +1,7 @@
 //! Metrics services.
 #![cfg(feature = "metrics")]
 
+use std::borrow::Cow;
 use std::stringify;
 use std::time::Instant;
 
@@ -174,7 +175,10 @@ metrics! {
     histogram_duration executor_external_block{} [],
 
     "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
-    histogram_duration executor_external_transaction{} [],
+    histogram_duration executor_external_transaction{function} [],
+
+    "Gas spent to execute a single transaction inside import_offline operation."
+    histogram_counter executor_external_transaction_gas{function} [],
 
     "Number of account reads when importing an external block."
     histogram_counter executor_external_block_account_reads{} [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 150., 200.],
@@ -186,10 +190,16 @@ metrics! {
     histogram_counter executor_external_block_slot_reads_cached{} [0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100., 200., 300., 400., 500., 600., 700., 800., 900., 1000., 2000., 3000., 4000., 5000., 6000., 7000., 8000., 9000., 10000.],
 
     "Time to execute a transaction received with eth_sendRawTransaction."
-    histogram_duration executor_transact{success} [],
+    histogram_duration executor_transact{success, function} [],
+
+    "Gas spent execute a transaction received with eth_sendRawTransaction."
+    histogram_counter executor_transact_gas{success, function} [],
 
     "Time to execute a transaction received with eth_call or eth_estimateGas."
-    histogram_duration executor_call{success} []
+    histogram_duration executor_call{success, function} [],
+
+    "Gas spent to execute a transaction received with eth_call or eth_estimateGas."
+    histogram_counter executor_call_gas{function} []
 }
 
 metrics! {
@@ -253,6 +263,15 @@ pub enum LabelValue {
     Some(String),
     /// Label does not have a value and should be ignored.
     None,
+}
+
+impl From<Option<Cow<'static, str>>> for LabelValue {
+    fn from(value: Option<Cow<'static, str>>) -> Self {
+        match value {
+            Some(str) => Self::Some(str.into_owned()),
+            None => Self::None,
+        }
+    }
 }
 
 impl From<&str> for LabelValue {

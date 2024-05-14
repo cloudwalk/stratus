@@ -167,6 +167,7 @@ pub fn test_accounts() -> Vec<Account> {
         hex!("15d34aaf54267db7d7c367839aaf71a00a2c6a65"),
         hex!("9965507d1a55bcc2695c58ba16fb37d819b0a4dc"),
         hex!("976ea74026e726554db657fa54763abd0c3a0aa9"),
+        hex!("e45b176cad7090a5cf70b69a73b6def9296ba6a2"),
     ]
     .into_iter()
     .map(|address| Account {
