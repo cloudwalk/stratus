@@ -310,6 +310,7 @@ impl Executor {
             to = ?input.to,
             data_len = input.data.len(),
             data = %input.data,
+            ?point_in_time,
             "executing read-only transaction"
         );
 

@@ -246,7 +246,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         tracing::debug!("finishing active block");
 
         let mut states = self.lock_write().await;
-        let Some(block_number) = states.head.active_block_number else {
+        let Some(number) = states.head.active_block_number else {
             return log_and_err!("failed to finish block because there is no active block being mined");
         };
 
@@ -257,9 +257,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         // create new state
         states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.active_block_number = Some(block_number.next());
+        states.head.active_block_number = Some(number.next());
 
-        Ok(block_number)
+        Ok(number)
     }
 
     async fn reset(&self) -> anyhow::Result<()> {
