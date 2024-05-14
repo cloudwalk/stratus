@@ -36,6 +36,8 @@ describe("Transaction: serial transfer", () => {
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
+
+        await send("evm_mine", []);
     });
     it("Transaction is created", async () => {
         _tx = await send("eth_getTransactionByHash", [_txHash]);
