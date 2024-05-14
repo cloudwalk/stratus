@@ -102,7 +102,7 @@ impl InMemoryPermanentStorage {
 
     /// Creates a new InMemoryPermanentStorage from a snapshot dump.
     pub fn from_snapshot(state: InMemoryPermanentStorageState) -> Self {
-        tracing::info!("creating inmemory permanent storage from snapshot");
+        tracing::info!("starting inmemory permanent storage from snapshot");
         Self {
             state: RwLock::new(state),
             block_number: AtomicU64::new(0),
@@ -126,7 +126,7 @@ impl InMemoryPermanentStorage {
 
 impl Default for InMemoryPermanentStorage {
     fn default() -> Self {
-        tracing::info!("creating inmemory permanent storage");
+        tracing::info!("starting inmemory permanent storage");
         Self {
             state: RwLock::new(InMemoryPermanentStorageState::default()),
             block_number: Default::default(),

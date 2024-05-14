@@ -66,7 +66,7 @@ impl Executor {
         evm_tx: crossbeam_channel::Sender<EvmTask>,
         num_evms: usize,
     ) -> Self {
-        tracing::info!(%num_evms, "creating executor");
+        tracing::info!(%num_evms, "starting executor");
         Self {
             evm_tx,
             num_evms,

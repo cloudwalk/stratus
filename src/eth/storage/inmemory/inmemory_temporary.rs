@@ -52,7 +52,7 @@ impl InMemoryTemporaryStorage {
 
 impl Default for InMemoryTemporaryStorage {
     fn default() -> Self {
-        tracing::info!("creating inmemory temporary storage");
+        tracing::info!("starting inmemory temporary storage");
         Self {
             states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState::default())),
         }

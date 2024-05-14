@@ -59,6 +59,8 @@ pub async fn serve_rpc(
     chain_id: ChainId,
     cancellation: CancellationToken,
 ) -> anyhow::Result<()> {
+    tracing::info!("starting rpc server");
+
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     let _handle_subs_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();

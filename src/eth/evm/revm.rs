@@ -63,7 +63,7 @@ impl Revm {
     /// Creates a new instance of the Revm ready to be used.
     #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(storage: Arc<StratusStorage>, config: EvmConfig) -> Self {
-        tracing::info!(?config, "creating revm");
+        tracing::info!(?config, "starting revm");
 
         // configure handler
         let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
