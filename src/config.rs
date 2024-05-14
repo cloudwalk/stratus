@@ -496,7 +496,7 @@ pub struct StateValidatorConfig {
     pub seed: u64,
 
     /// Validate in batches of n blocks.
-    #[arg(short = 'i', long = "interval", value_parser=parse_duration, env = "INVERVAL", default_value = "1000ms")]
+    #[arg(short = 'i', long = "interval", value_parser=parse_duration, env = "INTERVAL", default_value = "1000ms")]
     pub interval: Duration,
 
     /// What method to use when validating.
