@@ -17,16 +17,22 @@ pub enum Signature {
 }
 
 impl Signature {
-    pub fn extract(self) -> SoliditySignature {
+    pub fn encoded(self) -> String {
         match self {
-            Signature::Function(id) => match codegen::SIGNATURES_4_BYTES.get(&id) {
-                Some(signature) => Cow::from(*signature),
-                None => Cow::from(const_hex::encode_prefixed(id)),
-            },
-            Signature::Event(id) => match codegen::SIGNATURES_32_BYTES.get(&id) {
-                Some(signature) => Cow::from(*signature),
-                None => Cow::from(const_hex::encode_prefixed(id)),
-            },
+            Signature::Function(id) => const_hex::encode_prefixed(id),
+            Signature::Event(id) => const_hex::encode_prefixed(id),
+        }
+    }
+
+    pub fn extract(self) -> SoliditySignature {
+        let sig = match self {
+            Signature::Function(id) => codegen::SIGNATURES_4_BYTES.get(&id),
+            Signature::Event(id) => codegen::SIGNATURES_32_BYTES.get(&id),
+        };
+
+        match sig {
+            Some(signature) => Cow::from(*signature),
+            None => Cow::from(self.encoded()),
         }
     }
 }
