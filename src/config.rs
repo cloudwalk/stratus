@@ -255,7 +255,9 @@ impl ExecutorConfig {
 // Config: Miner
 // -----------------------------------------------------------------------------
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct MinerConfig {}
+pub struct MinerConfig {
+    inter
+}
 
 impl MinerConfig {
     pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<BlockMiner> {
@@ -496,8 +498,8 @@ pub struct StateValidatorConfig {
     pub seed: u64,
 
     /// Validate in batches of n blocks.
-    #[arg(short = 'i', long = "interval", value_parser=parse_duration, env = "INTERVAL", default_value = "1000ms")]
-    pub interval: Duration,
+    #[arg(short = 'i', long = "interval", env = "INTERVAL", default_value = "1000")]
+    pub interval: u64,
 
     /// What method to use when validating.
     #[arg(short = 'm', long = "method", env = "METHOD")]
