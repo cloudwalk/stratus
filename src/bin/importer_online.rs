@@ -37,7 +37,7 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let chain = BlockchainClient::new(&config.external_rpc).await?;
     let cancellation: CancellationToken = signal_handler();
 
-    let result = run_importer_online(executor, miner, storage, chain, cancellation).await;
+    let result = run_importer_online(executor, miner, storage, chain, cancellation, config.sync_interval).await;
     if let Err(ref e) = result {
         tracing::error!(reason = ?e, "importer-online failed");
     }
@@ -50,10 +50,11 @@ pub async fn run_importer_online(
     storage: Arc<StratusStorage>,
     chain: BlockchainClient,
     cancellation: CancellationToken,
+    sync_interval: u64,
 ) -> anyhow::Result<()> {
     // start from last imported block
     let mut number = storage.read_mined_block_number().await?;
-    let (data_tx, mut data_rx) = mpsc::channel(100);
+    let (data_tx, mut data_rx) = mpsc::channel(10);
 
     if number != BlockNumber::from(0) {
         number = number.next();
@@ -61,7 +62,7 @@ pub async fn run_importer_online(
 
     let task_cancellation = cancellation.clone();
     tokio::spawn(async move {
-        prefetch_blocks_and_receipts(number, chain, data_tx, task_cancellation).await;
+        prefetch_blocks_and_receipts(number, chain, data_tx, task_cancellation, sync_interval).await;
     });
 
     while let Some((block, receipts)) = data_rx.recv().await {
@@ -93,8 +94,10 @@ async fn prefetch_blocks_and_receipts(
     chain: BlockchainClient,
     data_tx: mpsc::Sender<(ExternalBlock, ExternalReceipts)>,
     cancellation: CancellationToken,
+    sync_interval: u64,
 ) {
     let buffered_data = Arc::new(RwLock::new(HashMap::new()));
+    let chain_clone = chain.clone();
 
     // This task will handle the ordered sending of blocks and receipts
     {
@@ -107,6 +110,19 @@ async fn prefetch_blocks_and_receipts(
                     break;
                 }
                 let mut data = buffered_data.write().await;
+
+                //if it is close to the last block, use the sync interval
+                match chain_clone.get_current_block_number().await {
+                    Ok(current_block_number) =>
+                        if current_block_number < next_block_number.next() {
+                            sleep(Duration::from_millis(sync_interval)).await;
+                        },
+                    Err(e) => {
+                        tracing::error!("failed to get current block number {:?}", e);
+                        sleep(Duration::from_millis(sync_interval)).await;
+                    }
+                }
+
                 if let Some((block, receipts)) = data.remove(&next_block_number) {
                     data_tx.send((block, receipts)).await.expect("Failed to send block and receipts");
                     next_block_number = next_block_number.next();
@@ -118,7 +134,7 @@ async fn prefetch_blocks_and_receipts(
     loop {
         let mut handles = Vec::new();
         // Spawn tasks for concurrent fetching
-        for _ in 0..4 {
+        for _ in 0..2 {
             // Number of concurrent fetch tasks
             let chain = chain.clone();
             let buffered_data = Arc::clone(&buffered_data);
