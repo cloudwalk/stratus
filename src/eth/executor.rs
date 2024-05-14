@@ -275,12 +275,6 @@ impl Executor {
                             return Err(e);
                         }
                     }
-
-                    // TODO: remove automine
-                    let miner = self.miner.lock().await;
-                    let block = miner.mine_local().await?;
-                    miner.commit(block).await?;
-
                     break tx_execution;
                 }
             }
