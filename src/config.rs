@@ -36,8 +36,6 @@ use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
-#[cfg(feature = "rocks")]
-use crate::eth::storage::RocksTemporaryStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
@@ -625,8 +623,6 @@ pub struct TemporaryStorageConfig {
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum TemporaryStorageKind {
     InMemory,
-    #[cfg(feature = "rocks")]
-    Rocks,
 }
 
 impl TemporaryStorageConfig {
@@ -636,8 +632,6 @@ impl TemporaryStorageConfig {
 
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
-            #[cfg(feature = "rocks")]
-            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporaryStorage::new().await?)),
         }
     }
 }
@@ -648,8 +642,6 @@ impl FromStr for TemporaryStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
-            #[cfg(feature = "rocks")]
-            "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
     }

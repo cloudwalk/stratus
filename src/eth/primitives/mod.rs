@@ -110,6 +110,7 @@ mod log_topic;
 pub mod logs_bloom;
 mod miner_nonce;
 mod nonce;
+mod pending_block;
 mod size;
 mod slot;
 mod slot_access;
@@ -166,6 +167,7 @@ pub use log_mined::LogMined;
 pub use log_topic::LogTopic;
 pub use miner_nonce::MinerNonce;
 pub use nonce::Nonce;
+pub use pending_block::PendingBlock;
 pub use size::Size;
 pub use slot::Slot;
 pub use slot_access::SlotAccess;
@@ -196,6 +198,7 @@ mod tests {
     type TransactionExecutionValueChangeSlot = ExecutionValueChange<Slot>;
     type TransactionExecutionValueChangeWei = ExecutionValueChange<Wei>;
 
+    // TODO: add more serde tests for new primitives
     gen_test_serde!(Address);
     gen_test_serde!(Account);
     gen_test_serde!(Block);
