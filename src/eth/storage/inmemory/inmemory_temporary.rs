@@ -17,6 +17,7 @@ use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
@@ -26,11 +27,6 @@ use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
 const MAX_BLOCKS: usize = 64;
-
-/// Index representing the last pending block.
-///
-/// A pending block is a block that is not receiving more updates, but was not persisted in the permanent storage yet.
-const PENDING_BLOCK_INDEX: usize = 1;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
@@ -69,24 +65,34 @@ impl Default for InMemoryTemporaryStorage {
 
 #[derive(Debug, Default)]
 pub struct InMemoryTemporaryStorageState {
-    /// Number of active block being mined.
-    pub active_block_number: Option<BlockNumber>,
+    /// Block that is being mined.
+    pub block: Option<PendingBlock>,
 
-    /// External block being re-executed.
-    pub external_block: Option<ExternalBlock>,
-
-    /// Pending transactions executions during block execution.
-    pub tx_executions: Vec<TransactionExecution>,
-
-    /// Pending accounts modified during block execution.
+    /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
     pub accounts: HashMap<Address, InMemoryTemporaryAccount>,
 }
 
 impl InMemoryTemporaryStorageState {
+    /// Validates that there is an active pending block being mined and returns a reference to it.
+    fn require_active_block(&mut self) -> anyhow::Result<&PendingBlock> {
+        match &self.block {
+            Some(block) => Ok(block),
+            None => log_and_err!("no pending block being mined"),
+        }
+    }
+
+    /// Validates that there is an active pending block being mined and returns a mutable reference to it.
+    fn require_active_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
+        match &mut self.block {
+            Some(block) => Ok(block),
+            None => log_and_err!("no pending block being mined"),
+        }
+    }
+}
+
+impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
-        self.active_block_number = None;
-        self.external_block = None;
-        self.tx_executions.clear();
+        self.block = None;
         self.accounts.clear();
     }
 }
@@ -132,8 +138,13 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         tracing::debug!(%number, "setting active block number");
 
-        let mut state = self.lock_write().await;
-        state.head.active_block_number = Some(number);
+        let mut states = self.lock_write().await;
+        match states.head.block.as_mut() {
+            Some(block) => block.number = number,
+            None => {
+                states.head.block = Some(PendingBlock::new(number));
+            }
+        }
         Ok(())
     }
 
@@ -141,7 +152,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         tracing::debug!("reading active block number");
 
         let states = self.lock_read().await;
-        Ok(states.head.active_block_number)
+        match &states.head.block {
+            Some(block) => Ok(Some(block.number)),
+            None => Ok(None),
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -152,18 +166,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         tracing::debug!(number = %block.number(), "setting re-executed external block");
 
         let mut states = self.lock_write().await;
-        states.head.external_block = Some(block);
+        states.head.require_active_block_mut()?.external_block = Some(block);
         Ok(())
-    }
-
-    async fn read_pending_external_block(&self) -> anyhow::Result<Option<ExternalBlock>> {
-        tracing::debug!("reading re-executed external block");
-
-        let states = self.lock_read().await;
-        match states.get(PENDING_BLOCK_INDEX) {
-            Some(state) => Ok(state.external_block.clone()),
-            None => Ok(None),
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -216,19 +220,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.tx_executions.push(tx);
+        states.head.require_active_block_mut()?.tx_executions.push(tx);
 
         Ok(())
-    }
-
-    async fn read_pending_executions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
-        tracing::debug!("reading pending executions");
-
-        let states = self.lock_read().await;
-        match states.get(PENDING_BLOCK_INDEX) {
-            Some(state) => Ok(state.tx_executions.clone()),
-            None => Ok(vec![]),
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -242,13 +236,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
-    async fn finish_block(&self) -> anyhow::Result<BlockNumber> {
+    async fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         tracing::debug!("finishing active block");
 
         let mut states = self.lock_write().await;
-        let Some(number) = states.head.active_block_number else {
-            return log_and_err!("failed to finish block because there is no active block being mined");
-        };
+        let finished_block = states.head.require_active_block()?.clone();
 
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
@@ -257,9 +249,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         // create new state
         states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.active_block_number = Some(number.next());
+        states.head.block = Some(PendingBlock::new(finished_block.number.next()));
 
-        Ok(number)
+        Ok(finished_block)
     }
 
     async fn reset(&self) -> anyhow::Result<()> {

@@ -25,8 +25,6 @@ pub use postgres_permanent::PostgresPermanentStorage;
 pub use postgres_permanent::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 pub use rocks::rocks_permanent::RocksPermanentStorage;
-#[cfg(feature = "rocks")]
-pub use rocks::rocks_temporary::RocksTemporaryStorage;
 pub use storage_error::StorageError;
 pub use stratus_storage::StratusStorage;
 pub use temporary_storage::TemporaryStorage;
