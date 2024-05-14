@@ -74,7 +74,7 @@ pub async fn serve_rpc(
         // services
         executor,
         storage,
-        _miner: miner,
+        miner,
 
         // subscriptions
         subs,
@@ -181,14 +181,16 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 #[cfg(feature = "dev")]
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    ctx.storage.reset_temp().await?;
     ctx.storage.reset_perm(number).await?;
+    ctx.storage.reset_temp().await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 
 #[cfg(feature = "dev")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    ctx.executor.mine_empty_block().await?;
+    let block = ctx.miner.mine_local().await?;
+    ctx.miner.commit(block).await?;
+
     Ok(serde_json::to_value(true).unwrap())
 }
 
@@ -348,7 +350,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
         Ok(evm_result) if evm_result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(evm_result) => Err(RpcError::Response(rpc_internal_error(hex_data(evm_result.execution.output)))),
+        Ok(evm_result) => Err(RpcError::Response(rpc_internal_error(hex_data(evm_result.execution().output.clone())))),
 
         // internal error
         Err(e) => {

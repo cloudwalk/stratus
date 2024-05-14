@@ -18,7 +18,6 @@ use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::StorageError;
 
 /// Permanent (committed) storage operations
 #[async_trait]
@@ -34,11 +33,6 @@ pub trait PermanentStorage: Send + Sync {
 
     // Retrieves the last mined block number.
     async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber>;
-
-    /// Atomically increments the block number, returning the new value.
-    ///
-    /// TODO: this can probably be removed because set_mined_block_number and set_active_block_number may be enough.
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
@@ -59,7 +53,7 @@ pub trait PermanentStorage: Send + Sync {
     async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     /// Persists atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError>;
+    async fn save_block(&self, block: Block) -> anyhow::Result<()>;
 
     /// Persists initial accounts (test accounts or genesis accounts).
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;

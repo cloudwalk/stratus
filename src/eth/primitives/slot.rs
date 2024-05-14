@@ -1,10 +1,11 @@
-use std::fmt::Debug;
 use std::fmt::Display;
+
+use display_json::DebugAsJson;
 
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
     pub index: SlotIndex,
     pub value: SlotValue,

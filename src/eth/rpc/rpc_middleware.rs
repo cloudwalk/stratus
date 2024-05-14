@@ -126,7 +126,7 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
                 function = %proj.function.unwrap_or_default(),
                 duration_ms = %elapsed.as_millis(),
                 success = %response.is_success(),
-                // result = %response.result,
+                result = %response.as_result(),
                 "rpc response"
             );
 

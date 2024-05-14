@@ -18,7 +18,6 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::ext::not;
 #[cfg(feature = "metrics")]
@@ -81,21 +80,6 @@ impl StratusStorage {
         result
     }
 
-    /// Atomically increments the block number, returning the new value.
-    #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip_all)]
-    pub async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.perm.increment_block_number().await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_increment_block_number(start.elapsed(), result.is_ok());
-
-        result
-    }
-
     /// Sets the active block number to a specific value.
     #[allow(clippy::let_and_return)]
     #[tracing::instrument(skip_all)]
@@ -109,6 +93,22 @@ impl StratusStorage {
         metrics::inc_storage_set_active_block_number(start.elapsed(), result.is_ok());
 
         result
+    }
+
+    /// Sets the active block number as the next number after the last mined block number.
+    pub async fn set_active_block_number_as_next(&self) -> anyhow::Result<()> {
+        let last_mined_block = self.perm.read_mined_block_number().await?;
+        self.temp.set_active_block_number(last_mined_block.next()).await?;
+        Ok(())
+    }
+
+    /// Sets the active block number as the next number after the last mined block number only if it is not set.
+    pub async fn set_active_block_number_as_next_if_not_set(&self) -> anyhow::Result<()> {
+        let active_block = self.read_active_block_number().await?;
+        if active_block.is_none() {
+            self.set_active_block_number_as_next().await?;
+        }
+        Ok(())
     }
 
     /// Sets the mined block number to a specific value.
@@ -136,27 +136,30 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        match self.temp.read_account(address).await? {
-            Some(account) => {
-                tracing::debug!("account found in the temporary storage");
+        // read from temp only if present
+        if point_in_time.is_present() {
+            if let Some(account) = self.temp.read_account(address).await? {
+                tracing::debug!(%address, "account found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                return Ok(account);
+            }
+        }
+
+        // always read from perm if necessary
+        match self.perm.read_account(address, point_in_time).await? {
+            Some(account) => {
+                tracing::debug!(%address, "account found in permanent storage");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
                 Ok(account)
             }
-            None => match self.perm.read_account(address, point_in_time).await? {
-                Some(account) => {
-                    tracing::debug!("account found in the permanent storage");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
-                    Ok(account)
-                }
-                None => {
-                    tracing::debug!("account not found, assuming default value");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Account::new_empty(*address))
-                }
-            },
+            None => {
+                tracing::debug!(%address, "account not found, assuming default value");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
+                Ok(Account::new_empty(*address))
+            }
         }
     }
 
@@ -166,27 +169,30 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        match self.temp.read_slot(address, index).await? {
-            Some(slot) => {
-                tracing::debug!("slot found in the temporary storage");
+        // read from temp only if present
+        if point_in_time.is_present() {
+            if let Some(slot) = self.temp.read_slot(address, index).await? {
+                tracing::debug!(%address, %index, value = %slot.value, "slot found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                return Ok(slot);
+            }
+        }
+
+        // always read from perm if necessary
+        match self.perm.read_slot(address, index, point_in_time).await? {
+            Some(slot) => {
+                tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
                 Ok(slot)
             }
-            None => match self.perm.read_slot(address, index, point_in_time).await? {
-                Some(slot) => {
-                    tracing::debug!("slot found in the permanent storage");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
-                    Ok(slot)
-                }
-                None => {
-                    tracing::debug!("slot not found, assuming default value");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Slot::new_empty(*index))
-                }
-            },
+            None => {
+                tracing::debug!(%address, %index, "slot not found, assuming default value");
+                #[cfg(feature = "metrics")]
+                metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
+                Ok(Slot::new_empty(*index))
+            }
         }
     }
 
@@ -199,14 +205,16 @@ impl StratusStorage {
         let mut slots = Vec::with_capacity(slot_indexes.len());
         let mut perm_indexes = SlotIndexes::with_capacity(slot_indexes.len());
 
-        // read slots from temporary storage
-        for index in slot_indexes.iter() {
-            match self.temp.read_slot(address, index).await? {
-                Some(slot) => {
-                    slots.push(slot);
-                }
-                None => {
-                    perm_indexes.insert(*index);
+        // read from temp only if present
+        if point_in_time.is_present() {
+            for index in slot_indexes.iter() {
+                match self.temp.read_slot(address, index).await? {
+                    Some(slot) => {
+                        slots.push(slot);
+                    }
+                    None => {
+                        perm_indexes.insert(*index);
+                    }
                 }
             }
         }
@@ -325,7 +333,7 @@ impl StratusStorage {
     /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
     #[allow(clippy::let_and_return)]
     #[tracing::instrument(skip_all)]
-    pub async fn save_block_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub async fn save_block_to_perm(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, label_size_by_tx, label_size_by_gas, gas_used) = (
             metrics::now(),
@@ -353,12 +361,13 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let result = self.temp.reset().await;
+        let result_result = self.temp.reset().await;
+        let result_set = self.set_active_block_number_as_next().await;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result.is_ok());
+        metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result_result.is_ok() && result_set.is_ok());
 
-        result
+        result_result
     }
 
     /// Resets permanent storage down to specific block_number.
