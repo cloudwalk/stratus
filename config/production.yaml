@@ -35,7 +35,7 @@ kubernetes:
         rollingUpdate:
           maxSurge: 1
           maxUnavailable: 0
-      replicas: 0
+      replicas: 1
       resources:
         requests:
           cpu: 16000m
