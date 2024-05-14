@@ -14,7 +14,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
-use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -41,34 +40,40 @@ impl BlockMiner {
         }
     }
 
-    /// Mine a block from an external block.
+    /// Mines from external block and external transactions.
+    ///
+    /// Local transactions are not allowed to be part of the block.
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
-        let _ = self.storage.temp.finish_block().await?;
-
-        // retrieve data
-        let (external_block, txs) = read_external_block_and_executions(&self.storage).await?;
-        let (local_txs, external_txs) = partition_transactions(txs);
+        let block = self.storage.temp.finish_block().await?;
+        let (local_txs, external_txs) = block.split_transactions();
 
         // validate
+        let Some(external_block) = block.external_block else {
+            return log_and_err!("failed to mine external block because there is no external block being re-executed");
+        };
         if not(local_txs.is_empty()) {
             return log_and_err!("failed to mine external block because one of the transactions is a local transaction");
         }
 
         // mine external transactions
-        let mined_txs = mine_external_transactions(external_block.number(), external_txs)?;
+        let mined_txs = mine_external_transactions(block.number, external_txs)?;
         block_from_external(external_block, mined_txs)
     }
 
-    /// Mine a block from an external block and local failed transactions.
-    pub async fn mine_mixed(&self) -> anyhow::Result<Block> {
-        let _ = self.storage.temp.finish_block().await?;
+    /// Mines from external block and external transactions.
+    ///
+    /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
+    pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
+        let block = self.storage.temp.finish_block().await?;
+        let (local_txs, external_txs) = block.split_transactions();
 
-        // retrieve data
-        let (external_block, txs) = read_external_block_and_executions(&self.storage).await?;
-        let (local_txs, external_txs) = partition_transactions(txs);
+        // validate
+        let Some(external_block) = block.external_block else {
+            return log_and_err!("failed to mine mixed block because there is no external block being re-executed");
+        };
 
         // mine external transactions
-        let mined_txs = mine_external_transactions(external_block.number(), external_txs)?;
+        let mined_txs = mine_external_transactions(block.number, external_txs)?;
         let mut block = block_from_external(external_block, mined_txs)?;
 
         // mine local transactions
@@ -82,13 +87,12 @@ impl BlockMiner {
         Ok(block)
     }
 
-    /// Mine a block from local transactions.
+    /// Mines from local transactions.
+    ///
+    /// External transactions are not allowed to be part of the block.
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
-        let number = self.storage.temp.finish_block().await?;
-
-        // retrieve data
-        let txs = self.storage.temp.read_pending_executions().await?;
-        let (local_txs, external_txs) = partition_transactions(txs);
+        let block = self.storage.temp.finish_block().await?;
+        let (local_txs, external_txs) = block.split_transactions();
 
         // validate
         if not(external_txs.is_empty()) {
@@ -97,8 +101,8 @@ impl BlockMiner {
 
         // mine local transactions
         match NonEmpty::from_vec(local_txs) {
-            Some(txs) => block_from_local(number, txs),
-            None => Ok(Block::new_at_now(number)),
+            Some(local_txs) => block_from_local(block.number, local_txs),
+            None => Ok(Block::new_at_now(block.number)),
         }
     }
 
@@ -124,34 +128,6 @@ impl BlockMiner {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-async fn read_external_block_and_executions(storage: &StratusStorage) -> anyhow::Result<(ExternalBlock, Vec<TransactionExecution>)> {
-    let block = match storage.temp.read_pending_external_block().await {
-        Ok(Some(block)) => block,
-        Ok(None) => return log_and_err!("no active external block being re-executed"),
-        Err(e) => return Err(e),
-    };
-    let txs = storage.temp.read_pending_executions().await?;
-
-    Ok((block, txs))
-}
-
-fn partition_transactions(txs: Vec<TransactionExecution>) -> (Vec<LocalTransactionExecution>, Vec<ExternalTransactionExecution>) {
-    let mut local_txs = Vec::with_capacity(txs.len());
-    let mut external_txs = Vec::with_capacity(txs.len());
-
-    for tx in txs {
-        match tx {
-            TransactionExecution::Local(tx) => {
-                local_txs.push(tx);
-            }
-            TransactionExecution::External(tx) => {
-                external_txs.push(tx);
-            }
-        }
-    }
-    (local_txs, external_txs)
-}
 
 fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransactionExecution>) -> anyhow::Result<Vec<TransactionMined>> {
     let mut mined_txs = Vec::with_capacity(txs.len());

@@ -77,7 +77,7 @@ pub async fn run_importer_online(
         executor.reexecute_external(&block, &receipts).await?;
 
         // mine block
-        let mined_block = miner.mine_mixed().await?;
+        let mined_block = miner.mine_external_mixed().await?;
         miner.commit(mined_block).await?;
 
         #[cfg(feature = "metrics")]
