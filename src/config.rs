@@ -255,9 +255,7 @@ impl ExecutorConfig {
 // Config: Miner
 // -----------------------------------------------------------------------------
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct MinerConfig {
-    inter
-}
+pub struct MinerConfig {}
 
 impl MinerConfig {
     pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<BlockMiner> {
@@ -423,7 +421,7 @@ pub struct ImporterOnlineConfig {
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
 
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "700ms")]
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
     pub sync_interval: Duration,
 
     #[clap(flatten)]
@@ -454,6 +452,9 @@ pub struct RunWithImporterConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
+    pub sync_interval: Duration,
 
     #[clap(flatten)]
     pub stratus_storage: StratusStorageConfig,
