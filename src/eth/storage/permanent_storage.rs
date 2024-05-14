@@ -34,11 +34,6 @@ pub trait PermanentStorage: Send + Sync {
     // Retrieves the last mined block number.
     async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber>;
 
-    /// Atomically increments the block number, returning the new value.
-    ///
-    /// TODO: this can probably be removed because set_mined_block_number and set_active_block_number may be enough.
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
-
     /// Retrieves an account from the storage. Returns Option when not found.
     async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
 

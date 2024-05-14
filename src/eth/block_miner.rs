@@ -43,19 +43,21 @@ impl BlockMiner {
 
     /// Mine a block with no transactions.
     pub async fn mine_empty(&self) -> anyhow::Result<Block> {
-        let number = self.storage.increment_block_number().await?;
+        let number = self.storage.temp.finish_block().await?;
         Ok(Block::new_at_now(number))
     }
 
     /// Mine a block from an external block.
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
+        let _ = self.storage.temp.finish_block().await?;
+
         // retrieve data
         let (external_block, txs) = read_external_block_and_executions(&self.storage).await?;
         let (local_txs, external_txs) = partition_transactions(txs);
 
         // validate
         if not(local_txs.is_empty()) {
-            return log_and_err!("cannot mine external block because one of the transactions is a local transaction");
+            return log_and_err!("failed to mine external block because one of the transactions is a local transaction");
         }
 
         // mine external transactions
@@ -65,6 +67,8 @@ impl BlockMiner {
 
     /// Mine a block from an external block and local failed transactions.
     pub async fn mine_mixed(&self) -> anyhow::Result<Block> {
+        let _ = self.storage.temp.finish_block().await?;
+
         // retrieve data
         let (external_block, txs) = read_external_block_and_executions(&self.storage).await?;
         let (local_txs, external_txs) = partition_transactions(txs);
@@ -76,7 +80,7 @@ impl BlockMiner {
         // mine local transactions
         for tx in local_txs {
             if tx.is_success() {
-                return log_and_err!("cannot mine mixed block because one of the local execution is a success");
+                return log_and_err!("failed to mine mixed block because one of the local execution is a success");
             }
             block.push_execution(tx.input, tx.result);
         }
@@ -86,109 +90,22 @@ impl BlockMiner {
 
     /// Mine a block from local transactions.
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
+        let number = self.storage.temp.finish_block().await?;
+
         // retrieve data
-        let txs = self.storage.temp.read_executions().await?;
+        let txs = self.storage.temp.read_pending_executions().await?;
         let (local_txs, external_txs) = partition_transactions(txs);
 
         // validate
         if not(external_txs.is_empty()) {
-            return log_and_err!("cannot mine local block because one of the transactions is an external transaction");
+            return log_and_err!("failed to mine local block because one of the transactions is an external transaction");
         }
 
         // mine local transactions
         match NonEmpty::from_vec(local_txs) {
-            Some(txs) => self.mine_with_many_transactions(txs).await,
-            None => self.mine_empty().await,
+            Some(txs) => block_from_local(number, txs),
+            None => Ok(Block::new_at_now(number)),
         }
-    }
-
-    /// Mine one block with a single transaction.
-    /// Internally, it wraps the single transaction into a format suitable for `mine_with_many_transactions`,
-    /// enabling consistent processing for both single and multiple transaction scenarios.
-    ///
-    /// TODO: remove
-    pub async fn mine_with_one_transaction(&self, tx: LocalTransactionExecution) -> anyhow::Result<Block> {
-        let txs = NonEmpty::new(tx);
-        self.mine_with_many_transactions(txs).await
-    }
-
-    /// Mines a new block from one or more transactions.
-    /// This is the core function for block creation, processing each transaction, generating the necessary logs,
-    /// and finalizing the block. It is used both directly for multiple transactions and indirectly by `mine_with_one_transaction`.
-    ///
-    /// TODO: Future enhancements may include breaking down this method for improved readability and maintenance.
-    pub async fn mine_with_many_transactions(&self, txs: NonEmpty<LocalTransactionExecution>) -> anyhow::Result<Block> {
-        // init block
-        let number = self.storage.increment_block_number().await?;
-        let block_timestamp = txs
-            .minimum_by(|tx1, tx2| tx1.result.execution.block_timestamp.cmp(&tx2.result.execution.block_timestamp))
-            .result
-            .execution
-            .block_timestamp;
-
-        let mut block = Block::new(number, block_timestamp);
-        block.transactions.reserve(txs.len());
-
-        // mine transactions and logs
-        let mut log_index = Index::ZERO;
-        for (tx_idx, tx) in txs.into_iter().enumerate() {
-            let transaction_index = Index::new(tx_idx as u64);
-            // mine logs
-            let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());
-            for mined_log in tx.result.execution.logs.clone() {
-                // calculate bloom
-                block.header.bloom.accrue(BloomInput::Raw(mined_log.address.as_ref()));
-                for topic in mined_log.topics().into_iter() {
-                    block.header.bloom.accrue(BloomInput::Raw(topic.as_ref()));
-                }
-
-                // mine log
-                let mined_log = LogMined {
-                    log: mined_log,
-                    transaction_hash: tx.input.hash,
-                    transaction_index,
-                    log_index,
-                    block_number: block.header.number,
-                    block_hash: block.header.hash,
-                };
-                mined_logs.push(mined_log);
-
-                // increment log index
-                log_index = log_index + Index::ONE;
-            }
-
-            // mine transaction
-            let mined_transaction = TransactionMined {
-                input: tx.input,
-                execution: tx.result.execution,
-                transaction_index,
-                block_number: block.header.number,
-                block_hash: block.header.hash,
-                logs: mined_logs,
-            };
-
-            // add transaction to block
-            block.transactions.push(mined_transaction);
-        }
-
-        // calculate transactions hash
-        if not(block.transactions.is_empty()) {
-            let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
-            block.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
-        }
-
-        // calculate final block hash
-
-        // replicate calculated block hash from header to transactions and logs
-        for transaction in block.transactions.iter_mut() {
-            transaction.block_hash = block.header.hash;
-            for log in transaction.logs.iter_mut() {
-                log.block_hash = block.header.hash;
-            }
-        }
-
-        // TODO: calculate size, state_root, receipts_root, parent_hash
-        Ok(block)
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
@@ -198,10 +115,6 @@ impl BlockMiner {
         // persist block
         self.storage.save_block_to_perm(block.clone()).await?;
         self.storage.set_mined_block_number(block_number).await?;
-
-        // prepare new block to be mined
-        self.storage.set_active_block_number(block_number.next()).await?;
-        self.storage.reset_temp().await?;
 
         // notify
         let logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
@@ -219,12 +132,12 @@ impl BlockMiner {
 // -----------------------------------------------------------------------------
 
 async fn read_external_block_and_executions(storage: &StratusStorage) -> anyhow::Result<(ExternalBlock, Vec<TransactionExecution>)> {
-    let block = match storage.temp.read_external_block().await {
+    let block = match storage.temp.read_pending_external_block().await {
         Ok(Some(block)) => block,
         Ok(None) => return log_and_err!("no active external block being re-executed"),
         Err(e) => return Err(e),
     };
-    let txs = storage.temp.read_executions().await?;
+    let txs = storage.temp.read_pending_executions().await?;
 
     Ok((block, txs))
 }
@@ -250,7 +163,7 @@ fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransa
     let mut mined_txs = Vec::with_capacity(txs.len());
     for tx in txs {
         if tx.tx.block_number() != block_number {
-            return log_and_err!("cannot mine external block because one of the transactions does not belong to the external block");
+            return log_and_err!("failed to mine external block because one of the transactions does not belong to the external block");
         }
         mined_txs.push(TransactionMined::from_external(tx.tx, tx.receipt, tx.result.execution)?);
     }
@@ -262,4 +175,77 @@ fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<Transaction
         header: BlockHeader::try_from(&external_block)?,
         transactions: mined_txs,
     })
+}
+
+pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecution>) -> anyhow::Result<Block> {
+    // init block
+    let block_timestamp = txs
+        .minimum_by(|tx1, tx2| tx1.result.execution.block_timestamp.cmp(&tx2.result.execution.block_timestamp))
+        .result
+        .execution
+        .block_timestamp;
+
+    let mut block = Block::new(number, block_timestamp);
+    block.transactions.reserve(txs.len());
+
+    // mine transactions and logs
+    let mut log_index = Index::ZERO;
+    for (tx_idx, tx) in txs.into_iter().enumerate() {
+        let transaction_index = Index::new(tx_idx as u64);
+        // mine logs
+        let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());
+        for mined_log in tx.result.execution.logs.clone() {
+            // calculate bloom
+            block.header.bloom.accrue(BloomInput::Raw(mined_log.address.as_ref()));
+            for topic in mined_log.topics().into_iter() {
+                block.header.bloom.accrue(BloomInput::Raw(topic.as_ref()));
+            }
+
+            // mine log
+            let mined_log = LogMined {
+                log: mined_log,
+                transaction_hash: tx.input.hash,
+                transaction_index,
+                log_index,
+                block_number: block.header.number,
+                block_hash: block.header.hash,
+            };
+            mined_logs.push(mined_log);
+
+            // increment log index
+            log_index = log_index + Index::ONE;
+        }
+
+        // mine transaction
+        let mined_transaction = TransactionMined {
+            input: tx.input,
+            execution: tx.result.execution,
+            transaction_index,
+            block_number: block.header.number,
+            block_hash: block.header.hash,
+            logs: mined_logs,
+        };
+
+        // add transaction to block
+        block.transactions.push(mined_transaction);
+    }
+
+    // calculate transactions hash
+    if not(block.transactions.is_empty()) {
+        let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
+        block.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
+    }
+
+    // calculate final block hash
+
+    // replicate calculated block hash from header to transactions and logs
+    for transaction in block.transactions.iter_mut() {
+        transaction.block_hash = block.header.hash;
+        for log in transaction.logs.iter_mut() {
+            log.block_hash = block.header.hash;
+        }
+    }
+
+    // TODO: calculate size, state_root, receipts_root, parent_hash
+    Ok(block)
 }

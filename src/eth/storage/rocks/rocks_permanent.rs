@@ -121,11 +121,6 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(next.into())
-    }
-
     async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())

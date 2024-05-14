@@ -80,21 +80,6 @@ impl StratusStorage {
         result
     }
 
-    /// Atomically increments the block number, returning the new value.
-    #[allow(clippy::let_and_return)]
-    #[tracing::instrument(skip_all)]
-    pub async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.perm.increment_block_number().await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_increment_block_number(start.elapsed(), result.is_ok());
-
-        result
-    }
-
     /// Sets the active block number to a specific value.
     #[allow(clippy::let_and_return)]
     #[tracing::instrument(skip_all)]

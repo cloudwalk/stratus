@@ -5,7 +5,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use anyhow::Context;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use rand::rngs::StdRng;
@@ -24,8 +23,6 @@ use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExecutionConflicts;
-use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -40,7 +37,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StorageError;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
@@ -126,43 +122,6 @@ impl InMemoryPermanentStorage {
         state.blocks_by_number.clear();
         state.logs.clear();
     }
-
-    fn check_conflicts(state: &InMemoryPermanentStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
-        let mut conflicts = ExecutionConflictsBuilder::default();
-
-        for change in account_changes {
-            let address = &change.address;
-
-            if let Some(account) = state.accounts.get(address) {
-                // check account info conflicts
-                if let Some(original_nonce) = change.nonce.take_original_ref() {
-                    let account_nonce = account.nonce.get_current_ref();
-                    if original_nonce != account_nonce {
-                        conflicts.add_nonce(*address, *account_nonce, *original_nonce);
-                    }
-                }
-                if let Some(original_balance) = change.balance.take_original_ref() {
-                    let account_balance = account.balance.get_current_ref();
-                    if original_balance != account_balance {
-                        conflicts.add_balance(*address, *account_balance, *original_balance);
-                    }
-                }
-
-                // check slots conflicts
-                for (slot_index, slot_change) in &change.slots {
-                    if let Some(account_slot) = account.slots.get(slot_index).map(|value| value.get_current_ref()) {
-                        if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value = account_slot.value;
-                            if original_slot.value != account_slot_value {
-                                conflicts.add_slot(*address, *slot_index, account_slot_value, original_slot.value);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        conflicts.build()
-    }
 }
 
 impl Default for InMemoryPermanentStorage {
@@ -190,15 +149,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+        tracing::debug!("reading mined block number");
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        let next = self.block_number.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(next.into())
-    }
-
     async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        tracing::debug!(%number, "setting mined block number");
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
     }
@@ -322,12 +278,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
     async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         let mut state = self.lock_write().await;
 
-        // check conflicts before persisting any state changes
-        let account_changes = block.compact_account_changes();
-        if let Some(conflicts) = Self::check_conflicts(&state, &account_changes) {
-            return Err(StorageError::Conflict(conflicts)).context("storage conflict");
-        }
-
         // save block
         tracing::debug!(number = %block.number(), "saving block");
         let block = Arc::new(block);
@@ -347,7 +297,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
 
         // save block account changes
-        for changes in account_changes {
+        for changes in block.compact_account_changes() {
             let account = state
                 .accounts
                 .entry(changes.address)

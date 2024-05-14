@@ -120,14 +120,14 @@ impl Executor {
                             None => tx,
                             // conflict: reexecute
                             Some(conflicts) => {
-                                tracing::warn!(?conflicts, "reexecuting serially because parallel execution conflicted");
+                                tracing::warn!(?conflicts, "re-executing serially because parallel execution conflicted");
                                 self.reexecute_external_tx(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
                             }
                         },
 
                         // failure: reexecute
                         Err((tx, receipt, e)) => {
-                            tracing::warn!(reason = ?e, "reexecuting serially because parallel execution errored");
+                            tracing::warn!(reason = ?e, "re-executing serially because parallel execution errored");
                             self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?
                         }
                     }
@@ -253,14 +253,7 @@ impl Executor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let execution = match &self.relayer {
-            // relayer present
-            Some(relayer) => {
-                let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
-                let evm_result = self.execute_in_evm(evm_input).await?;
-                relayer.forward(tx_input.clone(), evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-                TransactionExecution::new_local(tx_input, evm_result)
-            }
+        let tx_execution = match &self.relayer {
             // relayer not present
             None => {
                 // executes transaction until no more conflicts
@@ -272,45 +265,38 @@ impl Executor {
 
                     // save execution to temporary storage (not working yet)
                     let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-
-                    // if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
-                    //     if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
-                    //         tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
-                    //         continue;
-                    //     } else {
-                    //         #[cfg(feature = "metrics")]
-                    //         metrics::inc_executor_transact(start.elapsed(), false);
-                    //         return Err(e);
-                    //     }
-                    // }
-
-                    // TODO: mine and save to permanent storage (remove soon)
-                    let miner = self.miner.lock().await;
-                    let tx_local = LocalTransactionExecution::new(tx_input.clone(), evm_result);
-                    let block = miner.mine_with_one_transaction(tx_local).await?;
-
-                    match self.storage.save_block_to_perm(block).await {
-                        Ok(()) => {
-                            break tx_execution;
+                    if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
+                        if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                            tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
+                            continue;
+                        } else {
+                            #[cfg(feature = "metrics")]
+                            metrics::inc_executor_transact(start.elapsed(), false);
+                            return Err(e);
                         }
-                        Err(e) =>
-                            if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
-                                tracing::warn!(?conflicts, "permanent storage conflict detected when saving execution");
-                                continue;
-                            } else {
-                                #[cfg(feature = "metrics")]
-                                metrics::inc_executor_transact(start.elapsed(), false);
-                                return Err(e);
-                            },
                     }
+
+                    // TODO: remove automine
+                    let miner = self.miner.lock().await;
+                    let block = miner.mine_local().await?;
+                    miner.commit(block).await?;
+
+                    break tx_execution;
                 }
+            }
+            // relayer present
+            Some(relayer) => {
+                let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
+                let evm_result = self.execute_in_evm(evm_input).await?;
+                relayer.forward(tx_input.clone(), evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+                TransactionExecution::new_local(tx_input, evm_result)
             }
         };
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_transact(start.elapsed(), true);
 
-        Ok(execution)
+        Ok(tx_execution)
     }
 
     /// Executes a transaction without persisting state changes.
