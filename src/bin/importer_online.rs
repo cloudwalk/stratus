@@ -77,8 +77,7 @@ pub async fn run_importer_online(
         executor.reexecute_external(&block, &receipts).await?;
 
         // mine block
-        let mined_block = miner.mine_mixed().await?;
-        miner.commit(mined_block).await?;
+        miner.mine_external_mixed_and_commit().await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
