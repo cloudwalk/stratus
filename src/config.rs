@@ -246,14 +246,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let auto_mine_enabled = if miner.block_time.is_none() {
-            tracing::info!("enabling auto mining");
-            true
-        } else {
-            false
-        };
-
-        let executor = Executor::new(storage, miner, auto_mine_enabled, relayer, evm_tx, self.num_evms);
+        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms);
         Arc::new(executor)
     }
 }
@@ -271,12 +264,11 @@ pub struct MinerConfig {
 impl MinerConfig {
     pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<BlockMiner> {
         tracing::info!(config = ?self, "starting block miner");
+
         let miner = Arc::new(BlockMiner::new(storage, self.block_time));
-
-        if let Some(block_time) = self.block_time {
-            Arc::clone(&miner).spawn_interval_miner(block_time);
+        if miner.is_interval_miner_mode() {
+            Arc::clone(&miner).spawn_interval_miner();
         }
-
         miner
     }
 }

@@ -51,7 +51,7 @@ pub struct Executor {
     miner: Mutex<Arc<BlockMiner>>,
 
     /// Bool indicating whether to enable auto mining or not.
-    auto_mine_enabled: bool,
+    automine: bool,
 
     /// Provider for sending rpc calls to substrate
     relayer: Option<Arc<TransactionRelayer>>,
@@ -65,17 +65,18 @@ impl Executor {
     pub fn new(
         storage: Arc<StratusStorage>,
         miner: Arc<BlockMiner>,
-        auto_mine_enabled: bool,
         relayer: Option<Arc<TransactionRelayer>>,
         evm_tx: crossbeam_channel::Sender<EvmTask>,
         num_evms: usize,
     ) -> Self {
-        tracing::info!(%num_evms, "starting executor");
+        let automine = miner.is_automine_mode();
+        tracing::info!(%num_evms, %automine, "starting executor");
+
         Self {
             evm_tx,
             num_evms,
             miner: Mutex::new(miner),
-            auto_mine_enabled,
+            automine,
             storage,
             relayer,
         }
@@ -285,7 +286,7 @@ impl Executor {
                     }
 
                     // auto mine needed for e2e contract tests
-                    if self.auto_mine_enabled {
+                    if self.automine {
                         let miner = self.miner.lock().await;
                         miner.mine_local_and_commit().await?;
                     }

@@ -46,12 +46,28 @@ impl BlockMiner {
         }
     }
 
-    pub fn spawn_interval_miner(self: Arc<Self>, block_time: Duration) {
+    /// Spawns a new thread that keep mining blocks in the specified interval.
+    pub fn spawn_interval_miner(self: Arc<Self>) {
+        let Some(block_time) = self.block_time else {
+            tracing::error!("cannot spawn interval miner because it does not have a block time defined");
+            return;
+        };
+
         tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
 
         let t = thread::Builder::new().name("interval-miner".into());
         t.spawn(move || interval_miner(self, block_time))
             .expect("spawning interval miner should not fail");
+    }
+
+    /// Checks if miner should run in interval miner mode.
+    pub fn is_interval_miner_mode(&self) -> bool {
+        self.block_time.is_some()
+    }
+
+    /// Checks if miner should run in automine mode.
+    pub fn is_automine_mode(&self) -> bool {
+        not(self.is_interval_miner_mode())
     }
 
     /// Mines external block and external transactions.
