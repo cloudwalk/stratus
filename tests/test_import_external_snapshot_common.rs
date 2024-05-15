@@ -155,7 +155,7 @@ pub async fn execute_test(
     // init services
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage)));
     let relayer = config.relayer.init(Arc::clone(&storage)).await.unwrap();
-    let miner = config.miner.init(Arc::clone(&storage)).await?;
+    let miner = config.miner.init(Arc::clone(&storage)).await.unwrap();
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
 
     // execute and mine
