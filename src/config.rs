@@ -157,7 +157,7 @@ impl StratusStorageConfig {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                storage.save_block_to_perm(Block::genesis()).await?;
+                storage.save_block(Block::genesis()).await?;
             }
         }
 

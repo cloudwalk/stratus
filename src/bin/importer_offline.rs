@@ -75,7 +75,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
-    stratus_storage.save_accounts_to_perm(initial_accounts.clone()).await?;
+    stratus_storage.save_accounts(initial_accounts.clone()).await?;
     if let Some(ref mut csv) = csv {
         if csv.is_accounts_empty() {
             csv.export_initial_accounts(initial_accounts.clone())?;

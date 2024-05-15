@@ -141,7 +141,7 @@ impl Executor {
             }
 
             // persist state
-            storage.save_execution_to_temp(TransactionExecution::External(tx)).await?;
+            storage.save_execution(TransactionExecution::External(tx)).await?;
         }
 
         // track block metrics
@@ -278,7 +278,7 @@ impl Executor {
 
                     // save execution to temporary storage (not working yet)
                     let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-                    if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
+                    if let Err(e) = self.storage.save_execution(tx_execution.clone()).await {
                         if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
                             tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
                             continue;

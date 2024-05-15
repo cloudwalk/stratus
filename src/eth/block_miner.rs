@@ -139,7 +139,7 @@ impl BlockMiner {
         let block_number = *block.number();
 
         // persist block
-        self.storage.save_block_to_perm(block.clone()).await?;
+        self.storage.save_block(block.clone()).await?;
         self.storage.set_mined_block_number(block_number).await?;
 
         // notify
