@@ -463,6 +463,9 @@ pub struct RunWithImporterConfig {
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
 
+    #[arg(long = "leader_node", env = "LEADER_NODE")]
+    pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
+
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
     pub sync_interval: Duration,
 
