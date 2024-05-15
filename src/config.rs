@@ -203,7 +203,13 @@ impl ExecutorConfig {
     /// Note: Should be called only after async runtime is initialized.
     ///
     /// TODO: remove BlockMiner after migration is completed.
-    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, block_time: Option<Duration>, relayer: Option<Arc<TransactionRelayer>>) -> Arc<Executor> {
+    pub async fn init(
+        &self,
+        storage: Arc<StratusStorage>,
+        miner: Arc<BlockMiner>,
+        block_time: Option<Duration>,
+        relayer: Option<Arc<TransactionRelayer>>,
+    ) -> Arc<Executor> {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(config = ?self, "starting executor");
 
