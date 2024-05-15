@@ -266,7 +266,7 @@ impl MinerConfig {
         tracing::info!(config = ?self, "starting block miner");
 
         let miner = Arc::new(BlockMiner::new(storage, self.block_time));
-        if miner.is_automine_mode() {
+        if miner.is_interval_miner_mode() {
             Arc::clone(&miner).spawn_interval_miner();
         }
         miner
