@@ -54,7 +54,7 @@ impl BlockMiner {
     ///
     /// Local transactions are not allowed to be part of the block.
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
-        let block = self.storage.temp.finish_block().await?;
+        let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -80,7 +80,7 @@ impl BlockMiner {
     ///
     /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
     pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
-        let block = self.storage.temp.finish_block().await?;
+        let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -113,7 +113,7 @@ impl BlockMiner {
     ///
     /// External transactions are not allowed to be part of the block.
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
-        let block = self.storage.temp.finish_block().await?;
+        let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate

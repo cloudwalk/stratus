@@ -80,9 +80,10 @@ pub async fn run_importer_online(
         miner.mine_external_mixed_and_commit().await?;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
-        #[cfg(feature = "metrics")]
-        metrics::inc_import_online_mined_block(start.elapsed());
+        {
+            metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
+            metrics::inc_import_online_mined_block(start.elapsed());
+        }
     }
 
     Ok(())

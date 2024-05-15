@@ -8,9 +8,13 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotIndexes;
@@ -35,7 +39,7 @@ const DEFAULT_VALUE: &str = "default";
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
 pub struct StratusStorage {
-    pub temp: Arc<dyn TemporaryStorage>,
+    temp: Arc<dyn TemporaryStorage>,
     perm: Arc<dyn PermanentStorage>,
 }
 
@@ -139,6 +143,19 @@ impl StratusStorage {
     // Accounts and slots
     // -------------------------------------------------------------------------
 
+    pub async fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+        #[cfg(feature = "metrics")]
+        {
+            let start = metrics::now();
+            let result = self.temp.set_active_external_block(block).await;
+            metrics::inc_storage_set_active_external_block(start.elapsed(), result.is_ok());
+            result
+        }
+
+        #[cfg(not(feature = "metrics"))]
+        self.temp.inc_storage_set_external_block(block).await
+    }
+
     #[tracing::instrument(skip_all)]
     pub async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
@@ -151,6 +168,20 @@ impl StratusStorage {
 
         #[cfg(not(feature = "metrics"))]
         self.perm.save_accounts(accounts).await
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        #[cfg(feature = "metrics")]
+        {
+            let start = metrics::now();
+            let result = self.temp.check_conflicts(execution).await;
+            metrics::inc_storage_check_conflicts(start.elapsed(), result.is_ok(), result.as_ref().is_ok_and(|conflicts| conflicts.is_some()));
+            result
+        }
+
+        #[cfg(not(feature = "metrics"))]
+        self.temp.check_conflicts(execution).await
     }
 
     #[tracing::instrument(skip_all)]
@@ -275,21 +306,26 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(skip_all)]
+    pub async fn finish_block(&self) -> anyhow::Result<PendingBlock> {
+        #[cfg(feature = "metrics")]
+        {
+            let start = metrics::now();
+            let result = self.temp.finish_block().await;
+            metrics::inc_storage_finish_block(start.elapsed(), result.is_ok());
+            result
+        }
+
+        #[cfg(not(feature = "metrics"))]
+        self.temp.finish_block().await
+    }
+
+    #[tracing::instrument(skip_all)]
     pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
-            let (start, label_size_by_tx, label_size_by_gas, gas_used) = (
-                metrics::now(),
-                block.label_size_by_transactions(),
-                block.label_size_by_gas(),
-                block.header.gas_used.as_u64(),
-            );
-
+            let (start, label_size_by_tx, label_size_by_gas) = (metrics::now(), block.label_size_by_transactions(), block.label_size_by_gas());
             let result = self.perm.save_block(block).await;
-
-            metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
-            metrics::inc_n_storage_gas_total(gas_used);
-
+            metrics::inc_storage_save_block(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
             result
         }
 
@@ -340,12 +376,12 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn flush_temp(&self) -> anyhow::Result<()> {
+    pub async fn flush(&self) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
             let result = self.temp.flush().await;
-            metrics::inc_storage_flush_temp(start.elapsed(), result.is_ok());
+            metrics::inc_storage_flush(start.elapsed(), STORAGE_TEMP, result.is_ok());
             result
         }
 

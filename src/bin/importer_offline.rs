@@ -21,8 +21,6 @@ use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::not;
-#[cfg(feature = "metrics")]
-use stratus::infra::metrics;
 use stratus::log_and_err;
 use stratus::utils::signal_handler;
 use stratus::GlobalServices;
@@ -166,9 +164,6 @@ async fn execute_block_importer(
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
             async {
-                #[cfg(feature = "metrics")]
-                let start = metrics::now();
-
                 // re-execute block
                 executor.reexecute_external(&block, &receipts).await?;
 
@@ -185,9 +180,6 @@ async fn execute_block_importer(
                 if blocks_to_export_snapshot.contains(mined_block.number()) {
                     export_snapshot(&block, &receipts, &mined_block)?;
                 }
-
-                #[cfg(feature = "metrics")]
-                metrics::inc_import_offline(start.elapsed());
 
                 anyhow::Ok(())
             }
@@ -349,7 +341,7 @@ async fn import_external_to_csv(
     // flush
     if should_flush {
         csv.flush()?;
-        stratus_storage.flush_temp().await?;
+        stratus_storage.flush().await?;
     }
 
     // chunk

@@ -90,7 +90,7 @@ impl Executor {
 
         // track active block number
         let storage = &self.storage;
-        storage.temp.set_external_block(block.clone()).await?;
+        storage.set_active_external_block(block.clone()).await?;
         storage.set_active_block_number(block.number()).await?;
 
         // determine how to execute each transaction
@@ -115,7 +115,7 @@ impl Executor {
                 ParallelExecutionRoute::Parallel(..) => {
                     match parallel_executions.next().await.unwrap() {
                         // success: check conflicts
-                        Ok(tx) => match storage.temp.check_conflicts(&tx.result.execution).await? {
+                        Ok(tx) => match storage.check_conflicts(&tx.result.execution).await? {
                             // no conflict: proceeed
                             None => tx,
                             // conflict: reexecute

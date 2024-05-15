@@ -26,10 +26,10 @@ mod m {
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION_SLOT_READS_CACHED;
     pub use stratus::infra::metrics::METRIC_EXECUTOR_EXTERNAL_BLOCK;
-    pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOTS;
+    pub use stratus::infra::metrics::METRIC_STORAGE_SAVE_BLOCK;
 }
 
 #[cfg(feature = "metrics")]
@@ -83,7 +83,7 @@ const METRIC_QUERIES: [&str; 48] = [
     m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     "* COMMIT",
-    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_COMMIT),
+    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_SAVE_BLOCK),
 ];
 
 #[cfg(not(feature = "metrics"))]
