@@ -252,7 +252,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let auto_mine_enabled = if let Some(_block_time) = block_time {
+        let auto_mine_enabled = if block_time.is_none(){
             false
         } else {
             tracing::info!("enabling auto mining");
