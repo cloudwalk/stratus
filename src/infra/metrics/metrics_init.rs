@@ -9,7 +9,6 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use crate::config::MetricsHistogramKind;
 use crate::infra::metrics::metrics_for_evm;
 use crate::infra::metrics::metrics_for_executor;
-use crate::infra::metrics::metrics_for_importer_offline;
 use crate::infra::metrics::metrics_for_importer_online;
 use crate::infra::metrics::metrics_for_json_rpc;
 use crate::infra::metrics::metrics_for_rocks;
@@ -33,7 +32,6 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
 
     // get metric definitions
     let mut metrics = Vec::new();
-    metrics.extend(metrics_for_importer_offline());
     metrics.extend(metrics_for_importer_online());
     metrics.extend(metrics_for_json_rpc());
     metrics.extend(metrics_for_executor());
