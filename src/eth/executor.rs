@@ -294,6 +294,7 @@ impl Executor {
                         }
                     }
 
+                    // TODO: remove automine
                     if self.auto_mine_enabled {
                         let miner = self.miner.lock().await;
                         miner.mine_local_and_commit().await?;
