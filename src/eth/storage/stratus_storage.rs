@@ -153,7 +153,7 @@ impl StratusStorage {
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.inc_storage_set_external_block(block).await
+        self.temp.set_active_external_block(block).await
     }
 
     #[tracing::instrument(skip_all)]
