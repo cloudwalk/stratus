@@ -284,7 +284,7 @@ impl Executor {
                         }
                     }
 
-                    // TODO: remove automine
+                    // auto mine needed for e2e contract tests
                     if self.auto_mine_enabled {
                         let miner = self.miner.lock().await;
                         miner.mine_local_and_commit().await?;
