@@ -321,7 +321,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
     tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
     EvmExecution {
         block_timestamp: input.block_timestamp,
-        execution_costs_applied: false,
+        receipt_applied: false,
         result,
         output,
         logs,
