@@ -95,7 +95,7 @@ impl Executor {
 
         // track active block number
         let storage = &self.storage;
-        storage.temp.set_external_block(block.clone()).await?;
+        storage.set_active_external_block(block.clone()).await?;
         storage.set_active_block_number(block.number()).await?;
 
         // determine how to execute each transaction
@@ -120,7 +120,7 @@ impl Executor {
                 ParallelExecutionRoute::Parallel(..) => {
                     match parallel_executions.next().await.unwrap() {
                         // success: check conflicts
-                        Ok(tx) => match storage.temp.check_conflicts(&tx.result.execution).await? {
+                        Ok(tx) => match storage.check_conflicts(&tx.result.execution).await? {
                             // no conflict: proceeed
                             None => tx,
                             // conflict: reexecute
@@ -146,7 +146,7 @@ impl Executor {
             }
 
             // persist state
-            storage.save_execution_to_temp(TransactionExecution::External(tx)).await?;
+            storage.save_execution(TransactionExecution::External(tx)).await?;
         }
 
         // track block metrics
@@ -202,20 +202,16 @@ impl Executor {
         // handle reexecution result
         match evm_result {
             Ok(mut evm_result) => {
-                // apply execution costs that were not consided when reexecuting the transaction
-                if let Err(e) = evm_result.execution.apply_execution_costs(receipt) {
-                    return Err((tx, receipt, e));
-                };
-
+                // track metrics before execution is update with receipt
                 #[cfg(feature = "metrics")]
                 {
-                    let gas_used = evm_result.execution.gas;
-                    metrics::inc_executor_external_transaction_gas(gas_used.as_u64() as usize, function.clone());
+                    metrics::inc_executor_external_transaction_gas(evm_result.execution.gas.as_u64() as usize, function.clone());
+                    metrics::inc_executor_external_transaction(start.elapsed(), function);
                 }
 
-                evm_result.execution.gas = match receipt.gas_used.unwrap_or_default().try_into() {
-                    Ok(gas) => gas,
-                    Err(e) => return Err((tx, receipt, e)),
+                // update execution with receipt info
+                if let Err(e) = evm_result.execution.apply_receipt(receipt) {
+                    return Err((tx, receipt, e));
                 };
 
                 // ensure it matches receipt before saving
@@ -226,10 +222,6 @@ impl Executor {
                     tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
                     return Err((tx, receipt, e));
                 };
-
-                // track metrics
-                #[cfg(feature = "metrics")]
-                metrics::inc_executor_external_transaction(start.elapsed(), function);
 
                 Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result))
             }
@@ -250,9 +242,7 @@ impl Executor {
     #[tracing::instrument(skip_all)]
     pub async fn transact(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
-        let start = metrics::now();
-        #[cfg(feature = "metrics")]
-        let function = tx_input.extract_function();
+        let (start, function) = (metrics::now(), tx_input.extract_function());
 
         tracing::info!(
             hash = %tx_input.hash,
@@ -283,7 +273,7 @@ impl Executor {
 
                     // save execution to temporary storage (not working yet)
                     let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-                    if let Err(e) = self.storage.save_execution_to_temp(tx_execution.clone()).await {
+                    if let Err(e) = self.storage.save_execution(tx_execution.clone()).await {
                         if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
                             tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
                             continue;

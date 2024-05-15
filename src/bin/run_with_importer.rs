@@ -48,7 +48,7 @@ fn get_chain_url(config: RunWithImporterConfig) -> String {
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     // init services
-    let storage = config.stratus_storage.init().await?;
+    let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage));
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;

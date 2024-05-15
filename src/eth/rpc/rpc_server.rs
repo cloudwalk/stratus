@@ -183,8 +183,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 #[cfg(feature = "dev")]
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    ctx.storage.reset_perm(number).await?;
-    ctx.storage.reset_temp().await?;
+    ctx.storage.reset(number).await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 

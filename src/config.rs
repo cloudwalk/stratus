@@ -157,7 +157,7 @@ impl StratusStorageConfig {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                storage.save_block_to_perm(Block::genesis()).await?;
+                storage.save_block(Block::genesis()).await?;
             }
         }
 
@@ -174,7 +174,7 @@ impl StratusStorageConfig {
 
             if not(test_accounts_to_insert.is_empty()) {
                 tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
+                storage.save_accounts(test_accounts_to_insert).await?;
             }
         }
 
@@ -213,7 +213,7 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: matches!(storage.perm.kind(), PermanentStorageKind::Postgres { .. }),
+                prefetch_slots: matches!(storage.perm_kind(), PermanentStorageKind::Postgres { .. }),
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
@@ -318,7 +318,7 @@ pub struct StratusConfig {
     pub address: SocketAddr,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -411,7 +411,7 @@ pub struct ImporterOfflineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
@@ -451,7 +451,7 @@ pub struct ImporterOnlineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -477,7 +477,7 @@ pub struct RunWithImporterConfig {
     pub sync_interval: Duration,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -535,7 +535,7 @@ pub struct StateValidatorConfig {
     pub common: CommonConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 }
 
 impl WithCommonConfig for StateValidatorConfig {
@@ -565,7 +565,7 @@ pub struct IntegrationTestConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,

@@ -22,6 +22,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
@@ -33,8 +34,8 @@ pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
     pub block_timestamp: UnixTime,
 
-    /// Flag to indicate if the execution costs have been applied.
-    pub execution_costs_applied: bool,
+    /// Flag to indicate if  external receipt fixes have been applied.
+    pub receipt_applied: bool,
 
     /// Status of the execution.
     pub result: ExecutionResult,
@@ -73,7 +74,7 @@ impl EvmExecution {
         // crete execution and apply costs
         let mut execution = Self {
             block_timestamp: block.timestamp(),
-            execution_costs_applied: false,
+            receipt_applied: false,
             result: ExecutionResult::new_reverted(), // assume it reverted
             output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
@@ -81,7 +82,7 @@ impl EvmExecution {
             changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
-        execution.apply_execution_costs(receipt)?;
+        execution.apply_receipt(receipt)?;
         Ok(execution)
     }
 
@@ -174,34 +175,42 @@ impl EvmExecution {
         Ok(())
     }
 
-    /// Apply execution costs of an external transaction.
+    /// External transactions are re-executed locally with max gas and zero gas price.
     ///
-    /// External transactions are re-executed locally with max gas and zero gas price,
-    /// so the paid amount is applied after execution based on the receipt.
-    pub fn apply_execution_costs(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
-        // do nothing if execution costs were already applied
-        if self.execution_costs_applied {
+    /// This causes some attributes to be different from the original execution.
+    ///
+    /// This method updates the attributes that can diverge based on the receipt of the external transaction.
+    pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
+        // do nothing if receipt is already applied
+        if self.receipt_applied {
             return Ok(());
         }
-        self.execution_costs_applied = true;
+        self.receipt_applied = true;
 
-        // do nothing if execution cost is zero
+        // fix gas
+        self.gas = receipt.gas_used.unwrap_or_default().try_into()?;
+
+        // TODO: fix logs
+
+        // fix sender balance
         let execution_cost = receipt.execution_cost();
-        if execution_cost.is_zero() {
-            return Ok(());
+        if execution_cost > Wei::ZERO {
+            // find sender changes
+            let sender_address: Address = receipt.0.from.into();
+            let Some(sender_changes) = self.changes.get_mut(&sender_address) else {
+                return log_and_err!("sender changes not present in execution when applying execution costs");
+            };
+
+            // subtract execution cost from sender balance
+            let sender_balance = *sender_changes.balance.take_ref().expect("balance is never None");
+            let sender_new_balance = if sender_balance > execution_cost {
+                sender_balance - execution_cost
+            } else {
+                Wei::ZERO
+            };
+            sender_changes.balance.set_modified(sender_new_balance);
         }
 
-        // find sender changes (this can be improved if changes is HashMap)
-        let sender_address: Address = receipt.0.from.into();
-        let sender_changes = self.changes.get_mut(&sender_address);
-        let Some(sender_changes) = sender_changes else {
-            return log_and_err!("sender changes not present in execution when applying execution costs");
-        };
-
-        // subtract execution cost from sender balance
-        let current_balance = *sender_changes.balance.take_ref().expect("balance is never None");
-        let new_balance = current_balance - execution_cost; // TODO: handle underflow, but it should not happen
-        sender_changes.balance.set_modified(new_balance);
         Ok(())
     }
 }

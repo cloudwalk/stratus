@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
-    let storage = config.stratus_storage.init().await?;
+    let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage));
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
@@ -80,9 +80,10 @@ pub async fn run_importer_online(
         miner.mine_external_mixed_and_commit().await?;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
-        #[cfg(feature = "metrics")]
-        metrics::inc_import_online_mined_block(start.elapsed());
+        {
+            metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
+            metrics::inc_import_online_mined_block(start.elapsed());
+        }
     }
 
     Ok(())

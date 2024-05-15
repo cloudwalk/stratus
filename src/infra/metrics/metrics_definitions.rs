@@ -15,6 +15,9 @@ metrics! {
 metrics! {
     group: storage_read,
 
+    "Time to execute storage check_conflicts operation."
+    histogram_duration storage_check_conflicts{success, conflicted} [],
+
     "Time to execute storage read_active_block_number operation."
     histogram_duration storage_read_active_block_number{success} [],
 
@@ -56,41 +59,30 @@ metrics! {
     "Time to execute storage save_account_changes operation."
     histogram_duration storage_save_execution{success} [],
 
-    "Time to execute storage flush_temp operation."
-    histogram_duration storage_flush_temp{success} [],
+    "Time to execute storage flush operation."
+    histogram_duration storage_flush{kind, success} [],
+
+    "Time to execute storage set_active_external_block operation."
+    histogram_duration storage_set_active_external_block{success} [],
+
+    "Time to execute storage finish_block operation."
+    histogram_duration storage_finish_block{success} [],
 
     "Time to execute storage save_block operation."
-    histogram_duration storage_save_block{success} [],
+    histogram_duration storage_save_block{size_by_tx, size_by_gas, success} [],
 
     "Time to execute storage reset operation."
-    histogram_duration storage_reset{kind, success} [],
-
-    "Time to execute storage commit operation."
-    histogram_duration storage_commit{size_by_tx, size_by_gas, success} [],
-
-    "Ammount of gas in the commited transactions"
-    counter   storage_gas_total{} []
-}
-
-// Importer offline metrics.
-metrics! {
-    group: importer_offline,
-
-    "Time to execute import_offline operation."
-    histogram_duration import_offline{} []
+    histogram_duration storage_reset{kind, success} []
 }
 
 // Importer online metrics.
 metrics! {
     group: importer_online,
 
-    "Time to execute import_online operation."
-    histogram_duration import_online{} [],
-
-    "Time to import one mined block."
+    "Time to import one block."
     histogram_duration import_online_mined_block{} [],
 
-    "Transactions imported"
+    "Number of transactions imported."
     counter importer_online_transactions_total{} []
 }
 
