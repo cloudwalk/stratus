@@ -203,7 +203,7 @@ impl ExecutorConfig {
     /// Note: Should be called only after async runtime is initialized.
     ///
     /// TODO: remove BlockMiner after migration is completed.
-    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, relayer: Option<Arc<TransactionRelayer>>) -> Arc<Executor> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, block_time: Option<Duration>, relayer: Option<Arc<TransactionRelayer>>) -> Arc<Executor> {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(config = ?self, "starting executor");
 
@@ -246,7 +246,14 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms);
+        let auto_mine_enabled = if let Some(_block_time) = block_time {
+            false
+        } else {
+            tracing::info!("enabling auto mining");
+            true
+        };
+
+        let executor = Executor::new(storage, miner, auto_mine_enabled, relayer, evm_tx, self.num_evms);
         Arc::new(executor)
     }
 }
