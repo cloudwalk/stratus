@@ -30,6 +30,9 @@ fn current_namespace() -> Option<String> {
     Some(namespace.trim().to_string())
 }
 
+//XXX this is a temporary solution to get the leader node
+// later we want the leader to GENERATE blocks
+// and even later we want this sync to be replaced by a gossip protocol or raft
 fn get_chain_url(config: RunWithImporterConfig) -> String {
     if let Some(leader_node) = config.leader_node {
         if let Some(current_node) = current_node() {
