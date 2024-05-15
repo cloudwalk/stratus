@@ -174,7 +174,7 @@ impl StratusStorageConfig {
 
             if not(test_accounts_to_insert.is_empty()) {
                 tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
+                storage.save_accounts(test_accounts_to_insert).await?;
             }
         }
 
