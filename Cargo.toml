@@ -160,6 +160,9 @@ rocks = ["rocksdb", "bincode", "raft"]
 # XXX: Enable external transaction parallel execution.
 executor-parallel = []
 
+# Enable auto mining of one block per transaction.
+auto-mine = []
+
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------

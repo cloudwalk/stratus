@@ -47,12 +47,12 @@ run-rocks *args="":
     cargo run {{ build_flags }} --features rocks -- {{ run_flags }} {{args}}
 
 # Stratus: Compile with debug options
-build:
-    cargo build {{ build_flags }}
+build *args="":
+    cargo build {{ build_flags }} --features {{args}}
 
 # Stratus: Compile with debug options
-build-rocks:
-    cargo build {{ build_flags }} --features rocks
+build-rocks *args="":
+    cargo build {{ build_flags }} --features rocks {{args}}
 
 # Stratus: Check, or compile without generating code
 check:
@@ -223,14 +223,14 @@ e2e-hardhat test="":
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus test="":
+e2e-stratus test="" *features="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
 
     echo "-> Starting Stratus"
-    just build || exit 1
+    just build {{features}} || exit 1
     just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -245,14 +245,14 @@ e2e-stratus test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-rocks test="":
+e2e-stratus-rocks test="" *features="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
 
     echo "-> Starting Stratus"
-    just build-rocks || exit 1
+    just build-rocks {{features}} || exit 1
     just run-rocks -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
@@ -267,7 +267,7 @@ e2e-stratus-rocks test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-postgres test="":
+e2e-stratus-postgres test="" *features="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -281,7 +281,7 @@ e2e-stratus-postgres test="":
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Starting Stratus"
-    just build || exit 1
+    just build {{features}} || exit 1
     just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"

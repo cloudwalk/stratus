@@ -289,9 +289,11 @@ impl Executor {
                         }
                     }
 
-                    // TODO: remove automine
-                    let miner = self.miner.lock().await;
-                    miner.mine_local_and_commit().await?;
+                    #[cfg(feature = "auto-mine")]
+                    {
+                        let miner = self.miner.lock().await;
+                        miner.mine_local_and_commit().await?;
+                    }
 
                     break tx_execution;
                 }

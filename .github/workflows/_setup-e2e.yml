@@ -14,6 +14,10 @@ on:
         required: false
         type: string
         default: 'stable-release'
+      feature_flags:
+        required: false
+        type: string
+        default: ''
 
 jobs:
   setup_and_test:
@@ -61,7 +65,7 @@ jobs:
           cargo install wait-service || true
 
       - name: Run e2e tests
-        run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}
+        run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}  ${{ inputs.feature_flags }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: off
