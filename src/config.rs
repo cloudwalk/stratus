@@ -253,10 +253,10 @@ impl ExecutorConfig {
         }
 
         let auto_mine_enabled = if block_time.is_none(){
-            false
-        } else {
             tracing::info!("enabling auto mining");
             true
+        } else {
+            false
         };
 
         let executor = Executor::new(storage, miner, auto_mine_enabled, relayer, evm_tx, self.num_evms);
