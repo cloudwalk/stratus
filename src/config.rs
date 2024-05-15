@@ -311,7 +311,7 @@ pub struct StratusConfig {
     pub address: SocketAddr,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -404,7 +404,7 @@ pub struct ImporterOfflineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
@@ -444,7 +444,7 @@ pub struct ImporterOnlineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -467,7 +467,7 @@ pub struct RunWithImporterConfig {
     pub sync_interval: Duration,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -525,7 +525,7 @@ pub struct StateValidatorConfig {
     pub common: CommonConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 }
 
 impl WithCommonConfig for StateValidatorConfig {
@@ -555,7 +555,7 @@ pub struct IntegrationTestConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
