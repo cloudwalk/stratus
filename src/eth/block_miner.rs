@@ -24,6 +24,9 @@ use crate::log_and_err;
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 
+    /// Time duration between blocks.
+    pub block_time: Option<Duration>,
+
     /// Broadcasts new mined blocks events.
     pub notifier_blocks: broadcast::Sender<Block>,
 
@@ -33,10 +36,11 @@ pub struct BlockMiner {
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>) -> Self {
         tracing::info!("starting block miner");
         Self {
             storage,
+            block_time,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
         }
