@@ -206,31 +206,51 @@ export async function sendGetBlockNumber(): Promise<number> {
     return parseInt(result, 16);
 }
 
-/// Start a subscription and returns its id
-/// Waits at the most for the specified time
-/// An error or timeout will result in undefined
-export async function subscribeAndGetId(
-    subscription: string,
-    waitTimeInMilliseconds: number,
-): Promise<string | undefined> {
+/// Open a WebSocket connection and return the socket
+export function openWebSocketConnection(): WebSocket {
     const socket = new WebSocket(providerUrl.replace("http", "ws"));
-    let subsId = undefined;
+    return socket;
+}
 
+/// Add an "open" event listener to a WebSocket
+export function addOpenListener(socket: WebSocket, subscription: string) {
     socket.addEventListener("open", function () {
         socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription] }));
     });
+}
 
-    socket.addEventListener("message", function (event: { data: string }) {
-        //console.log('Message from server ', event.data);
-        if (event.data.includes("id")) {
-            subsId = JSON.parse(event.data).result;
-        }
-        socket.close();
+/// Add a "message" event listener to a WebSocket
+export function addMessageListener(socket: WebSocket, messageToReturn: number): Promise<any> {
+    return new Promise((resolve) => {
+        let messageCount = 0;
+        socket.addEventListener("message", function (messageEvent: { data: string }) {
+            //console.log("Received message: " + messageEvent.data);
+            messageCount++;
+            if (messageCount === messageToReturn) {
+                const event = JSON.parse(messageEvent.data);
+                socket.close();
+                resolve(event);
+            } else {
+                send("evm_mine", []);
+            }
+        });
     });
+}
+
+/// Start a subscription and returns its N event
+/// Waits at the most for the specified time
+export async function subscribeAndGetEvent(
+    subscription: string,
+    waitTimeInMilliseconds: number,
+    messageToReturn: number = 1,
+): Promise<any> {
+    const socket = openWebSocketConnection();
+    addOpenListener(socket, subscription);
+    const event = await addMessageListener(socket, messageToReturn);
 
     // Wait for the specified time, if necessary
-    if (subsId === undefined && waitTimeInMilliseconds > 0)
+    if (waitTimeInMilliseconds > 0)
         await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
 
-    return subsId;
+    return event;
 }

@@ -12,8 +12,7 @@ import {
     send,
     sendAndGetError,
     sendExpect,
-    sendRawTransaction,
-    subscribeAndGetId,
+    subscribeAndGetEvent,
 } from "./helpers/rpc";
 
 describe("JSON-RPC", () => {
@@ -63,8 +62,7 @@ describe("JSON-RPC", () => {
             let tx = { from: ALICE.address, to: BOB.address, value: "0x1" }
             let gas = await send("eth_estimateGas", [tx]);
             expect(gas).match(HEX_PATTERN, "format");
-            
-            const gasDec = parseInt(gas, 16); 
+            const gasDec = parseInt(gas, 16);
             expect(gasDec).to.be.greaterThan(0).and.lessThan(1_000_000);
         });
     });
@@ -158,10 +156,58 @@ describe("JSON-RPC", () => {
         });
 
         describe("WebSocket", () => {
-            it("Subscribe to newHeads receives subscription id", async () => {
+            it("Subscribe to newHeads receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
-                const id = await subscribeAndGetId("newHeads", waitTimeInMilliseconds);
-                expect(id).to.not.be.undefined;
+                const response = await subscribeAndGetEvent("newHeads", waitTimeInMilliseconds);
+                expect(response).to.not.be.undefined;
+                expect(response.id).to.not.be.undefined;
+                expect(response.result).to.not.be.undefined;
+            });
+
+            it("Subscribe to logs receives success subscription event", async () => {
+                const waitTimeInMilliseconds = 40;
+                const response = await subscribeAndGetEvent("logs", waitTimeInMilliseconds);
+                expect(response).to.not.be.undefined;
+                expect(response.id).to.not.be.undefined;
+                expect(response.result).to.not.be.undefined;
+            });
+
+            it("Subscribe to unsupported receives error subscription event", async () => {
+                const waitTimeInMilliseconds = 40;
+                const response = await subscribeAndGetEvent("newPendingTransactions", waitTimeInMilliseconds);
+                expect(response).to.not.be.undefined;
+                expect(response.id).to.not.be.undefined;
+                expect(response.error.code).eq(-32700);
+            });
+
+            it("Validate newHeads subscription event", async () => {
+                const waitTimeInMilliseconds = 40;
+                const response = await subscribeAndGetEvent("newHeads", waitTimeInMilliseconds, 2);
+                expect(response).to.not.be.undefined;
+
+                const params = response.params;
+                expect(params).to.have.property('subscription').that.is.a('string');
+                expect(params).to.have.property('result').that.is.an('object');
+
+                const result = params.result;
+                expect(result).to.have.property('number').that.is.a('string');
+                expect(result).to.have.property('hash').that.is.a('string');
+                expect(result).to.have.property('transactions_root').that.is.a('string');
+                expect(result).to.have.property('gas_used').that.is.a('string');
+                expect(result).to.have.property('gas_limit').that.is.a('string');
+                expect(result).to.have.property('bloom').that.is.a('string');
+                expect(result).to.have.property('timestamp').that.is.a('number');
+                expect(result).to.have.property('parent_hash').that.is.a('string');
+                expect(result).to.have.property('author').that.is.a('string');
+                expect(result).to.have.property('extra_data').that.is.a('string');
+                expect(result).to.have.property('miner').that.is.a('string');
+                expect(result).to.have.property('difficulty').that.is.a('string');
+                expect(result).to.have.property('receipts_root').that.is.a('string');
+                expect(result).to.have.property('uncle_hash').that.is.a('string');
+                expect(result).to.have.property('size').that.is.a('string');
+                expect(result).to.have.property('state_root').that.is.a('string');
+                expect(result).to.have.property('total_difficulty').that.is.a('string');
+                expect(result).to.have.property('nonce').that.is.a('string');
             });
         });
     });
