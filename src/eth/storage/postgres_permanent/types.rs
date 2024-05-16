@@ -61,7 +61,7 @@ impl PostgresTransaction {
             logs: inner_logs,
             // TODO: do this correctly
             changes: HashMap::new(),
-            execution_costs_applied: true,
+            receipt_applied: true,
             deployed_contract_address: self.contract_address,
         };
         let input = TransactionInput {

@@ -19,16 +19,18 @@ use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
+use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::TransactionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
@@ -48,6 +50,9 @@ pub struct Executor {
     /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Mutex<Arc<BlockMiner>>,
 
+    /// Bool indicating whether to enable auto mining or not.
+    automine: bool,
+
     /// Provider for sending rpc calls to substrate
     relayer: Option<Arc<TransactionRelayer>>,
 
@@ -64,11 +69,14 @@ impl Executor {
         evm_tx: crossbeam_channel::Sender<EvmTask>,
         num_evms: usize,
     ) -> Self {
-        tracing::info!(%num_evms, "creating executor");
+        let automine = miner.is_automine_mode();
+        tracing::info!(%num_evms, %automine, "starting executor");
+
         Self {
             evm_tx,
             num_evms,
             miner: Mutex::new(miner),
+            automine,
             storage,
             relayer,
         }
@@ -78,25 +86,24 @@ impl Executor {
     // External transactions
     // -------------------------------------------------------------------------
 
-    /// Re-executes an external block locally and imports it to the temporary storage.
+    /// Reexecutes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(skip_all)]
     pub async fn reexecute_external(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        tracing::info!(number = %block.number(), "re-executing external block");
-
-        let storage = &self.storage;
+        tracing::info!(number = %block.number(), "reexecuting external block");
 
         // track active block number
-        storage.temp.set_external_block(block.clone()).await?;
+        let storage = &self.storage;
+        storage.set_active_external_block(block.clone()).await?;
         storage.set_active_block_number(block.number()).await?;
 
-        // execute mixing serial and parallel approaches
+        // determine how to execute each transaction
         let tx_routes = route_transactions(&block.transactions, receipts)?;
-        let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
 
         // execute parallel executions
+        let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
                 tx_parallel_executions.push(self.reexecute_external_tx(tx, receipt, block));
@@ -106,74 +113,44 @@ impl Executor {
 
         // execute serial transactions joining them with parallel
         for tx_route in tx_routes {
-            match tx_route {
+            let tx = match tx_route {
                 // serial: execute now
-                ParallelExecutionRoute::Serial(tx, receipt) => {
-                    let evm_result = self.reexecute_external_tx(tx, receipt, block).await.2?;
+                ParallelExecutionRoute::Serial(tx, receipt) => self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?,
 
-                    // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
-                    storage.save_execution_to_temp(tx_execution).await?;
-                }
-
-                // parallel: check results and re-execute if necessary
+                // parallel: get parallel execution result and reexecute if failed because of error
                 ParallelExecutionRoute::Parallel(..) => {
-                    let evm_result = parallel_executions.next().await.unwrap();
-
-                    let decision = match evm_result {
-                        // execution success
-                        (tx, receipt, Ok(evm_result)) => {
-                            let current_execution = &evm_result.execution;
-
-                            // check conflict with all previous transactions
-                            // TODO: conflict detection in the temporary storage will avoid checking conflict with all previous transactions here
-                            let mut reexecute = false;
-
-                            let prev_txs = storage.temp.read_executions().await?;
-                            for prev_tx in prev_txs {
-                                let prev_execution = &prev_tx.execution;
-                                if let Some(conflicts) = prev_execution.check_conflicts(current_execution) {
-                                    tracing::warn!(?conflicts, "parallel execution conflicts");
-                                    reexecute = true;
-                                    break;
-                                }
+                    match parallel_executions.next().await.unwrap() {
+                        // success: check conflicts
+                        Ok(tx) => match storage.check_conflicts(&tx.result.execution).await? {
+                            // no conflict: proceeed
+                            None => tx,
+                            // conflict: reexecute
+                            Some(conflicts) => {
+                                tracing::warn!(?conflicts, "re-executing serially because parallel execution conflicted");
+                                self.reexecute_external_tx(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
                             }
-                            if reexecute {
-                                ParallelExecutionDecision::Reexecute(tx, receipt)
-                            } else {
-                                ParallelExecutionDecision::Proceed(tx, receipt, evm_result)
-                            }
-                        }
-                        // execution failure
-                        (tx, receipt, Err(e)) => {
-                            tracing::warn!(reason = ?e, "parallel execution failed");
-                            ParallelExecutionDecision::Reexecute(tx, receipt)
-                        }
-                    };
-
-                    // re-execute if necessary
-                    let (tx, receipt, evm_result) = match decision {
-                        ParallelExecutionDecision::Proceed(tx, receipt, evm_result) => (tx, receipt, evm_result),
-                        ParallelExecutionDecision::Reexecute(tx, receipt) => match self.reexecute_external_tx(tx, receipt, block).await {
-                            (tx, receipt, Ok(evm_result)) => (tx, receipt, evm_result),
-                            (.., Err(e)) => return Err(e),
                         },
-                    };
 
-                    // track metrics
-                    #[cfg(feature = "metrics")]
-                    {
-                        block_metrics += evm_result.metrics;
+                        // failure: reexecute
+                        Err((tx, receipt, e)) => {
+                            tracing::warn!(reason = ?e, "re-executing serially because parallel execution errored");
+                            self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?
+                        }
                     }
-
-                    // persist state
-                    let tx_execution = TransactionExecution::new_external(tx.clone(), receipt.clone(), evm_result.execution);
-                    storage.save_execution_to_temp(tx_execution).await?;
                 }
+            };
+
+            // track transaction metrics
+            #[cfg(feature = "metrics")]
+            {
+                block_metrics += tx.result.metrics;
             }
+
+            // persist state
+            storage.save_execution(TransactionExecution::External(tx)).await?;
         }
 
-        // track metrics
+        // track block metrics
         #[cfg(feature = "metrics")]
         {
             metrics::inc_executor_external_block(start.elapsed());
@@ -191,42 +168,51 @@ impl Executor {
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
         block: &ExternalBlock,
-    ) -> (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Result<EvmExecutionResult>) {
+    ) -> Result<ExternalTransactionExecution, (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Error)> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        // re-execute transaction or create a fake execution from the failed external transaction
-        let evm_result = if receipt.is_success() {
-            let evm_input = match EvmInput::from_external_transaction(tx, receipt, block) {
-                Ok(evm_input) => evm_input,
-                Err(e) => return (tx, receipt, Err(e)),
-            };
-            self.execute_in_evm(evm_input).await
-        } else {
+        // when transaction externally failed, create fake transaction instead of reexecuting
+        if receipt.is_failure() {
             let sender = match self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await {
                 Ok(sender) => sender,
-                Err(e) => return (tx, receipt, Err(e)),
+                Err(e) => return Err((tx, receipt, e)),
             };
             let execution = match EvmExecution::from_failed_external_transaction(sender, receipt, block) {
                 Ok(execution) => execution,
-                Err(e) => return (tx, receipt, Err(e)),
+                Err(e) => return Err((tx, receipt, e)),
             };
-            Ok(EvmExecutionResult {
+            let evm_result = EvmExecutionResult {
                 execution,
                 metrics: ExecutionMetrics::default(),
-            })
+            };
+            return Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
+        }
+
+        // reexecute transaction
+        let evm_input = match EvmInput::from_external(tx, receipt, block) {
+            Ok(evm_input) => evm_input,
+            Err(e) => return Err((tx, receipt, e)),
         };
 
-        // handle execution result
+        #[cfg(feature = "metrics")]
+        let function = evm_input.extract_function();
+
+        let evm_result = self.execute_in_evm(evm_input).await;
+
+        // handle reexecution result
         match evm_result {
             Ok(mut evm_result) => {
-                // apply execution costs that were not consided when re-executing the transaction
-                if let Err(e) = evm_result.execution.apply_execution_costs(receipt) {
-                    return (tx, receipt, Err(e));
-                };
-                evm_result.execution.gas = match receipt.gas_used.unwrap_or_default().try_into() {
-                    Ok(gas) => gas,
-                    Err(e) => return (tx, receipt, Err(e)),
+                // track metrics before execution is update with receipt
+                #[cfg(feature = "metrics")]
+                {
+                    metrics::inc_executor_external_transaction_gas(evm_result.execution.gas.as_u64() as usize, function.clone());
+                    metrics::inc_executor_external_transaction(start.elapsed(), function);
+                }
+
+                // update execution with receipt info
+                if let Err(e) = evm_result.execution.apply_receipt(receipt) {
+                    return Err((tx, receipt, e));
                 };
 
                 // ensure it matches receipt before saving
@@ -235,20 +221,16 @@ impl Executor {
                     let json_receipt = serde_json::to_string(&receipt).unwrap();
                     let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).unwrap();
                     tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
-                    return (tx, receipt, Err(e));
+                    return Err((tx, receipt, e));
                 };
 
-                // track metrics
-                #[cfg(feature = "metrics")]
-                metrics::inc_executor_external_transaction(start.elapsed());
-
-                (tx, receipt, Ok(evm_result))
+                Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result))
             }
             Err(e) => {
                 let json_tx = serde_json::to_string(&tx).unwrap();
                 let json_receipt = serde_json::to_string(&receipt).unwrap();
                 tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
-                (tx, receipt, Err(e))
+                Err((tx, receipt, e))
             }
         }
     }
@@ -259,71 +241,74 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(skip_all)]
-    pub async fn transact(&self, transaction: TransactionInput) -> anyhow::Result<EvmExecution> {
+    pub async fn transact(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        let (start, function) = (metrics::now(), tx_input.extract_function());
 
         tracing::info!(
-            hash = %transaction.hash,
-            nonce = %transaction.nonce,
-            from = ?transaction.from,
-            signer = %transaction.signer,
-            to = ?transaction.to,
-            data_len = %transaction.input.len(),
-            data = %transaction.input,
+            hash = %tx_input.hash,
+            nonce = %tx_input.nonce,
+            from = ?tx_input.from,
+            signer = %tx_input.signer,
+            to = ?tx_input.to,
+            data_len = %tx_input.input.len(),
+            data = %tx_input.input,
             "executing transaction"
         );
 
         // validate
-        if transaction.signer.is_zero() {
+        if tx_input.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let execution = match &self.relayer {
-            // relayer present
-            Some(relayer) => {
-                let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-                let execution = self.execute_in_evm(evm_input).await?.execution;
-                relayer.forward(transaction, execution.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-                execution
-            }
+        let tx_execution = match &self.relayer {
             // relayer not present
             None => {
                 // executes transaction until no more conflicts
                 // TODO: must have a stop condition like timeout or max number of retries
                 loop {
-                    // execute and check conflicts before mining block
-                    let evm_input = EvmInput::from_eth_transaction(transaction.clone());
-                    let execution = self.execute_in_evm(evm_input).await?.execution;
+                    // execute transaction
+                    let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
+                    let evm_result = self.execute_in_evm(evm_input).await?;
 
-                    // mine and commit block
-                    let miner = self.miner.lock().await;
-                    let block = miner.mine_with_one_transaction(transaction.clone(), execution.clone()).await?;
-
-                    match self.storage.save_block_to_perm(block).await {
-                        // success: break with execution
-                        Ok(()) => break execution,
-                        // conflict: try again
-                        Err(StorageError::Conflict(conflicts)) => {
-                            tracing::warn!(?conflicts, "storage conflict detected when saving block");
+                    // save execution to temporary storage (not working yet)
+                    let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
+                    if let Err(e) = self.storage.save_execution(tx_execution.clone()).await {
+                        if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                            tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
                             continue;
-                        }
-                        // unexpected error: break with error
-                        Err(e) => {
+                        } else {
                             #[cfg(feature = "metrics")]
-                            metrics::inc_executor_transact(start.elapsed(), false);
-                            return Err(e.into());
+                            metrics::inc_executor_transact(start.elapsed(), false, function);
+                            return Err(e);
                         }
                     }
+
+                    // auto mine needed for e2e contract tests
+                    if self.automine {
+                        let miner = self.miner.lock().await;
+                        miner.mine_local_and_commit().await?;
+                    }
+
+                    break tx_execution;
                 }
+            }
+            // relayer present
+            Some(relayer) => {
+                let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
+                let evm_result = self.execute_in_evm(evm_input).await?;
+                relayer.forward(tx_input.clone(), evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
+                TransactionExecution::new_local(tx_input, evm_result)
             }
         };
 
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_transact(start.elapsed(), true);
+        metrics::inc_executor_transact(start.elapsed(), true, function.clone());
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
 
-        Ok(execution)
+        Ok(tx_execution)
     }
 
     /// Executes a transaction without persisting state changes.
@@ -331,12 +316,15 @@ impl Executor {
     pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+        #[cfg(feature = "metrics")]
+        let function = input.extract_function();
 
         tracing::info!(
             from = ?input.from,
             to = ?input.to,
             data_len = input.data.len(),
             data = %input.data,
+            ?point_in_time,
             "executing read-only transaction"
         );
 
@@ -344,22 +332,18 @@ impl Executor {
         let evm_result = self.execute_in_evm(evm_input).await;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_call(start.elapsed(), evm_result.is_ok());
+        metrics::inc_executor_call(start.elapsed(), evm_result.is_ok(), function.clone());
 
-        evm_result.map(|x| x.execution)
-    }
+        let execution = evm_result?.execution;
 
-    #[cfg(feature = "dev")]
-    pub async fn mine_empty_block(&self) -> anyhow::Result<()> {
-        let miner = self.miner.lock().await;
-        let block = miner.mine_empty().await?;
-        miner.commit(block).await?;
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_call_gas(execution.gas.as_u64() as usize, function.clone());
 
-        Ok(())
+        Ok(execution)
     }
 
     // -------------------------------------------------------------------------
-    // Private
+    // Helpers
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
@@ -406,7 +390,7 @@ fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a
         if seen_from.contains(&tx.from) {
             route = ParallelExecutionRoute::Serial(tx, receipt);
         }
-        // failed receipts are not re-executed, so they can be executed in parallel
+        // failed receipts are not reexecuted, so they can be executed in parallel
         if receipt.is_failure() {
             route = ParallelExecutionRoute::Parallel(tx, receipt);
         }
@@ -421,7 +405,7 @@ fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a
 }
 
 /// How a transaction should be executed in a parallel execution context.
-#[derive(Debug, strum::Display)]
+#[derive(Debug, strum::Display, strum::EnumIs)]
 enum ParallelExecutionRoute<'a> {
     /// Transaction must be executed serially after all previous states are computed.
     #[strum(to_string = "Serial")]
@@ -430,14 +414,4 @@ enum ParallelExecutionRoute<'a> {
     /// Transaction can be executed in parallel with other transactions.
     #[strum(to_string = "Parallel")]
     Parallel(&'a ExternalTransaction, &'a ExternalReceipt),
-}
-
-/// What to do after a transaction was executed in parallel.
-#[derive(Debug)]
-enum ParallelExecutionDecision<'a> {
-    /// Parallel execution succeeded and can be persisted.
-    Proceed(&'a ExternalTransaction, &'a ExternalReceipt, EvmExecutionResult),
-
-    /// Parallel execution failed and must be re-executed in a serial manner.
-    Reexecute(&'a ExternalTransaction, &'a ExternalReceipt),
 }

@@ -36,8 +36,6 @@ use crate::eth::storage::PostgresPermanentStorage;
 use crate::eth::storage::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
-#[cfg(feature = "rocks")]
-use crate::eth::storage::RocksTemporaryStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
@@ -150,16 +148,20 @@ impl StratusStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let temp_storage = self.temp_storage.init().await?;
         let perm_storage = self.perm_storage.init().await?;
-        let storage = StratusStorage::new(temp_storage, perm_storage);
 
+        let storage = StratusStorage::new(temp_storage, perm_storage);
+        storage.set_active_block_number_as_next_if_not_set().await?;
+
+        // enable genesis block
         if self.enable_genesis {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                storage.save_block_to_perm(Block::genesis()).await?;
+                storage.save_block(Block::genesis()).await?;
             }
         }
 
+        // enable test accounts
         #[cfg(feature = "dev")]
         if self.enable_test_accounts {
             let mut test_accounts_to_insert = Vec::new();
@@ -172,7 +174,7 @@ impl StratusStorageConfig {
 
             if not(test_accounts_to_insert.is_empty()) {
                 tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
+                storage.save_accounts(test_accounts_to_insert).await?;
             }
         }
 
@@ -203,7 +205,7 @@ impl ExecutorConfig {
     /// TODO: remove BlockMiner after migration is completed.
     pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, relayer: Option<Arc<TransactionRelayer>>) -> Arc<Executor> {
         let num_evms = max(self.num_evms, 1);
-        tracing::info!(config = ?self, "configuring executor");
+        tracing::info!(config = ?self, "starting executor");
 
         // spawn evm in background using native threads
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
@@ -211,7 +213,7 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: matches!(storage.perm.kind(), PermanentStorageKind::Postgres { .. }),
+                prefetch_slots: matches!(storage.perm_kind(), PermanentStorageKind::Postgres { .. }),
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
@@ -253,12 +255,21 @@ impl ExecutorConfig {
 // Config: Miner
 // -----------------------------------------------------------------------------
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct MinerConfig {}
+pub struct MinerConfig {
+    /// Target block time.
+    #[arg(long = "block-time", value_parser=parse_duration, env = "BLOCK_TIME")]
+    pub block_time: Option<Duration>,
+}
 
 impl MinerConfig {
     pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<BlockMiner> {
-        tracing::info!(config = ?self, "configuring block miner");
-        Arc::new(BlockMiner::new(storage))
+        tracing::info!(config = ?self, "starting block miner");
+
+        let miner = Arc::new(BlockMiner::new(storage, self.block_time));
+        if miner.is_interval_miner_mode() {
+            Arc::clone(&miner).spawn_interval_miner();
+        }
+        miner
     }
 }
 
@@ -274,7 +285,7 @@ pub struct RelayerConfig {
 
 impl RelayerConfig {
     pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
-        tracing::info!(config = ?self, "configuring transaction relayer");
+        tracing::info!(config = ?self, "starting transaction relayer");
 
         match self.forward_to {
             Some(ref url) => {
@@ -299,7 +310,7 @@ pub struct StratusConfig {
     pub address: SocketAddr,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -392,7 +403,7 @@ pub struct ImporterOfflineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
@@ -419,6 +430,9 @@ pub struct ImporterOnlineConfig {
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
 
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
+    pub sync_interval: Duration,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
@@ -429,7 +443,7 @@ pub struct ImporterOnlineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -448,8 +462,14 @@ pub struct RunWithImporterConfig {
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
 
+    #[arg(long = "leader_node", env = "LEADER_NODE")]
+    pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
+    pub sync_interval: Duration,
+
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -491,7 +511,7 @@ pub struct StateValidatorConfig {
     pub seed: u64,
 
     /// Validate in batches of n blocks.
-    #[arg(short = 'i', long = "inverval", env = "INVERVAL", default_value_t = 1000)]
+    #[arg(short = 'i', long = "interval", env = "INTERVAL", default_value = "1000")]
     pub interval: u64,
 
     /// What method to use when validating.
@@ -507,7 +527,7 @@ pub struct StateValidatorConfig {
     pub common: CommonConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 }
 
 impl WithCommonConfig for StateValidatorConfig {
@@ -537,7 +557,7 @@ pub struct IntegrationTestConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
@@ -564,9 +584,9 @@ pub struct ExternalRpcStorageConfig {
     #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS")]
     pub external_rpc_storage_connections: u32,
 
-    /// External RPC storage timeout when opening a connection (in millis).
-    #[arg(long = "external-rpc-storage-timeout", env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
-    pub external_rpc_storage_timeout_millis: u64,
+    /// External RPC storage timeout when opening a connection.
+    #[arg(long = "external-rpc-storage-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
+    pub external_rpc_storage_timeout: Duration,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -577,14 +597,14 @@ pub enum ExternalRpcStorageKind {
 impl ExternalRpcStorageConfig {
     /// Initializes external rpc storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
-        tracing::info!(config = ?self, "configuring external rpc storage");
+        tracing::info!(config = ?self, "starting external rpc storage");
 
         match self.external_rpc_storage_kind {
             ExternalRpcStorageKind::Postgres { ref url } => {
                 let config = PostgresExternalRpcStorageConfig {
                     url: url.to_owned(),
                     connections: self.external_rpc_storage_connections,
-                    acquire_timeout: Duration::from_millis(self.external_rpc_storage_timeout_millis),
+                    acquire_timeout: self.external_rpc_storage_timeout,
                 };
                 Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
             }
@@ -618,19 +638,15 @@ pub struct TemporaryStorageConfig {
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum TemporaryStorageKind {
     InMemory,
-    #[cfg(feature = "rocks")]
-    Rocks,
 }
 
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
-        tracing::info!(config = ?self, "configuring temporary storage");
+        tracing::info!(config = ?self, "starting temporary storage");
 
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
-            #[cfg(feature = "rocks")]
-            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporaryStorage::new().await?)),
         }
     }
 }
@@ -641,8 +657,6 @@ impl FromStr for TemporaryStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
-            #[cfg(feature = "rocks")]
-            "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown temporary storage: {}", s)),
         }
     }
@@ -664,8 +678,8 @@ pub struct PermanentStorageConfig {
     pub perm_storage_connections: u32,
 
     /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "perm-storage-timeout", env = "PERM_STORAGE_TIMEOUT")]
-    pub perm_storage_timeout_millis: u64,
+    #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
+    pub perm_storage_timeout: Duration,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -681,7 +695,7 @@ pub enum PermanentStorageKind {
 impl PermanentStorageConfig {
     /// Initializes permanent storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
-        tracing::info!(config = ?self, "configuring permanent storage");
+        tracing::info!(config = ?self, "starting permanent storage");
 
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
@@ -691,7 +705,7 @@ impl PermanentStorageConfig {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
                     connections: self.perm_storage_connections,
-                    acquire_timeout: Duration::from_millis(self.perm_storage_timeout_millis),
+                    acquire_timeout: self.perm_storage_timeout,
                 };
                 Arc::new(PostgresPermanentStorage::new(config).await?)
             }
@@ -763,4 +777,23 @@ impl FromStr for ValidatorMethodConfig {
             s => Ok(Self::Rpc { url: s.to_string() }),
         }
     }
+}
+
+// -----------------------------------------------------------------------------
+// Parsers
+// -----------------------------------------------------------------------------
+fn parse_duration(s: &str) -> anyhow::Result<Duration> {
+    // try millis
+    let millis: Result<u64, _> = s.parse();
+    if let Ok(millis) = millis {
+        return Ok(Duration::from_millis(millis));
+    }
+
+    // try humantime
+    if let Ok(parsed) = humantime::parse_duration(s) {
+        return Ok(parsed);
+    }
+
+    // error
+    Err(anyhow!("invalid duration format: {}", s))
 }

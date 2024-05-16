@@ -4,6 +4,7 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
+#[cfg(feature = "dev")]
 use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::config::IntegrationTestConfig;
@@ -25,10 +26,10 @@ mod m {
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION_SLOT_READS_CACHED;
     pub use stratus::infra::metrics::METRIC_EXECUTOR_EXTERNAL_BLOCK;
-    pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOTS;
+    pub use stratus::infra::metrics::METRIC_STORAGE_SAVE_BLOCK;
 }
 
 #[cfg(feature = "metrics")]
@@ -82,7 +83,7 @@ const METRIC_QUERIES: [&str; 48] = [
     m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     "* COMMIT",
-    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_COMMIT),
+    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_SAVE_BLOCK),
 ];
 
 #[cfg(not(feature = "metrics"))]
@@ -103,7 +104,7 @@ pub fn init_config_and_data(
     let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
     global_services.config.executor.chain_id = 2009;
     global_services.config.executor.num_evms = 8;
-    global_services.config.stratus_storage.perm_storage.perm_storage_connections = 9;
+    global_services.config.storage.perm_storage.perm_storage_connections = 9;
 
     // init block data
     let block_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/block.json", block_number)).unwrap();
@@ -159,8 +160,7 @@ pub async fn execute_test(
 
     // execute and mine
     executor.reexecute_external(&block, &receipts).await.unwrap();
-    let mined_block = miner.mine_external().await.unwrap();
-    miner.commit(mined_block).await.unwrap();
+    miner.mine_external_and_commit().await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
     tokio::time::sleep(Duration::from_secs(5)).await;
@@ -189,7 +189,10 @@ pub async fn execute_test(
                 println!("{:<70} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);
+                #[cfg(feature = "dev")]
                 println!("{:<70} = {}", query, secs.fancy_duration().truncate(2));
+                #[cfg(not(feature = "dev"))]
+                println!("{:<70} = {}", query, secs.as_millis());
             }
         }
     }

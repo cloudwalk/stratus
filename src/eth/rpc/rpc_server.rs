@@ -59,6 +59,8 @@ pub async fn serve_rpc(
     chain_id: ChainId,
     cancellation: CancellationToken,
 ) -> anyhow::Result<()> {
+    tracing::info!("starting rpc server");
+
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     let _handle_subs_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();
@@ -74,7 +76,7 @@ pub async fn serve_rpc(
         // services
         executor,
         storage,
-        _miner: miner,
+        miner,
 
         // subscriptions
         subs,
@@ -181,14 +183,13 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 #[cfg(feature = "dev")]
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    ctx.storage.reset_temp().await?;
-    ctx.storage.reset_perm(number).await?;
+    ctx.storage.reset(number).await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 
 #[cfg(feature = "dev")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    ctx.executor.mine_empty_block().await?;
+    ctx.miner.mine_local_and_commit().await?;
     Ok(serde_json::to_value(true).unwrap())
 }
 
@@ -345,10 +346,10 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     let hash = transaction.hash;
     match ctx.executor.transact(transaction).await {
         // result is success
-        Ok(result) if result.is_success() => Ok(hex_data(hash)),
+        Ok(evm_result) if evm_result.is_success() => Ok(hex_data(hash)),
 
         // result is failure
-        Ok(result) => Err(RpcError::Response(rpc_internal_error(hex_data(result.output)))),
+        Ok(evm_result) => Err(RpcError::Response(rpc_internal_error(hex_data(evm_result.execution().output.clone())))),
 
         // internal error
         Err(e) => {

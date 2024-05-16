@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {
-    let storage = config.stratus_storage.init().await?;
+    let storage = config.storage.init().await?;
 
     let interval = BlockNumber::from(config.interval);
 

@@ -556,7 +556,7 @@ impl From<EvmExecution> for ExecutionRocksdb {
     fn from(item: EvmExecution) -> Self {
         Self {
             block_timestamp: UnixTimeRocksdb::from(item.block_timestamp),
-            execution_costs_applied: item.execution_costs_applied,
+            execution_costs_applied: item.receipt_applied,
             result: item.result.into(),
             output: BytesRocksdb::from(item.output),
             logs: item.logs.into_iter().map(LogRocksdb::from).collect(),
@@ -570,7 +570,7 @@ impl From<ExecutionRocksdb> for EvmExecution {
     fn from(item: ExecutionRocksdb) -> Self {
         Self {
             block_timestamp: item.block_timestamp.into(),
-            execution_costs_applied: item.execution_costs_applied,
+            receipt_applied: item.execution_costs_applied,
             result: item.result.into(),
             output: item.output.into(),
             logs: item.logs.into_iter().map(Log::from).collect(),

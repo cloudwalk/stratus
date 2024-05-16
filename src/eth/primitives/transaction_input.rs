@@ -5,6 +5,8 @@
 //! payload. It is essential for creating and interpreting Ethereum
 //! transactions, providing a comprehensive interface for transaction data.
 
+use std::borrow::Cow;
+
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -16,6 +18,8 @@ use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
 
+use super::signature::SoliditySignature;
+use super::Signature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -53,6 +57,15 @@ impl TransactionInput {
     /// Checks if the current transaction is for a contract deployment.
     pub fn is_contract_deployment(&self) -> bool {
         self.to.is_none() && not(self.input.is_empty())
+    }
+
+    pub fn extract_function(&self) -> Option<SoliditySignature> {
+        if self.is_contract_deployment() {
+            return Some(Cow::from("contract_deployment"));
+        }
+        let sig = Signature::Function(self.input.get(..4)?.try_into().ok()?);
+
+        Some(sig.extract())
     }
 }
 

@@ -6,6 +6,8 @@
 //! facilitates flexible EVM integrations, enabling the project to adapt to different blockchain environments
 //! or requirements while maintaining a consistent execution interface.
 
+use std::borrow::Cow;
+
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
@@ -21,18 +23,33 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Signature;
+use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
+use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::if_else;
 
 /// Evm execution result.
-#[derive(Debug)]
+#[derive(DebugAsJson, Clone, serde::Serialize)]
 pub struct EvmExecutionResult {
     pub execution: EvmExecution,
     pub metrics: ExecutionMetrics,
+}
+
+impl EvmExecutionResult {
+    /// Checks if the current transaction was completed normally.
+    pub fn is_success(&self) -> bool {
+        self.execution.is_success()
+    }
+
+    /// Checks if the current transaction was completed with a failure (reverted or halted).
+    pub fn is_failure(&self) -> bool {
+        self.execution.is_failure()
+    }
 }
 
 /// EVM operations.
@@ -114,6 +131,19 @@ pub struct EvmInput {
 }
 
 impl EvmInput {
+    fn is_contract_deployment(&self) -> bool {
+        self.to.is_none() && not(self.data.is_empty())
+    }
+
+    pub fn extract_function(&self) -> Option<SoliditySignature> {
+        if self.is_contract_deployment() {
+            return Some(Cow::from("contract_deployment"));
+        }
+        let sig = Signature::Function(self.data.get(..4)?.try_into().ok()?);
+
+        Some(sig.extract())
+    }
+
     /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
     pub fn from_eth_transaction(input: TransactionInput) -> Self {
         Self {
@@ -157,7 +187,7 @@ impl EvmInput {
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
     ///
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
-    pub fn from_external_transaction(tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
+    pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
         Ok(Self {
             from: tx.0.from.into(),
             to: tx.0.to.map_into(),

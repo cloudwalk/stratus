@@ -11,20 +11,19 @@ use std::fmt::Debug;
 
 use anyhow::anyhow;
 use anyhow::Ok;
-use itertools::Itertools;
+use hex_literal::hex;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExecutionConflicts;
-use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
@@ -36,8 +35,8 @@ pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
     pub block_timestamp: UnixTime,
 
-    /// Flag to indicate if the execution costs have been applied.
-    pub execution_costs_applied: bool,
+    /// Flag to indicate if  external receipt fixes have been applied.
+    pub receipt_applied: bool,
 
     /// Status of the execution.
     pub result: ExecutionResult,
@@ -76,7 +75,7 @@ impl EvmExecution {
         // crete execution and apply costs
         let mut execution = Self {
             block_timestamp: block.timestamp(),
-            execution_costs_applied: false,
+            receipt_applied: false,
             result: ExecutionResult::new_reverted(), // assume it reverted
             output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
@@ -84,7 +83,7 @@ impl EvmExecution {
             changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
-        execution.apply_execution_costs(receipt)?;
+        execution.apply_receipt(receipt)?;
         Ok(execution)
     }
 
@@ -110,58 +109,6 @@ impl EvmExecution {
             }
         }
         None
-    }
-
-    /// Returns account changes to be persisted.
-    pub fn changes_to_persist(&self) -> Vec<ExecutionAccountChanges> {
-        self.changes.values().cloned().collect_vec()
-    }
-
-    /// Checks conflicts between two executions.
-    ///
-    /// Assumes self is the present execution and next should happen after self in a serialized context.
-    pub fn check_conflicts(&self, next_execution: &EvmExecution) -> Option<ExecutionConflicts> {
-        let mut conflicts = ExecutionConflictsBuilder::default();
-
-        for current in self.changes.values() {
-            let Some(next) = next_execution.changes.get(&current.address) else {
-                continue;
-            };
-
-            // nonce conflict
-            let current_nonce = current.nonce.take_modified_ref();
-            let next_nonce = next.nonce.take_original_ref();
-            match (current_nonce, next_nonce) {
-                (Some(current_nonce), Some(next_nonce)) if current_nonce != next_nonce => {
-                    conflicts.add_nonce(current.address, *current_nonce, *next_nonce);
-                }
-                _ => {}
-            }
-
-            // balance conflict
-            let current_balance = current.balance.take_modified_ref();
-            let next_balance = next.balance.take_original_ref();
-            match (current_balance, next_balance) {
-                (Some(current_balance), Some(next_balance)) if current_balance != next_balance => {
-                    conflicts.add_balance(current.address, *current_balance, *next_balance);
-                }
-                _ => {}
-            }
-
-            // slot conflicts
-            for (slot_index, current_slot_change) in &current.slots {
-                let current_slot = current_slot_change.take_modified_ref();
-                let next_slot = next.slots.get(slot_index).and_then(|slot| slot.take_original_ref());
-                match (current_slot, next_slot) {
-                    (Some(current_slot), Some(next_slot)) if current_slot != next_slot => {
-                        conflicts.add_slot(current.address, *slot_index, current_slot.value, next_slot.value);
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        conflicts.build()
     }
 
     /// Checks if current execution state matches the information present in the external receipt.
@@ -229,34 +176,78 @@ impl EvmExecution {
         Ok(())
     }
 
-    /// Apply execution costs of an external transaction.
+    /// External transactions are re-executed locally with max gas and zero gas price.
     ///
-    /// External transactions are re-executed locally with max gas and zero gas price,
-    /// so the paid amount is applied after execution based on the receipt.
-    pub fn apply_execution_costs(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
-        // do nothing if execution costs were already applied
-        if self.execution_costs_applied {
+    /// This causes some attributes to be different from the original execution.
+    ///
+    /// This method updates the attributes that can diverge based on the receipt of the external transaction.
+    pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
+        // do nothing if receipt is already applied
+        if self.receipt_applied {
             return Ok(());
         }
-        self.execution_costs_applied = true;
+        self.receipt_applied = true;
 
-        // do nothing if execution cost is zero
+        // fix gas
+        self.gas = receipt.gas_used.unwrap_or_default().try_into()?;
+
+        // fix logs
+        self.fix_logs_gas_left(receipt);
+
+        // fix sender balance
         let execution_cost = receipt.execution_cost();
-        if execution_cost.is_zero() {
-            return Ok(());
+        if execution_cost > Wei::ZERO {
+            // find sender changes
+            let sender_address: Address = receipt.0.from.into();
+            let Some(sender_changes) = self.changes.get_mut(&sender_address) else {
+                return log_and_err!("sender changes not present in execution when applying execution costs");
+            };
+
+            // subtract execution cost from sender balance
+            let sender_balance = *sender_changes.balance.take_ref().expect("balance is never None");
+            let sender_new_balance = if sender_balance > execution_cost {
+                sender_balance - execution_cost
+            } else {
+                Wei::ZERO
+            };
+            sender_changes.balance.set_modified(sender_new_balance);
         }
 
-        // find sender changes (this can be improved if changes is HashMap)
-        let sender_address: Address = receipt.0.from.into();
-        let sender_changes = self.changes.get_mut(&sender_address);
-        let Some(sender_changes) = sender_changes else {
-            return log_and_err!("sender changes not present in execution when applying execution costs");
-        };
-
-        // subtract execution cost from sender balance
-        let current_balance = *sender_changes.balance.take_ref().expect("balance is never None");
-        let new_balance = current_balance - execution_cost; // TODO: handle underflow, but it should not happen
-        sender_changes.balance.set_modified(new_balance);
         Ok(())
+    }
+
+    /// Apply `gasLeft` values from receipt to execution logs.
+    ///
+    /// External transactions are re-executed locally with a different amount of gas limit, so, rely
+    /// on the given receipt to copy the `gasLeft` values found in Logs.
+    ///
+    /// This is necessary if the contract emits an event that puts `gasLeft` in a log, this function
+    /// covers the following events that do the described:
+    ///
+    /// - `ERC20Trace` (topic0: `0x31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671`)
+    /// - `BalanceTrackerTrace` (topic0: `0x63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9`)
+    ///
+    /// The overwriting should be done by copying the first 32 bytes from the receipt to log in `self`.
+    fn fix_logs_gas_left(&mut self, receipt: &ExternalReceipt) {
+        const ERC20_TRACE_EVENT_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
+        const BALANCE_TRACKER_TRACE_EVENT_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
+
+        const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+
+            // only try overwriting if both logs refer to the target event
+            let should_overwrite = execution_log_matches() && receipt_log_matches();
+            if !should_overwrite {
+                continue;
+            }
+
+            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data.get(0..32)) else {
+                continue;
+            };
+            destination.copy_from_slice(source);
+        }
     }
 }

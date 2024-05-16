@@ -72,7 +72,7 @@ impl Drop for PostgresPermanentStorage {
 impl PostgresPermanentStorage {
     /// Creates a new [`PostgresPermanentStorage`].
     pub async fn new(config: PostgresPermanentStorageConfig) -> anyhow::Result<Self> {
-        tracing::info!(?config, "creating postgres permanent storage");
+        tracing::info!(?config, "starting postgres permanent storage");
 
         let result = PgPoolOptions::new()
             .min_connections(config.connections)
@@ -106,21 +106,6 @@ impl PermanentStorage for PostgresPermanentStorage {
         let conn = conn.leak();
         THREAD_CONN.set(Some(conn));
         Ok(())
-    }
-
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        tracing::debug!("incrementing block number");
-
-        let nextval = sqlx::query_file_scalar!("src/eth/storage/postgres_permanent/sql/select_current_block_number.sql")
-            .fetch_one(&self.pool)
-            .await
-            .unwrap_or_else(|err| {
-                tracing::error!(?err, "failed to get block number");
-                BigDecimal::from(0)
-            })
-            + BigDecimal::from(1);
-
-        nextval.try_into()
     }
 
     async fn set_mined_block_number(&self, _: BlockNumber) -> anyhow::Result<()> {
@@ -166,7 +151,7 @@ impl PermanentStorage for PostgresPermanentStorage {
     }
 
     async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, "reading slot");
+        tracing::debug!(%address, %index, "reading slot in permanent");
 
         // TODO: improve this conversion
         let slot_index_u8: [u8; 32] = (*index).into();
@@ -526,7 +511,7 @@ impl PermanentStorage for PostgresPermanentStorage {
     // in only one transaction so that we can rollback in case of conflicts.
     // The first would be easy if sqlx supported pipelining  (https://github.com/launchbadge/sqlx/issues/408)
     // like tokio_postgres does https://docs.rs/tokio-postgres/0.4.0-rc.3/tokio_postgres/#pipelining
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
         tracing::debug!(block = ?block, "saving block");
 
         let account_changes = block.compact_account_changes();
@@ -702,7 +687,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 expected: expected_modified_accounts,
                 actual: modified_accounts,
             }]));
-            return Err(error);
+            return Err(error).context("account modified count conflict");
         }
 
         if modified_slots != expected_modified_slots {
@@ -711,7 +696,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                 expected: expected_modified_slots,
                 actual: modified_slots
             }]));
-            return Err(error);
+            return Err(error).context("slot modified count conflict");
         }
 
         tx.commit().await.context("failed to commit transaction")?;

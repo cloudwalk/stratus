@@ -21,17 +21,12 @@ use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::not;
-#[cfg(feature = "metrics")]
-use stratus::infra::metrics;
 use stratus::log_and_err;
-use stratus::utils::new_context_id;
 use stratus::utils::signal_handler;
 use stratus::GlobalServices;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::info_span;
-use tracing::Instrument;
 
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
@@ -52,9 +47,9 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
-    let stratus_storage = config.stratus_storage.init().await?;
-    let miner = config.miner.init(Arc::clone(&stratus_storage));
-    let executor = config.executor.init(Arc::clone(&stratus_storage), Arc::clone(&miner), None).await;
+    let storage = config.storage.init().await?;
+    let miner = config.miner.init(Arc::clone(&storage));
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), None).await;
 
     // init block snapshots to export
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
@@ -62,7 +57,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
-        None => block_number_to_start(&stratus_storage).await?,
+        None => block_number_to_start(&storage).await?,
     };
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
@@ -78,7 +73,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
-    stratus_storage.save_accounts_to_perm(initial_accounts.clone()).await?;
+    storage.save_accounts(initial_accounts.clone()).await?;
     if let Some(ref mut csv) = csv {
         if csv.is_accounts_empty() {
             csv.export_initial_accounts(initial_accounts.clone())?;
@@ -115,7 +110,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         let result = importer_tokio.block_on(execute_block_importer(
             executor,
             miner,
-            stratus_storage,
+            storage,
             csv,
             importer_cancellation,
             backlog_rx,
@@ -134,7 +129,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 // -----------------------------------------------------------------------------
 // Block importer
 // -----------------------------------------------------------------------------
-#[tracing::instrument(name = "[Importer]", skip_all)]
+#[tracing::instrument(name = "block_importer", skip_all)]
 async fn execute_block_importer(
     // services
     executor: Arc<Executor>,
@@ -168,18 +163,12 @@ async fn execute_block_importer(
         // imports block transactions
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
-            let span = info_span!("re-executing block", context_id = new_context_id());
-
             async {
-                #[cfg(feature = "metrics")]
-                let start = metrics::now();
-
                 // re-execute block
                 executor.reexecute_external(&block, &receipts).await?;
 
                 // mine block
                 let mined_block = miner.mine_external().await?;
-                storage.temp.remove_executions_before(mined_block.transactions.len()).await?;
 
                 // export to csv OR permanent storage
                 match csv {
@@ -192,12 +181,8 @@ async fn execute_block_importer(
                     export_snapshot(&block, &receipts, &mined_block)?;
                 }
 
-                #[cfg(feature = "metrics")]
-                metrics::inc_import_offline(start.elapsed());
-
                 anyhow::Ok(())
             }
-            .instrument(span)
             .await?;
         }
     };
@@ -209,7 +194,7 @@ async fn execute_block_importer(
 // -----------------------------------------------------------------------------
 // Block loader
 // -----------------------------------------------------------------------------
-#[tracing::instrument(name = "[RPC]", skip_all, fields(start, end, block_by_fetch))]
+#[tracing::instrument(name = "storage_loader", skip_all, fields(start, end, block_by_fetch))]
 async fn execute_external_rpc_storage_loader(
     // services
     rpc_storage: Arc<dyn ExternalRpcStorage>,
@@ -228,10 +213,7 @@ async fn execute_external_rpc_storage_loader(
     while start <= end {
         let end = min(start + (blocks_by_fetch - 1), end);
 
-        let span = info_span!("fetching block", context_id = new_context_id());
-
         let task = load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end);
-        let task = task.instrument(span);
         tasks.push(task);
 
         start += blocks_by_fetch;
@@ -285,9 +267,9 @@ async fn load_blocks_and_receipts(
 }
 
 // Finds the block number to start the import job.
-async fn block_number_to_start(stratus_storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
+async fn block_number_to_start(storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
     // when has an active number, resume from it because it was not imported yet.
-    let active_number = stratus_storage.read_active_block_number().await?;
+    let active_number = storage.read_active_block_number().await?;
     if let Some(active_number) = active_number {
         return Ok(active_number);
     }
@@ -295,8 +277,8 @@ async fn block_number_to_start(stratus_storage: &StratusStorage) -> anyhow::Resu
     // fallback to last mined block
     // if mined is zero, we need to check if we have the zero block or not to decide if we start from zero or the next.
     // if mined is not zero, then can assume it is the next number after it.
-    let mut mined_number = stratus_storage.read_mined_block_number().await?;
-    let zero_block = stratus_storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+    let mut mined_number = storage.read_mined_block_number().await?;
+    let zero_block = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
     if not(mined_number.is_zero()) || zero_block.is_some() {
         mined_number = mined_number.next();
     }
@@ -337,7 +319,7 @@ fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalR
 // -----------------------------------------------------------------------------
 async fn import_external_to_csv(
     // services
-    stratus_storage: &StratusStorage,
+    storage: &StratusStorage,
     csv: &mut CsvExporter,
     // data
     block: Block,
@@ -359,7 +341,7 @@ async fn import_external_to_csv(
     // flush
     if should_flush {
         csv.flush()?;
-        stratus_storage.flush_temp().await?;
+        storage.flush().await?;
     }
 
     // chunk
