@@ -4,9 +4,8 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use anyhow::Context;
 use async_trait::async_trait;
-use futures::future::join_all;
+use rocksdb::WriteBatch;
 
 use super::rocks_state::RocksStorageState;
 use super::types::AddressRocksdb;
@@ -45,7 +44,7 @@ impl RocksPermanentStorage {
         tracing::info!("creating rocksdb storage");
 
         let state = RocksStorageState::new();
-        state.sync_data().await?;
+        //state.sync_data().await?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
@@ -153,18 +152,16 @@ impl PermanentStorage for RocksPermanentStorage {
                 logs_batch.push(((transaction.input.hash.into(), log.log_index.into()), transaction.block_number.into()));
             }
         }
+        let mut batch = WriteBatch::default();
 
         // save block
-        let mut futures = Vec::with_capacity(9);
-        let block_number = block.number();
+        let number = block.number();
         let txs_rocks = Arc::clone(&self.state.transactions);
         let logs_rocks = Arc::clone(&self.state.logs);
-        futures.push(tokio::task::spawn_blocking(move || {
-            txs_rocks.insert_batch_indexed(txs_batch, block_number.as_u64());
-        }));
-        futures.push(tokio::task::spawn_blocking(move || {
-            logs_rocks.insert_batch_indexed(logs_batch, block_number.as_u64());
-        }));
+
+        txs_rocks.insert_batch_indexed(txs_batch, number.as_u64(), &mut batch);
+
+        logs_rocks.insert_batch_indexed(logs_batch, number.as_u64(), &mut batch);
 
         let block_hash = block.hash();
 
@@ -175,20 +172,11 @@ impl PermanentStorage for RocksPermanentStorage {
             // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
             transaction.execution.changes.retain(|_, change| change.bytecode.clone().is_modified());
         }
-        let block_hash_clone = block_hash;
-        futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_number.insert(block_number.into(), block_without_changes.into());
-        }));
-        futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_hash.insert_batch_indexed(vec![(block_hash_clone.into(), block_number.into())], block_number.as_u64());
-        }));
+        blocks_by_number.insert_batch(vec![(number.into(), block_without_changes.into())], Some(number.as_u64()), &mut batch);
 
-        futures.append(
-            &mut self
-                .state
-                .update_state_with_execution_changes(&account_changes, block_number)
-                .context("failed to update state with execution changes")?,
-        );
+        blocks_by_hash.insert_batch_indexed(vec![(block_hash.into(), number.into())], number.as_u64(), &mut batch);
+
+        self.state.update_state_with_execution_changes(&account_changes, number, &mut batch);
 
         let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
         let _ = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
@@ -200,7 +188,7 @@ impl PermanentStorage for RocksPermanentStorage {
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 
-        join_all(futures).await;
+        blocks_by_hash.db.write(batch).unwrap();
         Ok(())
     }
 

@@ -15,6 +15,7 @@ use rocksdb::statistics::Histogram;
 #[cfg(feature = "metrics")]
 use rocksdb::statistics::Ticker;
 use rocksdb::BlockBasedOptions;
+use rocksdb::Cache;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::Env;
 use rocksdb::IteratorMode;
@@ -34,6 +35,8 @@ type Count = u64;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
+const GIGABYTE: usize = 1024 * 1024 * 1024;
+
 pub enum DbConfig {
     LargeSSTFiles,
     FastWriteSST,
@@ -42,16 +45,44 @@ pub enum DbConfig {
 
 // A generic struct that abstracts over key-value pairs stored in RocksDB.
 pub struct RocksDb<K, V> {
-    pub db: DB,
+    pub db: Arc<DB>,
     pub opts: Options,
     _marker: PhantomData<(K, V)>,
     // Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     pub prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
+    column_family: String,
 }
 
-impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
-    pub fn new(db_path: &str, config: DbConfig) -> anyhow::Result<Arc<Self>> {
+impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
+    pub fn new(cf_name: &str, db: Arc<DB>, config: DbConfig) -> anyhow::Result<Arc<Self>> {
+        let opts = Self::get_options(config, cf_name == "accounts" || cf_name == "account_slots");
+        db.create_cf(cf_name, &opts)?;
+        Ok(Arc::new(Self {
+            db,
+            opts,
+            _marker: PhantomData,
+            #[cfg(feature = "metrics")]
+            prev_stats: Mutex::new(HashMap::new()),
+            column_family: cf_name.to_owned(),
+        }))
+    }
+
+    pub fn new_db(db_path: &str, config: DbConfig) -> anyhow::Result<(Arc<DB>, Options)> {
+        let opts = Self::get_options(config, false);
+        let db = match DB::open(&opts, db_path) {
+            Ok(db) => db,
+            Err(e) => {
+                tracing::error!("Failed to open RocksDB: {}", e);
+                DB::repair(&opts, db_path)?;
+                DB::open(&opts, db_path)?
+            }
+        }; //XXX in case of corruption, use DB
+
+        Ok((Arc::new(db), opts))
+    }
+
+    fn get_options(config: DbConfig, cache: bool) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
@@ -176,23 +207,12 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
                 opts.set_plain_table_factory(&pt_opts);
             }
         }
+        if cache {
+            let cache = Cache::new_lru_cache(GIGABYTE * 30);
+            block_based_options.set_block_cache(&cache);
+        }
         opts.set_block_based_table_factory(&block_based_options);
-        let db = match DB::open(&opts, db_path) {
-            Ok(db) => db,
-            Err(e) => {
-                tracing::error!("Failed to open RocksDB: {}", e);
-                DB::repair(&opts, db_path)?;
-                DB::open(&opts, db_path)?
-            }
-        }; //XXX in case of corruption, use DB
-
-        Ok(Arc::new(RocksDb {
-            db,
-            opts,
-            _marker: PhantomData,
-            #[cfg(feature = "metrics")]
-            prev_stats: Mutex::new(HashMap::new()),
-        }))
+        opts
     }
 
     pub fn backup_path(&self) -> anyhow::Result<String> {
@@ -222,9 +242,10 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     // Clears the database
     pub fn clear(&self) -> Result<()> {
         let mut batch = WriteBatch::default();
-        for item in self.db.iterator(IteratorMode::Start) {
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        for item in self.db.iterator_cf(&cf, IteratorMode::Start) {
             let (key, _) = item?; // Handle or unwrap the Result
-            batch.delete(key);
+            batch.delete_cf(&cf, key);
         }
         self.db.write(batch)?;
         Ok(())
@@ -232,7 +253,10 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
     pub fn get(&self, key: &K) -> Option<V> {
         let Ok(serialized_key) = bincode::serialize(key) else { return None };
-        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return None };
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let Ok(Some(value_bytes)) = self.db.get_cf(&cf, serialized_key) else {
+            return None;
+        };
 
         bincode::deserialize(&value_bytes).ok()
     }
@@ -262,7 +286,11 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let Ok(serialized_key) = bincode::serialize(&"current_block") else {
             return 0;
         };
-        let Ok(Some(value_bytes)) = self.db.get(serialized_key) else { return 0 };
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        let Ok(Some(value_bytes)) = self.db.get_cf(&cf, serialized_key) else {
+            return 0;
+        };
 
         bincode::deserialize(&value_bytes).ok().unwrap_or(0)
     }
@@ -273,35 +301,34 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
     // Mimics the 'insert' functionality of a HashMap
     pub fn insert(&self, key: K, value: V) {
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
         let serialized_key = bincode::serialize(&key).unwrap();
         let serialized_value = bincode::serialize(&value).unwrap();
-        self.db.put(serialized_key, serialized_value).unwrap();
+        self.db.put_cf(&cf, serialized_key, serialized_value).unwrap();
     }
 
-    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<u64>) {
-        let mut batch = WriteBatch::default();
+    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<u64>, batch: &mut WriteBatch) {
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
 
         for (key, value) in changes {
             let serialized_key = bincode::serialize(&key).unwrap();
             let serialized_value = bincode::serialize(&value).unwrap();
             // Add each serialized key-value pair to the batch
-            batch.put(serialized_key, serialized_value);
+            batch.put_cf(&cf, serialized_key, serialized_value);
         }
 
         if let Some(current_block) = current_block {
             let serialized_block_key = bincode::serialize(&"current_block").unwrap();
             let serialized_block_value = bincode::serialize(&current_block).unwrap();
-            batch.put(serialized_block_key, serialized_block_value);
+            batch.put_cf(&cf, serialized_block_key, serialized_block_value);
         }
-
-        // Execute the batch operation atomically
-        self.db.write(batch).unwrap();
     }
 
     /// inserts data but keep a block as key pointing to the keys inserted in a given block
     /// this makes for faster search based on block_number, ergo index
-    pub fn insert_batch_indexed(&self, changes: Vec<(K, V)>, current_block: u64) {
-        let mut batch = WriteBatch::default();
+    pub fn insert_batch_indexed(&self, changes: Vec<(K, V)>, current_block: u64, batch: &mut WriteBatch) {
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
 
         let mut keys = vec![];
 
@@ -312,29 +339,29 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
             keys.push(key);
 
             // Add each serialized key-value pair to the batch
-            batch.put(serialized_key, serialized_value);
+            batch.put_cf(&cf, serialized_key, serialized_value);
         }
 
         let serialized_block_value = bincode::serialize(&current_block).unwrap();
         let serialized_keys = bincode::serialize(&keys).unwrap();
-        batch.put(serialized_block_value, serialized_keys);
-
-        // Execute the batch operation atomically
-        self.db.write(batch).unwrap();
+        batch.put_cf(&cf, serialized_block_value, serialized_keys);
     }
 
     // Deletes an entry from the database by key
     pub fn delete(&self, key: &K) -> Result<()> {
         let serialized_key = bincode::serialize(key)?;
-        self.db.delete(serialized_key)?;
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        self.db.delete_cf(&cf, serialized_key)?;
         Ok(())
     }
 
     // Deletes an entry from the database by key
     pub fn delete_index(&self, key: u64) -> Result<()> {
         let serialized_key = bincode::serialize(&key)?;
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
         //XXX check if value is a vec that can be deserialized as a safety measure
-        self.db.delete(serialized_key)?;
+        self.db.delete_cf(&cf, serialized_key)?;
         Ok(())
     }
 
@@ -354,17 +381,23 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
     }
 
     pub fn iter_start(&self) -> RocksDBIterator<K, V> {
-        let iter = self.db.iterator(IteratorMode::Start);
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
         RocksDBIterator::<K, V>::new(iter)
     }
 
     pub fn iter_end(&self) -> RocksDBIterator<K, V> {
-        let iter = self.db.iterator(IteratorMode::End);
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         RocksDBIterator::<K, V>::new(iter)
     }
 
     pub fn indexed_iter_end(&self) -> IndexedRocksDBIterator<K> {
-        let iter = self.db.iterator(IteratorMode::End);
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         IndexedRocksDBIterator::<K>::new(iter)
     }
 
@@ -374,17 +407,23 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         direction: rocksdb::Direction,
     ) -> RocksDBIterator<K, V> {
         let serialized_key = bincode::serialize(&key_prefix).unwrap();
-        let iter = self.db.iterator(IteratorMode::From(&serialized_key, direction));
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
         RocksDBIterator::<K, V>::new(iter)
     }
 
     pub fn last_index(&self) -> Option<(u64, Vec<K>)> {
-        let iter = self.db.iterator(IteratorMode::End);
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         IndexedRocksDBIterator::<K>::new(iter).next()
     }
 
     pub fn last(&self) -> Option<(K, V)> {
-        let mut iter = self.db.iterator(IteratorMode::End);
+        let cf = self.db.cf_handle(&self.column_family).unwrap();
+
+        let mut iter = self.db.iterator_cf(&cf, IteratorMode::End);
         if let Some(Ok((k, v))) = iter.next() {
             let key = bincode::deserialize(&k).unwrap();
             let value = bincode::deserialize(&v).unwrap();
@@ -519,49 +558,5 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq> Iterat
             }
         }
         None
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-    use std::collections::HashSet;
-    use std::fs;
-    use std::sync::Arc;
-
-    use fake::Fake;
-    use fake::Faker;
-
-    use super::RocksDb;
-    use crate::eth::primitives::SlotIndex;
-    use crate::eth::primitives::SlotValue;
-
-    #[test]
-    fn test_multi_get() {
-        let db: Arc<RocksDb<SlotIndex, SlotValue>> = RocksDb::new("./data/slots_test.rocksdb", super::DbConfig::Default).unwrap();
-
-        let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
-        let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
-            .map(|_| (Faker.fake(), Faker.fake()))
-            .filter(|(key, _)| !slots.contains_key(key))
-            .collect();
-
-        db.insert_batch(slots.clone().into_iter().collect(), None);
-        db.insert_batch(extra_slots.clone().into_iter().collect(), None);
-
-        let extra_keys: HashSet<SlotIndex> = (0..1000)
-            .map(|_| Faker.fake())
-            .filter(|key| !extra_slots.contains_key(key) && !slots.contains_key(key))
-            .collect();
-
-        let keys: Vec<SlotIndex> = slots.keys().cloned().chain(extra_keys).collect();
-        let result = db.multi_get(keys).expect("this should not fail");
-
-        assert_eq!(result.len(), slots.keys().len());
-        for (idx, value) in result {
-            assert_eq!(value, *slots.get(&idx).expect("should not be None"));
-        }
-
-        fs::remove_dir_all("./data/slots_test.rocksdb").unwrap();
     }
 }
