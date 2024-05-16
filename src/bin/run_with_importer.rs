@@ -50,7 +50,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     // init services
     let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
-    let miner = config.miner.init(Arc::clone(&storage));
+    let miner = config.miner.init(Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let chain_url = get_chain_url(config.clone());
     let chain = BlockchainClient::new(&chain_url).await?;
