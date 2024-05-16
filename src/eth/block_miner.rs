@@ -50,11 +50,10 @@ impl BlockMiner {
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
-    pub fn spawn_interval_miner(self: Arc<Self>) {
+    pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
         // validate
         let Some(block_time) = self.block_time else {
-            tracing::error!("cannot spawn interval miner because it does not have a block time defined");
-            return;
+            return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
         };
         tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
 
@@ -87,6 +86,8 @@ impl BlockMiner {
                 })
                 .expect("spawning interval miner ticker should not fail");
         });
+
+        Ok(())
     }
 
     /// Checks if miner should run in interval miner mode.
