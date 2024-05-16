@@ -1,10 +1,13 @@
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::sync::Condvar;
 use std::thread;
 use std::time::Duration;
 
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
+use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 
 use crate::eth::primitives::Block;
@@ -48,16 +51,43 @@ impl BlockMiner {
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
     pub fn spawn_interval_miner(self: Arc<Self>) {
+        // validate
         let Some(block_time) = self.block_time else {
             tracing::error!("cannot spawn interval miner because it does not have a block time defined");
             return;
         };
-
         tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
 
-        let t = thread::Builder::new().name("interval-miner".into());
-        t.spawn(move || interval_miner(self, block_time))
-            .expect("spawning interval miner should not fail");
+        // spawn scoped threads
+        let pending_blocks = AtomicUsize::new(0);
+        let pending_blocks_cvar = Condvar::new();
+
+        thread::scope(|s| {
+            // spawn miner
+            let t_miner = thread::Builder::new().name("miner".into());
+            let t_miner_tokio = Handle::current();
+            let t_miner_pending_blocks = &pending_blocks;
+            let t_miner_pending_blocks_cvar = &pending_blocks_cvar;
+            t_miner
+                .spawn_scoped(s, move || {
+                    let _tokio_guard = t_miner_tokio.enter();
+                    interval_miner::start(self, t_miner_pending_blocks, t_miner_pending_blocks_cvar);
+                })
+                .expect("spawning interval miner should not fail");
+
+            // spawn ticker
+            let t_ticker = thread::Builder::new().name("miner-ticker".into());
+            let t_ticker_tokio = Handle::current();
+            let t_ticker_pending_blocks = &pending_blocks;
+            let t_ticker_pending_blocks_cvar = &pending_blocks_cvar;
+
+            t_ticker
+                .spawn_scoped(s, move || {
+                    let _tokio_guard = t_ticker_tokio.enter();
+                    interval_miner_ticker::start(block_time, t_ticker_pending_blocks, t_ticker_pending_blocks_cvar);
+                })
+                .expect("spawning interval miner ticker should not fail");
+        });
     }
 
     /// Checks if miner should run in interval miner mode.
@@ -74,6 +104,8 @@ impl BlockMiner {
     ///
     /// Local transactions are not allowed to be part of the block.
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
+        tracing::debug!("mining external block");
+
         let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
@@ -100,6 +132,8 @@ impl BlockMiner {
     ///
     /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
     pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
+        tracing::debug!("mining external mixed block");
+
         let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
@@ -133,6 +167,8 @@ impl BlockMiner {
     ///
     /// External transactions are not allowed to be part of the block.
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
+        tracing::debug!("mining local block");
+
         let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
@@ -156,6 +192,8 @@ impl BlockMiner {
 
     /// Persists a mined block to permanent storage and prepares new block.
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
+        tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
+
         let block_number = *block.number();
 
         // persist block
@@ -271,23 +309,50 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 // -----------------------------------------------------------------------------
 // Miner
 // -----------------------------------------------------------------------------
-fn interval_miner(miner: Arc<BlockMiner>, block_time: Duration) {
-    loop {
-        thread::sleep(block_time);
-        tracing::info!("mining block");
+mod interval_miner {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+    use std::sync::Condvar;
+    use std::sync::Mutex;
 
+    use tokio::runtime::Handle;
+
+    use crate::eth::BlockMiner;
+
+    pub fn start(miner: Arc<BlockMiner>, pending_blocks: &AtomicUsize, pending_blocks_cvar: &Condvar) {
+        let tokio = Handle::current();
+        let cvar_mutex = Mutex::new(());
+
+        loop {
+            let pending = pending_blocks
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(1)))
+                .unwrap();
+            if pending > 0 {
+                tracing::info!(%pending, "interval mining block");
+                tokio.block_on(mine_and_commit(&miner));
+            } else {
+                tracing::debug!(%pending, "waiting for block interval");
+                let _ = pending_blocks_cvar.wait(cvar_mutex.lock().unwrap());
+            }
+        }
+    }
+
+    #[inline(always)]
+    async fn mine_and_commit(miner: &BlockMiner) {
         // mine
-        let block = match futures::executor::block_on(miner.mine_local()) {
-            Ok(block) => block,
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to mine block");
-                continue;
+        let block = loop {
+            match miner.mine_local().await {
+                Ok(block) => break block,
+                Err(e) => {
+                    tracing::error!(reason = ?e, "failed to mine block");
+                }
             }
         };
 
         // commit
         loop {
-            match futures::executor::block_on(miner.commit(block.clone())) {
+            match miner.commit(block.clone()).await {
                 Ok(_) => break,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to commit block");
@@ -295,5 +360,39 @@ fn interval_miner(miner: Arc<BlockMiner>, block_time: Duration) {
                 }
             }
         }
+    }
+}
+
+mod interval_miner_ticker {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+    use std::sync::Condvar;
+    use std::thread;
+    use std::time::Duration;
+
+    use chrono::Timelike;
+    use chrono::Utc;
+    use tokio::runtime::Handle;
+
+    pub fn start(block_time: Duration, pending_blocks: &AtomicUsize, pending_blocks_cvar: &Condvar) {
+        let tokio = Handle::current();
+
+        // sync to next second
+        let next_second = (Utc::now() + Duration::from_secs(1)).with_nanosecond(0).unwrap();
+        thread::sleep((next_second - Utc::now()).to_std().unwrap());
+
+        // prepare ticker
+        let mut ticker = tokio::time::interval(block_time);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
+
+        // keep ticking
+        tokio.block_on(async move {
+            ticker.tick().await;
+            loop {
+                let _ = ticker.tick().await;
+                let _ = pending_blocks.fetch_add(1, Ordering::SeqCst);
+                pending_blocks_cvar.notify_one();
+            }
+        });
     }
 }
