@@ -58,7 +58,7 @@ impl BlockMiner {
         };
         tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
 
-        // spawn scoped threads
+        // spawn scoped threads (tokio does not support scoped tasks)
         let pending_blocks = AtomicUsize::new(0);
         let pending_blocks_cvar = Condvar::new();
 
@@ -80,7 +80,6 @@ impl BlockMiner {
             let t_ticker_tokio = Handle::current();
             let t_ticker_pending_blocks = &pending_blocks;
             let t_ticker_pending_blocks_cvar = &pending_blocks_cvar;
-
             t_ticker
                 .spawn_scoped(s, move || {
                     let _tokio_guard = t_ticker_tokio.enter();
