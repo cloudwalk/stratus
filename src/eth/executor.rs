@@ -200,39 +200,38 @@ impl Executor {
 
         let evm_result = self.execute_in_evm(evm_input).await;
 
-        // handle reexecution result
-        match evm_result {
-            Ok(mut evm_result) => {
-                // track metrics before execution is update with receipt
-                #[cfg(feature = "metrics")]
-                {
-                    metrics::inc_executor_external_transaction_gas(evm_result.execution.gas.as_u64() as usize, function.clone());
-                    metrics::inc_executor_external_transaction(start.elapsed(), function);
-                }
-
-                // update execution with receipt info
-                if let Err(e) = evm_result.execution.apply_receipt(receipt) {
-                    return Err((tx, receipt, e));
-                };
-
-                // ensure it matches receipt before saving
-                if let Err(e) = evm_result.execution.compare_with_receipt(receipt) {
-                    let json_tx = serde_json::to_string(&tx).unwrap();
-                    let json_receipt = serde_json::to_string(&receipt).unwrap();
-                    let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).unwrap();
-                    tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
-                    return Err((tx, receipt, e));
-                };
-
-                Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result))
-            }
+        let mut evm_result = match evm_result {
+            Ok(inner) => inner,
             Err(e) => {
                 let json_tx = serde_json::to_string(&tx).unwrap();
                 let json_receipt = serde_json::to_string(&receipt).unwrap();
                 tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
-                Err((tx, receipt, e))
+                return Err((tx, receipt, e));
             }
+        };
+
+        // track metrics before execution is update with receipt
+        #[cfg(feature = "metrics")]
+        {
+            metrics::inc_executor_external_transaction_gas(evm_result.execution.gas.as_u64() as usize, function.clone());
+            metrics::inc_executor_external_transaction(start.elapsed(), function);
         }
+
+        // update execution with receipt info
+        if let Err(e) = evm_result.execution.apply_receipt(receipt) {
+            return Err((tx, receipt, e));
+        };
+
+        // ensure it matches receipt before saving
+        if let Err(e) = evm_result.execution.compare_with_receipt(receipt) {
+            let json_tx = serde_json::to_string(&tx).unwrap();
+            let json_receipt = serde_json::to_string(&receipt).unwrap();
+            let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).unwrap();
+            tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
+            return Err((tx, receipt, e));
+        };
+
+        Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result))
     }
 
     // -------------------------------------------------------------------------
