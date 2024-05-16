@@ -221,20 +221,25 @@ impl EvmExecution {
     /// External transactions are re-executed locally with a different amount of gas limit, so, rely
     /// on the given receipt to copy the `gasLeft` values found in Logs.
     ///
-    /// This is only necessary if the contract emits the event `ERC20Trace` with topic hash
-    /// `0x31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671`. To check for `ERC20Trace`
-    /// it's necessary to check if the `topic0` field of a log matches the above hash.
+    /// This is necessary if the contract emits an event that puts `gasLeft` in a log, this function
+    /// covers the following events that do the described:
+    ///
+    /// - `ERC20Trace` (topic0: `0x31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671`)
+    /// - `BalanceTrackerTrace` (topic0: `0x63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9`)
     ///
     /// The overwriting should be done by copying the first 32 bytes from the receipt to log in `self`.
     fn fix_logs_gas_left(&mut self, receipt: &ExternalReceipt) {
-        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
-            const ERC20_TRACE_EVENT_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
+        const ERC20_TRACE_EVENT_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
+        const BALANCE_TRACKER_TRACE_EVENT_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
 
-            let is_execution_log_target_event = || execution_log.topic0.is_some_and(|topic| topic.as_ref() == ERC20_TRACE_EVENT_HASH);
-            let is_receipt_log_target_event = || receipt_log.topics.first().is_some_and(|topic| topic.as_ref() == ERC20_TRACE_EVENT_HASH);
+        const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
 
             // only try overwriting if both logs refer to the target event
-            let should_overwrite = is_execution_log_target_event() && is_receipt_log_target_event();
+            let should_overwrite = execution_log_matches() && receipt_log_matches();
             if !should_overwrite {
                 continue;
             }
