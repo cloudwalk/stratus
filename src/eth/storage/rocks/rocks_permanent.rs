@@ -255,9 +255,11 @@ impl PermanentStorage for RocksPermanentStorage {
         tracing::debug!(?accounts, "saving initial accounts");
 
         for account in accounts {
-            let (key, value) = account.into();
-            self.state.accounts.insert(key, value.clone());
-            self.state.accounts_history.insert((key, 0.into()), value);
+            if self.read_account(&account.address, &StoragePointInTime::Present).await?.is_none() {
+                let (key, value) = account.into();
+                self.state.accounts.insert(key, value.clone());
+                self.state.accounts_history.insert((key, 0.into()), value);
+            }
         }
 
         Ok(())
