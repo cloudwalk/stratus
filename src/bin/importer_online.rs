@@ -182,6 +182,8 @@ async fn fetch_block(chain: &BlockchainClient, number: BlockNumber) -> anyhow::R
             #[cfg(not(feature = "perf"))]
             {
                 tracing::warn!(reason = %"null", "retrying block download because block is not mined yet");
+                sleep(Duration::from_millis(delay)).await;
+                delay *= 2;
                 continue;
             }
 
