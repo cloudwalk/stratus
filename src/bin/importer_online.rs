@@ -250,6 +250,7 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
             Ok(json) => json,
             Err(e) => {
                 backoff *= 2;
+                backoff = min(backoff, 1000); // no more than 1000ms of backoff
                 tracing::warn!(reason = ?e, %number, %backoff, "failed to retrieve block. retrying with backoff.");
                 sleep(Duration::from_millis(backoff)).await;
                 continue;
