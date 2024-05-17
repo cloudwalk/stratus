@@ -24,6 +24,7 @@ use stratus::GlobalServices;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::sleep;
+use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 // -----------------------------------------------------------------------------
@@ -43,6 +44,9 @@ const PARALLEL_BLOCKS: usize = 3;
 
 /// Number of receipts that are downloaded in parallel.
 const PARALLEL_RECEIPTS: usize = 100;
+
+/// Time to wait for new newHeads event before fallback to polling.
+const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(100);
 
 // -----------------------------------------------------------------------------
 // Execution
@@ -184,18 +188,22 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: Cancel
 
         // try to read from subscription
         if let Some(sub) = &mut sub_new_heads {
-            let resubscribe = match sub.next().await {
-                Some(Ok(block)) => {
+            let resubscribe = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
+                Ok(Some(Ok(block))) => {
                     tracing::info!(number = %block.number(), "newHeads event received");
                     RPC_CURRENT_BLOCK.store(block.number().as_u64(), Ordering::SeqCst);
                     continue;
                 }
-                None => {
+                Ok(None) => {
                     tracing::error!("newHeads subscription closed by the other side");
                     true
                 }
-                Some(Err(e)) => {
+                Ok(Some(Err(e))) => {
                     tracing::error!(reason = ?e, "failed to read newHeads subscription event");
+                    true
+                }
+                Err(_) => {
+                    tracing::error!("timeout waiting for newHeads subscription event");
                     true
                 }
             };
