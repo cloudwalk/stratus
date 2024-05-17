@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use anyhow::Context;
 use ethers_core::types::Bytes;
 use ethers_core::types::Transaction;
 use jsonrpsee::core::client::ClientT;
@@ -47,14 +48,20 @@ impl BlockchainClient {
         // build http provider
         let http = match HttpClientBuilder::default().request_timeout(DEFAULT_TIMEOUT).build(http_url) {
             Ok(http) => http,
-            Err(e) => return log_and_err!(reason = e, "failed to create blockchain http client"),
+            Err(e) => {
+                tracing::error!(reason = ?e, url = %http_url, "failed to create blockchain http client");
+                return Err(e).context("failed to create blockchain http client");
+            }
         };
 
         // build ws provider
         let (ws, ws_url) = if let Some(ws_url) = ws_url {
             match WsClientBuilder::new().connection_timeout(DEFAULT_TIMEOUT).build(ws_url).await {
                 Ok(ws) => (Some(ws), Some(ws_url.to_string())),
-                Err(e) => return log_and_err!(reason = e, "failed to create blockchain ws client"),
+                Err(e) => {
+                    tracing::error!(reason = ?e, url = %ws_url, "failed to create blockchain websocket client");
+                    return Err(e).context("failed to create blockchain websocket client");
+                }
             }
         } else {
             (None, None)
