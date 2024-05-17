@@ -158,16 +158,25 @@ impl StratusStorage {
 
     #[tracing::instrument(skip_all)]
     pub async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        // keep only accounts that does not exist in permanent storage
+        let mut missing_accounts = Vec::new();
+        for account in accounts {
+            let perm_account = self.perm.read_account(&account.address, &StoragePointInTime::Present).await?;
+            if perm_account.is_none() {
+                missing_accounts.push(account);
+            }
+        }
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.save_accounts(accounts).await;
+            let result = self.perm.save_accounts(missing_accounts).await;
             metrics::inc_storage_save_accounts(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.save_accounts(accounts).await
+        self.perm.save_accounts(accounts_to_insert).await
     }
 
     #[tracing::instrument(skip_all)]
