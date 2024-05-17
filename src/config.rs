@@ -24,8 +24,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
@@ -42,8 +40,6 @@ use crate::eth::BlockMiner;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
-#[cfg(feature = "dev")]
-use crate::ext::not;
 use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
@@ -253,18 +249,9 @@ impl MinerConfig {
         // enable test accounts
         #[cfg(feature = "dev")]
         if self.enable_test_accounts {
-            let mut test_accounts_to_insert = Vec::new();
-            for test_account in test_accounts() {
-                let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
-                if storage_account.is_empty() {
-                    test_accounts_to_insert.push(test_account);
-                }
-            }
-
-            if not(test_accounts_to_insert.is_empty()) {
-                tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                storage.save_accounts(test_accounts_to_insert).await?;
-            }
+            let test_accounts = test_accounts();
+            tracing::info!(accounts = ?test_accounts, "enabling test accounts");
+            storage.save_accounts(test_accounts).await?;
         }
 
         // set block number
