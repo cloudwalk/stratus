@@ -181,7 +181,7 @@ async fn start_block_fetcher(
             break;
         }
 
-        // if we are ahead of current block number, await until we are synced or behind again
+        // if we are ahead of current block number, await until we are behind again
         let rpc_current_number = RPC_CURRENT_BLOCK.load(Ordering::SeqCst);
         if number.as_u64() > rpc_current_number {
             yield_now().await;
