@@ -45,8 +45,8 @@ const PARALLEL_BLOCKS: usize = 3;
 /// Number of receipts that are downloaded in parallel.
 const PARALLEL_RECEIPTS: usize = 100;
 
-/// Time to wait for new newHeads event before fallback to polling.
-const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(100);
+/// Timeout for new newHeads event before fallback to polling.
+const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 
 // -----------------------------------------------------------------------------
 // Execution
