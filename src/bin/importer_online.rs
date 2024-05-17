@@ -186,7 +186,8 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: Cancel
         }
         tracing::info!("fetching current block number");
 
-        // try to read from subscription
+        // if we have a subscription, try to read from subscription.
+        // in case of failure, re-subscribe because current subscription may have been dropped in the server.
         if let Some(sub) = &mut sub_new_heads {
             let resubscribe = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                 Ok(Some(Ok(block))) => {
@@ -207,7 +208,10 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: Cancel
                     true
                 }
             };
-            if resubscribe {
+
+            // resubscribe if necessary
+            // only update the existing subscription if succedeed, otherwise we will try again in the iteration of the loop
+            if chain.is_ws_enabled() && resubscribe {
                 tracing::info!("resubscribing to newHeads event");
                 match chain.subscribe_new_heads().await {
                     Ok(sub) => sub_new_heads = Some(sub),
