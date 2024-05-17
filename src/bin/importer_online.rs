@@ -132,10 +132,12 @@ async fn start_block_executor(
         if let Err(e) = executor.reexecute_external(&block, &receipts).await {
             tracing::error!(reason = ?e, number = %block.number(), "cancelling importer-online because failed to reexecute block");
             cancellation.cancel();
+            break;
         };
         if let Err(e) = miner.mine_external_mixed_and_commit().await {
             tracing::error!(reason = ?e, number = %block.number(), "cancelling importer-online because failed to mine external block");
             cancellation.cancel();
+            break;
         };
 
         #[cfg(feature = "metrics")]
