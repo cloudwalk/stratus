@@ -18,6 +18,7 @@ fn main() -> anyhow::Result<()> {
     global_services.runtime.block_on(run(global_services.config))
 }
 
+/// TODO: There are platform-independent functions to get the hostname.
 fn current_node() -> Option<String> {
     let mut file = File::open("/etc/hostname").ok()?;
     let mut contents = String::new();
@@ -30,7 +31,7 @@ fn current_namespace() -> Option<String> {
     Some(namespace.trim().to_string())
 }
 
-//XXX this is a temporary solution to get the leader node
+// XXX this is a temporary solution to get the leader node
 // later we want the leader to GENERATE blocks
 // and even later we want this sync to be replaced by a gossip protocol or raft
 fn get_chain_url(config: RunWithImporterConfig) -> String {
@@ -43,7 +44,7 @@ fn get_chain_url(config: RunWithImporterConfig) -> String {
             }
         }
     }
-    config.external_rpc
+    config.online.external_rpc
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
@@ -52,8 +53,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
-    let chain_url = get_chain_url(config.clone());
-    let chain = Arc::new(BlockchainClient::new(&chain_url).await?);
+    let http_url = get_chain_url(config.clone());
+    let chain = Arc::new(BlockchainClient::new_http(&http_url).await?);
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);
     let rpc_miner = Arc::clone(&miner);
@@ -78,7 +79,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     };
 
     let importer_task = async move {
-        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone(), config.sync_interval).await;
+        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone(), config.online.sync_interval).await;
         tracing::warn!("run_importer_online finished, cancelling tasks");
         cancellation.cancel();
         res
