@@ -218,6 +218,7 @@ async fn start_block_fetcher(
             if backlog_tx.send((block, receipts)).is_err() {
                 tracing::error!("cancelling importer-online block-fetcher because backlog channel was closed by the other side");
                 cancellation.cancel();
+                break;
             }
         }
     }
