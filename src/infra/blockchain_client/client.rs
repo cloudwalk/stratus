@@ -3,6 +3,8 @@ use std::time::Duration;
 use ethers_core::types::Bytes;
 use ethers_core::types::Transaction;
 use jsonrpsee::core::client::ClientT;
+use jsonrpsee::core::client::Subscription;
+use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::ws_client::WsClient;
@@ -12,6 +14,7 @@ use serde_json::Value as JsonValue;
 use super::pending_transaction::PendingTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::SlotIndex;
@@ -71,7 +74,7 @@ impl BlockchainClient {
     }
 
     /// Checks if the current blockchain client is connected to the WS.
-    pub fn is_ws_connected(&self) -> bool {
+    pub fn is_ws_enabled(&self) -> bool {
         self.ws.is_some()
     }
 
@@ -173,6 +176,27 @@ impl BlockchainClient {
         match result {
             Ok(value) => Ok(value),
             Err(e) => log_and_err!(reason = e, "failed to retrieve account balance"),
+        }
+    }
+
+    pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<ExternalBlock>> {
+        tracing::debug!("subscribing to newHeads event");
+
+        let ws = self.require_ws()?;
+        let result = ws
+            .subscribe::<ExternalBlock, Vec<JsonValue>>("eth_subscribe", vec![JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
+            .await;
+        match result {
+            Ok(sub) => Ok(sub),
+            Err(e) => log_and_err!(reason = e, "failed to subscribe to newHeads event"),
+        }
+    }
+
+    /// Validates client is connected to websocket and returns a reference to it.
+    fn require_ws(&self) -> anyhow::Result<&WsClient> {
+        match &self.ws {
+            Some(ws) => Ok(ws),
+            None => log_and_err!("blockchain client not connected websocket endpoint"),
         }
     }
 }

@@ -34,17 +34,17 @@ fn current_namespace() -> Option<String> {
 // XXX this is a temporary solution to get the leader node
 // later we want the leader to GENERATE blocks
 // and even later we want this sync to be replaced by a gossip protocol or raft
-fn get_chain_url(config: RunWithImporterConfig) -> String {
+fn get_chain_url(config: RunWithImporterConfig) -> (String, Option<String>) {
     if let Some(leader_node) = config.leader_node {
         if let Some(current_node) = current_node() {
             if current_node != leader_node {
                 if let Some(namespace) = current_namespace() {
-                    return format!("http://{}.stratus-api.{}.svc.cluster.local:3000", leader_node, namespace);
+                    return (format!("http://{}.stratus-api.{}.svc.cluster.local:3000", leader_node, namespace), None);
                 }
             }
         }
     }
-    config.online.external_rpc
+    (config.online.external_rpc, config.online.external_rpc_ws)
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
@@ -53,8 +53,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
-    let http_url = get_chain_url(config.clone());
-    let chain = Arc::new(BlockchainClient::new_http(&http_url).await?);
+    let (http_url, ws_url) = get_chain_url(config.clone());
+    let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref()).await?);
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);
     let rpc_miner = Arc::clone(&miner);

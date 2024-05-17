@@ -120,7 +120,7 @@ async fn start_block_executor(
 ) {
     while let Some((block, receipts)) = backlog_rx.recv().await {
         if cancellation.is_cancelled() {
-            tracing::warn!("exiting importer-online block-executor because cancellation");
+            tracing::warn!("exiting block-executor because cancellation");
             break;
         }
 
@@ -130,12 +130,12 @@ async fn start_block_executor(
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
         if let Err(e) = executor.reexecute_external(&block, &receipts).await {
-            tracing::error!(reason = ?e, number = %block.number(), "cancelling importer-online because failed to reexecute block");
+            tracing::error!(reason = ?e, number = %block.number(), "cancelling block-executor because failed to reexecute block");
             cancellation.cancel();
             break;
         };
         if let Err(e) = miner.mine_external_mixed_and_commit().await {
-            tracing::error!(reason = ?e, number = %block.number(), "cancelling importer-online because failed to mine external block");
+            tracing::error!(reason = ?e, number = %block.number(), "cancelling block-executor because failed to mine external block");
             cancellation.cancel();
             break;
         };
@@ -146,7 +146,7 @@ async fn start_block_executor(
             metrics::inc_import_online_mined_block(start.elapsed());
         }
     }
-    tracing::warn!("exiting importer-online block-executor because backlog channel was closed by the other side");
+    tracing::warn!("exiting block-executor because backlog channel was closed by the other side");
 }
 
 // -----------------------------------------------------------------------------
@@ -155,19 +155,69 @@ async fn start_block_executor(
 
 /// Retrieves the blockchain current block number.
 async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: CancellationToken, sync_interval: Duration) {
+    // subscribe to newHeads event if WS is enabled
+    let mut sub_new_heads = match chain.is_ws_enabled() {
+        true => {
+            tracing::info!("subscribing number-fetcher to newHeads event");
+            match chain.subscribe_new_heads().await {
+                Ok(sub) => Some(sub),
+                Err(e) => {
+                    tracing::error!(reason = ?e, "cancelling number-fetcher because cannot subscribe to newHeads event");
+                    cancellation.cancel();
+                    return;
+                }
+            }
+        }
+        false => {
+            tracing::warn!("number-fetcher blockchain client does not have websocket enabled");
+            None
+        }
+    };
+
     loop {
+        // check cancellation
         if cancellation.is_cancelled() {
-            tracing::warn!("exiting importer-online number-fetcher because cancellation");
+            tracing::warn!("exiting number-fetcher because cancellation");
             break;
         }
-
         tracing::info!("fetching current block number");
+
+        // try to read from subscription
+        if let Some(sub) = &mut sub_new_heads {
+            let resubscribe = match sub.next().await {
+                Some(Ok(block)) => {
+                    tracing::info!(number = %block.number(), "newHeads event received");
+                    RPC_CURRENT_BLOCK.store(block.number().as_u64(), Ordering::SeqCst);
+                    continue;
+                }
+                None => {
+                    tracing::error!("newHeads subscription closed by the other side");
+                    true
+                }
+                Some(Err(e)) => {
+                    tracing::error!(reason = ?e, "failed to read newHeads subscription event");
+                    true
+                }
+            };
+            if resubscribe {
+                tracing::info!("resubscribing to newHeads event");
+                match chain.subscribe_new_heads().await {
+                    Ok(sub) => sub_new_heads = Some(sub),
+                    Err(e) => {
+                        tracing::error!(reason = ?e, "failed to resubscribe number-fetcher to newHeads event");
+                    }
+                }
+            }
+        }
+
+        // fallback to polling
+        tracing::warn!("number-fetcher falling back to http polling because subscription failed or it not enabled");
         match chain.get_current_block_number().await {
             Ok(number) => {
                 tracing::info!(
                     %number,
                     sync_interval = %humantime::Duration::from(sync_interval),
-                    "fetched current block number. awaiting sync interval to retrieve again."
+                    "fetched current block number via http. awaiting sync interval to retrieve again."
                 );
                 RPC_CURRENT_BLOCK.store(number.as_u64(), Ordering::SeqCst);
                 sleep(sync_interval).await;
@@ -192,7 +242,7 @@ async fn start_block_fetcher(
 ) {
     loop {
         if cancellation.is_cancelled() {
-            tracing::warn!("exiting importer-online block-fetcher because cancellation");
+            tracing::warn!("exiting block-fetcher because cancellation");
             break;
         }
 
@@ -218,7 +268,7 @@ async fn start_block_fetcher(
         let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
         while let Some((block, receipts)) = tasks.next().await {
             if backlog_tx.send((block, receipts)).is_err() {
-                tracing::error!("cancelling importer-online block-fetcher because backlog channel was closed by the other side");
+                tracing::error!("cancelling block-fetcher because backlog channel was closed by the other side");
                 cancellation.cancel();
                 break;
             }
