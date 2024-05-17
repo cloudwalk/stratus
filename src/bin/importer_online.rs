@@ -58,10 +58,10 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
-    let chain = Arc::new(BlockchainClient::new(&config.external_rpc).await?);
+    let chain = Arc::new(BlockchainClient::new_http_ws(&config.base.external_rpc, config.base.external_rpc_ws.as_deref()).await?);
     let cancellation: CancellationToken = signal_handler();
 
-    let result = run_importer_online(executor, miner, storage, chain, cancellation, config.sync_interval).await;
+    let result = run_importer_online(executor, miner, storage, chain, cancellation, config.base.sync_interval).await;
     if let Err(ref e) = result {
         tracing::error!(reason = ?e, "importer-online failed");
     }
