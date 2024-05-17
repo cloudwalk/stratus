@@ -84,16 +84,20 @@ pub async fn run_importer_online(
 
     let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
 
-    // spawn block executor in parallel
+    // spawn block executor:
+    // it executes and mines blocks and expects to receive them via channel in the correct order.
     let executor_cancellation = cancellation.clone();
     let task_executor = tokio::spawn(start_block_executor(executor, miner, backlog_rx, executor_cancellation));
 
-    // spawn block number fetcher in parallel
+    // spawn block number:
+    // it keeps track of the blockchain current block number.
     let number_fetcher_chain = Arc::clone(&chain);
     let number_fetcher_cancellation = cancellation.clone();
     let task_number_fetcher = tokio::spawn(start_number_fetcher(number_fetcher_chain, number_fetcher_cancellation, sync_interval));
 
-    // spawn block fetcher in parallel
+    // spawn block fetcher:
+    // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
+    // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
     let block_fetcher_chain = Arc::clone(&chain);
     let block_fetcher_cancellation = cancellation.clone();
     let task_block_fetcher = tokio::spawn(start_block_fetcher(block_fetcher_chain, block_fetcher_cancellation, backlog_tx, number));
