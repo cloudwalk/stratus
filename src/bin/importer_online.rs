@@ -89,7 +89,7 @@ pub async fn run_importer_online(
     let block_fetcher_cancellation = cancellation.clone();
     let task_block_fetcher = tokio::spawn(start_block_fetcher(block_fetcher_chain, block_fetcher_cancellation, backlog_tx, number));
 
-    // await both tasks
+    // await all tasks
     try_join!(task_executor, task_block_fetcher, task_number_fetcher)?;
     Ok(())
 }
