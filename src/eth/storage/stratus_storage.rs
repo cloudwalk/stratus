@@ -176,7 +176,7 @@ impl StratusStorage {
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.save_accounts(accounts_to_insert).await
+        self.perm.save_accounts(missing_accounts).await
     }
 
     #[tracing::instrument(skip_all)]
