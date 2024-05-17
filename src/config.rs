@@ -423,7 +423,7 @@ pub struct ImporterOnlineConfig {
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
 
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
     pub sync_interval: Duration,
 
     #[clap(flatten)]
