@@ -36,6 +36,15 @@ use tokio_util::sync::CancellationToken;
 static RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
 
 // -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+/// Number of blocks that are downloaded in parallel.
+const PARALLEL_BLOCKS: usize = 3;
+
+/// Number of receipts that are downloaded in parallel.
+const PARALLEL_RECEIPTS: usize = 100;
+
+// -----------------------------------------------------------------------------
 // Execution
 // -----------------------------------------------------------------------------
 #[allow(dead_code)]
@@ -200,9 +209,9 @@ async fn start_block_fetcher(
         }
 
         // keep fetching in order
-        let mut tasks = futures::stream::iter(tasks).buffered(3);
+        let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
         while let Some((block, receipts)) = tasks.next().await {
-            if let Err(_) = backlog_tx.send((block, receipts)) {
+            if backlog_tx.send((block, receipts)).is_err() {
                 tracing::error!("cancelling importer-online block-fetcher because backlog channel was closed by the other side");
                 cancellation.cancel();
             }
@@ -217,10 +226,10 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
-    for hash in  block.transactions.iter().map(|tx| tx.hash()) {
-        receipts_tasks.push(fetch_receipt(Arc::clone(&chain), number, hash))
+    for hash in block.transactions.iter().map(|tx| tx.hash()) {
+        receipts_tasks.push(fetch_receipt(Arc::clone(&chain), number, hash));
     }
-    let receipts = futures::stream::iter(receipts_tasks).buffer_unordered(100).collect().await;
+    let receipts = futures::stream::iter(receipts_tasks).buffer_unordered(PARALLEL_RECEIPTS).collect().await;
 
     (block, receipts)
 }
