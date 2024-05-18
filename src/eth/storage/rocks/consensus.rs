@@ -31,7 +31,7 @@ pub async fn gather_clients() -> Result<()> {
     ];
 
     for pod_ip in pods_list.iter() {
-        let chain = match BlockchainClient::new(pod_ip).await {
+        let chain = match BlockchainClient::new_http(pod_ip).await {
             Ok(chain) => chain,
             Err(e) => {
                 println!("Error: {}", e);
