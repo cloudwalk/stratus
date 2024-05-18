@@ -1,10 +1,7 @@
 mod importer_online;
 
-use std::env;
-use std::fs::File;
-use std::io::Read;
 use std::sync::Arc;
-
+use stratus::eth::consensus::Consensus;
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
@@ -18,41 +15,14 @@ fn main() -> anyhow::Result<()> {
     global_services.runtime.block_on(run(global_services.config))
 }
 
-fn current_node() -> Option<String> {
-    let mut file = File::open("/etc/hostname").ok()?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).ok()?;
-    Some(contents.trim().to_string())
-}
-
-fn current_namespace() -> Option<String> {
-    let namespace = env::var("NAMESPACE").ok()?;
-    Some(namespace.trim().to_string())
-}
-
-//XXX this is a temporary solution to get the leader node
-// later we want the leader to GENERATE blocks
-// and even later we want this sync to be replaced by a gossip protocol or raft
-fn get_chain_url(config: RunWithImporterConfig) -> String {
-    if let Some(leader_node) = config.leader_node {
-        if let Some(current_node) = current_node() {
-            if current_node != leader_node {
-                if let Some(namespace) = current_namespace() {
-                    return format!("http://{}.stratus-api.{}.svc.cluster.local:3000", leader_node, namespace);
-                }
-            }
-        }
-    }
-    config.external_rpc
-}
-
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     // init services
     let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage));
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
-    let chain_url = get_chain_url(config.clone());
+    let consensus = Consensus::new(config.clone().leader_node); // in development, with no leader configured, the current node ends up being the leader
+    let chain_url = consensus.get_chain_url(config.clone().external_rpc); //XXX maybe we should move this to the relayer and to the sync_online, in case of a change on urls, it safeguards us
     let chain = BlockchainClient::new(&chain_url).await?;
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);
