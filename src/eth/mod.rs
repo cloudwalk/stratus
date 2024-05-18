@@ -21,6 +21,7 @@
 
 mod block_miner;
 pub mod codegen;
+pub mod consensus;
 pub mod evm;
 mod executor;
 pub mod primitives;
