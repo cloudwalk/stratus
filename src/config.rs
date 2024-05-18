@@ -24,8 +24,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::StoragePointInTime;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
@@ -42,8 +40,6 @@ use crate::eth::BlockMiner;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
-#[cfg(feature = "dev")]
-use crate::ext::not;
 use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
@@ -132,15 +128,6 @@ pub struct StratusStorageConfig {
 
     #[clap(flatten)]
     pub perm_storage: PermanentStorageConfig,
-
-    /// Generates genesis block on startup when it does not exist.
-    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
-    pub enable_genesis: bool,
-
-    /// Enables test accounts with max wei on startup.
-    #[cfg(feature = "dev")]
-    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
-    pub enable_test_accounts: bool,
 }
 
 impl StratusStorageConfig {
@@ -148,35 +135,7 @@ impl StratusStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let temp_storage = self.temp_storage.init().await?;
         let perm_storage = self.perm_storage.init().await?;
-
         let storage = StratusStorage::new(temp_storage, perm_storage);
-        storage.set_active_block_number_as_next_if_not_set().await?;
-
-        // enable genesis block
-        if self.enable_genesis {
-            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
-            if genesis.is_none() {
-                tracing::info!("enabling genesis block");
-                storage.save_block(Block::genesis()).await?;
-            }
-        }
-
-        // enable test accounts
-        #[cfg(feature = "dev")]
-        if self.enable_test_accounts {
-            let mut test_accounts_to_insert = Vec::new();
-            for test_account in test_accounts() {
-                let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
-                if storage_account.is_empty() {
-                    test_accounts_to_insert.push(test_account);
-                }
-            }
-
-            if not(test_accounts_to_insert.is_empty()) {
-                tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                storage.save_accounts(test_accounts_to_insert).await?;
-            }
-        }
 
         Ok(Arc::new(storage))
     }
@@ -259,17 +218,51 @@ pub struct MinerConfig {
     /// Target block time.
     #[arg(long = "block-time", value_parser=parse_duration, env = "BLOCK_TIME")]
     pub block_time: Option<Duration>,
+
+    /// Generates genesis block on startup when it does not exist.
+    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
+    pub enable_genesis: bool,
+
+    /// Enables test accounts with max wei on startup.
+    #[cfg(feature = "dev")]
+    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
+    pub enable_test_accounts: bool,
 }
 
 impl MinerConfig {
-    pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<BlockMiner> {
+    pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
-        let miner = Arc::new(BlockMiner::new(storage, self.block_time));
-        if miner.is_interval_miner_mode() {
-            Arc::clone(&miner).spawn_interval_miner();
+        // create miner
+        let miner = BlockMiner::new(Arc::clone(&storage), self.block_time);
+        let miner = Arc::new(miner);
+
+        // enable genesis block
+        if self.enable_genesis {
+            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+            if genesis.is_none() {
+                tracing::info!("enabling genesis block");
+                miner.commit(Block::genesis()).await?;
+            }
         }
-        miner
+
+        // enable test accounts
+        #[cfg(feature = "dev")]
+        if self.enable_test_accounts {
+            let test_accounts = test_accounts();
+            tracing::info!(accounts = ?test_accounts, "enabling test accounts");
+            storage.save_accounts(test_accounts).await?;
+        }
+
+        // set block number
+        storage.set_active_block_number_as_next_if_not_set().await?;
+
+        // enable interval miner
+        if miner.is_interval_miner_mode() {
+            Arc::clone(&miner).spawn_interval_miner()?;
+        }
+
+        Ok(miner)
     }
 }
 
@@ -288,8 +281,8 @@ impl RelayerConfig {
         tracing::info!(config = ?self, "starting transaction relayer");
 
         match self.forward_to {
-            Some(ref url) => {
-                let chain = BlockchainClient::new(url).await?;
+            Some(ref forward_to) => {
+                let chain = BlockchainClient::new_http(forward_to).await?;
                 let relayer = TransactionRelayer::new(storage, chain);
                 Ok(Some(Arc::new(relayer)))
             }
@@ -426,12 +419,8 @@ impl WithCommonConfig for ImporterOfflineConfig {
 /// Configuration for `importer-online` binary.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct ImporterOnlineConfig {
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: String,
-
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
-    pub sync_interval: Duration,
+    #[clap(flatten)]
+    pub base: ImporterOnlineBaseConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -450,6 +439,20 @@ pub struct ImporterOnlineConfig {
     pub common: CommonConfig,
 }
 
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct ImporterOnlineBaseConfig {
+    /// External RPC HTTP endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    /// External RPC WS endpoint to sync blocks with Stratus.
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]
+    pub external_rpc_ws: Option<String>,
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
+    pub sync_interval: Duration,
+}
+
 impl WithCommonConfig for ImporterOnlineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
@@ -465,8 +468,8 @@ pub struct RunWithImporterConfig {
     #[arg(long = "leader_node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
 
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
-    pub sync_interval: Duration,
+    #[clap(flatten)]
+    pub online: ImporterOnlineBaseConfig,
 
     #[clap(flatten)]
     pub storage: StratusStorageConfig,
@@ -479,10 +482,6 @@ pub struct RunWithImporterConfig {
 
     #[clap(flatten)]
     pub miner: MinerConfig,
-
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: String,
 
     #[deref]
     #[clap(flatten)]

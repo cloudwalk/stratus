@@ -19,11 +19,11 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     // init services
     let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
-    let miner = config.miner.init(Arc::clone(&storage));
+    let miner = config.miner.init(Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
     let consensus = Consensus::new(config.clone().leader_node); // in development, with no leader configured, the current node ends up being the leader
-    let chain_url = consensus.get_chain_url(config.clone().external_rpc); //XXX maybe we should move this to the relayer and to the sync_online, in case of a change on urls, it safeguards us
-    let chain = BlockchainClient::new(&chain_url).await?;
+    let (http_url, ws_url) = consensus.get_chain_url(config.clone());
+    let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref()).await?);
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);
     let rpc_miner = Arc::clone(&miner);
@@ -48,7 +48,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     };
 
     let importer_task = async move {
-        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone(), config.sync_interval).await;
+        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone(), config.online.sync_interval).await;
         tracing::warn!("run_importer_online finished, cancelling tasks");
         cancellation.cancel();
         res

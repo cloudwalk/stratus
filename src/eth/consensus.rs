@@ -6,6 +6,8 @@ use std::fs::File;
 use std::io::Read;
 use std::env;
 
+use crate::config::RunWithImporterConfig;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Entry {
     index: u64,
@@ -86,13 +88,16 @@ impl Consensus {
         Some(namespace.trim().to_string())
     }
 
-    pub fn get_chain_url(&self, external_rpc: String) -> String {
+    // XXX this is a temporary solution to get the leader node
+    // later we want the leader to GENERATE blocks
+    // and even later we want this sync to be replaced by a gossip protocol or raft
+    pub fn get_chain_url(&self, config: RunWithImporterConfig) -> (String, Option<String>) {
         if self.is_follower() {
             if let Some(namespace) = Self::current_namespace() {
-                return format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace);
+                return (format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None);
             }
         }
-        external_rpc
+        (config.online.external_rpc, config.online.external_rpc_ws)
     }
 
     pub async fn discover_followers(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
