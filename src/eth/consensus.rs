@@ -1,10 +1,13 @@
-use kube::{api::Api, Client};
-use kube::api::ListParams;
-use k8s_openapi::api::core::v1::Pod;
-use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs::File;
 use std::io::Read;
-use std::env;
+
+use k8s_openapi::api::core::v1::Pod;
+use kube::api::Api;
+use kube::api::ListParams;
+use kube::Client;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::config::RunWithImporterConfig;
 
@@ -35,20 +38,14 @@ impl Consensus {
     //XXX for now we pick the leader name from the environment
     // the correct is to have a leader election algorithm
     pub fn new(leader_name: Option<String>) -> Self {
-        let node_name = match Self::current_node() {
-            Some(node_name) => node_name,
-            None => {
-                tracing::info!("No consensus module available, running in standalone mode");
-                return Self::new_stand_alone();
-            }
+        let Some(node_name) = Self::current_node() else {
+            tracing::info!("No consensus module available, running in standalone mode");
+            return Self::new_stand_alone();
         };
 
-        let leader_name = match leader_name {
-            Some(leader_name) => leader_name,
-            None => {
-                tracing::info!("No leader name provided, running in standalone mode");
-                return Self::new_stand_alone();
-            }
+        let Some(leader_name) = leader_name else {
+            tracing::info!("No leader name provided, running in standalone mode");
+            return Self::new_stand_alone();
         };
 
         Self {
