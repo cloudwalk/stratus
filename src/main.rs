@@ -15,7 +15,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage)).await?;
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await;
     let cancellation = signal_handler();
 
     // start rpc server

@@ -33,3 +33,4 @@ pub use block_miner::BlockMiner;
 pub use executor::EvmTask;
 pub use executor::Executor;
 pub use transaction_relayer::TransactionRelayer;
+pub use consensus::Consensus;

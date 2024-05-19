@@ -10,6 +10,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use revm::primitives::bitvec::vec;
 use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
@@ -39,6 +40,8 @@ use crate::eth::TransactionRelayer;
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
+use super::Consensus;
+
 pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
 pub struct Executor {
     /// Channel to send transactions to background EVMs.
@@ -58,6 +61,9 @@ pub struct Executor {
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
+
+    /// Consensus rules for the blockchain.
+    consensus: Option<Arc<Consensus>>,
 }
 
 impl Executor {
@@ -68,6 +74,7 @@ impl Executor {
         relayer: Option<Arc<TransactionRelayer>>,
         evm_tx: crossbeam_channel::Sender<EvmTask>,
         num_evms: usize,
+        consensus: Option<Arc<Consensus>>,
     ) -> Self {
         let automine = miner.is_automine_mode();
         tracing::info!(%num_evms, %automine, "starting executor");
@@ -79,6 +86,7 @@ impl Executor {
             automine,
             storage,
             relayer,
+            consensus,
         }
     }
 

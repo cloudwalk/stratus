@@ -40,6 +40,7 @@ use crate::eth::BlockMiner;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::eth::Consensus;
 use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
@@ -162,7 +163,7 @@ impl ExecutorConfig {
     /// Note: Should be called only after async runtime is initialized.
     ///
     /// TODO: remove BlockMiner after migration is completed.
-    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, relayer: Option<Arc<TransactionRelayer>>) -> Arc<Executor> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, relayer: Option<Arc<TransactionRelayer>>, consensus: Option<Arc<Consensus>>) -> Arc<Executor> {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(config = ?self, "starting executor");
 
@@ -205,7 +206,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms);
+        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms, consensus);
         Arc::new(executor)
     }
 }
