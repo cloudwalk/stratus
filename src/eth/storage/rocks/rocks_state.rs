@@ -1,4 +1,5 @@
 use core::fmt;
+use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
@@ -6,6 +7,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use itertools::Itertools;
 use rocksdb::WriteBatch;
+use rocksdb::DB;
 use tokio::sync::mpsc;
 use tracing::warn;
 
@@ -38,6 +40,7 @@ use crate::ext::OptionExt;
 use crate::log_and_err;
 
 pub struct RocksStorageState {
+    pub db_ref: Arc<DB>,
     pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
     pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>,
     pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>,
@@ -49,32 +52,30 @@ pub struct RocksStorageState {
     pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
-impl Default for RocksStorageState {
-    fn default() -> Self {
+impl RocksStorageState {
+    pub fn new(path: impl AsRef<Path>) -> Self {
         let (tx, rx) = mpsc::channel::<()>(1);
-        let (db, _opts) = RocksDb::<String, String>::new_db("./data/rocks", DbConfig::Default).unwrap();
+        let (db, _opts) = RocksDb::<String, String>::new_db(path.as_ref(), DbConfig::Default).unwrap();
+
+        let db = || Arc::clone(&db);
+
         //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
         let state = Self {
-            accounts: RocksDb::new("accounts", db.clone(), DbConfig::Default).unwrap(),
-            accounts_history: RocksDb::new("accounts_history", db.clone(), DbConfig::FastWriteSST).unwrap(),
-            account_slots: RocksDb::new("account_slots", db.clone(), DbConfig::Default).unwrap(),
-            account_slots_history: RocksDb::new("account_slots_history", db.clone(), DbConfig::FastWriteSST).unwrap(),
-            transactions: RocksDb::new("transactions", db.clone(), DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_number: RocksDb::new("blocks_by_number", db.clone(), DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_hash: RocksDb::new("blocks_by_hash", db.clone(), DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
-            logs: RocksDb::new("logs", db, DbConfig::LargeSSTFiles).unwrap(),
+            db_ref: db(),
+            accounts: RocksDb::new("accounts", db(), DbConfig::Default).unwrap(),
+            accounts_history: RocksDb::new("accounts_history", db(), DbConfig::FastWriteSST).unwrap(),
+            account_slots: RocksDb::new("account_slots", db(), DbConfig::Default).unwrap(),
+            account_slots_history: RocksDb::new("account_slots_history", db(), DbConfig::FastWriteSST).unwrap(),
+            transactions: RocksDb::new("transactions", db(), DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_number: RocksDb::new("blocks_by_number", db(), DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_hash: RocksDb::new("blocks_by_hash", db(), DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            logs: RocksDb::new("logs", db(), DbConfig::LargeSSTFiles).unwrap(),
             backup_trigger: Arc::new(tx),
         };
 
         state.listen_for_backup_trigger(rx).unwrap();
 
         state
-    }
-}
-
-impl RocksStorageState {
-    pub fn new() -> Self {
-        Self::default()
     }
 
     pub fn listen_for_backup_trigger(&self, mut rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
@@ -209,7 +210,7 @@ impl RocksStorageState {
     }
 
     pub async fn reset_at(&self, _block_number: BlockNumber) -> anyhow::Result<()> {
-        todo!();
+        Ok(())
     }
 
     /// Updates the in-memory state with changes from transaction execution
@@ -415,6 +416,17 @@ impl RocksStorageState {
 
         self.account_slots.insert_batch(slot_batch, Some(block_number.into()), &mut batch);
         self.account_slots.db.write(batch).unwrap();
+    }
+
+    /// Write to all DBs in a batch
+    pub fn write_batch(&self, batch: WriteBatch) -> anyhow::Result<()> {
+        let batch_len = batch.len();
+        let result = self.db_ref.write(batch);
+
+        if let Err(err) = &result {
+            tracing::error!(?err, batch_len, "failed to write batch to DB");
+        }
+        result.map_err(Into::into)
     }
 
     /// Clears in-memory state.

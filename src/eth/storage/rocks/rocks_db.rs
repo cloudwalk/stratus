@@ -1,6 +1,7 @@
 #[cfg(feature = "metrics")]
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::path::Path;
 use std::sync::Arc;
 #[cfg(feature = "metrics")]
 use std::sync::Mutex;
@@ -54,7 +55,7 @@ pub struct RocksDb<K, V> {
     column_family: String,
 }
 
-impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
+impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
     pub fn new(cf_name: &str, db: Arc<DB>, config: DbConfig) -> anyhow::Result<Arc<Self>> {
         let opts = Self::get_options(config, cf_name == "accounts" || cf_name == "account_slots");
         db.create_cf(cf_name, &opts)?;
@@ -68,7 +69,7 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Ser
         }))
     }
 
-    pub fn new_db(db_path: &str, config: DbConfig) -> anyhow::Result<(Arc<DB>, Options)> {
+    pub fn new_db(db_path: &Path, config: DbConfig) -> anyhow::Result<(Arc<DB>, Options)> {
         let opts = Self::get_options(config, false);
         let db = match DB::open(&opts, db_path) {
             Ok(db) => db,

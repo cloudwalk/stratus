@@ -43,7 +43,7 @@ impl RocksPermanentStorage {
     pub async fn new() -> anyhow::Result<Self> {
         tracing::info!("creating rocksdb storage");
 
-        let state = RocksStorageState::new();
+        let state = RocksStorageState::new("./data/rocks");
         //state.sync_data().await?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
@@ -188,7 +188,7 @@ impl PermanentStorage for RocksPermanentStorage {
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 
-        blocks_by_hash.db.write(batch).unwrap();
+        self.state.write_batch(batch).unwrap();
         Ok(())
     }
 
