@@ -8,6 +8,8 @@ use kube::api::ListParams;
 use kube::Client;
 use serde::Deserialize;
 use serde::Serialize;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{self};
 
 use crate::config::RunWithImporterConfig;
 
@@ -30,8 +32,10 @@ struct AppendEntriesResponse {
 pub struct Consensus {
     node_name: String,
     leader_name: String,
+    sender: Sender<String>,
     //XXX retry_attempts: u32,
     //XXX retry_delay: Duration,
+    //XXX current_index: AtomicU64,
 }
 
 impl Consensus {
@@ -48,9 +52,19 @@ impl Consensus {
             return Self::new_stand_alone();
         };
 
+        let (sender, mut receiver) = mpsc::channel(32);
+
+        tokio::spawn(async move {
+            while let Some(data) = receiver.recv().await {
+                tracing::info!("Received data: {}", data); //XXX this is where we will send the data to the followers
+                                                           //XXX let followers = self.discover_followers().await?; //XXX rediscover followers on comunication error
+            }
+        });
+
         Self {
             node_name,
             leader_name,
+            sender,
             //XXX  retry_attempts: 3,
             //XXX  retry_delay: Duration::from_millis(10),
         }
@@ -60,6 +74,7 @@ impl Consensus {
         Self {
             node_name: "standalone".to_string(),
             leader_name: "standalone".to_string(),
+            sender: mpsc::channel(32).0,
             //XXX retry_attempts: 0,
             //XXX retry_delay: Duration::from_millis(0),
         }
