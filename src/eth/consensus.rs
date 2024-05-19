@@ -32,7 +32,7 @@ struct AppendEntriesResponse {
 pub struct Consensus {
     node_name: String,
     leader_name: String,
-    sender: Sender<String>,
+    pub sender: Sender<String>,
     //XXX retry_attempts: u32,
     //XXX retry_delay: Duration,
     //XXX current_index: AtomicU64,
