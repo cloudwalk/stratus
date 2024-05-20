@@ -8,7 +8,10 @@ metrics! {
     counter   rpc_requests_started{method, function} [],
 
     "Number of JSON-RPC requests that finished."
-    histogram_duration rpc_requests_finished{method, function, success} []
+    histogram_duration rpc_requests_finished{method, function, success} [],
+
+    "Number of active subscriptions."
+    gauge rpc_subscriptions{subscription} []
 }
 
 // Storage reads.
