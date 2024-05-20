@@ -73,7 +73,7 @@ pub struct InMemoryTemporaryStorageState {
 }
 
 impl InMemoryTemporaryStorageState {
-    /// Validates that there is an active pending block being mined and returns a reference to it.
+    /// Validates there is an active pending block being mined and returns a reference to it.
     fn require_active_block(&mut self) -> anyhow::Result<&PendingBlock> {
         match &self.block {
             Some(block) => Ok(block),
@@ -81,7 +81,7 @@ impl InMemoryTemporaryStorageState {
         }
     }
 
-    /// Validates that there is an active pending block being mined and returns a mutable reference to it.
+    /// Validates there is an active pending block being mined and returns a mutable reference to it.
     fn require_active_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
         match &mut self.block {
             Some(block) => Ok(block),
