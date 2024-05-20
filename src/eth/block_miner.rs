@@ -25,6 +25,8 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::log_and_err;
 
+use super::transaction_relayer::ExternalRelayerClient;
+
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 
@@ -39,11 +41,14 @@ pub struct BlockMiner {
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
+
+    /// External relayer client
+    relayer_client: Option<ExternalRelayerClient>
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>, relayer_client: Option<ExternalRelayerClient>) -> Self {
         tracing::info!("starting block miner");
         Self {
             storage,
@@ -51,6 +56,7 @@ impl BlockMiner {
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
+            relayer_client
         }
     }
 
@@ -214,6 +220,10 @@ impl BlockMiner {
         // persist block
         self.storage.save_block(block.clone()).await?;
         self.storage.set_mined_block_number(block_number).await?;
+
+        if let Some(relayer) = &self.relayer_client {
+            relayer.send_to_relayer(block.clone()).await?; // TODO: do this through a channel to another task
+        }
 
         // notify
         let logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();

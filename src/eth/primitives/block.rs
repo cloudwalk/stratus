@@ -26,6 +26,8 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
+use crate::log_and_err;
+use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -186,6 +188,17 @@ impl From<Block> for EthersBlock<H256> {
         Self {
             transactions: ethers_block_transactions,
             ..ethers_block
+        }
+    }
+}
+
+impl TryFrom<serde_json::Value> for Block {
+    type Error = anyhow::Error;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        match Block::deserialize(&value) {
+            Ok(v) => Ok(v),
+            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to Block"),
         }
     }
 }
