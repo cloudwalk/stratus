@@ -10,7 +10,6 @@ use anyhow::anyhow;
 use anyhow::Result;
 use rocksdb::backup::BackupEngine;
 use rocksdb::backup::BackupEngineOptions;
-use rocksdb::backup::RestoreOptions;
 #[cfg(feature = "metrics")]
 use rocksdb::statistics::Histogram;
 #[cfg(feature = "metrics")]
@@ -57,8 +56,11 @@ pub struct RocksDb<K, V> {
 
 impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDb<K, V> {
     pub fn new(cf_name: &str, db: Arc<DB>, config: DbConfig) -> anyhow::Result<Arc<Self>> {
-        let opts = Self::get_options(config, cf_name == "accounts" || cf_name == "account_slots");
+        let enable_cache = cf_name == "accounts" || cf_name == "account_slots";
+        let opts = Self::get_options(config, enable_cache);
+
         db.create_cf(cf_name, &opts)?;
+
         Ok(Arc::new(Self {
             db,
             opts,
@@ -230,13 +232,6 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         let mut backup_engine = self.backup_engine()?;
         backup_engine.create_new_backup(&self.db)?;
         backup_engine.purge_old_backups(2)?;
-        Ok(())
-    }
-
-    pub fn restore(&self) -> anyhow::Result<()> {
-        let mut backup_engine = self.backup_engine()?;
-        let restore_options = RestoreOptions::default();
-        backup_engine.restore_from_latest_backup(self.db.path(), self.backup_path()?, &restore_options)?;
         Ok(())
     }
 

@@ -13,7 +13,6 @@ use rocksdb::DB;
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing::info;
-use tracing::warn;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -140,77 +139,6 @@ impl RocksStorageState {
         let block_number = self.blocks_by_number.last().map(|(num, _)| num).unwrap_or_default();
         tracing::info!(number = %block_number, "preloaded block_number");
         Ok((u64::from(block_number)).into())
-    }
-
-    pub async fn sync_data(&self) -> anyhow::Result<()> {
-        tracing::info!("starting sync_data");
-        tracing::info!("account_block_number {:?}", self.accounts.get_current_block_number());
-        tracing::info!("slots_block_number {:?}", self.account_slots.get_current_block_number());
-        tracing::info!("slots_history_block_number {:?}", self.account_slots_history.get_index_block_number());
-        tracing::info!("accounts_history_block_number {:?}", self.accounts_history.get_index_block_number());
-        tracing::info!("logs_block_number {:?}", self.logs.get_index_block_number());
-        tracing::info!("transactions_block_number {:?}", self.transactions.get_index_block_number());
-
-        if let Some((last_block_number, _)) = self.blocks_by_number.last() {
-            tracing::info!("last_block_number {:?}", last_block_number);
-            if self.accounts.get_current_block_number() != self.account_slots.get_current_block_number() {
-                warn!(
-                    "block numbers are not in sync {:?} {:?} {:?} {:?} {:?} {:?}",
-                    self.accounts.get_current_block_number(),
-                    self.account_slots.get_current_block_number(),
-                    self.account_slots_history.get_index_block_number(),
-                    self.accounts_history.get_index_block_number(),
-                    self.logs.get_index_block_number(),
-                    self.transactions.get_index_block_number(),
-                );
-                let mut min_block_number = std::cmp::min(
-                    std::cmp::min(
-                        std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
-                        std::cmp::min(
-                            self.account_slots_history.get_index_block_number(),
-                            self.accounts_history.get_index_block_number(),
-                        ),
-                    ),
-                    std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
-                );
-
-                let last_secure_block_number = last_block_number.inner_value().as_u64() - 5000;
-                if last_secure_block_number > min_block_number {
-                    self.accounts.restore().unwrap();
-                    tracing::warn!("accounts restored");
-                    self.accounts_history.restore().unwrap();
-                    tracing::warn!("accounts_history restored");
-                    self.account_slots.restore().unwrap();
-                    tracing::warn!("account_slots restored");
-                    self.account_slots_history.restore().unwrap();
-                    tracing::warn!("account_slots_history restored");
-                    self.transactions.restore().unwrap();
-                    tracing::warn!("transactions restored");
-                    self.blocks_by_number.restore().unwrap();
-                    tracing::warn!("blocks_by_number restored");
-                    self.blocks_by_hash.restore().unwrap();
-                    tracing::warn!("blocks_by_hash restored");
-                    self.logs.restore().unwrap();
-                    tracing::warn!("logs restored");
-
-                    min_block_number = std::cmp::min(
-                        std::cmp::min(
-                            std::cmp::min(self.accounts.get_current_block_number(), self.account_slots.get_current_block_number()),
-                            std::cmp::min(
-                                self.account_slots_history.get_index_block_number(),
-                                self.accounts_history.get_index_block_number(),
-                            ),
-                        ),
-                        std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
-                    );
-                }
-                self.reset_at(BlockNumber::from(min_block_number)).await?;
-            }
-        }
-
-        tracing::info!("data is in sync");
-
-        Ok(())
     }
 
     pub async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {

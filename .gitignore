@@ -9,6 +9,7 @@ data/**/*.db
 data/**/*.json
 data/**/*.txt
 data/**/*.rocksdb
+data/rocksdb/
 
 # E2E (Stratus)
 e2e/artifacts
