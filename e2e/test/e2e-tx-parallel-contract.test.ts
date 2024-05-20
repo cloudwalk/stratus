@@ -66,31 +66,30 @@ describe("Transaction: parallel TestContractBalances", async () => {
         expect(await _contract.get(CHARLIE.address)).eq(expectedBalances[CHARLIE.address]);
     });
 
-    it("Sends parallel transactions that should have one success and one fail due to lack of balance", async () => {
-        expect(await _contract.get(BOB.address)).eq(625);
+    it("Fails parallel transactions due to lack of balance", async () => {
+        // set initial balance
+        await _contract.connect(ALICE.signer()).set(ALICE.address, 1140);
+        expect(await _contract.get(ALICE.address)).eq(1140);
 
+        // parallel transactions decreases balance (15 must work, 5 should fail)
+        const signedTxs = [];
         const senders = randomAccounts(20);
-        const signedTxsSub = [];
-        for (let accountIndex = 0; accountIndex < senders.length; accountIndex++) {
-            const sender = senders[accountIndex];
+        for (const sender of senders) {
             let nonce = await sendGetNonce(sender.address);
-            const tx = await _contract.connect(sender.signer()).sub.populateTransaction(BOB.address, 60, {
+            const tx = await _contract.connect(sender.signer()).sub.populateTransaction(ALICE.address, 75, {
                 nonce: nonce,
                 ...TX_PARAMS,
             });
-
-            nonce++;
-
-            signedTxsSub.push(await sender.signer().signTransaction(tx));
+            signedTxs.push(await sender.signer().signTransaction(tx));
         }
 
-        let result = await sendRawTransactions(signedTxsSub);
+        // send transactions in parallel
+        let hashes = await sendRawTransactions(signedTxs);
+        let failed = hashes.filter(x => x === undefined).length;
 
-        expect(await _contract.get(BOB.address)).eq(25);
-        const undefinedCount = result.reduce((count, element) => {
-            return element === undefined ? count + 1 : count;
-        }, 0);
-        expect(undefinedCount).eq(10);
+        // check remaining balance
+        expect(await _contract.get(ALICE.address)).eq(15);
+        expect(failed).eq(5, "failed transactions");
     });
 });
 

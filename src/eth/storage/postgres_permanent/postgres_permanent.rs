@@ -7,7 +7,6 @@ use std::time::Duration;
 use anyhow::Context;
 use async_trait::async_trait;
 use itertools::Itertools;
-use nonempty::nonempty;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::query_builder::QueryBuilder;
@@ -24,8 +23,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::ExecutionConflict;
-use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Hash as TransactionHash;
 use crate::eth::primitives::Log;
@@ -48,7 +45,6 @@ use crate::eth::storage::postgres_permanent::types::PostgresTransaction;
 use crate::eth::storage::postgres_permanent::types::SlotBatch;
 use crate::eth::storage::postgres_permanent::types::TransactionBatch;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StorageError;
 use crate::log_and_err;
 
 #[derive(Debug)]
@@ -593,12 +589,9 @@ impl PermanentStorage for PostgresPermanentStorage {
             }
         }
 
-        let expected_modified_slots = slot_batch.address.len();
-        let expected_modified_accounts = account_batch.address.len();
-
         let mut tx = self.pool.begin().await.context("failed to init save_block transaction")?;
 
-        let block_result = sqlx::query_file!(
+        sqlx::query_file!(
             "src/eth/storage/postgres_permanent/sql/insert_entire_block.sql",
             block.header.number as _,                   // $1
             block.header.hash.as_ref(),                 // $2
@@ -677,27 +670,6 @@ impl PermanentStorage for PostgresPermanentStorage {
         .fetch_one(&mut *tx)
         .await
         .context("failed to insert block")?;
-
-        let modified_accounts = block_result.modified_accounts.unwrap_or_default() as usize;
-        let modified_slots = block_result.modified_slots.unwrap_or_default() as usize;
-
-        if modified_accounts != expected_modified_accounts {
-            tx.rollback().await.context("failed to rollback transaction")?;
-            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::AccountModifiedCount {
-                expected: expected_modified_accounts,
-                actual: modified_accounts,
-            }]));
-            return Err(error).context("account modified count conflict");
-        }
-
-        if modified_slots != expected_modified_slots {
-            tx.rollback().await.context("failed to rollback transaction")?;
-            let error: StorageError = StorageError::Conflict(ExecutionConflicts(nonempty![ExecutionConflict::SlotModifiedCount {
-                expected: expected_modified_slots,
-                actual: modified_slots
-            }]));
-            return Err(error).context("slot modified count conflict");
-        }
 
         tx.commit().await.context("failed to commit transaction")?;
 

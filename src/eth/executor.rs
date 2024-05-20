@@ -50,7 +50,7 @@ pub struct Executor {
     num_evms: usize,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
-    miner: Mutex<Arc<BlockMiner>>,
+    miner: Arc<BlockMiner>,
 
     /// Bool indicating whether to enable auto mining or not.
     automine: bool,
@@ -81,7 +81,7 @@ impl Executor {
         Self {
             evm_tx,
             num_evms,
-            miner: Mutex::new(miner),
+            miner,
             automine,
             storage,
             relayer,
@@ -154,7 +154,7 @@ impl Executor {
             }
 
             // persist state
-            storage.save_execution(TransactionExecution::External(tx)).await?;
+            self.miner.save_execution(TransactionExecution::External(tx)).await?;
         }
 
         // track block metrics
@@ -282,7 +282,7 @@ impl Executor {
 
                     // save execution to temporary storage (not working yet)
                     let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-                    if let Err(e) = self.storage.save_execution(tx_execution.clone()).await {
+                    if let Err(e) = self.miner.save_execution(tx_execution.clone()).await {
                         if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
                             tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
                             continue;
@@ -295,8 +295,7 @@ impl Executor {
 
                     // auto mine needed for e2e contract tests
                     if self.automine {
-                        let miner = self.miner.lock().await;
-                        miner.mine_local_and_commit().await?;
+                        self.miner.mine_local_and_commit().await?;
                     }
 
                     break tx_execution;
