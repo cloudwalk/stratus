@@ -10,6 +10,7 @@ use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 
+use super::Consensus;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -24,8 +25,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::log_and_err;
-
-use super::Consensus;
 
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
