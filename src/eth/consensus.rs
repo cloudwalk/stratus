@@ -30,9 +30,9 @@ struct AppendEntriesResponse {
 }
 
 pub struct Consensus {
+    pub sender: Sender<String>,
     node_name: String,
     leader_name: String,
-    pub sender: Sender<String>,
     //XXX retry_attempts: u32,
     //XXX retry_delay: Duration,
     //XXX current_index: AtomicU64,
@@ -71,10 +71,18 @@ impl Consensus {
     }
 
     fn new_stand_alone() -> Self {
+        let (sender, mut receiver) = mpsc::channel(32);
+
+        tokio::spawn(async move {
+            while let Some(data) = receiver.recv().await {
+                tracing::info!("Received data: {}", data);
+            }
+        });
+
         Self {
             node_name: "standalone".to_string(),
             leader_name: "standalone".to_string(),
-            sender: mpsc::channel(32).0,
+            sender,
             //XXX retry_attempts: 0,
             //XXX retry_delay: Duration::from_millis(0),
         }
