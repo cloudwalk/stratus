@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 
+use super::Consensus;
 use crate::eth::evm;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
@@ -39,8 +40,6 @@ use crate::eth::TransactionRelayer;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
-
-use super::Consensus;
 
 pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
 pub struct Executor {
