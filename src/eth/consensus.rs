@@ -33,7 +33,6 @@ pub struct Consensus {
     pub sender: Sender<String>,
     node_name: String,
     leader_name: String,
-    pub sender: Sender<String>,
     //XXX retry_attempts: u32,
     //XXX retry_delay: Duration,
     //XXX current_index: AtomicU64,
