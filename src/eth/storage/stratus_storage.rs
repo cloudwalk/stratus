@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use consensus::Consensus;
 
 use crate::config::PermanentStorageKind;
+use crate::eth::consensus;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -41,6 +43,7 @@ const DEFAULT_VALUE: &str = "default";
 pub struct StratusStorage {
     temp: Arc<dyn TemporaryStorage>,
     perm: Arc<dyn PermanentStorage>,
+    consensus: Option<Arc<Consensus>>,
 }
 
 impl StratusStorage {
@@ -49,8 +52,8 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
-        Self { temp, perm }
+    pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>, consensus: Option<Arc<Consensus>>) -> Self {
+        Self { temp, perm, consensus }
     }
 
     pub async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
@@ -330,6 +333,10 @@ impl StratusStorage {
 
     #[tracing::instrument(skip_all)]
     pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+        if let Some(consensus) = &self.consensus {
+            consensus.sender.send("Block Saved.".to_string()).await.unwrap(); //XXX temporary, later we will send the whole block
+        }
+
         #[cfg(feature = "metrics")]
         {
             let (start, label_size_by_tx, label_size_by_gas) = (metrics::now(), block.label_size_by_transactions(), block.label_size_by_gas());

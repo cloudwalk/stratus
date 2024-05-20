@@ -58,7 +58,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
-    let storage = config.storage.init().await?;
+    let storage = config.storage.init(None).await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init(Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await; //XXX TODO implement the consensus here, in case of it being a follower, it should not even enter here

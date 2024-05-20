@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {
-    let storage = config.storage.init().await?;
+    let storage = config.storage.init(None).await?;
 
     let interval = BlockNumber::from(config.interval);
 

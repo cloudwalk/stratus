@@ -133,10 +133,10 @@ pub struct StratusStorageConfig {
 
 impl StratusStorageConfig {
     /// Initializes Stratus storage.
-    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+    pub async fn init(&self, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<StratusStorage>> {
         let temp_storage = self.temp_storage.init().await?;
         let perm_storage = self.perm_storage.init().await?;
-        let storage = StratusStorage::new(temp_storage, perm_storage);
+        let storage = StratusStorage::new(temp_storage, perm_storage, consensus);
 
         Ok(Arc::new(storage))
     }

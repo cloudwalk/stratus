@@ -30,7 +30,7 @@ struct AppendEntriesResponse {
 }
 
 pub struct Consensus {
-    pub sender: Sender<String>,
+    pub sender: Sender<String>, //XXX maybe we should privatize this and use a oneshot channel
     node_name: String,
     leader_name: String,
     //XXX retry_attempts: u32,
