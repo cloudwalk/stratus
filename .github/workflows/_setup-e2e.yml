@@ -33,10 +33,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-${{ inputs.cache_key }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          key: ${{ runner.os }}-v2-cargo-${{ inputs.cache_key }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ inputs.cache_key }}-
-            ${{ runner.os }}-cargo-stable-release-
+            ${{ runner.os }}-v2-cargo-${{ inputs.cache_key }}-
+            ${{ runner.os }}-v2-cargo-stable-release-
 
       - name: Set up Rust
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
