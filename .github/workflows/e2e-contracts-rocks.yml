@@ -51,9 +51,8 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-v2-cargo-stable-release-rocks-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          key: ${{ runner.os }}-v2-cargo-stable-release-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-v2-cargo-stable-release-rocks-
             ${{ runner.os }}-v2-cargo-stable-release-
 
       - name: Set up Rust
