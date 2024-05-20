@@ -35,7 +35,7 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
-use crate::eth::rpc::rpc_parsing_error;
+use crate::eth::rpc::rpc_invalid_params_error;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
@@ -414,7 +414,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         // unsupported
         kind => {
             tracing::warn!(%kind, "unsupported subscription kind");
-            pending.reject(rpc_parsing_error(format!("unsupported subscription kind: {}", kind))).await;
+            pending.reject(rpc_invalid_params_error(format!("unsupported subscription kind: {}", kind))).await;
         }
     };
     Ok(())

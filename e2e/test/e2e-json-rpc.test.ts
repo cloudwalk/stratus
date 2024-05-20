@@ -191,7 +191,7 @@ describe("JSON-RPC", () => {
                 expect(response.error).to.not.be.undefined;
                 expect(response.error.code).to.not.be.undefined;
                 expect(response.error.code).to.be.a('number');
-                // expect(response.error.code).eq(-32602);
+                expect(response.error.code).eq(-32602);
             });
 
             it("Validate newHeads event", async () => {
