@@ -113,14 +113,13 @@ impl BlockMiner {
 
     /// Persists a transaction execution.
     pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
-        if let Some(consensus) = &self.consensus {
-            //XXX TODO FIXME HACK let execution = format!("{:?}", tx_execution.clone());
-            consensus.sender.send("Execution performed".to_string()).await.unwrap();
-        }
-
         let tx_hash = tx_execution.hash();
 
-        self.storage.save_execution(tx_execution).await?;
+        self.storage.save_execution(tx_execution.clone()).await?;
+        if let Some(consensus) = &self.consensus {
+            let execution = format!("{:?}", tx_execution.clone());
+            consensus.sender.send(execution).await.unwrap();
+        }
         let _ = self.notifier_pending_txs.send(tx_hash);
 
         Ok(())
