@@ -25,6 +25,8 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::log_and_err;
 
+use super::Consensus;
+
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 
@@ -39,11 +41,14 @@ pub struct BlockMiner {
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
+
+    /// Consensus logic.
+    consensus: Option<Arc<Consensus>>,
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>, consensus: Option<Arc<Consensus>>) -> Self {
         tracing::info!("starting block miner");
         Self {
             storage,
@@ -51,6 +56,7 @@ impl BlockMiner {
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
+            consensus,
         }
     }
 
@@ -107,6 +113,11 @@ impl BlockMiner {
 
     /// Persists a transaction execution.
     pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
+        if let Some(consensus) = &self.consensus {
+            //XXX TODO FIXME HACK let execution = format!("{:?}", tx_execution.clone());
+            consensus.sender.send("Execution performed".to_string()).await.unwrap();
+        }
+
         let tx_hash = tx_execution.hash();
 
         self.storage.save_execution(tx_execution).await?;
