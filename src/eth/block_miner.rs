@@ -19,6 +19,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -29,6 +30,9 @@ pub struct BlockMiner {
 
     /// Time duration between blocks.
     pub block_time: Option<Duration>,
+
+    /// Broadcasts pending transactions events.
+    pub notifier_pending_txs: broadcast::Sender<Hash>,
 
     /// Broadcasts new mined blocks events.
     pub notifier_blocks: broadcast::Sender<Block>,
@@ -44,6 +48,7 @@ impl BlockMiner {
         Self {
             storage,
             block_time,
+            notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
         }
@@ -98,6 +103,16 @@ impl BlockMiner {
     /// Checks if miner should run in automine mode.
     pub fn is_automine_mode(&self) -> bool {
         not(self.is_interval_miner_mode())
+    }
+
+    /// Persists a transaction execution.
+    pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
+        let tx_hash = tx_execution.hash();
+
+        self.storage.save_execution(tx_execution).await?;
+        let _ = self.notifier_pending_txs.send(tx_hash);
+
+        Ok(())
     }
 
     /// Mines external block and external transactions.
