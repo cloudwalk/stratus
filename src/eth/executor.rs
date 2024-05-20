@@ -117,7 +117,7 @@ impl Executor {
                 // serial: execute now
                 ParallelExecutionRoute::Serial(tx, receipt) => self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?,
 
-                // parallel: get parallel execution result and reexecute if failed because of error
+                // parallel: get parallel execution result and reexecute if failed
                 ParallelExecutionRoute::Parallel(..) => {
                     match parallel_executions.next().await.unwrap() {
                         // success: check conflicts
@@ -163,25 +163,32 @@ impl Executor {
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
+    ///
+    /// This function wraps `reexecute_external_tx_inner` and returns back the payload
+    /// to facilitate re-execution of parallel transactions that failed
     async fn reexecute_external_tx<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
         block: &ExternalBlock,
     ) -> Result<ExternalTransactionExecution, (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Error)> {
+        self.reexecute_external_tx_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
+    }
+
+    /// Reexecutes an external transaction locally ensuring it produces the same output.
+    async fn reexecute_external_tx_inner<'a, 'b>(
+        &'a self,
+        tx: &'b ExternalTransaction,
+        receipt: &'b ExternalReceipt,
+        block: &ExternalBlock,
+    ) -> anyhow::Result<ExternalTransactionExecution> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         if receipt.is_failure() {
-            let sender = match self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await {
-                Ok(sender) => sender,
-                Err(e) => return Err((tx, receipt, e)),
-            };
-            let execution = match EvmExecution::from_failed_external_transaction(sender, receipt, block) {
-                Ok(execution) => execution,
-                Err(e) => return Err((tx, receipt, e)),
-            };
+            let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await?;
+            let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block)?;
             let evm_result = EvmExecutionResult {
                 execution,
                 metrics: ExecutionMetrics::default(),
@@ -190,49 +197,43 @@ impl Executor {
         }
 
         // reexecute transaction
-        let evm_input = match EvmInput::from_external(tx, receipt, block) {
-            Ok(evm_input) => evm_input,
-            Err(e) => return Err((tx, receipt, e)),
-        };
+        let evm_input = EvmInput::from_external(tx, receipt, block)?;
 
         #[cfg(feature = "metrics")]
         let function = evm_input.extract_function();
 
         let evm_result = self.execute_in_evm(evm_input).await;
 
-        // handle reexecution result
-        match evm_result {
-            Ok(mut evm_result) => {
-                // track metrics before execution is update with receipt
-                #[cfg(feature = "metrics")]
-                {
-                    metrics::inc_executor_external_transaction_gas(evm_result.execution.gas.as_u64() as usize, function.clone());
-                    metrics::inc_executor_external_transaction(start.elapsed(), function);
-                }
-
-                // update execution with receipt info
-                if let Err(e) = evm_result.execution.apply_receipt(receipt) {
-                    return Err((tx, receipt, e));
-                };
-
-                // ensure it matches receipt before saving
-                if let Err(e) = evm_result.execution.compare_with_receipt(receipt) {
-                    let json_tx = serde_json::to_string(&tx).unwrap();
-                    let json_receipt = serde_json::to_string(&receipt).unwrap();
-                    let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).unwrap();
-                    tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
-                    return Err((tx, receipt, e));
-                };
-
-                Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result))
-            }
+        let mut evm_result = match evm_result {
+            Ok(inner) => inner,
             Err(e) => {
                 let json_tx = serde_json::to_string(&tx).unwrap();
                 let json_receipt = serde_json::to_string(&receipt).unwrap();
                 tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
-                Err((tx, receipt, e))
+                return Err(e);
             }
+        };
+
+        // track metrics before execution is update with receipt
+        #[cfg(feature = "metrics")]
+        {
+            metrics::inc_executor_external_transaction_gas(evm_result.execution.gas.as_u64() as usize, function.clone());
+            metrics::inc_executor_external_transaction(start.elapsed(), function);
         }
+
+        // update execution with receipt info
+        evm_result.execution.apply_receipt(receipt)?;
+
+        // ensure it matches receipt before saving
+        if let Err(e) = evm_result.execution.compare_with_receipt(receipt) {
+            let json_tx = serde_json::to_string(&tx).unwrap();
+            let json_receipt = serde_json::to_string(&receipt).unwrap();
+            let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).unwrap();
+            tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
+            return Err(e);
+        };
+
+        Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result))
     }
 
     // -------------------------------------------------------------------------
