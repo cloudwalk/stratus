@@ -309,7 +309,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
         self.db.put_cf(&cf, serialized_key, serialized_value).unwrap();
     }
 
-    pub fn insert_batch(&self, changes: Vec<(K, V)>, current_block: Option<u64>, batch: &mut WriteBatch) {
+    pub fn prepare_batch_insertion(&self, changes: Vec<(K, V)>, current_block: Option<u64>, batch: &mut WriteBatch) {
         let cf = self.db.cf_handle(&self.column_family).unwrap();
 
         for (key, value) in changes {
@@ -328,7 +328,7 @@ impl<K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Seriali
 
     /// inserts data but keep a block as key pointing to the keys inserted in a given block
     /// this makes for faster search based on block_number, ergo index
-    pub fn insert_batch_indexed(&self, changes: Vec<(K, V)>, current_block: u64, batch: &mut WriteBatch) {
+    pub fn prepare_batch_insertion_indexed(&self, changes: Vec<(K, V)>, current_block: u64, batch: &mut WriteBatch) {
         let cf = self.db.cf_handle(&self.column_family).unwrap();
 
         let mut keys = vec![];

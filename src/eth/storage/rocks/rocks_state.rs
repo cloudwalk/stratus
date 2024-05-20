@@ -246,8 +246,8 @@ impl RocksStorageState {
             }
         }
 
-        accounts.insert_batch(account_changes, Some(block_number.into()), batch);
-        accounts_history.insert_batch_indexed(account_history_changes, block_number.into(), batch);
+        accounts.prepare_batch_insertion(account_changes, Some(block_number.into()), batch);
+        accounts_history.prepare_batch_insertion_indexed(account_history_changes, block_number.into(), batch);
 
         let mut slot_changes = Vec::new();
         let mut slot_history_changes = Vec::new();
@@ -261,8 +261,8 @@ impl RocksStorageState {
                 }
             }
         }
-        account_slots.insert_batch(slot_changes, Some(block_number.into()), batch);
-        account_slots_history.insert_batch_indexed(slot_history_changes, block_number.into(), batch);
+        account_slots.prepare_batch_insertion(slot_changes, Some(block_number.into()), batch);
+        account_slots_history.prepare_batch_insertion_indexed(slot_history_changes, block_number.into(), batch);
     }
 
     pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
@@ -400,8 +400,9 @@ impl RocksStorageState {
         for account in accounts {
             account_batch.push(account.into());
         }
+
         let mut batch = WriteBatch::default();
-        self.accounts.insert_batch(account_batch, Some(block_number.into()), &mut batch);
+        self.accounts.prepare_batch_insertion(account_batch, Some(block_number.into()), &mut batch);
         self.accounts.db.write(batch).unwrap();
     }
 
@@ -413,8 +414,7 @@ impl RocksStorageState {
             slot_batch.push(((address.into(), slot.index.into()), slot.value.into()));
         }
         let mut batch = WriteBatch::default();
-
-        self.account_slots.insert_batch(slot_batch, Some(block_number.into()), &mut batch);
+        self.account_slots.prepare_batch_insertion(slot_batch, Some(block_number.into()), &mut batch);
         self.account_slots.db.write(batch).unwrap();
     }
 

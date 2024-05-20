@@ -159,9 +159,9 @@ impl PermanentStorage for RocksPermanentStorage {
         let txs_rocks = Arc::clone(&self.state.transactions);
         let logs_rocks = Arc::clone(&self.state.logs);
 
-        txs_rocks.insert_batch_indexed(txs_batch, number.as_u64(), &mut batch);
+        txs_rocks.prepare_batch_insertion_indexed(txs_batch, number.as_u64(), &mut batch);
 
-        logs_rocks.insert_batch_indexed(logs_batch, number.as_u64(), &mut batch);
+        logs_rocks.prepare_batch_insertion_indexed(logs_batch, number.as_u64(), &mut batch);
 
         let block_hash = block.hash();
 
@@ -172,9 +172,9 @@ impl PermanentStorage for RocksPermanentStorage {
             // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
             transaction.execution.changes.retain(|_, change| change.bytecode.clone().is_modified());
         }
-        blocks_by_number.insert_batch(vec![(number.into(), block_without_changes.into())], Some(number.as_u64()), &mut batch);
+        blocks_by_number.prepare_batch_insertion(vec![(number.into(), block_without_changes.into())], Some(number.as_u64()), &mut batch);
 
-        blocks_by_hash.insert_batch_indexed(vec![(block_hash.into(), number.into())], number.as_u64(), &mut batch);
+        blocks_by_hash.prepare_batch_insertion_indexed(vec![(block_hash.into(), number.into())], number.as_u64(), &mut batch);
 
         self.state.update_state_with_execution_changes(&account_changes, number, &mut batch);
 
