@@ -26,7 +26,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let external_relayer = if let Some(c) = config.external_relayer { Some(c.init().await) } else { None };
-    let miner = config.miner.init(Arc::clone(&storage), external_relayer).await?;
+    let miner = config.miner.init(Arc::clone(&storage), Some(Arc::clone(&consensus)), external_relayer).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, Some(consensus)).await;
 
     let rpc_storage = Arc::clone(&storage);

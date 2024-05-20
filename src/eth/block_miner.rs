@@ -10,6 +10,7 @@ use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 
+use super::Consensus;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -44,11 +45,14 @@ pub struct BlockMiner {
 
     /// External relayer client
     relayer_client: Option<ExternalRelayerClient>
+  
+    /// Consensus logic.
+    consensus: Option<Arc<Consensus>>,
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>, relayer_client: Option<ExternalRelayerClient>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>, consensus: Option<Arc<Consensus>>, relayer_client: Option<ExternalRelayerClient>) -> Self {
         tracing::info!("starting block miner");
         Self {
             storage,
@@ -57,6 +61,7 @@ impl BlockMiner {
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
             relayer_client
+            consensus,
         }
     }
 
@@ -115,7 +120,11 @@ impl BlockMiner {
     pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
         let tx_hash = tx_execution.hash();
 
-        self.storage.save_execution(tx_execution).await?;
+        self.storage.save_execution(tx_execution.clone()).await?;
+        if let Some(consensus) = &self.consensus {
+            let execution = format!("{:?}", tx_execution.clone());
+            consensus.sender.send(execution).await.unwrap();
+        }
         let _ = self.notifier_pending_txs.send(tx_hash);
 
         Ok(())

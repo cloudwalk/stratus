@@ -239,11 +239,11 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    pub async fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
         // create miner
-        let miner = BlockMiner::new(Arc::clone(&storage), self.block_time, relayer);
+        let miner = BlockMiner::new(Arc::clone(&storage), self.block_time, consensus, relayer);
         let miner = Arc::new(miner);
 
         // enable genesis block
