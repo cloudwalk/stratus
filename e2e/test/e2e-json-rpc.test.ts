@@ -188,6 +188,9 @@ describe("JSON-RPC", () => {
                 const response = await subscribeAndGetEvent("unsupportedSubscription", waitTimeInMilliseconds);
                 expect(response).to.not.be.undefined;
                 expect(response.id).to.not.be.undefined;
+                expect(response.error).to.not.be.undefined;
+                expect(response.error.code).to.not.be.undefined;
+                expect(response.error.code).to.be.a('number');
                 // expect(response.error.code).eq(-32602);
             });
 
