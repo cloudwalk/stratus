@@ -215,7 +215,7 @@ export function openWebSocketConnection(): WebSocket {
 /// Add an "open" event listener to a WebSocket
 export function addOpenListener(socket: WebSocket, subscription: string) {
     socket.addEventListener("open", function () {
-        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription] }));
+        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription, {}] }));
     });
 }
 
