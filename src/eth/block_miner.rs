@@ -44,8 +44,8 @@ pub struct BlockMiner {
     pub notifier_logs: broadcast::Sender<LogMined>,
 
     /// External relayer client
-    relayer_client: Option<ExternalRelayerClient>
-  
+    relayer_client: Option<ExternalRelayerClient>,
+
     /// Consensus logic.
     consensus: Option<Arc<Consensus>>,
 }
@@ -60,8 +60,8 @@ impl BlockMiner {
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
-            relayer_client
-            consensus,
+            relayer_client,
+            consensus
         }
     }
 
