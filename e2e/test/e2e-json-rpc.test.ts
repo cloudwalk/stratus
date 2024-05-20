@@ -63,7 +63,7 @@ describe("JSON-RPC", () => {
             let tx = { from: ALICE.address, to: BOB.address, value: "0x1" }
             let gas = await send("eth_estimateGas", [tx]);
             expect(gas).match(HEX_PATTERN, "format");
-            
+
             const gasDec = parseInt(gas, 16); 
             expect(gasDec).to.be.greaterThan(0).and.lessThan(1_000_000);
         });
@@ -173,6 +173,15 @@ describe("JSON-RPC", () => {
                 expect(response.id).to.not.be.undefined;
                 expect(response.result).to.not.be.undefined;
             });
+
+            //it("Subscribe to newPendingTransactions receives success subscription event", async () => {
+            //    const waitTimeInMilliseconds = 40;
+            //     const response = await subscribeAndGetEvent("newPendingTransactions", waitTimeInMilliseconds);
+            //     expect(response).to.not.be.undefined;
+            //     expect(response.id).to.not.be.undefined;
+            //     expect(response.result).to.not.be.undefined;
+            //});
+
 
             it("Subscribe to unsupported receives error subscription event", async () => {
                const waitTimeInMilliseconds = 40;
