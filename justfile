@@ -42,17 +42,9 @@ setup:
 run *args="":
     cargo run {{ build_flags }} -- {{ run_flags }} {{args}}
 
-# Stratus: Run main service
-run-rocks *args="":
-    cargo run {{ build_flags }} --features rocks -- {{ run_flags }} {{args}}
-
 # Stratus: Compile with debug options
 build:
     cargo build {{ build_flags }}
-
-# Stratus: Compile with debug options
-build-rocks:
-    cargo build {{ build_flags }} --features rocks
 
 # Stratus: Check, or compile without generating code
 check:
@@ -251,8 +243,8 @@ e2e-stratus-rocks test="":
     fi
 
     echo "-> Starting Stratus"
-    just build-rocks || exit 1
-    just run-rocks -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just build || exit 1
+    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -432,8 +424,8 @@ contracts-test-stratus-postgres *args="":
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
-    just build-rocks || exit 1
-    just run-rocks -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just build || exit 1
+    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo

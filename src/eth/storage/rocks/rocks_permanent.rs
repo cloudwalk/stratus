@@ -9,15 +9,12 @@ use async_trait::async_trait;
 use futures::future::join_all;
 
 use super::rocks_state::RocksStorageState;
-use super::types::NonceRocksdb;
-use super::types::WeiRocksdb;
 use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -29,7 +26,6 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StorageError;
 
 /// used for multiple purposes, such as TPS counting and backup management
 const TRANSACTION_LOOP_THRESHOLD: usize = 120_000;
