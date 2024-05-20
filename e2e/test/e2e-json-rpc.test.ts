@@ -13,6 +13,7 @@ import {
     sendAndGetError,
     sendExpect,
     subscribeAndGetEvent,
+    subscribeAndGetEventWithContract,
 } from "./helpers/rpc";
 
 describe("JSON-RPC", () => {
@@ -208,6 +209,27 @@ describe("JSON-RPC", () => {
                 // expect(result).to.have.property('stateRoot').that.is.a('string');
                 // expect(result).to.have.property('totalDifficulty').that.is.a('string');
                 // expect(result).to.have.property('nonce').that.is.a('string');
+            });
+
+            it("Validate logs event", async () => {
+                const waitTimeInMilliseconds = 40;
+                const response = await subscribeAndGetEventWithContract("logs", waitTimeInMilliseconds, 2);
+                expect(response).to.not.be.undefined;
+
+                const params = response.params;
+                expect(params).to.have.property('subscription').that.is.a('string');
+                expect(params).to.have.property('result').that.is.an('object');
+
+                const result = params.result;
+                expect(result).to.have.property('address').that.is.a('string');
+                expect(result).to.have.property('topics').that.is.an('array');
+                expect(result).to.have.property('data').that.is.a('string');
+                expect(result).to.have.property('blockHash').that.is.a('string');
+                expect(result).to.have.property('blockNumber').that.is.a('string');
+                expect(result).to.have.property('transactionHash').that.is.a('string');
+                expect(result).to.have.property('transactionIndex').that.is.a('string');
+                expect(result).to.have.property('logIndex').that.is.a('string');
+                expect(result).to.have.property('removed').that.is.a('boolean');
             });
         });
     });

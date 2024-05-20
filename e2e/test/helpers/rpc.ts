@@ -213,17 +213,17 @@ export function openWebSocketConnection(): WebSocket {
 }
 
 /// Add an "open" event listener to a WebSocket
-export function addOpenListener(socket: WebSocket, subscription: string) {
+function addOpenListener(socket: WebSocket, subscription: string, params: any) {
     socket.addEventListener("open", function () {
-        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription, {}] }));
+        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription, params] }));
     });
 }
 
-/// Add a "message" event listener to a WebSocket
-export function addMessageListener(socket: WebSocket, messageToReturn: number): Promise<any> {
+/// Generalized function to add a "message" event listener to a WebSocket
+function addMessageListener(socket: WebSocket, messageToReturn: number, callback: (messageEvent: { data: string }) => Promise<void>): Promise<any> {
     return new Promise((resolve) => {
         let messageCount = 0;
-        socket.addEventListener("message", function (messageEvent: { data: string }) {
+        socket.addEventListener("message", async function (messageEvent: { data: string }) {
             //console.log("Received message: " + messageEvent.data);
             messageCount++;
             if (messageCount === messageToReturn) {
@@ -231,22 +231,31 @@ export function addMessageListener(socket: WebSocket, messageToReturn: number): 
                 socket.close();
                 resolve(event);
             } else {
+                await callback(messageEvent);
                 send("evm_mine", []);
             }
         });
     });
 }
 
-/// Start a subscription and returns its N event
-/// Waits at the most for the specified time
+/// Execute an async contract operation
+async function asyncContractOperation(contract: TestContractBalances) {
+    let nonce = await sendGetNonce(CHARLIE.address);
+    const contractOps = contract.connect(CHARLIE.signer());
+    await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
+
+    return new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+/// Start a subscription and return its N-th event
 export async function subscribeAndGetEvent(
     subscription: string,
     waitTimeInMilliseconds: number,
     messageToReturn: number = 1,
 ): Promise<any> {
     const socket = openWebSocketConnection();
-    addOpenListener(socket, subscription);
-    const event = await addMessageListener(socket, messageToReturn);
+    addOpenListener(socket, subscription, {});
+    const event = await addMessageListener(socket, messageToReturn, async (messageEvent) => {});
 
     // Wait for the specified time, if necessary
     if (waitTimeInMilliseconds > 0)
@@ -254,3 +263,25 @@ export async function subscribeAndGetEvent(
 
     return event;
 }
+
+/// Start a subscription with contract and return its N-th event
+export async function subscribeAndGetEventWithContract(
+    subscription: string,
+    waitTimeInMilliseconds: number,
+    messageToReturn: number = 1,
+): Promise<any> {
+    const contract = await deployTestContractBalances();
+    const contractAddress = await contract.getAddress();
+    const socket = openWebSocketConnection();
+    addOpenListener(socket, subscription, { "address": contractAddress });
+    const event = await addMessageListener(socket, messageToReturn, async (messageEvent) => {
+        await asyncContractOperation(contract);
+    });
+
+    // Wait for the specified time, if necessary
+    if (waitTimeInMilliseconds > 0)
+        await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
+
+    return event;
+}
+
