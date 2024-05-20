@@ -18,8 +18,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExecutionConflicts;
-use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -61,45 +59,6 @@ impl RocksPermanentStorage {
     pub fn clear(&self) {
         self.state.clear().unwrap();
         self.block_number.store(0, Ordering::SeqCst);
-    }
-
-    fn check_conflicts(state: &RocksStorageState, account_changes: &[ExecutionAccountChanges]) -> Option<ExecutionConflicts> {
-        let mut conflicts = ExecutionConflictsBuilder::default();
-
-        for change in account_changes {
-            let address = &change.address;
-
-            if let Some(account) = state.accounts.get(&(*address).into()) {
-                // check account info conflicts
-                if let Some(original_nonce) = change.nonce.take_original_ref() {
-                    let account_nonce = &account.nonce;
-                    let original_nonce: NonceRocksdb = (*original_nonce).into();
-
-                    if &original_nonce != account_nonce {
-                        conflicts.add_nonce(*address, account_nonce.clone().into(), original_nonce.into());
-                    }
-                }
-                if let Some(original_balance) = change.balance.take_original_ref() {
-                    let account_balance = &account.balance;
-                    let original_balance: WeiRocksdb = (*original_balance).into();
-                    if &original_balance != account_balance {
-                        conflicts.add_balance(*address, account_balance.clone().into(), original_balance.into());
-                    }
-                }
-                // check slots conflicts
-                for (slot_index, slot_change) in &change.slots {
-                    if let Some(value) = state.account_slots.get(&((*address).into(), (*slot_index).into())) {
-                        if let Some(original_slot) = slot_change.take_original_ref() {
-                            let account_slot_value: SlotValue = value.clone().into();
-                            if original_slot.value != account_slot_value {
-                                conflicts.add_slot(*address, *slot_index, account_slot_value, original_slot.value);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        conflicts.build()
     }
 }
 
@@ -185,13 +144,7 @@ impl PermanentStorage for RocksPermanentStorage {
         {
             self.state.export_metrics();
         }
-        // check conflicts before persisting any state changes
         let account_changes = block.compact_account_changes();
-        if let Some(conflicts) = Self::check_conflicts(&self.state, &account_changes) {
-            return Err(StorageError::Conflict(conflicts)).context("storage conflict");
-        }
-
-        let mut futures = Vec::with_capacity(9);
 
         //TODO move those loops inside the spawn and check if speed improves
         let mut txs_batch = vec![];
@@ -204,6 +157,7 @@ impl PermanentStorage for RocksPermanentStorage {
         }
 
         // save block
+        let mut futures = Vec::with_capacity(9);
         let number = *block.number();
         let txs_rocks = Arc::clone(&self.state.transactions);
         let logs_rocks = Arc::clone(&self.state.logs);
