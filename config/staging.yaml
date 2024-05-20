@@ -115,7 +115,7 @@ kubernetes:
         port: '9000'
       ports:
       - containerPort: 3000
-        name: app-stratus
+        name: app-stratus-benchmark
         virtualservice:
           gateway: internal
           hosts:
