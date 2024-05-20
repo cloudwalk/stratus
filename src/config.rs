@@ -37,6 +37,7 @@ use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
+use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
@@ -162,7 +163,13 @@ impl ExecutorConfig {
     /// Note: Should be called only after async runtime is initialized.
     ///
     /// TODO: remove BlockMiner after migration is completed.
-    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, relayer: Option<Arc<TransactionRelayer>>) -> Arc<Executor> {
+    pub async fn init(
+        &self,
+        storage: Arc<StratusStorage>,
+        miner: Arc<BlockMiner>,
+        relayer: Option<Arc<TransactionRelayer>>,
+        consensus: Option<Arc<Consensus>>,
+    ) -> Arc<Executor> {
         let num_evms = max(self.num_evms, 1);
         tracing::info!(config = ?self, "starting executor");
 
@@ -205,7 +212,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms);
+        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms, consensus);
         Arc::new(executor)
     }
 }
@@ -281,8 +288,8 @@ impl RelayerConfig {
         tracing::info!(config = ?self, "starting transaction relayer");
 
         match self.forward_to {
-            Some(ref url) => {
-                let chain = BlockchainClient::new(url).await?;
+            Some(ref forward_to) => {
+                let chain = BlockchainClient::new_http(forward_to).await?;
                 let relayer = TransactionRelayer::new(storage, chain);
                 Ok(Some(Arc::new(relayer)))
             }
@@ -419,12 +426,8 @@ impl WithCommonConfig for ImporterOfflineConfig {
 /// Configuration for `importer-online` binary.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct ImporterOnlineConfig {
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: String,
-
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
-    pub sync_interval: Duration,
+    #[clap(flatten)]
+    pub base: ImporterOnlineBaseConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -443,6 +446,20 @@ pub struct ImporterOnlineConfig {
     pub common: CommonConfig,
 }
 
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct ImporterOnlineBaseConfig {
+    /// External RPC HTTP endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    /// External RPC WS endpoint to sync blocks with Stratus.
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]
+    pub external_rpc_ws: Option<String>,
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
+    pub sync_interval: Duration,
+}
+
 impl WithCommonConfig for ImporterOnlineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
@@ -458,8 +475,8 @@ pub struct RunWithImporterConfig {
     #[arg(long = "leader_node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
 
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "600ms")]
-    pub sync_interval: Duration,
+    #[clap(flatten)]
+    pub online: ImporterOnlineBaseConfig,
 
     #[clap(flatten)]
     pub storage: StratusStorageConfig,
@@ -472,10 +489,6 @@ pub struct RunWithImporterConfig {
 
     #[clap(flatten)]
     pub miner: MinerConfig,
-
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: String,
 
     #[deref]
     #[clap(flatten)]

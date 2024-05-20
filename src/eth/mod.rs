@@ -21,6 +21,7 @@
 
 mod block_miner;
 pub mod codegen;
+pub mod consensus;
 pub mod evm;
 mod executor;
 pub mod primitives;
@@ -29,6 +30,7 @@ pub mod storage;
 pub mod transaction_relayer;
 
 pub use block_miner::BlockMiner;
+pub use consensus::Consensus;
 pub use executor::EvmTask;
 pub use executor::Executor;
 pub use transaction_relayer::TransactionRelayer;

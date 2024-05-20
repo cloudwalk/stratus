@@ -118,29 +118,28 @@ db-load-csv:
 # ------------------------------------------------------------------------------
 
 # Bin: Download external RPC blocks and receipts to temporary storage
-bin-rpc-downloader *args="":
+rpc-downloader *args="":
     cargo run --bin rpc-downloader {{release_flag}} --features {{feature_flags}} -- {{args}}
-alias rpc-downloader := bin-rpc-downloader
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
-bin-importer-offline *args="":
+importer-offline *args="":
     cargo run --bin importer-offline {{release_flag}} --features {{feature_flags}} -- {{args}}
-alias importer-offline := bin-importer-offline
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage - with rocksdb
-bin-importer-offline-rocks *args="":
+importer-offline-rocks *args="":
     cargo run --bin importer-offline {{release_flag}} --features rocks -- {{args}}
-alias importer-offline-rocks := bin-importer-offline-rocks
 
 # Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
-bin-importer-online *args="":
+importer-online *args="":
     cargo run --bin importer-online {{release_flag}} --features dev -- {{args}}
-alias importer-online := bin-importer-online
 
 # Bin: Validate Stratus storage slots matches reference slots
-bin-state-validator *args="":
+state-validator *args="":
     cargo run --bin state-validator {{release_flag}} --features dev -- {{args}}
-alias state-validator := bin-state-validator
+
+# Bin: `stratus` and `importer-online` in a single binary
+run-with-importer *args="":
+    cargo run --bin run-with-importer {{release_flag}} --features dev -- {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
