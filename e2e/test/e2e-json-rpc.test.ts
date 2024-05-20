@@ -8,7 +8,6 @@ import {
     CHAIN_ID_DEC,
     HEX_PATTERN,
     TEST_BALANCE,
-    TEST_TRANSFER,
     ZERO,
     send,
     sendAndGetError,
