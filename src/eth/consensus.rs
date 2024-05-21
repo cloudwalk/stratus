@@ -55,9 +55,17 @@ impl Consensus {
         let (sender, mut receiver) = mpsc::channel(32);
 
         tokio::spawn(async move {
+            let followers = Self::discover_followers().await.expect("Failed to discover followers");
+
             while let Some(data) = receiver.recv().await {
-                tracing::info!("Received data: {}", data); //XXX this is where we will send the data to the followers
-                                                           //XXX let followers = self.discover_followers().await?; //XXX rediscover followers on comunication error
+                //TODO add data to consensus-log-transactions
+                //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
+                tracing::info!("Received data: {}", data);
+                for follower in &followers {
+                    //XXX self.append_entries(follower, vec![Entry { index: 0, data: data.clone() }]).await?;
+                }
+                //TODO rediscover followers on comunication error
+                //TODO this is where we will send the data to the followers
             }
         });
 
@@ -120,7 +128,7 @@ impl Consensus {
         (config.online.external_rpc, config.online.external_rpc_ws)
     }
 
-    pub async fn discover_followers(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub async fn discover_followers() -> Result<Vec<String>, anyhow::Error> {
         let client = Client::try_default().await?;
         let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
 
@@ -130,8 +138,10 @@ impl Consensus {
         let mut followers = Vec::new();
         for p in pod_list.items {
             if let Some(pod_name) = p.metadata.name {
-                if pod_name != self.node_name {
-                    followers.push(pod_name);
+                if pod_name != Self::current_node().unwrap() {
+                    if let Some(namespace) = Self::current_namespace() {
+                        followers.push(format!("http://{}.stratus-api.{}.svc.cluster.local:3000", pod_name, namespace));
+                    }
                 }
             }
         }
