@@ -89,7 +89,7 @@ impl BlockchainClient {
     pub async fn append_entries(&self, entries: Vec<crate::eth::consensus::Entry>) -> anyhow::Result<()> {
         tracing::debug!(?entries, "appending entries");
         let entries = serde_json::to_value(entries)?;
-        self.http.request::<(), Vec<JsonValue>>("eth_appendEntries", vec![entries]).await?;
+        self.http.request::<(), Vec<JsonValue>>("stratus_appendEntries", vec![entries]).await?;
         Ok(())
     }
 
