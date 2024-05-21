@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::eth::primitives::ChainId;
-use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::Executor;
@@ -19,7 +19,7 @@ pub struct RpcContext {
     pub executor: Arc<Executor>,
     pub miner: Arc<BlockMiner>,
     pub storage: Arc<StratusStorage>,
-    pub subs: Arc<RpcSubscriptions>,
+    pub subs: Arc<RpcSubscriptionsConnected>,
 }
 
 impl Debug for RpcContext {
