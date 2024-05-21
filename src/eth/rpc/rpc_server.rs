@@ -64,6 +64,7 @@ pub async fn serve_rpc(
     // configure subscriptions
     let subs = Arc::new(RpcSubscriptions::default());
     let _handle_subs_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();
+    let handle_new_pending_txs = Arc::clone(&subs).spawn_new_pending_txs_notifier(miner.notifier_pending_txs.subscribe());
     let handle_new_heads_notifier = Arc::clone(&subs).spawn_new_heads_notifier(miner.notifier_blocks.subscribe());
     let handle_logs_notifier = Arc::clone(&subs).spawn_logs_notifier(miner.notifier_logs.subscribe());
 
@@ -105,7 +106,12 @@ pub async fn serve_rpc(
     let handle_clone = handle_rpc_server.clone();
 
     let rpc_server_future = async move {
-        let _ = join!(handle_rpc_server.stopped(), handle_logs_notifier, handle_new_heads_notifier);
+        let _ = join!(
+            handle_rpc_server.stopped(),
+            handle_new_pending_txs,
+            handle_logs_notifier,
+            handle_new_heads_notifier
+        );
     };
 
     // await server and subscriptions to stop
@@ -399,12 +405,14 @@ async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Resul
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>) -> impl IntoSubscriptionCloseResponse {
     let (params, kind) = next_rpc_param::<String>(params.sequence())?;
     match kind.deref() {
-        // new block emitted
+        "newPendingTransactions" => {
+            ctx.subs.add_new_pending_txs(pending.accept().await?).await;
+        }
+
         "newHeads" => {
             ctx.subs.add_new_heads(pending.accept().await?).await;
         }
 
-        // transaction logs emitted
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage).await?;

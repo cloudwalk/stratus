@@ -36,7 +36,7 @@ pub struct BlockMiner {
     pub notifier_pending_txs: broadcast::Sender<Hash>,
 
     /// Broadcasts new mined blocks events.
-    pub notifier_blocks: broadcast::Sender<Block>,
+    pub notifier_blocks: broadcast::Sender<BlockHeader>,
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
@@ -218,18 +218,20 @@ impl BlockMiner {
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
         tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 
+        // extract fields to use in notifications
         let block_number = *block.number();
+        let block_header = block.header.clone();
+        let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
 
         // persist block
-        self.storage.save_block(block.clone()).await?;
+        self.storage.save_block(block).await?;
         self.storage.set_mined_block_number(block_number).await?;
 
         // notify
-        let logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
-        for log in logs {
+        for log in block_logs {
             let _ = self.notifier_logs.send(log);
         }
-        let _ = self.notifier_blocks.send(block);
+        let _ = self.notifier_blocks.send(block_header);
 
         Ok(())
     }
