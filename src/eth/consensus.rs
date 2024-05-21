@@ -1,7 +1,9 @@
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::time::Duration;
 
+use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::Api;
 use kube::api::ListParams;
@@ -10,31 +12,24 @@ use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
+use tokio::time::sleep;
 
 use crate::config::RunWithImporterConfig;
+use crate::infra::BlockchainClient;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Entry {
+const RETRY_ATTEMPTS: u32 = 3;
+const RETRY_DELAY: Duration = Duration::from_millis(10);
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Entry {
     index: u64,
     data: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct AppendEntriesRequest {
-    entries: Vec<Entry>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct AppendEntriesResponse {
-    success: bool,
 }
 
 pub struct Consensus {
     pub sender: Sender<String>,
     node_name: String,
     leader_name: String,
-    //XXX retry_attempts: u32,
-    //XXX retry_delay: Duration,
     //XXX current_index: AtomicU64,
 }
 
@@ -52,7 +47,7 @@ impl Consensus {
             return Self::new_stand_alone();
         };
 
-        let (sender, mut receiver) = mpsc::channel(32);
+        let (sender, mut receiver) = mpsc::channel::<String>(32);
 
         tokio::spawn(async move {
             let followers = Self::discover_followers().await.expect("Failed to discover followers");
@@ -61,8 +56,16 @@ impl Consensus {
                 //TODO add data to consensus-log-transactions
                 //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
                 tracing::info!("Received data: {}", data);
-                for follower in &followers {
-                    //XXX self.append_entries(follower, vec![Entry { index: 0, data: data.clone() }]).await?;
+
+                //TODO use gRPC instead of jsonrpc
+                //FIXME for now, this has no colateral efects, but it will have in the future
+                match Self::append_entries_to_followers(vec![Entry { index: 0, data: data.clone() }], followers.clone()).await {
+                    Ok(_) => {
+                        tracing::info!("Data sent to followers: {}", data);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to send data to followers: {}", e);
+                    }
                 }
                 //TODO rediscover followers on comunication error
                 //TODO this is where we will send the data to the followers
@@ -73,8 +76,6 @@ impl Consensus {
             node_name,
             leader_name,
             sender,
-            //XXX  retry_attempts: 3,
-            //XXX  retry_delay: Duration::from_millis(10),
         }
     }
 
@@ -91,8 +92,6 @@ impl Consensus {
             node_name: "standalone".to_string(),
             leader_name: "standalone".to_string(),
             sender,
-            //XXX retry_attempts: 0,
-            //XXX retry_delay: Duration::from_millis(0),
         }
     }
 
@@ -149,43 +148,32 @@ impl Consensus {
         Ok(followers)
     }
 
-    //XXX this will be used to send the entries to the followers
-    //XXX async fn append_entries(&self, follower: &str, entries: Vec<Entry>) -> Result<(), Box<dyn std::error::Error>> {
-    //XXX     let client = HttpClient::new();
-    //XXX     let url = format!("http://{}/append_entries", follower);
+    async fn append_entries(follower: &str, entries: Vec<Entry>) -> Result<(), anyhow::Error> {
+        let client = BlockchainClient::new_http_ws(follower, None).await?;
 
-    //XXX     let request = AppendEntriesRequest {
-    //XXX         entries,
-    //XXX     };
+        for attempt in 1..=RETRY_ATTEMPTS {
+            let response = client.append_entries(entries.clone()).await;
+            match response {
+                Ok(resp) => {
+                    tracing::debug!("Entries appended to follower {}: attempt {}: {:?}", follower, attempt, resp);
+                    return Ok(());
+                }
+                Err(e) => tracing::error!("Error appending entries to follower {}: attempt {}: {:?}", follower, attempt, e),
+            }
+            sleep(RETRY_DELAY).await;
+        }
 
-    //XXX     for attempt in 1..=self.retry_attempts {
-    //XXX         let response = client.post(&url).json(&request).send().await;
-    //XXX         match response {
-    //XXX             Ok(resp) if resp.status().is_success() => {
-    //XXX                 let response: AppendEntriesResponse = resp.json().await?;
-    //XXX                 if response.success {
-    //XXX                     return Ok(());
-    //XXX                 } else {
-    //XXX                     eprintln!("AppendEntries to {} failed", follower);
-    //XXX                 }
-    //XXX             }
-    //XXX             Ok(resp) => eprintln!("Failed to append entries to {}: {:?}", follower, resp),
-    //XXX             Err(e) => eprintln!("Error appending entries to follower {}: attempt {}: {:?}", follower, attempt, e),
-    //XXX         }
-    //XXX         sleep(self.retry_delay).await;
-    //XXX     }
+        Err(anyhow!("Failed to append entries to {} after {} attempts", follower, RETRY_ATTEMPTS))
+    }
 
-    //XXX     Err(format!("Failed to append entries to {} after {} attempts", follower, self.retry_attempts).into())
-    //XXX }
-
-    //XXX pub async fn append_entries_to_followers(&self, entries: Vec<Entry>, followers: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    //XXX     for entry in entries {
-    //XXX         for follower in &followers {
-    //XXX             if let Err(e) = self.append_entries(follower, vec![entry.clone()]).await {
-    //XXX                 eprintln!("Error appending entry to follower {}: {:?}", follower, e);
-    //XXX             }
-    //XXX         }
-    //XXX     }
-    //XXX     Ok(())
-    //XXX }
+    pub async fn append_entries_to_followers(entries: Vec<Entry>, followers: Vec<String>) -> Result<(), anyhow::Error> {
+        for entry in entries {
+            for follower in &followers {
+                if let Err(e) = Self::append_entries(follower, vec![entry.clone()]).await {
+                    tracing::debug!("Error appending entry to follower {}: {:?}", follower, e);
+                }
+            }
+        }
+        Ok(())
+    }
 }
