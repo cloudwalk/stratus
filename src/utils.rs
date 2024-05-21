@@ -6,6 +6,8 @@ use tokio::signal::unix::SignalKind;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::ext::spawn_named;
+
 pub fn new_context_id() -> String {
     Uuid::new_v4().to_string()
 }
@@ -24,7 +26,7 @@ fn signal_or_cancel(kind: SignalKind, cancellation: &CancellationToken) -> anyho
 pub fn signal_handler() -> CancellationToken {
     let cancellation = CancellationToken::new();
     let task_cancellation = cancellation.clone();
-    tokio::spawn(async move {
+    spawn_named("sys::signal_handler", async move {
         let Ok(mut sigterm) = signal_or_cancel(SignalKind::terminate(), &task_cancellation) else {
             return;
         };

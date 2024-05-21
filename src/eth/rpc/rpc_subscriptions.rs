@@ -16,6 +16,9 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::ext::not;
+use crate::ext::spawn_named;
+use crate::ext::warn_task_cancellation;
+use crate::ext::warn_task_tx_closed;
 use crate::if_else;
 use crate::infra::metrics;
 
@@ -58,10 +61,10 @@ impl RpcSubscriptions {
     fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>, cancellation: CancellationToken) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc subscriptions cleaner");
 
-        tokio::spawn(async move {
+        spawn_named("rpc::sub::cleaner", async move {
             loop {
                 if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc subscription cleaner because of cancellation");
+                    warn_task_cancellation("rpc subscription cleaner");
                     return Ok(());
                 }
 
@@ -89,15 +92,15 @@ impl RpcSubscriptions {
     ) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc newPendingTransactions notifier");
 
-        tokio::spawn(async move {
+        spawn_named("rpc::sub::newPendingTransactions", async move {
             loop {
                 if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc newPendingTransactions notifier because of cancellation");
+                    warn_task_cancellation("rpc newPendingTransactions notifier");
                     return Ok(());
                 }
 
                 let Ok(hash) = rx.recv().await else {
-                    tracing::warn!("stopping newPendingTransactions notifier because tx channel was closed");
+                    warn_task_tx_closed("rpc newPendingTransactions notifier");
                     break;
                 };
 
@@ -116,15 +119,15 @@ impl RpcSubscriptions {
     ) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc newHeads notifier");
 
-        tokio::spawn(async move {
+        spawn_named("rpc::sub::newHeads", async move {
             loop {
                 if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc newHeads notifier because of cancellation");
+                    warn_task_cancellation("rpc newHeads notifier");
                     return Ok(());
                 }
 
                 let Ok(header) = rx.recv().await else {
-                    tracing::warn!("stopping newHeads notifier because tx channel was closed");
+                    warn_task_tx_closed("rpc newHeads notifier");
                     break;
                 };
 
@@ -143,15 +146,15 @@ impl RpcSubscriptions {
     ) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc logs notifier");
 
-        tokio::spawn(async move {
+        spawn_named("rpc::sub::logs", async move {
             loop {
                 if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc logs cleaner because of cancellation");
+                    warn_task_cancellation("rpc logs notifier");
                     return Ok(());
                 }
 
                 let Ok(log) = rx.recv().await else {
-                    tracing::warn!("stopping logs notifier because tx channel was closed");
+                    warn_task_tx_closed("rpc logs notifier");
                     break;
                 };
 
