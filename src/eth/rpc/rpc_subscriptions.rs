@@ -58,27 +58,30 @@ impl RpcSubscriptions {
     fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>, cancellation: CancellationToken) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc subscriptions cleaner");
 
-        tokio::spawn(async move {
-            loop {
-                if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc subscription cleaner because of cancellation");
-                    return Ok(());
+        tokio::task::Builder::new()
+            .name("rpc::sub::cleaner")
+            .spawn(async move {
+                loop {
+                    if cancellation.is_cancelled() {
+                        tracing::warn!("exiting rpc subscription cleaner because of cancellation");
+                        return Ok(());
+                    }
+
+                    // remove closed subscriptions
+                    subs.new_pending_txs.write().await.retain(|_, sub| not(sub.is_closed()));
+                    subs.new_heads.write().await.retain(|_, sub| not(sub.is_closed()));
+                    subs.logs.write().await.retain(|_, (sub, _)| not(sub.is_closed()));
+
+                    // update metrics
+                    metrics::set_rpc_subscriptions(subs.new_pending_txs.read().await.len() as u64, "newPendingTransactions");
+                    metrics::set_rpc_subscriptions(subs.new_heads.read().await.len() as u64, "newHeads");
+                    metrics::set_rpc_subscriptions(subs.logs.read().await.len() as u64, "logs");
+
+                    // await next iteration
+                    tokio::time::sleep(CLEANING_FREQUENCY).await;
                 }
-
-                // remove closed subscriptions
-                subs.new_pending_txs.write().await.retain(|_, sub| not(sub.is_closed()));
-                subs.new_heads.write().await.retain(|_, sub| not(sub.is_closed()));
-                subs.logs.write().await.retain(|_, (sub, _)| not(sub.is_closed()));
-
-                // update metrics
-                metrics::set_rpc_subscriptions(subs.new_pending_txs.read().await.len() as u64, "newPendingTransactions");
-                metrics::set_rpc_subscriptions(subs.new_heads.read().await.len() as u64, "newHeads");
-                metrics::set_rpc_subscriptions(subs.logs.read().await.len() as u64, "logs");
-
-                // await next iteration
-                tokio::time::sleep(CLEANING_FREQUENCY).await;
-            }
-        })
+            })
+            .expect("spawning rpc subscription cleaner notifier should not fail")
     }
 
     /// Spawns a new task that notifies subscribers about new executed transactions.
@@ -89,23 +92,26 @@ impl RpcSubscriptions {
     ) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc newPendingTransactions notifier");
 
-        tokio::spawn(async move {
-            loop {
-                if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc newPendingTransactions notifier because of cancellation");
-                    return Ok(());
+        tokio::task::Builder::new()
+            .name("rpc::sub::newPendingTransactions")
+            .spawn(async move {
+                loop {
+                    if cancellation.is_cancelled() {
+                        tracing::warn!("exiting rpc newPendingTransactions notifier because of cancellation");
+                        return Ok(());
+                    }
+
+                    let Ok(hash) = rx.recv().await else {
+                        tracing::warn!("stopping newPendingTransactions notifier because tx channel was closed");
+                        break;
+                    };
+
+                    let subs = subs.new_pending_txs.read().await;
+                    Self::notify(subs.values(), hash.to_string()).await;
                 }
-
-                let Ok(hash) = rx.recv().await else {
-                    tracing::warn!("stopping newPendingTransactions notifier because tx channel was closed");
-                    break;
-                };
-
-                let subs = subs.new_pending_txs.read().await;
-                Self::notify(subs.values(), hash.to_string()).await;
-            }
-            Ok(())
-        })
+                Ok(())
+            })
+            .expect("spawning rpc newPendingTransactions notifier should not fail")
     }
 
     /// Spawns a new task that notifies subscribers about new created blocks.
@@ -116,23 +122,26 @@ impl RpcSubscriptions {
     ) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc newHeads notifier");
 
-        tokio::spawn(async move {
-            loop {
-                if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc newHeads notifier because of cancellation");
-                    return Ok(());
+        tokio::task::Builder::new()
+            .name("rpc::sub::newHeads")
+            .spawn(async move {
+                loop {
+                    if cancellation.is_cancelled() {
+                        tracing::warn!("exiting rpc newHeads notifier because of cancellation");
+                        return Ok(());
+                    }
+
+                    let Ok(header) = rx.recv().await else {
+                        tracing::warn!("stopping newHeads notifier because tx channel was closed");
+                        break;
+                    };
+
+                    let subs = subs.new_heads.read().await;
+                    Self::notify(subs.values(), header).await;
                 }
-
-                let Ok(header) = rx.recv().await else {
-                    tracing::warn!("stopping newHeads notifier because tx channel was closed");
-                    break;
-                };
-
-                let subs = subs.new_heads.read().await;
-                Self::notify(subs.values(), header).await;
-            }
-            Ok(())
-        })
+                Ok(())
+            })
+            .expect("spawning rpc newHeads notifier should not fail")
     }
 
     /// Spawns a new task that notifies subscribers about new transactions logs.
@@ -143,28 +152,31 @@ impl RpcSubscriptions {
     ) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc logs notifier");
 
-        tokio::spawn(async move {
-            loop {
-                if cancellation.is_cancelled() {
-                    tracing::warn!("exiting rpc logs cleaner because of cancellation");
-                    return Ok(());
+        tokio::task::Builder::new()
+            .name("rpc::sub::logs")
+            .spawn(async move {
+                loop {
+                    if cancellation.is_cancelled() {
+                        tracing::warn!("exiting rpc logs cleaner because of cancellation");
+                        return Ok(());
+                    }
+
+                    let Ok(log) = rx.recv().await else {
+                        tracing::warn!("stopping logs notifier because tx channel was closed");
+                        break;
+                    };
+
+                    let subs = subs.logs.read().await;
+                    let interested_subs = subs
+                        .values()
+                        .filter_map(|(sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
+                        .collect_vec();
+
+                    Self::notify(interested_subs.into_iter(), log).await;
                 }
-
-                let Ok(log) = rx.recv().await else {
-                    tracing::warn!("stopping logs notifier because tx channel was closed");
-                    break;
-                };
-
-                let subs = subs.logs.read().await;
-                let interested_subs = subs
-                    .values()
-                    .filter_map(|(sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
-                    .collect_vec();
-
-                Self::notify(interested_subs.into_iter(), log).await;
-            }
-            Ok(())
-        })
+                Ok(())
+            })
+            .expect("spawning rpc logs notifier should not fail")
     }
 
     async fn notify(subs: impl ExactSizeIterator<Item = &SubscriptionSink>, msg: impl Into<SubscriptionMessage>) {
