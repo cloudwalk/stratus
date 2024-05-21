@@ -16,6 +16,8 @@ use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
+use stratus::ext::warn_task_cancellation;
+use stratus::ext::warn_task_tx_closed;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
@@ -125,7 +127,7 @@ async fn start_block_executor(
 ) {
     while let Some((block, receipts)) = backlog_rx.recv().await {
         if cancellation.is_cancelled() {
-            tracing::warn!("exiting block-executor because cancellation");
+            warn_task_cancellation("block-executor");
             break;
         }
 
@@ -151,7 +153,7 @@ async fn start_block_executor(
             metrics::inc_import_online_mined_block(start.elapsed());
         }
     }
-    tracing::warn!("exiting block-executor because backlog channel was closed by the other side");
+    warn_task_tx_closed("block-executor");
 }
 
 // -----------------------------------------------------------------------------
@@ -182,7 +184,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: Cancel
     loop {
         // check cancellation
         if cancellation.is_cancelled() {
-            tracing::warn!("exiting number-fetcher because cancellation");
+            warn_task_cancellation("number-fetcher");
             break;
         }
         tracing::info!("fetching current block number");
@@ -255,7 +257,7 @@ async fn start_block_fetcher(
 ) {
     loop {
         if cancellation.is_cancelled() {
-            tracing::warn!("exiting block-fetcher because cancellation");
+            warn_task_cancellation("block-fetcher");
             break;
         }
 

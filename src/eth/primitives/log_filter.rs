@@ -6,6 +6,8 @@
 //! and topics. The module provides the core functionality to create and apply
 //! these filters, enhancing the efficiency of log querying and processing.
 
+use display_json::DebugAsJson;
+
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::LogMined;
@@ -13,7 +15,7 @@ use crate::eth::primitives::LogTopic;
 use crate::ext::not;
 use crate::gen_newtype_from;
 
-#[derive(Debug)]
+#[derive(DebugAsJson, serde::Serialize)]
 pub struct LogFilter {
     pub from_block: BlockNumber,
     pub to_block: Option<BlockNumber>,
@@ -51,7 +53,7 @@ impl LogFilter {
     }
 }
 
-#[derive(Debug)]
+#[derive(DebugAsJson, serde::Serialize)]
 pub struct LogFilterTopicCombination(Vec<(usize, LogTopic)>);
 
 gen_newtype_from!(self = LogFilterTopicCombination, other = Vec<(usize, LogTopic)>);
