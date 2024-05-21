@@ -195,7 +195,7 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
 
 impl From<BlockHeader> for SubscriptionMessage {
     fn from(value: BlockHeader) -> Self {
-        let ethers_block = Into::<EthersBlock<()>>::into(value);
+        let ethers_block: EthersBlock<()> = EthersBlock::from(value);
         Self::from_json(&ethers_block).unwrap()
     }
 }
