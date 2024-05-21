@@ -36,9 +36,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-nightly-debug-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          key: ${{ runner.os }}-v2-cargo-nightly-debug-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-nightly-debug-
+            ${{ runner.os }}-v2-cargo-nightly-debug-
       
       - name: Set up Rust Nightly and Rust Docs
         run: |

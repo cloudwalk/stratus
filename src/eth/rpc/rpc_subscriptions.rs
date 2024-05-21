@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use futures::join;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
@@ -8,11 +9,19 @@ use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
+use tokio_util::sync::CancellationToken;
 
-use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::ext::not;
+use crate::ext::spawn_named;
+use crate::ext::warn_task_cancellation;
+use crate::ext::warn_task_tx_closed;
+use crate::if_else;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 
 /// Frequency of cleaning up closed subscriptions.
 const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
@@ -22,108 +31,231 @@ const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
 
 type SubscriptionId = usize;
 
-/// State of JSON-RPC websocket subscriptions.
-#[derive(Debug, Default)]
-pub struct RpcSubscriptions {
-    /// Subscribers of `newHeads` event.
-    pub new_heads: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
+#[cfg(feature = "metrics")]
+mod label {
+    pub(super) const PENDING_TXS: &str = "newPendingTransactions";
+    pub(super) const NEW_HEADS: &str = "newHeads";
+    pub(super) const LOGS: &str = "logs";
+}
 
-    /// Subscribers of `logs` event.
-    pub logs: RwLock<HashMap<SubscriptionId, (SubscriptionSink, LogFilter)>>,
+/// State of JSON-RPC websocket subscriptions.
+#[derive(Debug)]
+pub struct RpcSubscriptions {
+    pub connected: Arc<RpcSubscriptionsConnected>,
+    pub handles: RpcSubscriptionsHandles,
 }
 
 impl RpcSubscriptions {
-    /// Spawns a new thread to clean up closed subscriptions from time to time.
-    pub fn spawn_subscriptions_cleaner(self: Arc<Self>) -> JoinHandle<anyhow::Result<()>> {
+    /// Creates a new subscriptin manager that automatically spawns all necessary tasks in background.
+    pub fn spawn(
+        rx_pending_txs: broadcast::Receiver<Hash>,
+        rx_blocks: broadcast::Receiver<BlockHeader>,
+        rx_logs: broadcast::Receiver<LogMined>,
+        cancellation: CancellationToken,
+    ) -> Self {
+        let connected = Arc::new(RpcSubscriptionsConnected::default());
+
+        Self::spawn_subscriptions_cleaner(Arc::clone(&connected), cancellation.child_token());
+        let handles = RpcSubscriptionsHandles {
+            new_pending_txs: Self::spawn_new_pending_txs_notifier(Arc::clone(&connected), rx_pending_txs, cancellation.child_token()),
+            new_heads: Self::spawn_new_heads_notifier(Arc::clone(&connected), rx_blocks, cancellation.child_token()),
+            logs: Self::spawn_logs_notifier(Arc::clone(&connected), rx_logs, cancellation.child_token()),
+        };
+
+        Self { connected, handles }
+    }
+
+    /// Spawns a new task to clean up closed subscriptions from time to time.
+    fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>, cancellation: CancellationToken) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc subscriptions cleaner");
 
-        tokio::spawn(async move {
+        spawn_named("rpc::sub::cleaner", async move {
             loop {
-                let any_new_heads_closed = self.new_heads.read().await.iter().any(|(_, sub)| sub.is_closed());
-                if any_new_heads_closed {
-                    let mut new_heads_subs = self.new_heads.write().await;
-                    let before = new_heads_subs.len();
-                    new_heads_subs.retain(|_, sub| not(sub.is_closed()));
-                    tracing::info!(%before, after = new_heads_subs.len(), "removed newHeads subscriptions");
+                if cancellation.is_cancelled() {
+                    warn_task_cancellation("rpc subscription cleaner");
+                    return Ok(());
                 }
 
-                let any_logs_closed = self.logs.read().await.iter().any(|(_, (sub, _))| sub.is_closed());
-                if any_logs_closed {
-                    let mut logs_subs = self.logs.write().await;
-                    let before = logs_subs.len();
-                    logs_subs.retain(|_, (sub, _)| not(sub.is_closed()));
-                    tracing::info!(%before, after = logs_subs.len(), "removed logs subscriptions");
+                // remove closed subscriptions
+                subs.new_pending_txs.write().await.retain(|_, sub| not(sub.is_closed()));
+                subs.new_heads.write().await.retain(|_, sub| not(sub.is_closed()));
+                subs.logs.write().await.retain(|_, (sub, _)| not(sub.is_closed()));
+
+                // update metrics
+                #[cfg(feature = "metrics")]
+                {
+                    metrics::set_rpc_subscriptions_active(subs.new_pending_txs.read().await.len() as u64, label::PENDING_TXS);
+                    metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
+                    metrics::set_rpc_subscriptions_active(subs.logs.read().await.len() as u64, label::LOGS);
                 }
 
+                // await next iteration
                 tokio::time::sleep(CLEANING_FREQUENCY).await;
             }
         })
     }
 
-    /// Spawns a new thread that notifies subscribers about new created blocks.
-    pub fn spawn_new_heads_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<Block>) -> JoinHandle<anyhow::Result<()>> {
-        tracing::info!("spawning rpc new heads notifier");
+    /// Spawns a new task that notifies subscribers about new executed transactions.
+    fn spawn_new_pending_txs_notifier(
+        subs: Arc<RpcSubscriptionsConnected>,
+        mut rx: broadcast::Receiver<Hash>,
+        cancellation: CancellationToken,
+    ) -> JoinHandle<anyhow::Result<()>> {
+        tracing::info!("spawning rpc newPendingTransactions notifier");
 
-        tokio::spawn(async move {
+        spawn_named("rpc::sub::newPendingTransactions", async move {
             loop {
-                let Ok(block) = rx.recv().await else {
-                    tracing::warn!("stopping subscription blocks notifier because tx channel was closed");
+                if cancellation.is_cancelled() {
+                    warn_task_cancellation("rpc newPendingTransactions notifier");
+                    return Ok(());
+                }
+
+                let Ok(hash) = rx.recv().await else {
+                    warn_task_tx_closed("rpc newPendingTransactions notifier");
                     break;
                 };
-                let msg = SubscriptionMessage::from(block.header);
 
-                let new_heads_subs = self.new_heads.read().await;
-                for sub in new_heads_subs.values() {
-                    notify(sub, msg.clone()).await;
-                }
+                let subs = subs.new_pending_txs.read().await;
+                Self::notify(subs.values(), hash.to_string()).await;
             }
             Ok(())
         })
     }
 
-    /// Spawns a new thread that notifies subscribers about new transactions logs.
-    pub fn spawn_logs_notifier(self: Arc<Self>, mut rx: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
+    /// Spawns a new task that notifies subscribers about new created blocks.
+    fn spawn_new_heads_notifier(
+        subs: Arc<RpcSubscriptionsConnected>,
+        mut rx: broadcast::Receiver<BlockHeader>,
+        cancellation: CancellationToken,
+    ) -> JoinHandle<anyhow::Result<()>> {
+        tracing::info!("spawning rpc newHeads notifier");
+
+        spawn_named("rpc::sub::newHeads", async move {
+            loop {
+                if cancellation.is_cancelled() {
+                    warn_task_cancellation("rpc newHeads notifier");
+                    return Ok(());
+                }
+
+                let Ok(header) = rx.recv().await else {
+                    warn_task_tx_closed("rpc newHeads notifier");
+                    break;
+                };
+
+                let subs = subs.new_heads.read().await;
+                Self::notify(subs.values(), header).await;
+            }
+            Ok(())
+        })
+    }
+
+    /// Spawns a new task that notifies subscribers about new transactions logs.
+    fn spawn_logs_notifier(
+        subs: Arc<RpcSubscriptionsConnected>,
+        mut rx: broadcast::Receiver<LogMined>,
+        cancellation: CancellationToken,
+    ) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc logs notifier");
 
-        tokio::spawn(async move {
+        spawn_named("rpc::sub::logs", async move {
             loop {
+                if cancellation.is_cancelled() {
+                    warn_task_cancellation("rpc logs notifier");
+                    return Ok(());
+                }
+
                 let Ok(log) = rx.recv().await else {
-                    tracing::warn!("stopping subscription logs notifier because tx channel was closed");
+                    warn_task_tx_closed("rpc logs notifier");
                     break;
                 };
 
-                let logs_subs = self.logs.read().await;
-                let logs_interested_subs = logs_subs.values().filter(|(_, filter)| filter.matches(&log)).collect_vec();
+                let subs = subs.logs.read().await;
+                let interested_subs = subs
+                    .values()
+                    .filter_map(|(sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
+                    .collect_vec();
 
-                let msg = SubscriptionMessage::from(log);
-                for sub in logs_interested_subs {
-                    notify(&sub.0, msg.clone()).await;
-                }
+                Self::notify(interested_subs.into_iter(), log).await;
             }
             Ok(())
         })
     }
 
-    // -------------------------------------------------------------------------
-    // Mutations
-    // -------------------------------------------------------------------------
+    async fn notify(subs: impl ExactSizeIterator<Item = &SubscriptionSink>, msg: impl Into<SubscriptionMessage>) {
+        if subs.len() == 0 {
+            return;
+        }
+
+        let msg = msg.into();
+        for sub in subs {
+            if sub.is_closed() {
+                continue;
+            }
+            if let Err(e) = sub.send_timeout(msg.clone(), NOTIFICATION_TIMEOUT).await {
+                tracing::error!(reason = ?e, "failed to send subscription notification");
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Notifier handles
+// -----------------------------------------------------------------------------
+
+/// Handles of subscription background tasks.
+#[derive(Debug)]
+pub struct RpcSubscriptionsHandles {
+    new_pending_txs: JoinHandle<anyhow::Result<()>>,
+    new_heads: JoinHandle<anyhow::Result<()>>,
+    logs: JoinHandle<anyhow::Result<()>>,
+}
+
+impl RpcSubscriptionsHandles {
+    pub async fn stopped(self) {
+        let _ = join!(self.new_pending_txs, self.new_heads, self.logs);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Connected clients
+// -----------------------------------------------------------------------------
+
+/// Active client subscriptions.
+#[derive(Debug, Default)]
+pub struct RpcSubscriptionsConnected {
+    new_pending_txs: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
+    new_heads: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
+    logs: RwLock<HashMap<SubscriptionId, (SubscriptionSink, LogFilter)>>,
+}
+
+impl RpcSubscriptionsConnected {
+    /// Adds a new subscriber to `newPendingTransactions` event.
+    pub async fn add_new_pending_txs(&self, sink: SubscriptionSink) {
+        tracing::debug!(id = %sink.connection_id(), "subscribing to newPendingTransactions event");
+        let mut subs = self.new_pending_txs.write().await;
+        subs.insert(sink.connection_id(), sink);
+
+        #[cfg(feature = "metrics")]
+        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::PENDING_TXS);
+    }
 
     /// Adds a new subscriber to `newHeads` event.
     pub async fn add_new_heads(&self, sink: SubscriptionSink) {
-        self.new_heads.write().await.insert(sink.connection_id(), sink);
+        tracing::debug!(id = %sink.connection_id(), "subscribing to newHeads event");
+        let mut subs = self.new_heads.write().await;
+        subs.insert(sink.connection_id(), sink);
+
+        #[cfg(feature = "metrics")]
+        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::NEW_HEADS);
     }
 
     /// Adds a new subscriber to `logs` event.
     pub async fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
-        self.logs.write().await.insert(sink.connection_id(), (sink, filter));
-    }
-}
+        tracing::debug!(id = %sink.connection_id(), ?filter, "subscribing to logs event");
+        let mut subs = self.logs.write().await;
+        subs.insert(sink.connection_id(), (sink, filter));
 
-async fn notify(sub: &SubscriptionSink, msg: SubscriptionMessage) {
-    if sub.is_closed() {
-        return;
-    }
-    if let Err(e) = sub.send_timeout(msg, NOTIFICATION_TIMEOUT).await {
-        tracing::error!(reason = ?e, "failed to send subscription notification");
+        #[cfg(feature = "metrics")]
+        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);
     }
 }

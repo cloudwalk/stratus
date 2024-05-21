@@ -41,6 +41,7 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
@@ -161,8 +162,6 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    ///
-    /// TODO: remove BlockMiner after migration is completed.
     pub async fn init(
         &self,
         storage: Arc<StratusStorage>,
@@ -207,7 +206,7 @@ impl ExecutorConfig {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
                     };
                 }
-                tracing::warn!("stopping evm thread because task channel was closed");
+                warn_task_tx_closed("evm thread");
             })
             .expect("spawning evm threads should not fail");
         }
@@ -237,11 +236,11 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<BlockMiner>> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
         // create miner
-        let miner = BlockMiner::new(Arc::clone(&storage), self.block_time);
+        let miner = BlockMiner::new(Arc::clone(&storage), self.block_time, consensus);
         let miner = Arc::new(miner);
 
         // enable genesis block

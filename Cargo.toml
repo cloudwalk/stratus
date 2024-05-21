@@ -72,16 +72,16 @@ reqwest = { version = "=0.12.4", features = ["json"] }
 tower = "=0.4.13"
 
 # observability
+console-subscriber = "=0.2.0"
 metrics = { version = "=0.21.1", optional = true }
 metrics-exporter-prometheus = { version = "=0.12.2", optional = true }
-tracing = { version = "=0.1.40", features = ["attributes"] }
-tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
-tracing-opentelemetry = "=0.23.0"
-sentry = "=0.32.3"
 opentelemetry = "=0.22.0"
-opentelemetry-otlp = "=0.15.0"
 opentelemetry_sdk = { version = "=0.22.1", features = ["rt-tokio"] }
-
+opentelemetry-otlp = "=0.15.0"
+sentry = "=0.32.3"
+tracing = { version = "=0.1.40", features = ["attributes"] }
+tracing-opentelemetry = "=0.23.0"
+tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
 
 # storage
 sqlx = { version = "=0.7.4", features = ["runtime-tokio", "postgres", "bigdecimal", "time"] }
@@ -143,7 +143,7 @@ path = "src/bin/run_with_importer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "kubernetes"]
+default = ["rocks", "metrics", "kubernetes"]
 
 # Application is running in develoment mode.
 dev  = []

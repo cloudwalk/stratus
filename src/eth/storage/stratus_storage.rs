@@ -29,11 +29,11 @@ use crate::ext::not;
 use crate::infra::metrics;
 
 #[cfg(feature = "metrics")]
-const STORAGE_TEMP: &str = "temporary";
-#[cfg(feature = "metrics")]
-const STORAGE_PERM: &str = "permanent";
-#[cfg(feature = "metrics")]
-const DEFAULT_VALUE: &str = "default";
+mod label {
+    pub(super) const TEMP: &str = "temporary";
+    pub(super) const PERM: &str = "permanent";
+    pub(super) const DEFAULT: &str = "default";
+}
 
 /// Proxy that simplifies interaction with permanent and temporary storages.
 ///
@@ -203,7 +203,7 @@ impl StratusStorage {
             if let Some(account) = self.temp.read_account(address).await? {
                 tracing::debug!(%address, "account found in temporary storage");
                 #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                metrics::inc_storage_read_account(start.elapsed(), label::TEMP, point_in_time, true);
                 return Ok(account);
             }
         }
@@ -213,13 +213,13 @@ impl StratusStorage {
             Some(account) => {
                 tracing::debug!(%address, "account found in permanent storage");
                 #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
+                metrics::inc_storage_read_account(start.elapsed(), label::PERM, point_in_time, true);
                 Ok(account)
             }
             None => {
                 tracing::debug!(%address, "account not found, assuming default value");
                 #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
+                metrics::inc_storage_read_account(start.elapsed(), label::DEFAULT, point_in_time, true);
                 Ok(Account::new_empty(*address))
             }
         }
@@ -235,7 +235,7 @@ impl StratusStorage {
             if let Some(slot) = self.temp.read_slot(address, index).await? {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in temporary storage");
                 #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                metrics::inc_storage_read_slot(start.elapsed(), label::TEMP, point_in_time, true);
                 return Ok(slot);
             }
         }
@@ -245,13 +245,13 @@ impl StratusStorage {
             Some(slot) => {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
                 #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
+                metrics::inc_storage_read_slot(start.elapsed(), label::PERM, point_in_time, true);
                 Ok(slot)
             }
             None => {
                 tracing::debug!(%address, %index, "slot not found, assuming default value");
                 #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
+                metrics::inc_storage_read_slot(start.elapsed(), label::DEFAULT, point_in_time, true);
                 Ok(Slot::new_empty(*index))
             }
         }
@@ -390,7 +390,7 @@ impl StratusStorage {
         {
             let start = metrics::now();
             let result = self.temp.flush().await;
-            metrics::inc_storage_flush(start.elapsed(), STORAGE_TEMP, result.is_ok());
+            metrics::inc_storage_flush(start.elapsed(), label::TEMP, result.is_ok());
             result
         }
 
@@ -411,11 +411,11 @@ impl StratusStorage {
         {
             let start = metrics::now();
             let result = self.perm.reset_at(number).await;
-            metrics::inc_storage_reset(start.elapsed(), STORAGE_PERM, result.is_ok());
+            metrics::inc_storage_reset(start.elapsed(), label::PERM, result.is_ok());
 
             let start = metrics::now();
             let result = self.temp.reset().await;
-            metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result.is_ok());
+            metrics::inc_storage_reset(start.elapsed(), label::TEMP, result.is_ok());
 
             self.set_active_block_number_as_next().await?;
 

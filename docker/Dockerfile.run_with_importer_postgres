@@ -14,6 +14,7 @@ RUN apt-get install -y libclang-dev cmake
 
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV JSON_LOGS=1
+ENV NO_COLOR=1
 RUN cargo build --release --bin run-with-importer --features metrics
 
 # Runtime
