@@ -62,10 +62,12 @@ pub async fn serve_rpc(
     tracing::info!("starting rpc server");
 
     // configure subscriptions
-    let subs = Arc::new(RpcSubscriptions::default());
-    let _handle_subs_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();
-    let handle_new_heads_notifier = Arc::clone(&subs).spawn_new_heads_notifier(miner.notifier_blocks.subscribe());
-    let handle_logs_notifier = Arc::clone(&subs).spawn_logs_notifier(miner.notifier_logs.subscribe());
+    let subs = RpcSubscriptions::spawn(
+        miner.notifier_pending_txs.subscribe(),
+        miner.notifier_blocks.subscribe(),
+        miner.notifier_logs.subscribe(),
+        cancellation.child_token(),
+    );
 
     // configure context
     let ctx = RpcContext {
@@ -79,7 +81,7 @@ pub async fn serve_rpc(
         miner,
 
         // subscriptions
-        subs,
+        subs: Arc::clone(&subs.connected),
     };
     tracing::info!(%address, ?ctx, "starting rpc server");
 
@@ -90,9 +92,9 @@ pub async fn serve_rpc(
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
     let http_middleware = tower::ServiceBuilder::new()
-        .layer(ProxyGetRequestLayer::new("/startup", "startup").unwrap())
-        .layer(ProxyGetRequestLayer::new("/readiness", "readiness").unwrap())
-        .layer(ProxyGetRequestLayer::new("/liveness", "liveness").unwrap());
+        .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
+        .layer(ProxyGetRequestLayer::new("/readiness", "stratus_readiness").unwrap())
+        .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap());
 
     // serve module
     let server = Server::builder()
@@ -101,25 +103,24 @@ pub async fn serve_rpc(
         .set_id_provider(RandomStringIdProvider::new(8))
         .build(address)
         .await?;
+
     let handle_rpc_server = server.start(module);
-    let handle_clone = handle_rpc_server.clone();
+    let handle_rpc_server_watch = handle_rpc_server.clone();
 
-    let rpc_server_future = async move {
-        let _ = join!(handle_rpc_server.stopped(), handle_logs_notifier, handle_new_heads_notifier);
-    };
-
-    // await server and subscriptions to stop
+    // await for cancellation or jsonrpsee to stop (should not happen)
     select! {
-        _ = rpc_server_future => {
-            tracing::warn!("rpc_server_future finished, cancelling tasks");
+        _ = handle_rpc_server_watch.stopped() => {
+            tracing::warn!("rpc server finished unexpectedly, cancelling tasks");
             cancellation.cancel();
         },
         _ = cancellation.cancelled() => {
-            tracing::info!("serve_rpc task cancelled, stopping rpc server");
-            let _ = handle_clone.stop();
-            handle_clone.stopped().await;
+            tracing::info!("rpc server cancelled, stopping it");
+            let _ = handle_rpc_server.stop();
         }
     }
+
+    // await rpc server and subscriptions to finish
+    join!(handle_rpc_server.stopped(), subs.handles.stopped());
 
     Ok(())
 }
@@ -133,12 +134,14 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_async_method("debug_setHead", debug_set_head)?;
     }
 
+    // stratus health check
+    module.register_async_method("stratus_startup", stratus_startup)?;
+    module.register_async_method("stratus_readiness", stratus_readiness)?;
+    module.register_async_method("stratus_liveness", stratus_liveness)?;
+
     // blockchain
     module.register_async_method("net_version", net_version)?;
     module.register_async_method("net_listening", net_listening)?;
-    module.register_async_method("startup", startup)?;
-    module.register_async_method("readiness", readiness)?;
-    module.register_async_method("liveness", liveness)?;
     module.register_async_method("eth_chainId", eth_chain_id)?;
     module.register_async_method("web3_clientVersion", web3_client_version)?;
 
@@ -183,8 +186,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 #[cfg(feature = "dev")]
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    ctx.storage.reset_perm(number).await?;
-    ctx.storage.reset_temp().await?;
+    ctx.storage.reset(number).await?;
     Ok(serde_json::to_value(number).unwrap())
 }
 
@@ -210,18 +212,18 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
 
 // Status
 async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    readiness(params, arc).await
+    stratus_readiness(params, arc).await
 }
 
-async fn startup(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+async fn stratus_startup(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
-async fn readiness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+async fn stratus_readiness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
-async fn liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
@@ -400,12 +402,14 @@ async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Resul
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>) -> impl IntoSubscriptionCloseResponse {
     let (params, kind) = next_rpc_param::<String>(params.sequence())?;
     match kind.deref() {
-        // new block emitted
+        "newPendingTransactions" => {
+            ctx.subs.add_new_pending_txs(pending.accept().await?).await;
+        }
+
         "newHeads" => {
             ctx.subs.add_new_heads(pending.accept().await?).await;
         }
 
-        // transaction logs emitted
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage).await?;

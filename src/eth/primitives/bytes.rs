@@ -10,6 +10,7 @@
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
+use std::ops::DerefMut;
 
 use ethers_core::types::Bytes as EthersBytes;
 use revm::interpreter::analysis::to_analysed;
@@ -119,6 +120,12 @@ impl Deref for Bytes {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for Bytes {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

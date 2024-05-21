@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {
-    let storage = config.stratus_storage.init().await?;
+    let storage = config.storage.init().await?;
 
     let interval = BlockNumber::from(config.interval);
 
@@ -53,7 +53,7 @@ async fn validate_state(
 ) -> anyhow::Result<()> {
     match method {
         ValidatorMethodConfig::Rpc { url } => {
-            let chain = BlockchainClient::new(&url).await?;
+            let chain = BlockchainClient::new_http(&url).await?;
             validate_state_rpc(&chain, storage, start, end, max_sample_size, seed).await
         }
         _ => todo!(),

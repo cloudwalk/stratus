@@ -3,6 +3,8 @@
 //! TODO: If it becomes a bottleneck, it can be processed asynchronously.
 
 use std::future::Future;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 use std::task::Poll;
 use std::time::Instant;
 
@@ -19,6 +21,11 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+
+// -----------------------------------------------------------------------------
+// Global metrics
+// -----------------------------------------------------------------------------
+static ACTIVE_REQUESTS: AtomicU64 = AtomicU64::new(0);
 
 // -----------------------------------------------------------------------------
 // Request handling
@@ -55,7 +62,11 @@ where
 
         // metrify request
         #[cfg(feature = "metrics")]
-        metrics::inc_rpc_requests_started(method, function.clone());
+        {
+            let active = ACTIVE_REQUESTS.fetch_add(1, Ordering::Relaxed) + 1;
+            metrics::set_rpc_requests_active(active, method, function.clone());
+            metrics::inc_rpc_requests_started(method, function.clone());
+        }
 
         RpcResponse {
             id: request.id.to_string(),
@@ -119,7 +130,11 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
 
             // metrify response
             #[cfg(feature = "metrics")]
-            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), proj.function.clone(), response.is_success());
+            {
+                let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
+                metrics::set_rpc_requests_active(active, proj.method.clone(), proj.function.clone());
+                metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), proj.function.clone(), response.is_success());
+            }
         }
 
         response

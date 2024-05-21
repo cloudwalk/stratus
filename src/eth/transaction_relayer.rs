@@ -34,7 +34,7 @@ impl TransactionRelayer {
         if evm_result.is_failure() {
             tracing::debug!("transaction failed in local execution");
             let tx_execution = TransactionExecution::new_local(tx_input, evm_result);
-            self.storage.save_execution_to_temp(tx_execution).await?;
+            self.storage.save_execution(tx_execution).await?;
             return Ok(());
         }
 

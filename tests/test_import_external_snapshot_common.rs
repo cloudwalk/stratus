@@ -26,10 +26,10 @@ mod m {
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION_SLOT_READS_CACHED;
     pub use stratus::infra::metrics::METRIC_EXECUTOR_EXTERNAL_BLOCK;
-    pub use stratus::infra::metrics::METRIC_STORAGE_COMMIT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOTS;
+    pub use stratus::infra::metrics::METRIC_STORAGE_SAVE_BLOCK;
 }
 
 #[cfg(feature = "metrics")]
@@ -83,7 +83,7 @@ const METRIC_QUERIES: [&str; 48] = [
     m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
     "* COMMIT",
-    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_COMMIT),
+    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_SAVE_BLOCK),
 ];
 
 #[cfg(not(feature = "metrics"))]
@@ -104,7 +104,7 @@ pub fn init_config_and_data(
     let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
     global_services.config.executor.chain_id = 2009;
     global_services.config.executor.num_evms = 8;
-    global_services.config.stratus_storage.perm_storage.perm_storage_connections = 9;
+    global_services.config.storage.perm_storage.perm_storage_connections = 9;
 
     // init block data
     let block_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/block.json", block_number)).unwrap();
@@ -155,8 +155,8 @@ pub async fn execute_test(
     // init services
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage)));
     let relayer = config.relayer.init(Arc::clone(&storage)).await.unwrap();
-    let miner = config.miner.init(Arc::clone(&storage));
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer).await;
+    let miner = config.miner.init(Arc::clone(&storage), None).await.unwrap();
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await;
 
     // execute and mine
     executor.reexecute_external(&block, &receipts).await.unwrap();

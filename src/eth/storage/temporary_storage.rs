@@ -15,16 +15,6 @@ use crate::eth::primitives::TransactionExecution;
 #[async_trait]
 pub trait TemporaryStorage: Send + Sync {
     // -------------------------------------------------------------------------
-    // Accounts and Slots
-    // -------------------------------------------------------------------------
-
-    /// Retrieves an account from the storage. Returns Option when not found.
-    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
-
-    /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
-
-    // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
 
@@ -35,28 +25,34 @@ pub trait TemporaryStorage: Send + Sync {
     async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
 
     // -------------------------------------------------------------------------
-    // External block
+    // Block and executions
     // -------------------------------------------------------------------------
 
     /// Sets the external block being re-executed.
-    async fn set_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
-
-    // -------------------------------------------------------------------------
-    // Executions
-    // -------------------------------------------------------------------------
+    async fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
 
     /// Saves an re-executed transaction to the active mined block.
     async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
 
+    /// Finishes the mining of the active block and starts a new block.
+    async fn finish_block(&self) -> anyhow::Result<PendingBlock>;
+
     // -------------------------------------------------------------------------
-    // General state
+    // Accounts and slots
     // -------------------------------------------------------------------------
 
     /// Checks if an execution conflicts with current storage state.
     async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>>;
 
-    /// Finishes the mining of the active block and starts a new block.
-    async fn finish_block(&self) -> anyhow::Result<PendingBlock>;
+    /// Retrieves an account from the storage. Returns Option when not found.
+    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
+
+    /// Retrieves an slot from the storage. Returns Option when not found.
+    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
+
+    // -------------------------------------------------------------------------
+    // Global state
+    // -------------------------------------------------------------------------
 
     /// Resets to default empty state.
     async fn reset(&self) -> anyhow::Result<()>;

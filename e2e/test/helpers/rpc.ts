@@ -206,31 +206,82 @@ export async function sendGetBlockNumber(): Promise<number> {
     return parseInt(result, 16);
 }
 
-/// Start a subscription and returns its id
-/// Waits at the most for the specified time
-/// An error or timeout will result in undefined
-export async function subscribeAndGetId(
+/// Open a WebSocket connection and return the socket
+export function openWebSocketConnection(): WebSocket {
+    const socket = new WebSocket(providerUrl.replace("http", "ws"));
+    return socket;
+}
+
+/// Add an "open" event listener to a WebSocket
+function addOpenListener(socket: WebSocket, subscription: string, params: any) {
+    socket.addEventListener("open", function () {
+        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription, params] }));
+    });
+}
+
+/// Generalized function to add a "message" event listener to a WebSocket
+function addMessageListener(socket: WebSocket, messageToReturn: number, callback: (messageEvent: { data: string }) => Promise<void>): Promise<any> {
+    return new Promise((resolve) => {
+        let messageCount = 0;
+        socket.addEventListener("message", async function (messageEvent: { data: string }) {
+            //console.log("Received message: " + messageEvent.data);
+            messageCount++;
+            if (messageCount === messageToReturn) {
+                const event = JSON.parse(messageEvent.data);
+                socket.close();
+                resolve(event);
+            } else {
+                await callback(messageEvent);
+                send("evm_mine", []);
+            }
+        });
+    });
+}
+
+/// Execute an async contract operation
+async function asyncContractOperation(contract: TestContractBalances) {
+    let nonce = await sendGetNonce(CHARLIE.address);
+    const contractOps = contract.connect(CHARLIE.signer());
+    await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
+
+    return new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+/// Start a subscription and return its N-th event
+export async function subscribeAndGetEvent(
     subscription: string,
     waitTimeInMilliseconds: number,
-): Promise<string | undefined> {
-    const socket = new WebSocket(providerUrl.replace("http", "ws"));
-    let subsId = undefined;
+    messageToReturn: number = 1,
+): Promise<any> {
+    const socket = openWebSocketConnection();
+    addOpenListener(socket, subscription, {});
+    const event = await addMessageListener(socket, messageToReturn, async (messageEvent) => {});
 
-    socket.addEventListener("open", function () {
-        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 0, method: "eth_subscribe", params: [subscription] }));
-    });
+    // Wait for the specified time, if necessary
+    if (waitTimeInMilliseconds > 0)
+        await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
 
-    socket.addEventListener("message", function (event: { data: string }) {
-        //console.log('Message from server ', event.data);
-        if (event.data.includes("id")) {
-            subsId = JSON.parse(event.data).result;
-        }
-        socket.close();
+    return event;
+}
+
+/// Start a subscription with contract and return its N-th event
+export async function subscribeAndGetEventWithContract(
+    subscription: string,
+    waitTimeInMilliseconds: number,
+    messageToReturn: number = 1,
+): Promise<any> {
+    const contract = await deployTestContractBalances();
+    const contractAddress = await contract.getAddress();
+    const socket = openWebSocketConnection();
+    addOpenListener(socket, subscription, { "address": contractAddress });
+    const event = await addMessageListener(socket, messageToReturn, async (messageEvent) => {
+        await asyncContractOperation(contract);
     });
 
     // Wait for the specified time, if necessary
-    if (subsId === undefined && waitTimeInMilliseconds > 0)
+    if (waitTimeInMilliseconds > 0)
         await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
 
-    return subsId;
+    return event;
 }
+

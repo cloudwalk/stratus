@@ -18,8 +18,8 @@ where
     T: clap::Parser + WithCommonConfig + Debug,
 {
     pub config: T,
-    _sentry_guard: Option<ClientInitGuard>,
     pub runtime: Runtime,
+    _sentry_guard: Option<ClientInitGuard>,
 }
 
 impl<T> GlobalServices<T>
@@ -50,12 +50,12 @@ where
         let runtime = config.common().init_runtime();
 
         // init tracing
-        runtime.block_on(async { infra::init_tracing(config.common().tracing_url.as_ref()) });
+        runtime.block_on(infra::init_tracing(config.common().tracing_url.as_ref()));
 
         Self {
             config,
-            _sentry_guard,
             runtime,
+            _sentry_guard,
         }
     }
 }

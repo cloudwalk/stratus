@@ -7,6 +7,7 @@ contract TestContractBalances {
 
     event Add(address indexed account, uint amount);
     event Sub(address indexed account, uint amount);
+    event Set(address indexed account, uint amount);
 
     /// @dev Add amount to the balance of an account.
     /// @return The new balance.
@@ -24,6 +25,15 @@ contract TestContractBalances {
 
         balances[account] -= amount;
         emit Sub(account, amount);
+
+        return balances[msg.sender];
+    }
+
+    /// @dev Sets the exact balance of an account.
+    /// @return The new balance.
+    function set(address account, uint256 amount) public returns (uint256) {
+        balances[account] = amount;
+        emit Set(account, amount);
 
         return balances[msg.sender];
     }

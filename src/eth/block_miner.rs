@@ -1,12 +1,16 @@
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::sync::Condvar;
 use std::thread;
 use std::time::Duration;
 
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
+use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 
+use super::Consensus;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -16,6 +20,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -24,37 +29,108 @@ use crate::log_and_err;
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 
+    /// Time duration between blocks.
+    pub block_time: Option<Duration>,
+
+    /// Broadcasts pending transactions events.
+    pub notifier_pending_txs: broadcast::Sender<Hash>,
+
     /// Broadcasts new mined blocks events.
-    pub notifier_blocks: broadcast::Sender<Block>,
+    pub notifier_blocks: broadcast::Sender<BlockHeader>,
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
+
+    /// Consensus logic.
+    consensus: Option<Arc<Consensus>>,
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>, consensus: Option<Arc<Consensus>>) -> Self {
         tracing::info!("starting block miner");
         Self {
             storage,
+            block_time,
+            notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
+            consensus,
         }
     }
 
-    pub fn spawn_interval_miner(self: Arc<Self>, block_time: Duration) {
+    /// Spawns a new thread that keep mining blocks in the specified interval.
+    pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
+        // validate
+        let Some(block_time) = self.block_time else {
+            return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
+        };
         tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
 
-        let t = thread::Builder::new().name("interval-miner".into());
-        t.spawn(move || interval_miner(self, block_time))
-            .expect("spawning interval miner should not fail");
+        // spawn scoped threads (tokio does not support scoped tasks)
+        let pending_blocks = AtomicUsize::new(0);
+        let pending_blocks_cvar = Condvar::new();
+
+        thread::scope(|s| {
+            // spawn miner
+            let t_miner = thread::Builder::new().name("miner".into());
+            let t_miner_tokio = Handle::current();
+            let t_miner_pending_blocks = &pending_blocks;
+            let t_miner_pending_blocks_cvar = &pending_blocks_cvar;
+            t_miner
+                .spawn_scoped(s, move || {
+                    let _tokio_guard = t_miner_tokio.enter();
+                    interval_miner::start(self, t_miner_pending_blocks, t_miner_pending_blocks_cvar);
+                })
+                .expect("spawning interval miner should not fail");
+
+            // spawn ticker
+            let t_ticker = thread::Builder::new().name("miner-ticker".into());
+            let t_ticker_tokio = Handle::current();
+            let t_ticker_pending_blocks = &pending_blocks;
+            let t_ticker_pending_blocks_cvar = &pending_blocks_cvar;
+            t_ticker
+                .spawn_scoped(s, move || {
+                    let _tokio_guard = t_ticker_tokio.enter();
+                    interval_miner_ticker::start(block_time, t_ticker_pending_blocks, t_ticker_pending_blocks_cvar);
+                })
+                .expect("spawning interval miner ticker should not fail");
+        });
+
+        Ok(())
+    }
+
+    /// Checks if miner should run in interval miner mode.
+    pub fn is_interval_miner_mode(&self) -> bool {
+        self.block_time.is_some()
+    }
+
+    /// Checks if miner should run in automine mode.
+    pub fn is_automine_mode(&self) -> bool {
+        not(self.is_interval_miner_mode())
+    }
+
+    /// Persists a transaction execution.
+    pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
+        let tx_hash = tx_execution.hash();
+
+        self.storage.save_execution(tx_execution.clone()).await?;
+        if let Some(consensus) = &self.consensus {
+            let execution = format!("{:?}", tx_execution.clone());
+            consensus.sender.send(execution).await.unwrap();
+        }
+        let _ = self.notifier_pending_txs.send(tx_hash);
+
+        Ok(())
     }
 
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
-        let block = self.storage.temp.finish_block().await?;
+        tracing::debug!("mining external block");
+
+        let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -80,7 +156,9 @@ impl BlockMiner {
     ///
     /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
     pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
-        let block = self.storage.temp.finish_block().await?;
+        tracing::debug!("mining external mixed block");
+
+        let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -113,7 +191,9 @@ impl BlockMiner {
     ///
     /// External transactions are not allowed to be part of the block.
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
-        let block = self.storage.temp.finish_block().await?;
+        tracing::debug!("mining local block");
+
+        let block = self.storage.finish_block().await?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -136,18 +216,22 @@ impl BlockMiner {
 
     /// Persists a mined block to permanent storage and prepares new block.
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
+        tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
+
+        // extract fields to use in notifications
         let block_number = *block.number();
+        let block_header = block.header.clone();
+        let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
 
         // persist block
-        self.storage.save_block_to_perm(block.clone()).await?;
+        self.storage.save_block(block).await?;
         self.storage.set_mined_block_number(block_number).await?;
 
         // notify
-        let logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
-        for log in logs {
+        for log in block_logs {
             let _ = self.notifier_logs.send(log);
         }
-        let _ = self.notifier_blocks.send(block);
+        let _ = self.notifier_blocks.send(block_header);
 
         Ok(())
     }
@@ -251,23 +335,50 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 // -----------------------------------------------------------------------------
 // Miner
 // -----------------------------------------------------------------------------
-fn interval_miner(miner: Arc<BlockMiner>, block_time: Duration) {
-    loop {
-        thread::sleep(block_time);
-        tracing::info!("mining block");
+mod interval_miner {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+    use std::sync::Condvar;
+    use std::sync::Mutex;
 
+    use tokio::runtime::Handle;
+
+    use crate::eth::BlockMiner;
+
+    pub fn start(miner: Arc<BlockMiner>, pending_blocks: &AtomicUsize, pending_blocks_cvar: &Condvar) {
+        let tokio = Handle::current();
+        let cvar_mutex = Mutex::new(());
+
+        loop {
+            let pending = pending_blocks
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(1)))
+                .unwrap();
+            if pending > 0 {
+                tracing::info!(%pending, "interval mining block");
+                tokio.block_on(mine_and_commit(&miner));
+            } else {
+                tracing::debug!(%pending, "waiting for block interval");
+                let _ = pending_blocks_cvar.wait(cvar_mutex.lock().unwrap());
+            }
+        }
+    }
+
+    #[inline(always)]
+    async fn mine_and_commit(miner: &BlockMiner) {
         // mine
-        let block = match futures::executor::block_on(miner.mine_local()) {
-            Ok(block) => block,
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to mine block");
-                continue;
+        let block = loop {
+            match miner.mine_local().await {
+                Ok(block) => break block,
+                Err(e) => {
+                    tracing::error!(reason = ?e, "failed to mine block");
+                }
             }
         };
 
         // commit
         loop {
-            match futures::executor::block_on(miner.commit(block.clone())) {
+            match miner.commit(block.clone()).await {
                 Ok(_) => break,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to commit block");
@@ -275,5 +386,39 @@ fn interval_miner(miner: Arc<BlockMiner>, block_time: Duration) {
                 }
             }
         }
+    }
+}
+
+mod interval_miner_ticker {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+    use std::sync::Condvar;
+    use std::thread;
+    use std::time::Duration;
+
+    use chrono::Timelike;
+    use chrono::Utc;
+    use tokio::runtime::Handle;
+
+    pub fn start(block_time: Duration, pending_blocks: &AtomicUsize, pending_blocks_cvar: &Condvar) {
+        let tokio = Handle::current();
+
+        // sync to next second
+        let next_second = (Utc::now() + Duration::from_secs(1)).with_nanosecond(0).unwrap();
+        thread::sleep((next_second - Utc::now()).to_std().unwrap());
+
+        // prepare ticker
+        let mut ticker = tokio::time::interval(block_time);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
+
+        // keep ticking
+        tokio.block_on(async move {
+            ticker.tick().await;
+            loop {
+                let _ = ticker.tick().await;
+                let _ = pending_blocks.fetch_add(1, Ordering::SeqCst);
+                pending_blocks_cvar.notify_one();
+            }
+        });
     }
 }
