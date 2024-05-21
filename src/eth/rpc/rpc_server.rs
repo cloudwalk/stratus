@@ -419,7 +419,9 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         // unsupported
         kind => {
             tracing::warn!(%kind, "unsupported subscription kind");
-            pending.reject(rpc_invalid_params_error(format!("unsupported subscription kind: {}", kind))).await;
+            pending
+                .reject(rpc_invalid_params_error(format!("unsupported subscription kind: {}", kind)))
+                .await;
         }
     };
     Ok(())
