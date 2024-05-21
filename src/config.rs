@@ -161,8 +161,6 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    ///
-    /// TODO: remove BlockMiner after migration is completed.
     pub async fn init(
         &self,
         storage: Arc<StratusStorage>,
@@ -207,7 +205,7 @@ impl ExecutorConfig {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
                     };
                 }
-                tracing::warn!("stopping evm thread because task channel was closed");
+                tracing::warn!("stopping evm thread because tx channel was closed");
             })
             .expect("spawning evm threads should not fail");
         }

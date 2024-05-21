@@ -62,11 +62,12 @@ pub async fn serve_rpc(
     tracing::info!("starting rpc server");
 
     // configure subscriptions
-    let subs = Arc::new(RpcSubscriptions::default());
-    let _handle_subs_cleaner = Arc::clone(&subs).spawn_subscriptions_cleaner();
-    let handle_new_pending_txs = Arc::clone(&subs).spawn_new_pending_txs_notifier(miner.notifier_pending_txs.subscribe());
-    let handle_new_heads_notifier = Arc::clone(&subs).spawn_new_heads_notifier(miner.notifier_blocks.subscribe());
-    let handle_logs_notifier = Arc::clone(&subs).spawn_logs_notifier(miner.notifier_logs.subscribe());
+    let subs = RpcSubscriptions::spawn(
+        miner.notifier_pending_txs.subscribe(),
+        miner.notifier_blocks.subscribe(),
+        miner.notifier_logs.subscribe(),
+        cancellation.child_token(),
+    );
 
     // configure context
     let ctx = RpcContext {
@@ -80,7 +81,7 @@ pub async fn serve_rpc(
         miner,
 
         // subscriptions
-        subs,
+        subs: Arc::clone(&subs.connected),
     };
     tracing::info!(%address, ?ctx, "starting rpc server");
 
@@ -102,30 +103,24 @@ pub async fn serve_rpc(
         .set_id_provider(RandomStringIdProvider::new(8))
         .build(address)
         .await?;
+
     let handle_rpc_server = server.start(module);
-    let handle_clone = handle_rpc_server.clone();
+    let handle_rpc_server_watch = handle_rpc_server.clone();
 
-    let rpc_server_future = async move {
-        let _ = join!(
-            handle_rpc_server.stopped(),
-            handle_new_pending_txs,
-            handle_logs_notifier,
-            handle_new_heads_notifier
-        );
-    };
-
-    // await server and subscriptions to stop
+    // await for cancellation or jsonrpsee to stop (should not happen)
     select! {
-        _ = rpc_server_future => {
-            tracing::warn!("rpc_server_future finished, cancelling tasks");
+        _ = handle_rpc_server_watch.stopped() => {
+            tracing::warn!("rpc server finished unexpectedly, cancelling tasks");
             cancellation.cancel();
         },
         _ = cancellation.cancelled() => {
-            tracing::info!("serve_rpc task cancelled, stopping rpc server");
-            let _ = handle_clone.stop();
-            handle_clone.stopped().await;
+            tracing::info!("rpc server cancelled, stopping it");
+            let _ = handle_rpc_server.stop();
         }
     }
+
+    // await rpc server and subscriptions to finish
+    join!(handle_rpc_server.stopped(), subs.handles.stopped());
 
     Ok(())
 }
