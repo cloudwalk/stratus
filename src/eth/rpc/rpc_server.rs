@@ -139,6 +139,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_async_method("stratus_liveness", stratus_liveness)?;
 
+    // consensus
+    module.register_async_method("stratus_appendEntries", stratus_append_entries)?;
+
     // blockchain
     module.register_async_method("net_version", net_version)?;
     module.register_async_method("net_listening", net_listening)?;
@@ -227,6 +230,9 @@ async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<J
     Ok(json!(true))
 }
 
+async fn stratus_append_entries(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(json!(true))
+}
 // Blockchain
 
 async fn net_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
