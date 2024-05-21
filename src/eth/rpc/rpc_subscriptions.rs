@@ -102,7 +102,7 @@ impl RpcSubscriptions {
                 };
 
                 let subs = subs.new_pending_txs.read().await;
-                Self::notify(subs.values(), SubscriptionMessage::from(hash.to_string())).await;
+                Self::notify(subs.values(), hash.to_string()).await;
             }
             Ok(())
         })
@@ -129,7 +129,7 @@ impl RpcSubscriptions {
                 };
 
                 let subs = subs.new_heads.read().await;
-                Self::notify(subs.values(), SubscriptionMessage::from(header)).await;
+                Self::notify(subs.values(), header).await;
             }
             Ok(())
         })
@@ -161,13 +161,18 @@ impl RpcSubscriptions {
                     .filter_map(|(sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
                     .collect_vec();
 
-                Self::notify(interested_subs, SubscriptionMessage::from(log)).await;
+                Self::notify(interested_subs.into_iter(), log).await;
             }
             Ok(())
         })
     }
 
-    async fn notify(subs: impl IntoIterator<Item = &SubscriptionSink>, msg: SubscriptionMessage) {
+    async fn notify(subs: impl ExactSizeIterator<Item = &SubscriptionSink>, msg: impl Into<SubscriptionMessage>) {
+        if subs.len() == 0 {
+            return;
+        }
+
+        let msg = msg.into();
         for sub in subs {
             if sub.is_closed() {
                 continue;
