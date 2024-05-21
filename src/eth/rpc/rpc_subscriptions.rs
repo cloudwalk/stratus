@@ -20,6 +20,7 @@ use crate::ext::spawn_named;
 use crate::ext::warn_task_cancellation;
 use crate::ext::warn_task_tx_closed;
 use crate::if_else;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
 /// Frequency of cleaning up closed subscriptions.
@@ -29,6 +30,13 @@ const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
 const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
 
 type SubscriptionId = usize;
+
+#[cfg(feature = "metrics")]
+mod label {
+    pub(super) const PENDING_TXS: &str = "newPendingTransactions";
+    pub(super) const NEW_HEADS: &str = "newHeads";
+    pub(super) const LOGS: &str = "logs";
+}
 
 /// State of JSON-RPC websocket subscriptions.
 #[derive(Debug)]
@@ -74,9 +82,12 @@ impl RpcSubscriptions {
                 subs.logs.write().await.retain(|_, (sub, _)| not(sub.is_closed()));
 
                 // update metrics
-                metrics::set_rpc_subscriptions(subs.new_pending_txs.read().await.len() as u64, "newPendingTransactions");
-                metrics::set_rpc_subscriptions(subs.new_heads.read().await.len() as u64, "newHeads");
-                metrics::set_rpc_subscriptions(subs.logs.read().await.len() as u64, "logs");
+                #[cfg(feature = "metrics")]
+                {
+                    metrics::set_rpc_subscriptions_active(subs.new_pending_txs.read().await.len() as u64, label::PENDING_TXS);
+                    metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
+                    metrics::set_rpc_subscriptions_active(subs.logs.read().await.len() as u64, label::LOGS);
+                }
 
                 // await next iteration
                 tokio::time::sleep(CLEANING_FREQUENCY).await;
@@ -221,18 +232,30 @@ impl RpcSubscriptionsConnected {
     /// Adds a new subscriber to `newPendingTransactions` event.
     pub async fn add_new_pending_txs(&self, sink: SubscriptionSink) {
         tracing::debug!(id = %sink.connection_id(), "subscribing to newPendingTransactions event");
-        self.new_pending_txs.write().await.insert(sink.connection_id(), sink);
+        let mut subs = self.new_pending_txs.write().await;
+        subs.insert(sink.connection_id(), sink);
+
+        #[cfg(feature = "metrics")]
+        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::PENDING_TXS);
     }
 
     /// Adds a new subscriber to `newHeads` event.
     pub async fn add_new_heads(&self, sink: SubscriptionSink) {
         tracing::debug!(id = %sink.connection_id(), "subscribing to newHeads event");
-        self.new_heads.write().await.insert(sink.connection_id(), sink);
+        let mut subs = self.new_heads.write().await;
+        subs.insert(sink.connection_id(), sink);
+
+        #[cfg(feature = "metrics")]
+        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::NEW_HEADS);
     }
 
     /// Adds a new subscriber to `logs` event.
     pub async fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
         tracing::debug!(id = %sink.connection_id(), ?filter, "subscribing to logs event");
-        self.logs.write().await.insert(sink.connection_id(), (sink, filter));
+        let mut subs = self.logs.write().await;
+        subs.insert(sink.connection_id(), (sink, filter));
+
+        #[cfg(feature = "metrics")]
+        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);
     }
 }

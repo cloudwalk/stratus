@@ -4,14 +4,17 @@ use crate::metrics;
 metrics! {
     group: json_rpc,
 
+    "Number of JSON-RPC requests active right now."
+    gauge rpc_requests_active{method, function} [],
+
     "Number of JSON-RPC requests that started."
     counter   rpc_requests_started{method, function} [],
 
     "Number of JSON-RPC requests that finished."
     histogram_duration rpc_requests_finished{method, function, success} [],
 
-    "Number of active subscriptions."
-    gauge rpc_subscriptions{subscription} []
+    "Number of JSON-RPC subscriptions active right now."
+    gauge rpc_subscriptions_active{subscription} []
 }
 
 // Storage reads.
