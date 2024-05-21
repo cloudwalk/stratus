@@ -15,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
 use crate::ext::not;
+use crate::ext::spawn_named;
 
 /// Init application global tracing.
 pub async fn init_tracing(url: Option<&String>) {
@@ -69,14 +70,11 @@ pub async fn init_tracing(url: Option<&String>) {
         .init();
 
     // init tokio console server
-    tokio::task::Builder::new()
-        .name("console::grpc-server")
-        .spawn(async move {
-            if let Err(e) = console_server.serve().await {
-                tracing::error!(reason = ?e, "failed to start tokio-console server");
-            };
-        })
-        .expect("spawning tokio-console grpc server should not fail");
+    spawn_named("console::grpc-server", async move {
+        if let Err(e) = console_server.serve().await {
+            tracing::error!(reason = ?e, "failed to start tokio-console server");
+        };
+    });
 
     tracing::info!("started tracing");
 }

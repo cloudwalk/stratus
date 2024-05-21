@@ -41,6 +41,7 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
@@ -205,7 +206,7 @@ impl ExecutorConfig {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
                     };
                 }
-                tracing::warn!("stopping evm thread because tx channel was closed");
+                warn_task_tx_closed("evm thread");
             })
             .expect("spawning evm threads should not fail");
         }
