@@ -102,7 +102,7 @@ impl RpcSubscriptions {
                 };
 
                 let subs = subs.new_pending_txs.read().await;
-                notify(subs.values(), SubscriptionMessage::from(hash.to_string())).await;
+                Self::notify(subs.values(), SubscriptionMessage::from(hash.to_string())).await;
             }
             Ok(())
         })
@@ -129,7 +129,7 @@ impl RpcSubscriptions {
                 };
 
                 let subs = subs.new_heads.read().await;
-                notify(subs.values(), SubscriptionMessage::from(header)).await;
+                Self::notify(subs.values(), SubscriptionMessage::from(header)).await;
             }
             Ok(())
         })
@@ -161,36 +161,26 @@ impl RpcSubscriptions {
                     .filter_map(|(sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
                     .collect_vec();
 
-                notify(interested_subs, SubscriptionMessage::from(log)).await;
+                Self::notify(interested_subs, SubscriptionMessage::from(log)).await;
             }
             Ok(())
         })
     }
 
-    // -------------------------------------------------------------------------
-    //
-    // -------------------------------------------------------------------------
-    pub async fn stopped(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
-async fn notify(subs: impl IntoIterator<Item = &SubscriptionSink>, msg: SubscriptionMessage) {
-    for sub in subs {
-        if sub.is_closed() {
-            continue;
-        }
-        if let Err(e) = sub.send_timeout(msg.clone(), NOTIFICATION_TIMEOUT).await {
-            tracing::error!(reason = ?e, "failed to send subscription notification");
+    async fn notify(subs: impl IntoIterator<Item = &SubscriptionSink>, msg: SubscriptionMessage) {
+        for sub in subs {
+            if sub.is_closed() {
+                continue;
+            }
+            if let Err(e) = sub.send_timeout(msg.clone(), NOTIFICATION_TIMEOUT).await {
+                tracing::error!(reason = ?e, "failed to send subscription notification");
+            }
         }
     }
 }
 
 // -----------------------------------------------------------------------------
-// Background tasks handles
+// Notifier handles
 // -----------------------------------------------------------------------------
 
 /// Handles of subscription background tasks.
