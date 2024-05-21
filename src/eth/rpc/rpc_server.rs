@@ -92,9 +92,9 @@ pub async fn serve_rpc(
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
     let http_middleware = tower::ServiceBuilder::new()
-        .layer(ProxyGetRequestLayer::new("/startup", "startup").unwrap())
-        .layer(ProxyGetRequestLayer::new("/readiness", "readiness").unwrap())
-        .layer(ProxyGetRequestLayer::new("/liveness", "liveness").unwrap());
+        .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
+        .layer(ProxyGetRequestLayer::new("/readiness", "stratus_readiness").unwrap())
+        .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap());
 
     // serve module
     let server = Server::builder()
@@ -134,12 +134,14 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_async_method("debug_setHead", debug_set_head)?;
     }
 
+    // stratus health check
+    module.register_async_method("stratus_startup", stratus_startup)?;
+    module.register_async_method("stratus_readiness", stratus_readiness)?;
+    module.register_async_method("stratus_liveness", stratus_liveness)?;
+
     // blockchain
     module.register_async_method("net_version", net_version)?;
     module.register_async_method("net_listening", net_listening)?;
-    module.register_async_method("startup", startup)?;
-    module.register_async_method("readiness", readiness)?;
-    module.register_async_method("liveness", liveness)?;
     module.register_async_method("eth_chainId", eth_chain_id)?;
     module.register_async_method("web3_clientVersion", web3_client_version)?;
 
@@ -210,18 +212,18 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
 
 // Status
 async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    readiness(params, arc).await
+    stratus_readiness(params, arc).await
 }
 
-async fn startup(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+async fn stratus_startup(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
-async fn readiness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+async fn stratus_readiness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
-async fn liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
