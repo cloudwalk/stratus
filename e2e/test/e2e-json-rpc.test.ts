@@ -12,6 +12,7 @@ import {
     send,
     sendAndGetError,
     sendExpect,
+    sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
 } from "./helpers/rpc";
@@ -174,13 +175,13 @@ describe("JSON-RPC", () => {
                 expect(response.result).to.not.be.undefined;
             });
 
-            //it("Subscribe to newPendingTransactions receives success subscription event", async () => {
-            //    const waitTimeInMilliseconds = 40;
-            //     const response = await subscribeAndGetEvent("newPendingTransactions", waitTimeInMilliseconds);
-            //     expect(response).to.not.be.undefined;
-            //     expect(response.id).to.not.be.undefined;
-            //     expect(response.result).to.not.be.undefined;
-            //});
+            it("Subscribe to newPendingTransactions receives success subscription event", async () => {
+                const waitTimeInMilliseconds = 40;
+                 const response = await subscribeAndGetEvent("newPendingTransactions", waitTimeInMilliseconds);
+                 expect(response).to.not.be.undefined;
+                 expect(response.id).to.not.be.undefined;
+                 expect(response.result).to.not.be.undefined;
+            });
 
 
             it("Subscribe to unsupported receives error subscription event", async () => {
@@ -227,6 +228,7 @@ describe("JSON-RPC", () => {
             });
 
             it("Validate logs event", async () => {
+                await sendReset();
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEventWithContract("logs", waitTimeInMilliseconds, 2);
                 expect(response).to.not.be.undefined;
@@ -245,6 +247,17 @@ describe("JSON-RPC", () => {
                 expect(result).to.have.property('transactionIndex').that.is.a('string');
                 expect(result).to.have.property('logIndex').that.is.a('string');
                 expect(result).to.have.property('removed').that.is.a('boolean');
+            });
+
+            it("Validate newPendingTransactions event", async () => {
+                await sendReset();
+                const waitTimeInMilliseconds = 40;
+                const response = await subscribeAndGetEventWithContract("newPendingTransactions", waitTimeInMilliseconds, 2);
+                expect(response).to.not.be.undefined;
+
+                const params = response.params;
+                expect(params).to.have.property('subscription').that.is.a('string');
+                expect(params).to.have.property('result').that.is.an('string');
             });
         });
     });
