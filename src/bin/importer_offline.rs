@@ -230,7 +230,7 @@ async fn execute_external_rpc_storage_loader(
 }
 
 async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, start: BlockNumber, end: BlockNumber) -> anyhow::Result<BacklogTask> {
-    tracing::info!(%start, %end, "retrieving blocks and receipts");
+    tracing::info!(%start, %end, "loading blocks and receipts");
     let blocks_task = rpc_storage.read_blocks_in_range(start, end);
     let receipts_task = rpc_storage.read_receipts_in_range(start, end);
     try_join!(blocks_task, receipts_task)
