@@ -1,7 +1,6 @@
 mod importer_online;
 
 use stratus::config::ExternalRelayerConfig;
-
 use stratus::GlobalServices;
 
 fn main() -> anyhow::Result<()> {
@@ -25,7 +24,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
 
         match block_number {
             Some(block_number) => tracing::info!(?block_number, "relayed"),
-            None => tokio::time::sleep(backoff).await
+            None => tokio::time::sleep(backoff).await,
         };
     }
 }

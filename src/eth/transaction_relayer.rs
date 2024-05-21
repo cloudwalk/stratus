@@ -9,6 +9,9 @@ use sqlx::PgPool;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
+use super::primitives::Block;
+use super::primitives::BlockNumber;
+use super::primitives::TransactionMined;
 use crate::config::ExternalRelayerClientConfig;
 use crate::config::ExternalRelayerServerConfig;
 use crate::eth::evm::EvmExecutionResult;
@@ -18,10 +21,6 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StratusStorage;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
-
-use super::primitives::Block;
-use super::primitives::BlockNumber;
-use super::primitives::TransactionMined;
 
 pub struct TransactionRelayer {
     storage: Arc<StratusStorage>,

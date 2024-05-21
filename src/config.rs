@@ -239,7 +239,12 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+    pub async fn init(
+        &self,
+        storage: Arc<StratusStorage>,
+        consensus: Option<Arc<Consensus>>,
+        relayer: Option<ExternalRelayerClient>,
+    ) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
         // create miner

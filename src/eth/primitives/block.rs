@@ -14,6 +14,7 @@ use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
+use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
 use super::LogMined;
@@ -27,7 +28,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::log_and_err;
-use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
