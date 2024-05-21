@@ -102,6 +102,7 @@ testcontainers-modules = { version = "=0.3.5", features = ["postgres"] }
 
 # test
 fake = { version = "=2.9.2", features = ["derive"] }
+petgraph = "0.6.5"
 
 [dev-dependencies]
 binary_macros = "=1.0.0"
