@@ -18,6 +18,7 @@ spec:
       containers:
         - name: stratus-api
           image: local/run_with_importer:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
               name: http
@@ -57,9 +58,31 @@ spec:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
             - name: ENVIRONMENT
-              value: staging
+              value: local
             - name: ENV
-              value: staging
+              value: local
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /startup
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 60
+            timeoutSeconds: 5
           volumeMounts:
             - mountPath: /app/data
               name: rocksdata
