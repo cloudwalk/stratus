@@ -1,22 +1,18 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::rc::Rc;
+
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Context;
+use daggy::Dag;
 use ethers_core::types::Transaction;
-use futures::future::join_all;
+
 use itertools::Itertools;
-use petgraph::algo::kosaraju_scc;
-use petgraph::algo::min_spanning_tree;
+
 use petgraph::algo::tarjan_scc;
-use petgraph::data::FromElements;
 use petgraph::graph::NodeIndex;
-use petgraph::graphmap::GraphMap;
-use petgraph::visit::IntoNodeReferences;
-use petgraph::Graph;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
@@ -28,6 +24,7 @@ use super::primitives::BlockNumber;
 use super::primitives::Hash;
 use super::primitives::Index;
 use super::primitives::SlotIndex;
+use super::primitives::SlotValue;
 use super::primitives::TransactionMined;
 use crate::config::ExternalRelayerClientConfig;
 use crate::config::ExternalRelayerServerConfig;
@@ -143,87 +140,57 @@ impl ExternalRelayer {
         let block: Block = row.payload.try_into()?;
         let block_number = block.header.number;
 
-        let ordered_transactions = Self::compute_dependencies(block.transactions);
+        let (dag, component_roots) = Self::compute_tx_dags(block.transactions);
 
-        let mut futures = vec![];
-        for txs in ordered_transactions {
-            futures.push(self.relay_ordered(txs));
-        }
-
-        join_all(futures).await.into_iter().collect::<anyhow::Result<()>>()?;
+        self.relay_dag(dag, component_roots);
 
         Ok(Some(block_number))
     }
 
-    fn compute_dependencies(block_transactions: Vec<TransactionMined>) -> Vec<Vec<TransactionMined>> {
-        let mut slot_conflicts: SlotConflictMap = HashMap::new();
-        let mut balance_conflicts: BalanceConflictMap = HashMap::new();
-        let mut graph = Graph::new_undirected();
 
-        for tx in &block_transactions {
+    fn compute_tx_dags(block_transactions: Vec<TransactionMined>) -> (Dag<Option<TransactionMined>, i32>, Vec<NodeIndex>) {
+        let mut slot_conflicts: HashMap<&TransactionMined, HashSet<(&Address, &SlotIndex)>> = HashMap::new();
+        let mut balance_conflicts: HashMap<&TransactionMined, HashSet<&Address>> = HashMap::new();
+        let mut node_indexes: HashMap<&TransactionMined, NodeIndex> = HashMap::new();
+        let mut dag = Dag::new();
+
+        for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
+            let node_idx = dag.add_node(Some(tx));
+            let tx = dag.node_weight(node_idx).unwrap().as_ref().unwrap();
+            node_indexes.insert(tx, node_idx);
             for (address, change) in &tx.execution.changes {
                 for (idx, slot_change) in &change.slots {
                     if slot_change.is_modified() {
-                        slot_conflicts
-                            .entry((*address, *idx))
-                            .or_insert_with(|| {
-                                let set = RefCell::new(HashSet::new());
-                                (graph.add_node(set.clone()), set)
-                            })
-                            .1
-                            .borrow_mut()
-                            .insert(tx.transaction_index);
+                        slot_conflicts.entry(tx).or_default().insert((address, idx));
                     }
                 }
 
                 if change.balance.is_modified() {
-                    balance_conflicts
-                        .entry(*address)
-                        .or_insert_with(|| {
-                            let set = RefCell::new(HashSet::new());
-                            (graph.add_node(set.clone()), set)
-                        })
-                        .1
-                        .borrow_mut()
-                        .insert(tx.transaction_index);
+                    balance_conflicts.entry(tx).or_default().insert(address);
                 }
             }
         }
 
-        for (i, (node_idx1, set1)) in slot_conflicts.values().chain(balance_conflicts.values()).enumerate() {
-            for (node_idx2, set2) in slot_conflicts.values().chain(balance_conflicts.values()).skip(i) {
-                if !set1.borrow().is_disjoint(&set2.borrow()) {
-                    graph.add_edge(*node_idx1, *node_idx2, 1);
+        for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).enumerate() {
+            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).skip(i) {
+                if !set1.is_disjoint(set2) {
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
                 }
             }
         }
 
-        let mut ordered_transactions: Vec<Vec<TransactionMined>> = vec![];
-
-        let mut transactions: HashMap<_, _> = block_transactions.into_iter().map(|tx| (tx.transaction_index, tx)).collect();
-
-        // it'd be better to only contract cliques into single vertices
-        // then if we could produce a better DAG for processing transaction queues:
-        // 0 -- 1
-        //   \_ 2
-        // after 0, 1 and 2 can be executed in parallel.
-        // Currently we contract all the connected components into a single transaction queue.
-        for component in tarjan_scc(&graph) {
-            let ordered = component
-                .into_iter()
-                .map(|idx| graph.node_weight_mut(idx).unwrap().take())
-                .reduce(|mut acc, e| {
-                    acc.extend(e);
-                    acc
-                })
-                .unwrap()
-                .into_iter()
-                .map(|tx| transactions.remove(&tx).unwrap())
-                .sorted_by_key(|tx| tx.transaction_index)
-                .collect();
-            ordered_transactions.push(ordered);
+        for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).enumerate() {
+            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).skip(i) {
+                if !set1.is_disjoint(set2) {
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
+                }
+            }
         }
-        ordered_transactions
+
+        (
+            dag,
+            tarjan_scc(&dag).into_iter().map(|component| component.into_iter().min().unwrap()).collect(),
+        )
     }
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
@@ -258,7 +225,7 @@ impl ExternalRelayer {
         Ok(())
     }
 
-    pub async fn relay_ordered(&self, transactions: Vec<TransactionMined>) -> anyhow::Result<()> {
+    pub async fn relay_dag(&self, dag: Dag<Option<TransactionMined>, i32>, component_roots: Vec<NodeIndex>) -> anyhow::Result<()> {
         todo!();
     }
 }
