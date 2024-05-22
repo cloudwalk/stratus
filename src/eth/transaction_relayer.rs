@@ -186,10 +186,10 @@ impl ExternalRelayer {
                 }
             }
         }
-
+        let component_roots = tarjan_scc(&dag).into_iter().map(|component| component.into_iter().min().unwrap()).collect();
         (
             dag,
-            tarjan_scc(&dag).into_iter().map(|component| component.into_iter().min().unwrap()).collect(),
+            component_roots
         )
     }
 
