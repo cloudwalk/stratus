@@ -1,6 +1,8 @@
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::Ok;
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
@@ -22,6 +24,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
+use crate::ext::parse_duration;
 use crate::ext::spawn_named;
 use crate::ext::DisplayExt;
 use crate::log_and_err;
@@ -89,9 +92,10 @@ impl BlockMiner {
         // decide what to do based on mining mode
         match self.mode {
             // * do not consensus transactions
-            // * do not notify pending transactions
+            // * notify pending transactions
             // * mine block immediately
             BlockMinerMode::Automine => {
+                let _ = self.notifier_pending_txs.send(tx_hash);
                 self.mine_local_and_commit().await?;
             }
             // * consensus transactions
@@ -411,7 +415,7 @@ mod interval_miner_ticker {
 }
 
 /// Indicates when the miner will mine new blocks.
-#[derive(Debug, strum::EnumIs)]
+#[derive(Debug, Clone, Copy, strum::EnumIs, serde::Serialize)]
 pub enum BlockMinerMode {
     /// Mines a new block for each transaction execution.
     Automine,
@@ -421,4 +425,19 @@ pub enum BlockMinerMode {
 
     /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
     External,
+}
+
+impl FromStr for BlockMinerMode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "automine" => Ok(Self::Automine),
+            "external" => Ok(Self::External),
+            s => {
+                let block_time = parse_duration(s)?;
+                Ok(Self::Interval(block_time))
+            }
+        }
+    }
 }

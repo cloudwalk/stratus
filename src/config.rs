@@ -41,6 +41,7 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::parse_duration;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
@@ -231,8 +232,8 @@ impl ExecutorConfig {
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct MinerConfig {
     /// Target block time.
-    #[arg(long = "block-time", value_parser=parse_duration, env = "BLOCK_TIME")]
-    pub block_time: Option<Duration>,
+    #[arg(long = "block-mode", env = "BLOCK_MODE", default_value = "automine")]
+    pub block_mode: BlockMinerMode,
 
     /// Generates genesis block on startup when it does not exist.
     #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
@@ -247,19 +248,15 @@ pub struct MinerConfig {
 impl MinerConfig {
     /// Inits [`BlockMiner`] in external mining mode.
     pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init(BlockMinerMode::External, storage, consensus).await
+        self.init_with_mode(BlockMinerMode::External, storage, consensus).await
     }
 
-    /// Inits [`BlockMiner`] in automine or interval miner mode.
-    pub async fn init_automine_or_interval_mode(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        let mode = match self.block_time {
-            Some(block_time) => BlockMinerMode::Interval(block_time),
-            None => BlockMinerMode::Automine,
-        };
-        self.init(mode, storage, consensus).await
+    /// Inits [`BlockMiner`] in the configured mining mode.
+    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(self.block_mode, storage, consensus).await
     }
 
-    async fn init(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
+    async fn init_with_mode(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
         // create miner
@@ -811,23 +808,6 @@ impl FromStr for ValidatorMethodConfig {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-/// Parses a duration specified using human-time notation or fallback to milliseconds.
-fn parse_duration(s: &str) -> anyhow::Result<Duration> {
-    // try millis
-    let millis: Result<u64, _> = s.parse();
-    if let Ok(millis) = millis {
-        return Ok(Duration::from_millis(millis));
-    }
-
-    // try humantime
-    if let Ok(parsed) = humantime::parse_duration(s) {
-        return Ok(parsed);
-    }
-
-    // error
-    Err(anyhow!("invalid duration format: {}", s))
-}
 
 /// Gets the current binary basename.
 fn binary_name() -> String {
