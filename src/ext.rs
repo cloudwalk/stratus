@@ -1,5 +1,9 @@
 //! Standard library extensions.
 
+use std::time::Duration;
+
+use anyhow::anyhow;
+
 // -----------------------------------------------------------------------------
 // Macros
 // -----------------------------------------------------------------------------
@@ -95,6 +99,27 @@ macro_rules! log_and_err {
             Err(anyhow!($msg))
         }
     };
+}
+
+// -----------------------------------------------------------------------------
+// Duration
+// -----------------------------------------------------------------------------
+
+/// Parses a duration specified using human-time notation or fallback to milliseconds.
+pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
+    // try millis
+    let millis: Result<u64, _> = s.parse();
+    if let Ok(millis) = millis {
+        return Ok(Duration::from_millis(millis));
+    }
+
+    // try humantime
+    if let Ok(parsed) = humantime::parse_duration(s) {
+        return Ok(parsed);
+    }
+
+    // error
+    Err(anyhow!("invalid duration format: {}", s))
 }
 
 // -----------------------------------------------------------------------------

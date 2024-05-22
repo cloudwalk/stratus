@@ -277,7 +277,7 @@ e2e-clock-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --block-time 1000 -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev, -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -295,7 +295,7 @@ e2e-clock-stratus-rocks:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --block-time 1000 --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev, -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
