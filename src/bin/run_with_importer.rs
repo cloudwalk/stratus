@@ -17,6 +17,9 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
+    // init cancellation handler
+    let cancellation = signal_handler();
+
     // init services
     let storage = config.storage.init().await?;
     let consensus = Arc::new(Consensus::new(config.clone().leader_node)); // in development, with no leader configured, the current node ends up being the leader
@@ -26,14 +29,16 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let external_relayer = if let Some(c) = config.external_relayer { Some(c.init().await) } else { None };
-    let miner = config.miner.init(Arc::clone(&storage), Some(Arc::clone(&consensus)), external_relayer).await?;
+    let miner = config
+        .miner
+        .init(Arc::clone(&storage), Some(Arc::clone(&consensus)), external_relayer, cancellation.clone())
+        .await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, Some(consensus)).await;
 
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);
     let rpc_miner = Arc::clone(&miner);
 
-    let cancellation = signal_handler();
     let rpc_cancellation = cancellation.clone();
 
     // run rpc and importer-online in parallel

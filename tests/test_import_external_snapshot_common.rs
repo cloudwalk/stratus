@@ -20,6 +20,7 @@ use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::docker::Docker;
 use stratus::GlobalServices;
+use tokio_util::sync::CancellationToken;
 #[cfg(feature = "metrics")]
 mod m {
     pub use const_format::formatcp;
@@ -155,7 +156,7 @@ pub async fn execute_test(
     // init services
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage)));
     let relayer = config.relayer.init(Arc::clone(&storage)).await.unwrap();
-    let miner = config.miner.init(Arc::clone(&storage), None, None).await.unwrap();
+    let miner = config.miner.init(Arc::clone(&storage), None, None, CancellationToken::new()).await.unwrap();
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await;
 
     // execute and mine

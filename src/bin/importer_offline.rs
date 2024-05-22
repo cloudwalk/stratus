@@ -45,10 +45,13 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
+    // init cancellation handler
+    let cancellation = signal_handler();
+
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let storage = config.storage.init().await?;
-    let miner = config.miner.init(Arc::clone(&storage), None, None).await?;
+    let miner = config.miner.init(Arc::clone(&storage), None, None, cancellation.clone()).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), None, None).await;
 
     // init block snapshots to export
@@ -69,7 +72,6 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
-    let cancellation = signal_handler();
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;

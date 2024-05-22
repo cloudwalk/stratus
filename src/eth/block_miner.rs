@@ -1,14 +1,12 @@
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use std::sync::Condvar;
-use std::thread;
 use std::time::Duration;
 
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
-use tokio::runtime::Handle;
 use tokio::sync::broadcast;
+use tokio_util::sync::CancellationToken;
 
 use super::transaction_relayer::ExternalRelayerClient;
 use super::Consensus;
@@ -25,6 +23,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
+use crate::ext::spawn_named;
 use crate::log_and_err;
 
 pub struct BlockMiner {
@@ -70,42 +69,23 @@ impl BlockMiner {
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
-    pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
+    pub fn spawn_interval_miner(self: Arc<Self>, cancellation: CancellationToken) -> anyhow::Result<()> {
         // validate
         let Some(block_time) = self.block_time else {
             return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
         };
         tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
 
-        // spawn scoped threads (tokio does not support scoped tasks)
-        let pending_blocks = AtomicUsize::new(0);
-        let pending_blocks_cvar = Condvar::new();
-
-        thread::scope(|s| {
-            // spawn miner
-            let t_miner = thread::Builder::new().name("miner".into());
-            let t_miner_tokio = Handle::current();
-            let t_miner_pending_blocks = &pending_blocks;
-            let t_miner_pending_blocks_cvar = &pending_blocks_cvar;
-            t_miner
-                .spawn_scoped(s, move || {
-                    let _tokio_guard = t_miner_tokio.enter();
-                    interval_miner::start(self, t_miner_pending_blocks, t_miner_pending_blocks_cvar);
-                })
-                .expect("spawning interval miner should not fail");
-
-            // spawn ticker
-            let t_ticker = thread::Builder::new().name("miner-ticker".into());
-            let t_ticker_tokio = Handle::current();
-            let t_ticker_pending_blocks = &pending_blocks;
-            let t_ticker_pending_blocks_cvar = &pending_blocks_cvar;
-            t_ticker
-                .spawn_scoped(s, move || {
-                    let _tokio_guard = t_ticker_tokio.enter();
-                    interval_miner_ticker::start(block_time, t_ticker_pending_blocks, t_ticker_pending_blocks_cvar);
-                })
-                .expect("spawning interval miner ticker should not fail");
-        });
+        // spawn miner and ticker
+        let pending_blocks = Arc::new(AtomicUsize::new(0));
+        spawn_named(
+            "miner::miner",
+            interval_miner::run(Arc::clone(&self), Arc::clone(&pending_blocks), cancellation.child_token()),
+        );
+        spawn_named(
+            "miner::ticker",
+            interval_miner_ticker::run(block_time, Arc::clone(&pending_blocks), cancellation.child_token()),
+        );
 
         Ok(())
     }
@@ -353,27 +333,31 @@ mod interval_miner {
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
-    use std::sync::Condvar;
-    use std::sync::Mutex;
 
-    use tokio::runtime::Handle;
+    use tokio::task::yield_now;
+    use tokio_util::sync::CancellationToken;
 
     use crate::eth::BlockMiner;
+    use crate::ext::warn_task_cancellation;
 
-    pub fn start(miner: Arc<BlockMiner>, pending_blocks: &AtomicUsize, pending_blocks_cvar: &Condvar) {
-        let tokio = Handle::current();
-        let cvar_mutex = Mutex::new(());
-
+    pub async fn run(miner: Arc<BlockMiner>, pending_blocks: Arc<AtomicUsize>, cancellation: CancellationToken) {
         loop {
+            // check cancellation
+            if cancellation.is_cancelled() {
+                warn_task_cancellation("interval miner");
+                return;
+            }
+
+            // check pending blocks and mine if necessary
             let pending = pending_blocks
                 .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(1)))
                 .unwrap();
             if pending > 0 {
                 tracing::info!(%pending, "interval mining block");
-                tokio.block_on(mine_and_commit(&miner));
+                mine_and_commit(&miner).await;
             } else {
                 tracing::debug!(%pending, "waiting for block interval");
-                drop(pending_blocks_cvar.wait(cvar_mutex.lock().unwrap()));
+                yield_now().await;
             }
         }
     }
@@ -406,17 +390,17 @@ mod interval_miner {
 mod interval_miner_ticker {
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
-    use std::sync::Condvar;
+    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
     use chrono::Timelike;
     use chrono::Utc;
-    use tokio::runtime::Handle;
+    use tokio_util::sync::CancellationToken;
 
-    pub fn start(block_time: Duration, pending_blocks: &AtomicUsize, pending_blocks_cvar: &Condvar) {
-        let tokio = Handle::current();
+    use crate::ext::warn_task_cancellation;
 
+    pub async fn run(block_time: Duration, pending_blocks: Arc<AtomicUsize>, cancellation: CancellationToken) {
         // sync to next second
         let next_second = (Utc::now() + Duration::from_secs(1)).with_nanosecond(0).unwrap();
         thread::sleep((next_second - Utc::now()).to_std().unwrap());
@@ -426,13 +410,17 @@ mod interval_miner_ticker {
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
 
         // keep ticking
-        tokio.block_on(async move {
-            ticker.tick().await;
-            loop {
-                let _ = ticker.tick().await;
-                let _ = pending_blocks.fetch_add(1, Ordering::SeqCst);
-                pending_blocks_cvar.notify_one();
+        ticker.tick().await;
+        loop {
+            // check cancellation
+            if cancellation.is_cancelled() {
+                warn_task_cancellation("interval miner ticker");
+                return;
             }
-        });
+
+            // await next tick
+            let _ = ticker.tick().await;
+            let _ = pending_blocks.fetch_add(1, Ordering::SeqCst);
+        }
     }
 }

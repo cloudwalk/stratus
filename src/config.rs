@@ -13,6 +13,7 @@ use display_json::DebugAsJson;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
+use tokio_util::sync::CancellationToken;
 
 use crate::bin_name;
 use crate::eth::evm::revm::Revm;
@@ -243,6 +244,7 @@ impl MinerConfig {
         storage: Arc<StratusStorage>,
         consensus: Option<Arc<Consensus>>,
         relayer: Option<ExternalRelayerClient>,
+        cancellation: CancellationToken,
     ) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
@@ -272,7 +274,7 @@ impl MinerConfig {
 
         // enable interval miner
         if miner.is_interval_miner_mode() {
-            Arc::clone(&miner).spawn_interval_miner()?;
+            Arc::clone(&miner).spawn_interval_miner(cancellation)?;
         }
 
         Ok(miner)

@@ -35,7 +35,7 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
-use crate::eth::rpc::rpc_parsing_error;
+use crate::eth::rpc::rpc_invalid_params_error;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMiddleware;
@@ -139,6 +139,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_async_method("stratus_liveness", stratus_liveness)?;
 
+    // consensus
+    module.register_async_method("stratus_appendEntries", stratus_append_entries)?;
+
     // blockchain
     module.register_async_method("net_version", net_version)?;
     module.register_async_method("net_listening", net_listening)?;
@@ -227,6 +230,9 @@ async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<J
     Ok(json!(true))
 }
 
+async fn stratus_append_entries(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(json!(true))
+}
 // Blockchain
 
 async fn net_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
@@ -419,7 +425,9 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         // unsupported
         kind => {
             tracing::warn!(%kind, "unsupported subscription kind");
-            pending.reject(rpc_parsing_error(format!("unsupported subscription kind: {}", kind))).await;
+            pending
+                .reject(rpc_invalid_params_error(format!("unsupported subscription kind: {}", kind)))
+                .await;
         }
     };
     Ok(())

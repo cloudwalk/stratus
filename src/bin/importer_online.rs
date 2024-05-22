@@ -60,13 +60,16 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
+    // init cancellation handler
+    let cancellation = signal_handler();
+
+    // init server
     let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
 
-    let miner = config.miner.init(Arc::clone(&storage), None, None).await?;
+    let miner = config.miner.init(Arc::clone(&storage), None, None, cancellation.clone()).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await; //XXX TODO implement the consensus here, in case of it being a follower, it should not even enter here
     let chain = Arc::new(BlockchainClient::new_http_ws(&config.base.external_rpc, config.base.external_rpc_ws.as_deref()).await?);
-    let cancellation: CancellationToken = signal_handler();
 
     let result = run_importer_online(executor, miner, storage, chain, cancellation, config.base.sync_interval).await;
     if let Err(ref e) = result {
