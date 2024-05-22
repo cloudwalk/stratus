@@ -170,7 +170,7 @@ impl ExternalRelayer {
         }
 
         for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i) {
+            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i+1) {
                 if !set1.is_disjoint(set2) {
                     dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
                 }
@@ -178,7 +178,7 @@ impl ExternalRelayer {
         }
 
         for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i) {
+            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i+1) {
                 if !set1.is_disjoint(set2) {
                     dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
                 }
