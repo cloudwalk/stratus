@@ -139,7 +139,7 @@ impl ExternalRelayer {
 
         let block: Block = row.payload.try_into()?;
         let block_number = block.header.number;
-
+        // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = Self::compute_tx_dag(block.transactions);
 
         self.relay_dag(dag).await?;
@@ -161,12 +161,12 @@ impl ExternalRelayer {
     fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionInput, i32> {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
-        let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
+        let mut node_indices: HashMap<Index, NodeIndex> = HashMap::new();
         let mut dag = StableDag::new();
 
         for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
             let node_idx = dag.add_node(tx.input);
-            node_indexes.insert(tx.transaction_index, node_idx);
+            node_indices.insert(tx.transaction_index, node_idx);
 
             for (address, change) in &tx.execution.changes {
                 for (idx, slot_change) in &change.slots {
@@ -184,7 +184,7 @@ impl ExternalRelayer {
         for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i+1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
+                    dag.add_edge(*node_indices.get(&tx1).unwrap(), *node_indices.get(&tx2).unwrap(), 1).unwrap();
                 }
             }
         }
@@ -192,11 +192,10 @@ impl ExternalRelayer {
         for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i+1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
+                    dag.add_edge(*node_indices.get(&tx1).unwrap(), *node_indices.get(&tx2).unwrap(), 1).unwrap();
                 }
             }
         }
-
         dag
     }
 
@@ -247,15 +246,15 @@ impl ExternalRelayer {
     /// and by extension creating new roots for a future call. Returns `None` if the graph
     /// is empty.
     fn take_roots(dag: &mut StableDag<TransactionInput, i32>) -> Option<Vec<TransactionInput>> {
-        let mut root_indexes = vec![];
+        let mut root_indices = vec![];
         for index in dag.node_identifiers() {
             if dag.parents(index).walk_next(&dag).is_none() {
-                root_indexes.push(index);
+                root_indices.push(index);
             }
         }
 
         let mut roots = vec![];
-        while let Some(root) = root_indexes.pop() {
+        while let Some(root) = root_indices.pop() {
             roots.push(dag.remove_node(root).unwrap());
         }
 
