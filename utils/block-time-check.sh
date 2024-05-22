@@ -2,7 +2,7 @@
 
 set -e
 
-sleep_interval=180
+sleep_interval=120
 error_margin=0.05
 
 echo -n "-> Waiting for blocks to generate... "
