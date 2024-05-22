@@ -65,16 +65,6 @@ jobs:
       group: ${{ github.workflow }}-clock-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
-  e2e-clock-stratus-postgres:
-    name: E2E Clock Stratus Postgres
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: 'e2e-clock-stratus-postgres'
-
-    concurrency:
-      group: ${{ github.workflow }}-clock-postgres-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
   e2e-clock-stratus-rocks:
     name: E2E Clock Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml

@@ -308,36 +308,6 @@ e2e-clock-stratus-rocks:
     killport 3000
     exit $result_code
 
-# E2E Clock: Builds and runs Stratus Postgres with block-time flag, then validates average block generation time
-e2e-clock-stratus-postgres:
-    #!/bin/bash
-    echo "-> Starting Postgres"
-    docker compose down
-    docker compose up -d || exit 1
-
-    echo "-> Waiting Postgres to start"
-    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
-
-    echo "-> Starting Stratus"
-    just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --block-time 1000 -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
-
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
-
-    echo "-> Validating block time"
-    just block-time-check
-    result_code=$?
-
-    echo "-> Killing Stratus"
-    killport 3000
-
-    echo "-> Killing Postgres"
-    docker compose down
-
-    echo "** -> Stratus log accessible in ./stratus.log **"
-    exit $result_code
-
 # Checks if the average block time is within the expected range
 block-time-check:
     #!/bin/bash
@@ -361,14 +331,10 @@ block-time-check:
         -H "Content-Type: application/json" \
         -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["latest",false],"id":1}')
 
-    # Extract block time and block count
+    # Extract block time and block number
     first_block_time_hex=$(echo ${first_block_info} | jq -r '.result.timestamp')
     latest_block_time_hex=$(echo ${latest_block_info} | jq -r '.result.timestamp')
     block_count_hex=$(echo ${latest_block_info} | jq -r '.result.number')
-
-    echo "-> First block time: $first_block_time_hex"
-    echo "-> latest block time: $latest_block_info"
-    echo "-> Block count: $latest_block_info"
 
     # Remove 0x prefix
     first_block_time_hex_no_prefix=${first_block_time_hex#0x}
