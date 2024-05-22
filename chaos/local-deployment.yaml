@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: stratus-api
+  labels:
+    app: stratus-api
+spec:
+  serviceName: "stratus-api"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: stratus-api
+  template:
+    metadata:
+      labels:
+        app: stratus-api
+    spec:
+      containers:
+        - name: stratus-api
+          image: local/run_with_importer:latest
+          ports:
+            - containerPort: 3000
+              name: http
+            - containerPort: 9000
+              name: metrics
+          env:
+            - name: VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['version']
+            - name: APP_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['app']
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            - name: ENVIRONMENT
+              value: staging
+            - name: ENV
+              value: staging
+          volumeMounts:
+            - mountPath: /app/data
+              name: rocksdata
+      volumes:
+        - name: rocksdata
+          emptyDir: {}
