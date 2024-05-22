@@ -386,14 +386,21 @@ block-time-check:
     average_block_time=$(echo "scale=2; $block_time_elapsed / $blocks_mined" | bc)
     echo "-> Average block generation time: $average_block_time s"
 
-    # Check if the average block time is within the acceptable range
-    if (( $(echo "scale=2; abs($average_block_time - 1) <= $error_margin" | bc -l) )); then
+    # Calculate the absolute value of the difference between the average block time and the expected block time
+    actual_error_margin=$(echo "$average_block_time - 1" | bc)
+    if (( $(echo "$actual_error_margin < 0" | bc -l) )); then
+        actual_error_margin=$(echo "$actual_error_margin * -1" | bc)
+    fi
+
+    # Check if the difference is within the acceptable range
+    if (( $(echo "$actual_error_margin <= $error_margin" | bc -l) )); then
         echo "Average block time is within the acceptable range: $average_block_time per second"
         exit 0
     else
         echo "Error: Average block time is not within the acceptable range"
         exit 1
     fi
+
 
 # E2E: Lint and format code
 e2e-lint:
