@@ -55,7 +55,7 @@ jobs:
           asdf global nodejs 20.10.0
 
       - name: Install jq
-        run: apt-get install jq -y
+        run: sudo apt-get install jq -y
 
       - name: Set up Test Dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
