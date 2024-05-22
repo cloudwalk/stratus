@@ -175,25 +175,6 @@ e2e network="stratus" test="":
         npx hardhat test test/*.test.ts --network {{network}} --grep "{{test}}"
     fi
 
-# E2E: Starts and execute Hardhat tests in Anvil
-e2e-anvil test="":
-    #!/bin/bash
-    if [ -d e2e ]; then
-        cd e2e
-    fi
-
-    echo "-> Starting Anvil"
-    anvil --chain-id 2008 --gas-price 0 --block-base-fee-per-gas 0 --port 8546 &
-
-    echo "-> Waiting Anvil to start"
-    wait-service --tcp localhost:8546 -- echo
-
-    echo "-> Running E2E tests"
-    just e2e anvil {{test}}
-
-    echo "-> Killing Anvil"
-    killport 8546
-
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat test="":
     #!/bin/bash
@@ -506,9 +487,9 @@ local-chaos-cleanup:
 local-chaos-test:
     just local-chaos-setup
     @echo "Simulating leader polling and followers syncing for 60 seconds..."
-    @for pod in $(kubectl get pods -l app=stratus-api -o jsonpath='{.items[*].metadata.name}'); do \
-        kubectl exec -it $$pod -- /bin/sh -c 'for i in {1..60}; do curl -s http://staging-endpoint/eth_getBlockByNumber?params=[latest,true]; sleep 1; done' & \
-    done
+    @for pod in $(kubectl get pods -l app=stratus-api -o jsonpath='{.items[*].metadata.name}'); do
+    @    kubectl exec -it $$pod -- /bin/sh -c 'for i in {1..60}; do curl -s http://staging-endpoint/eth_getBlockByNumber?params=[latest,true]; sleep 1; done' &
+    @done
     wait
     @echo "Leader polling and followers syncing simulated."
     @echo "Cleaning up..."
