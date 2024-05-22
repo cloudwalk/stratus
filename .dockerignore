@@ -5,6 +5,7 @@
 !docker/
 !docker/Dockerfile.run_with_importer
 !src/
+!.cargo/
 !Cargo.toml
 !Cargo.lock
 !static/
