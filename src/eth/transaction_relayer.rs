@@ -8,17 +8,14 @@ use std::time::Duration;
 use anyhow::anyhow;
 use anyhow::Context;
 use daggy::stable_dag::StableDag;
-use daggy::Dag;
 use daggy::Walker;
 use ethers_core::types::Transaction;
 
 use futures::future::join_all;
 use itertools::Itertools;
 
-use petgraph::algo::tarjan_scc;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::IntoNodeIdentifiers;
-use petgraph::visit::IntoNodeReferences;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
@@ -27,10 +24,8 @@ use tokio::io::AsyncWriteExt;
 use super::primitives::Address;
 use super::primitives::Block;
 use super::primitives::BlockNumber;
-use super::primitives::Hash;
 use super::primitives::Index;
 use super::primitives::SlotIndex;
-use super::primitives::SlotValue;
 use super::primitives::TransactionMined;
 use crate::config::ExternalRelayerClientConfig;
 use crate::config::ExternalRelayerServerConfig;
@@ -42,8 +37,6 @@ use crate::eth::storage::StratusStorage;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
-type SlotConflictMap<'a> = HashMap<(Address, SlotIndex), (NodeIndex, RefCell<HashSet<Index>>)>;
-type BalanceConflictMap<'a> = HashMap<Address, (NodeIndex, RefCell<HashSet<Index>>)>;
 pub struct TransactionRelayer {
     storage: Arc<StratusStorage>,
 
