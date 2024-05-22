@@ -1,4 +1,3 @@
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,6 +5,8 @@ use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 use tokio::sync::broadcast;
+use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use super::Consensus;
@@ -23,6 +24,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::spawn_named;
+use crate::ext::DisplayExt;
 use crate::log_and_err;
 
 pub struct BlockMiner {
@@ -64,18 +66,12 @@ impl BlockMiner {
         let Some(block_time) = self.block_time else {
             return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
         };
-        tracing::info!(block_time = %humantime::Duration::from(block_time), "spawning interval miner");
+        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
 
         // spawn miner and ticker
-        let pending_blocks = Arc::new(AtomicUsize::new(0));
-        spawn_named(
-            "miner::miner",
-            interval_miner::run(Arc::clone(&self), Arc::clone(&pending_blocks), cancellation.child_token()),
-        );
-        spawn_named(
-            "miner::ticker",
-            interval_miner_ticker::run(block_time, Arc::clone(&pending_blocks), cancellation.child_token()),
-        );
+        let (ticks_tx, ticks_rx) = mpsc::unbounded_channel::<Instant>();
+        spawn_named("miner::miner", interval_miner::run(Arc::clone(&self), ticks_rx, cancellation.child_token()));
+        spawn_named("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx, cancellation.child_token()));
 
         Ok(())
     }
@@ -316,36 +312,29 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 // Miner
 // -----------------------------------------------------------------------------
 mod interval_miner {
-    use std::sync::atomic::AtomicUsize;
-    use std::sync::atomic::Ordering;
     use std::sync::Arc;
 
-    use tokio::task::yield_now;
+    use tokio::sync::mpsc;
+    use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
     use crate::eth::BlockMiner;
     use crate::ext::warn_task_cancellation;
+    use crate::ext::warn_task_rx_closed;
 
-    pub async fn run(miner: Arc<BlockMiner>, pending_blocks: Arc<AtomicUsize>, cancellation: CancellationToken) {
-        loop {
+    pub async fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>, cancellation: CancellationToken) {
+        while let Some(tick) = ticks_rx.recv().await {
             // check cancellation
             if cancellation.is_cancelled() {
-                warn_task_cancellation("interval miner");
+                warn_task_cancellation("interval-miner");
                 return;
             }
 
-            // check pending blocks and mine if necessary
-            let pending = pending_blocks
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(1)))
-                .unwrap();
-            if pending > 0 {
-                tracing::info!(%pending, "interval mining block");
-                mine_and_commit(&miner).await;
-            } else {
-                tracing::debug!(%pending, "waiting for block interval");
-                yield_now().await;
-            }
+            // mine
+            tracing::info!(lag_ys = %tick.elapsed().as_micros(), "interval mining block");
+            mine_and_commit(&miner).await;
         }
+        warn_task_rx_closed("interval-miner");
     }
 
     #[inline(always)]
@@ -374,19 +363,19 @@ mod interval_miner {
 }
 
 mod interval_miner_ticker {
-    use std::sync::atomic::AtomicUsize;
-    use std::sync::atomic::Ordering;
-    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
     use chrono::Timelike;
     use chrono::Utc;
+    use tokio::sync::mpsc;
+    use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
     use crate::ext::warn_task_cancellation;
+    use crate::ext::warn_task_rx_closed;
 
-    pub async fn run(block_time: Duration, pending_blocks: Arc<AtomicUsize>, cancellation: CancellationToken) {
+    pub async fn run(block_time: Duration, ticks_tx: mpsc::UnboundedSender<Instant>, cancellation: CancellationToken) {
         // sync to next second
         let next_second = (Utc::now() + Duration::from_secs(1)).with_nanosecond(0).unwrap();
         thread::sleep((next_second - Utc::now()).to_std().unwrap());
@@ -400,13 +389,16 @@ mod interval_miner_ticker {
         loop {
             // check cancellation
             if cancellation.is_cancelled() {
-                warn_task_cancellation("interval miner ticker");
+                warn_task_cancellation("interval-miner-ticker");
                 return;
             }
 
             // await next tick
-            let _ = ticker.tick().await;
-            let _ = pending_blocks.fetch_add(1, Ordering::SeqCst);
+            let tick = ticker.tick().await;
+            if ticks_tx.send(tick).is_err() {
+                warn_task_rx_closed("interval-miner-ticker");
+                break;
+            };
         }
     }
 }
