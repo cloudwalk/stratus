@@ -366,7 +366,11 @@ block-time-check:
     latest_block_time_hex=$(echo ${latest_block_info} | jq -r '.result.timestamp')
     block_count_hex=$(echo ${latest_block_info} | jq -r '.result.number')
 
-    # Remove 0x prefix if present
+    echo "-> First block time: $first_block_time_hex"
+    echo "-> latest block time: $latest_block_info"
+    echo "-> Block count: $latest_block_info"
+
+    # Remove 0x prefix
     first_block_time_hex_no_prefix=${first_block_time_hex#0x}
     latest_block_time_hex_no_prefix=${latest_block_time_hex#0x}
     block_count_hex_no_prefix=${block_count_hex#0x}
