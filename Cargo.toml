@@ -176,7 +176,7 @@ semicolon_if_nothing_returned = "warn"
 
 
 
-[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))'.dependencies]
+[target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
 revm = { version = "=8.0.0", features = ["asm-keccak"]}
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
 revm = { version = "=8.0.0" }
