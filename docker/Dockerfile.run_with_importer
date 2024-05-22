@@ -9,6 +9,7 @@ COPY build.rs /app/build.rs
 COPY Cargo.toml /app/Cargo.toml
 COPY Cargo.lock /app/Cargo.lock
 COPY .cargo .cargo
+COPY config /app/config
 
 RUN apt update
 RUN apt-get install -y libclang-dev cmake
@@ -22,5 +23,6 @@ RUN cargo build --release --bin run-with-importer --features metrics,rocks
 FROM rust:1.75 as runtime
 WORKDIR /app
 COPY --from=builder /app/target/release/run-with-importer /app/run-with-importer
+COPY --from=builder /app/config/* /app/config/
 
 CMD ["sh", "-c", "/app/run-with-importer"]
