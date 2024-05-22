@@ -149,43 +149,45 @@ impl ExternalRelayer {
 
 
     fn compute_tx_dags(block_transactions: Vec<TransactionMined>) -> (Dag<Option<TransactionMined>, i32>, Vec<NodeIndex>) {
-        let mut slot_conflicts: HashMap<&TransactionMined, HashSet<(&Address, &SlotIndex)>> = HashMap::new();
-        let mut balance_conflicts: HashMap<&TransactionMined, HashSet<&Address>> = HashMap::new();
-        let mut node_indexes: HashMap<&TransactionMined, NodeIndex> = HashMap::new();
+        let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
+        let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
+        let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
         let mut dag = Dag::new();
 
         for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
             let node_idx = dag.add_node(Some(tx));
             let tx = dag.node_weight(node_idx).unwrap().as_ref().unwrap();
-            node_indexes.insert(tx, node_idx);
+            node_indexes.insert(tx.transaction_index, node_idx);
+
             for (address, change) in &tx.execution.changes {
                 for (idx, slot_change) in &change.slots {
                     if slot_change.is_modified() {
-                        slot_conflicts.entry(tx).or_default().insert((address, idx));
+                        slot_conflicts.entry(tx.transaction_index).or_default().insert((*address, *idx));
                     }
                 }
 
                 if change.balance.is_modified() {
-                    balance_conflicts.entry(tx).or_default().insert(address);
+                    balance_conflicts.entry(tx.transaction_index).or_default().insert(*address);
                 }
             }
         }
 
-        for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).enumerate() {
-            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).skip(i) {
+        for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
+            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
+                    dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
                 }
             }
         }
 
-        for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).enumerate() {
-            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(tx, _)| tx.transaction_index).skip(i) {
+        for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
+            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
+                    dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
                 }
             }
         }
+
         let component_roots = tarjan_scc(&dag).into_iter().map(|component| component.into_iter().min().unwrap()).collect();
         (
             dag,
