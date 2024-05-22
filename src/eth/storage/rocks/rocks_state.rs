@@ -1,6 +1,6 @@
 use core::fmt;
-use std::collections::HashMap;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
@@ -8,12 +8,22 @@ use anyhow::anyhow;
 use anyhow::Context;
 use futures::future::join_all;
 use itertools::Itertools;
+use lazy_static::lazy_static;
+use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
+use serde::Deserialize;
+use serde::Serialize;
+use sugars::hmap;
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing::info;
 
+use super::rocks_cf::RocksCf;
+use super::rocks_config::CacheSetting;
+use super::rocks_config::DbConfig;
+use super::rocks_db::create_new_backup;
+use super::rocks_db::create_or_open_db;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -27,8 +37,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::rocks::rocks_db::DbConfig;
-use crate::eth::storage::rocks::rocks_db::RocksDb;
 use crate::eth::storage::rocks::types::AccountRocksdb;
 use crate::eth::storage::rocks::types::AddressRocksdb;
 use crate::eth::storage::rocks::types::BlockNumberRocksdb;
@@ -38,97 +46,105 @@ use crate::eth::storage::rocks::types::IndexRocksdb;
 use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::ext::named_spawn;
-use crate::ext::named_spawn_blocking;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "metrics")] {
+        use std::collections::HashMap;
+        use std::sync::Mutex;
+
+        use rocksdb::statistics::Histogram;
+        use rocksdb::statistics::Ticker;
+
+        use crate::infra::metrics::{self, Count, HistogramInt, Sum};
+    }
+}
+
+lazy_static! {
+    static ref CF_OPTIONS_MAP: HashMap<&'static str, Options> = hmap! {
+        "accounts" => DbConfig::Default.to_options(CacheSetting::Enabled),
+        "accounts_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
+        "account_slots" => DbConfig::Default.to_options(CacheSetting::Enabled),
+        "account_slots_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
+        "transactions" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+        "blocks_by_number" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+        "blocks_by_hash" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+        "logs" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+    };
+}
+
+/// State handler for our RocksDB storage, separating "tables" by column families.
+///
+/// With data separated by column families, writing and reading should be done via the `RocksCf` fields,
+/// while operations that include the whole database (e.g. backup) should refer to the inner `DB` directly.
+#[derive(Clone)]
 pub struct RocksStorageState {
-    pub db_ref: Arc<DB>,
-    pub accounts: Arc<RocksDb<AddressRocksdb, AccountRocksdb>>,
-    pub accounts_history: Arc<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>,
-    pub account_slots: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>,
-    pub account_slots_history: Arc<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>,
-    pub transactions: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
-    pub blocks_by_number: Arc<RocksDb<BlockNumberRocksdb, BlockRocksdb>>,
-    pub blocks_by_hash: Arc<RocksDb<HashRocksdb, BlockNumberRocksdb>>,
-    pub logs: Arc<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>,
+    pub db: Arc<DB>,
+    pub db_path: PathBuf,
+    pub accounts: RocksCf<AddressRocksdb, AccountRocksdb>,
+    pub accounts_history: RocksCf<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
+    pub account_slots: RocksCf<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
+    pub account_slots_history: RocksCf<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
+    pub transactions: RocksCf<HashRocksdb, BlockNumberRocksdb>,
+    pub blocks_by_number: RocksCf<BlockNumberRocksdb, BlockRocksdb>,
+    pub blocks_by_hash: RocksCf<HashRocksdb, BlockNumberRocksdb>,
+    pub logs: RocksCf<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
     pub backup_trigger: Arc<mpsc::Sender<()>>,
+    /// Last collected stats for a histogram
+    #[cfg(feature = "metrics")]
+    pub prev_stats: Arc<Mutex<HashMap<HistogramInt, (Sum, Count)>>>,
+    /// Options passed at DB creation, stored for metrics
+    ///
+    /// a newly created `rocksdb::Options` object is unique, with an underlying pointer identifier inside of it, and is used to access
+    /// the DB metrics, `Options` can be cloned, but two equal `Options` might not retrieve the same metrics
+    #[cfg(feature = "metrics")]
+    pub db_options: Options,
 }
 
 impl RocksStorageState {
     pub fn new(path: impl AsRef<Path>) -> Self {
-        let (tx, rx) = mpsc::channel::<()>(1);
-        let (db, _opts) = RocksDb::<String, String>::new_db(path.as_ref(), DbConfig::Default).unwrap();
+        let db_path = path.as_ref().to_path_buf();
+        let (backup_trigger_tx, backup_trigger_rx) = mpsc::channel::<()>(1);
 
-        let db = || Arc::clone(&db);
+        // granular settings for each Column Family to be created
+        let cf_options_iter = CF_OPTIONS_MAP.iter().map(|(name, opts)| (*name, opts.clone()));
+
+        let db_options = DbConfig::Default.to_options(CacheSetting::Disabled);
+
+        let db = create_or_open_db(&db_path, &db_options, cf_options_iter).unwrap();
 
         //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
         let state = Self {
-            db_ref: db(),
-            accounts: RocksDb::new("accounts", db(), DbConfig::Default).unwrap(),
-            accounts_history: RocksDb::new("accounts_history", db(), DbConfig::FastWriteSST).unwrap(),
-            account_slots: RocksDb::new("account_slots", db(), DbConfig::Default).unwrap(),
-            account_slots_history: RocksDb::new("account_slots_history", db(), DbConfig::FastWriteSST).unwrap(),
-            transactions: RocksDb::new("transactions", db(), DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_number: RocksDb::new("blocks_by_number", db(), DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_hash: RocksDb::new("blocks_by_hash", db(), DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
-            logs: RocksDb::new("logs", db(), DbConfig::LargeSSTFiles).unwrap(),
-            backup_trigger: Arc::new(tx),
+            db_path,
+            accounts: new_cf(&db, "accounts"),
+            accounts_history: new_cf(&db, "accounts_history"),
+            account_slots: new_cf(&db, "account_slots"),
+            account_slots_history: new_cf(&db, "account_slots_history"),
+            transactions: new_cf(&db, "transactions"),
+            blocks_by_number: new_cf(&db, "blocks_by_number"),
+            blocks_by_hash: new_cf(&db, "blocks_by_hash"), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            logs: new_cf(&db, "logs"),
+            backup_trigger: Arc::new(backup_trigger_tx),
+            #[cfg(feature = "metrics")]
+            prev_stats: Default::default(),
+            #[cfg(feature = "metrics")]
+            db_options,
+            db,
         };
 
-        state.listen_for_backup_trigger(rx).unwrap();
+        state.listen_for_backup_trigger(backup_trigger_rx).unwrap();
 
         state
     }
 
     pub fn listen_for_backup_trigger(&self, mut rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
-        tracing::info!("creating backup trigger listener");
-        let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
-        let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>::clone(&self.accounts_history);
-        let account_slots = Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>>::clone(&self.account_slots);
-        let account_slots_history =
-            Arc::<RocksDb<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>>::clone(&self.account_slots_history);
-        let blocks_by_hash = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.blocks_by_hash);
-        let blocks_by_number = Arc::<RocksDb<BlockNumberRocksdb, BlockRocksdb>>::clone(&self.blocks_by_number);
-        let transactions = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.transactions);
-        let logs = Arc::<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>::clone(&self.logs);
+        tracing::info!("starting rocksdb backup trigger listener");
 
-        named_spawn("storage::backup_trigger", async move {
+        let db = Arc::clone(&self.db);
+        named_spawn("storage::listen_backup_trigger", async move {
             while rx.recv().await.is_some() {
-                let accounts_clone = Arc::clone(&accounts);
-                let accounts_history_clone = Arc::clone(&accounts_history);
-                let account_slots_clone = Arc::clone(&account_slots);
-                let account_slots_history_clone = Arc::clone(&account_slots_history);
-                let transactions_clone = Arc::clone(&transactions);
-                let blocks_by_number_clone = Arc::clone(&blocks_by_number);
-                let blocks_by_hash_clone = Arc::clone(&blocks_by_hash);
-                let logs_clone = Arc::clone(&logs);
-
-                named_spawn_blocking("storage::backup_execution", move || {
-                    tracing::info!("rocksdb backuping accounts");
-                    accounts_clone.backup().unwrap();
-
-                    tracing::info!("rocksdb backuping accounts history");
-                    accounts_history_clone.backup().unwrap();
-
-                    tracing::info!("rocksdb backuping account slots");
-                    account_slots_clone.backup().unwrap();
-
-                    tracing::info!("rocksdb backuping account slots history");
-                    account_slots_history_clone.backup().unwrap();
-
-                    tracing::info!("rocksdb backuping transactions");
-                    transactions_clone.backup().unwrap();
-
-                    tracing::info!("rocksdb backuping blocks by number");
-                    blocks_by_number_clone.backup().unwrap();
-
-                    tracing::info!("rocksdb backuping blocks by hash");
-                    blocks_by_hash_clone.backup().unwrap();
-
-                    tracing::info!("rocksdb backuping logs");
-                    logs_clone.backup().unwrap();
-                });
+                create_new_backup(&db).expect("failed to backup DB");
             }
         });
 
@@ -144,7 +160,7 @@ impl RocksStorageState {
     pub async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let tasks = vec![
             {
-                let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
+                let self_blocks_by_hash_clone = self.blocks_by_hash.clone();
                 task::spawn_blocking(move || {
                     for (block_num, block_hash_vec) in self_blocks_by_hash_clone.indexed_iter_end() {
                         if block_num <= block_number.as_u64() {
@@ -163,7 +179,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_blocks_by_number_clone = Arc::clone(&self.blocks_by_number);
+                let self_blocks_by_number_clone = self.blocks_by_number.clone();
                 task::spawn_blocking(move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
                     for (num, _) in blocks_by_number {
@@ -179,7 +195,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_transactions_clone = Arc::clone(&self.transactions);
+                let self_transactions_clone = self.transactions.clone();
                 task::spawn_blocking(move || {
                     let transactions = self_transactions_clone.indexed_iter_end();
                     for (index_block_number, hash_vec) in transactions {
@@ -198,7 +214,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_logs_clone = Arc::clone(&self.logs);
+                let self_logs_clone = self.logs.clone();
                 task::spawn_blocking(move || {
                     let logs = self_logs_clone.indexed_iter_end();
                     for (index_block_number, logs_vec) in logs {
@@ -217,7 +233,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_accounts_history_clone = Arc::clone(&self.accounts_history);
+                let self_accounts_history_clone = self.accounts_history.clone();
                 task::spawn_blocking(move || {
                     let accounts_history = self_accounts_history_clone.indexed_iter_end();
                     for (index_block_number, accounts_history_vec) in accounts_history {
@@ -236,7 +252,7 @@ impl RocksStorageState {
                 })
             },
             {
-                let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
+                let self_account_slots_history_clone = self.account_slots_history.clone();
                 task::spawn_blocking(move || {
                     let account_slots_history = self_account_slots_history_clone.indexed_iter_end();
                     for (index_block_number, account_slots_history_vec) in account_slots_history {
@@ -265,8 +281,8 @@ impl RocksStorageState {
 
         // Spawn task for handling accounts
         let accounts_task = task::spawn_blocking({
-            let self_accounts_history_clone = Arc::clone(&self.accounts_history);
-            let self_accounts_clone = Arc::clone(&self.accounts);
+            let self_accounts_history_clone = self.accounts_history.clone();
+            let self_accounts_clone = self.accounts.clone();
             move || {
                 let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = std::collections::HashMap::new();
                 let account_histories = self_accounts_history_clone.iter_start();
@@ -295,8 +311,8 @@ impl RocksStorageState {
 
         // Spawn task for handling slots
         let slots_task = task::spawn_blocking({
-            let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
-            let self_account_slots_clone = Arc::clone(&self.account_slots);
+            let self_account_slots_history_clone = self.account_slots_history.clone();
+            let self_account_slots_clone = self.account_slots.clone();
             move || {
                 let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = std::collections::HashMap::new();
                 let slot_histories = self_account_slots_history_clone.iter_start();
@@ -335,10 +351,10 @@ impl RocksStorageState {
     /// Updates the in-memory state with changes from transaction execution
     pub fn update_state_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber, batch: &mut WriteBatch) {
         // Directly capture the fields needed by each future from `self`
-        let accounts = Arc::clone(&self.accounts);
-        let accounts_history = Arc::clone(&self.accounts_history);
-        let account_slots = Arc::clone(&self.account_slots);
-        let account_slots_history = Arc::clone(&self.account_slots_history);
+        let accounts = self.accounts.clone();
+        let accounts_history = self.accounts_history.clone();
+        let account_slots = self.account_slots.clone();
+        let account_slots_history = self.account_slots_history.clone();
 
         let changes_clone_for_accounts = changes.to_vec(); // Clone changes for accounts future
         let changes_clone_for_slots = changes.to_vec(); // Clone changes for slots future
@@ -540,7 +556,7 @@ impl RocksStorageState {
     /// Write to all DBs in a batch
     pub fn write_batch(&self, batch: WriteBatch) -> anyhow::Result<()> {
         let batch_len = batch.len();
-        let result = self.db_ref.write(batch);
+        let result = self.db.write(batch);
 
         if let Err(err) = &result {
             tracing::error!(?err, batch_len, "failed to write batch to DB");
@@ -560,22 +576,65 @@ impl RocksStorageState {
         self.logs.clear()?;
         Ok(())
     }
+}
 
-    #[cfg(feature = "metrics")]
+#[cfg(feature = "metrics")]
+impl RocksStorageState {
     pub fn export_metrics(&self) {
-        self.account_slots.export_metrics();
-        self.account_slots_history.export_metrics();
+        let db_get = self.db_options.get_histogram_data(Histogram::DbGet);
+        let db_write = self.db_options.get_histogram_data(Histogram::DbWrite);
 
-        self.accounts.export_metrics();
-        self.accounts_history.export_metrics();
+        let block_cache_miss = self.db_options.get_ticker_count(Ticker::BlockCacheMiss);
+        let block_cache_hit = self.db_options.get_ticker_count(Ticker::BlockCacheHit);
+        let bytes_written = self.db_options.get_ticker_count(Ticker::BytesWritten);
+        let bytes_read = self.db_options.get_ticker_count(Ticker::BytesRead);
 
-        self.blocks_by_hash.export_metrics();
-        self.blocks_by_number.export_metrics();
+        let db_name = self.db.path().file_name().unwrap().to_str();
+
+        metrics::set_rocks_db_get(db_get.count(), db_name);
+        metrics::set_rocks_db_write(db_write.count(), db_name);
+        metrics::set_rocks_block_cache_miss(block_cache_miss, db_name);
+        metrics::set_rocks_block_cache_hit(block_cache_hit, db_name);
+        metrics::set_rocks_bytes_written(bytes_written, db_name);
+        metrics::set_rocks_bytes_read(bytes_read, db_name);
+
+        metrics::set_rocks_compaction_time(self.get_histogram_average_in_interval(Histogram::CompactionTime), db_name);
+        metrics::set_rocks_compaction_cpu_time(self.get_histogram_average_in_interval(Histogram::CompactionCpuTime), db_name);
+        metrics::set_rocks_flush_time(self.get_histogram_average_in_interval(Histogram::FlushTime), db_name);
+    }
+
+    fn get_histogram_average_in_interval(&self, hist: Histogram) -> u64 {
+        // The stats are cumulative since opening the db
+        // we can get the average in the time interval with: avg = (new_sum - sum)/(new_count - count)
+
+        let mut prev_values = self.prev_stats.lock().unwrap();
+        let (prev_sum, prev_count): (Sum, Count) = *prev_values.get(&(hist as u32)).unwrap_or(&(0, 0));
+        let data = self.db_options.get_histogram_data(hist);
+        let data_count = data.count();
+        let data_sum = data.sum();
+
+        let Some(avg) = (data_sum - prev_sum).checked_div(data_count - prev_count) else {
+            return 0;
+        };
+
+        prev_values.insert(hist as u32, (data_sum, data_count));
+        avg
     }
 }
 
 impl fmt::Debug for RocksStorageState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RocksDb").field("db", &"Arc<DB>").finish()
+        f.debug_struct("RocksStorageState").field("db_path", &self.db_path).finish()
     }
+}
+
+fn new_cf<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCf<K, V>
+where
+    K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Clone,
+{
+    let options = CF_OPTIONS_MAP
+        .get(&column_family)
+        .unwrap_or_else(|| panic!("column_family `{column_family}` given to `new_cf` not found in options map"));
+    RocksCf::new_cf(Arc::clone(db), column_family, options.clone())
 }

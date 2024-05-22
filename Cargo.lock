@@ -5362,6 +5362,7 @@ dependencies = [
  "binary_macros",
  "bincode",
  "byte-unit",
+ "cfg-if",
  "chrono",
  "clap",
  "console-subscriber",
@@ -5391,6 +5392,7 @@ dependencies = [
  "k8s-openapi",
  "keccak-hasher",
  "kube",
+ "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
  "nom",
@@ -5420,6 +5422,7 @@ dependencies = [
  "sqlx",
  "stringreader",
  "strum",
+ "sugars",
  "testcontainers",
  "testcontainers-modules",
  "thiserror",
@@ -5505,6 +5508,12 @@ name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
+
+[[package]]
+name = "sugars"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc0db74f9ee706e039d031a560bd7d110c7022f016051b3d33eeff9583e3e67a"
 
 [[package]]
 name = "syn"

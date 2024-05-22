@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use rocksdb::WriteBatch;
@@ -154,8 +153,8 @@ impl PermanentStorage for RocksPermanentStorage {
 
         // save block
         let number = block.number();
-        let txs_rocks = Arc::clone(&self.state.transactions);
-        let logs_rocks = Arc::clone(&self.state.logs);
+        let txs_rocks = self.state.transactions.clone();
+        let logs_rocks = self.state.logs.clone();
 
         txs_rocks.prepare_batch_insertion_indexed(txs_batch, number.as_u64(), &mut batch);
 
@@ -163,8 +162,8 @@ impl PermanentStorage for RocksPermanentStorage {
 
         let block_hash = block.hash();
 
-        let blocks_by_number = Arc::clone(&self.state.blocks_by_number);
-        let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
+        let blocks_by_number = self.state.blocks_by_number.clone();
+        let blocks_by_hash = self.state.blocks_by_hash.clone();
         let mut block_without_changes = block.clone();
         for transaction in &mut block_without_changes.transactions {
             // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address

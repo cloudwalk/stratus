@@ -7,6 +7,10 @@ use metrics::Label;
 
 use crate::ext::not;
 
+pub type HistogramInt = u32;
+pub type Sum = u64;
+pub type Count = u64;
+
 /// Metric definition.
 pub(super) struct Metric {
     pub(super) kind: &'static str,
