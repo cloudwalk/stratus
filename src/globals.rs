@@ -75,6 +75,8 @@ pub struct GlobalState;
 impl GlobalState {
     #[track_caller]
     /// Shutdown the application.
+    ///
+    /// Returns the formatted reason for shutdown.
     pub fn shutdown_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "application is shutting down");
         CANCELLATION.cancel();
