@@ -273,17 +273,17 @@ e2e-stratus-postgres test="":
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
-e2e-stratus-clock:
+e2e-clock-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --enable-genesis --enable-test-accounts --block-time 1000 --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev, -- --block-time 1000 -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Validating block time"
-    block-time-check 300 1000 0.1
+    just block-time-check
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -291,17 +291,17 @@ e2e-stratus-clock:
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
-e2e-stratus-rocks-clock:
+e2e-clock-stratus-rocks:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --enable-genesis --enable-test-accounts --block-time 1000 --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev, -- --block-time 1000 --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Validating block time"
-    block-time-check 300 1000 0.1
+    just block-time-check
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -309,7 +309,7 @@ e2e-stratus-rocks-clock:
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus Postgres with block-time flag, then validates average block generation time
-e2e-stratus-postgres-clock:
+e2e-clock-stratus-postgres:
     #!/bin/bash
     echo "-> Starting Postgres"
     docker compose down
@@ -320,13 +320,13 @@ e2e-stratus-postgres-clock:
 
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --enable-genesis --enable-test-accounts --block-time 1000 -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+    cargo run  --release --bin stratus --features dev, -- --block-time 1000 -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Validating block time"
-    block-time-check 300 1000 0.1
+    just block-time-check
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -339,42 +339,61 @@ e2e-stratus-postgres-clock:
     exit $result_code
 
 # Checks if the average block time is within the expected range
-block-time-check() {
-    local sleep_interval=$1
-    local block_time=$2
-    local error_margin=$3
-    local success=1
+block-time-check:
+    #!/bin/bash
+    sleep_interval=10
+    error_margin=0.05
+    success=1
 
-    echo "-> Waiting $sleep_interval seconds for blocks to generate"
-    sleep $sleep_interval
+    echo -n "-> Waiting for blocks to generate... "
+    for ((i=1; i<=$sleep_interval; i++)); do
+        printf "\r-> Waiting for blocks to generate... %d/%ds" $i $sleep_interval
+        sleep 1
+    done
 
     echo "-> Getting info on first block"
-    first_block_info=$(curl https://0.0.0.0:3000 \
+    first_block_info=$(curl -s http://0.0.0.0:3000 \
         -H "Content-Type: application/json" \
         -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["earliest",false],"id":1}')
 
     echo "-> Getting info on latest block"
-    latest_block_info=$(curl https://0.0.0.0:3000 \
+    latest_block_info=$(curl -s http://0.0.0.0:3000 \
         -H "Content-Type: application/json" \
         -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["latest",false],"id":1}')
 
-    echo "-> Calculating average block generation time"
-    first_block_time=$(echo $((16#${first_block_info | jq -r '.result.timestamp'})))
-    latest_block_time=$(echo $((16#${latest_block_info | jq -r '.result.timestamp'})))
-    block_count=$(echo $((16#${latest_block_info | jq -r '.result.number'})))
+    # Extract block time and block count
+    first_block_time_hex=$(echo ${first_block_info} | jq -r '.result.timestamp')
+    latest_block_time_hex=$(echo ${latest_block_info} | jq -r '.result.timestamp')
+    block_count_hex=$(echo ${latest_block_info} | jq -r '.result.number')
 
-    average_block_time=$(echo "scale=2; ($latest_block_time - $first_block_time) / $block_count" | bc)
+    # Remove 0x prefix if present
+    first_block_time_hex_no_prefix=${first_block_time_hex#0x}
+    latest_block_time_hex_no_prefix=${latest_block_time_hex#0x}
+    block_count_hex_no_prefix=${block_count_hex#0x}
 
+    # Convert hex to number
+    first_block_time_dec=$((16#${first_block_time_hex_no_prefix}))
+    latest_block_time_dec=$((16#${latest_block_time_hex_no_prefix}))  
+    block_count=$((16#${block_count_hex_no_prefix}))
+
+    # Elapsed time between first and latest block
+    block_time_elapsed=$(($latest_block_time_dec - $first_block_time_dec))
+
+    # Amount of blocks mined during the elapsed time
+    blocks_mined=$((block_count - 1))
+
+    # Average block generation time
+    average_block_time=$(echo "scale=2; $block_time_elapsed / $blocks_mined" | bc)
     echo "-> Average block generation time: $average_block_time s"
 
-    if (( $(echo "$average_block_time > 1 + $error_margin" | bc -l) )); then
-        echo "Error: Average block time is too high"
-        return $success
+    # Check if the average block time is within the acceptable range
+    if (( $(echo "scale=2; abs($average_block_time - 1) <= $error_margin" | bc -l) )); then
+        echo "Average block time is within the acceptable range: $average_block_time per second"
+        exit 0
+    else
+        echo "Error: Average block time is not within the acceptable range"
+        exit 1
     fi
-
-    success=0
-    return $success
-}
 
 # E2E: Lint and format code
 e2e-lint:
