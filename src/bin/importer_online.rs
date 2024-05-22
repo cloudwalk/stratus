@@ -18,6 +18,7 @@ use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::warn_task_cancellation;
 use stratus::ext::warn_task_tx_closed;
+use stratus::ext::DisplayExt;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::BlockchainClient;
@@ -233,7 +234,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: Cancel
             Ok(number) => {
                 tracing::info!(
                     %number,
-                    sync_interval = %humantime::Duration::from(sync_interval),
+                    sync_interval = %sync_interval.to_string_ext(),
                     "fetched current block number via http. awaiting sync interval to retrieve again."
                 );
                 RPC_CURRENT_BLOCK.store(number.as_u64(), Ordering::SeqCst);
