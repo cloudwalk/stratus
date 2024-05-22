@@ -313,7 +313,6 @@ block-time-check:
     #!/bin/bash
     sleep_interval=180
     error_margin=0.05
-    success=1
 
     echo -n "-> Waiting for blocks to generate... "
     for ((i=1; i<=$sleep_interval; i++)); do
@@ -366,11 +365,9 @@ block-time-check:
     if (( $(echo "$actual_error_margin <= $error_margin" | bc -l) )); then
         echo "Average block time is within the acceptable range: $average_block_time per second"
         exit 0
-    else
-        echo "Error: Average block time is not within the acceptable range"
-        exit 1
     fi
-
+    echo "Error: Average block time is not within the acceptable range"
+    exit 1
 
 # E2E: Lint and format code
 e2e-lint:
