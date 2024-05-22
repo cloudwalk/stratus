@@ -469,15 +469,23 @@ local-chaos-setup:
     @echo $(pwd)
     @echo "Installing dependencies..."
     ./chaos/install-dependencies.sh
-    @echo "Cleaning up any existing Kind cluster..."
-    kind delete cluster --name local-testing || true
-    @echo "Setting up Kind cluster..."
-    kind create cluster --name local-testing
+    @echo "Checking if Kind cluster exists..."
+    if ! kind get clusters | grep -q local-testing; then \
+        echo "Setting up Kind cluster..."; \
+        kind create cluster --name local-testing; \
+        kind get kubeconfig --name local-testing > kubeconfig.yaml; \
+    else \
+        echo "Kind cluster already exists."; \
+    fi
     @echo "Configuring kubectl to use Kind cluster..."
-    kind get kubeconfig --name local-testing > kubeconfig.yaml
     export KUBECONFIG=$(pwd)/kubeconfig.yaml
-    @echo "Building Docker image..."
-    docker build -t local/run_with_importer -f ./docker/Dockerfile.run_with_importer .
+    @echo "Checking if Docker image is already built..."
+    if ! docker images | grep -q local/run_with_importer; then \
+        echo "Building Docker image..."; \
+        docker build -t local/run_with_importer -f ./docker/Dockerfile.run_with_importer .; \
+    else \
+        echo "Docker image already built."; \
+    fi
     @echo "Loading Docker image into Kind..."
     kind load docker-image local/run_with_importer --name local-testing
     @echo "Deploying application..."
@@ -494,14 +502,13 @@ local-chaos-cleanup:
     kind delete cluster --name local-testing
     @echo "Cleanup complete."
 
-
 # Chaos Testing: Run chaos test
 local-chaos-test:
     just local-chaos-setup
     @echo "Simulating leader polling and followers syncing for 60 seconds..."
-    @for pod in $(kubectl get pods -l app=stratus-api -o jsonpath='{.items[*].metadata.name}'); do
-    @    kubectl exec -it $$pod -- /bin/sh -c 'for i in {1..60}; do curl -s http://staging-endpoint/eth_getBlockByNumber?params=[latest,true]; sleep 1; done' &
-    @done
+    @for pod in $(kubectl get pods -l app=stratus-api -o jsonpath='{.items[*].metadata.name}'); do \
+        kubectl exec -it $$pod -- /bin/sh -c 'for i in {1..60}; do curl -s http://staging-endpoint/eth_getBlockByNumber?params=[latest,true]; sleep 1; done' & \
+    done
     wait
     @echo "Leader polling and followers syncing simulated."
     @echo "Cleaning up..."
