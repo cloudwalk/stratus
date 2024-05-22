@@ -17,7 +17,6 @@ use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
 use serde_json::Value as JsonValue;
 use tokio::select;
-use tokio_util::sync::CancellationToken;
 
 use crate::eth::primitives::Address;
 #[cfg(feature = "dev")]
@@ -43,6 +42,8 @@ use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::Executor;
+use crate::infra::tracing::warn_task_cancellation;
+use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -57,16 +58,16 @@ pub async fn serve_rpc(
     // config
     address: SocketAddr,
     chain_id: ChainId,
-    cancellation: CancellationToken,
 ) -> anyhow::Result<()> {
-    tracing::info!("starting rpc server");
+    const TASK_NAME: &str = "rpc-server";
+
+    tracing::info!("starting {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
         miner.notifier_pending_txs.subscribe(),
         miner.notifier_blocks.subscribe(),
         miner.notifier_logs.subscribe(),
-        cancellation.child_token(),
     );
 
     // configure context
@@ -83,7 +84,6 @@ pub async fn serve_rpc(
         // subscriptions
         subs: Arc::clone(&subs.connected),
     };
-    tracing::info!(%address, ?ctx, "starting rpc server");
 
     // configure module
     let mut module = RpcModule::<RpcContext>::new(ctx);
@@ -110,11 +110,10 @@ pub async fn serve_rpc(
     // await for cancellation or jsonrpsee to stop (should not happen)
     select! {
         _ = handle_rpc_server_watch.stopped() => {
-            tracing::warn!("rpc server finished unexpectedly, cancelling tasks");
-            cancellation.cancel();
+            GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
         },
-        _ = cancellation.cancelled() => {
-            tracing::info!("rpc server cancelled, stopping it");
+        _ = GlobalState::until_shutdown() => {
+            warn_task_cancellation(TASK_NAME);
             let _ = handle_rpc_server.stop();
         }
     }

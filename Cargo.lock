@@ -5333,6 +5333,7 @@ dependencies = [
  "nom",
  "nonempty",
  "num-traits",
+ "once_cell",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",

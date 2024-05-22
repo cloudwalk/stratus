@@ -7,7 +7,6 @@ use nonempty::NonEmpty;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
 
 use super::Consensus;
 use crate::eth::primitives::Block;
@@ -61,7 +60,7 @@ impl BlockMiner {
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
-    pub fn spawn_interval_miner(self: Arc<Self>, cancellation: CancellationToken) -> anyhow::Result<()> {
+    pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
         // validate
         let Some(block_time) = self.block_time else {
             return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
@@ -70,8 +69,8 @@ impl BlockMiner {
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::unbounded_channel::<Instant>();
-        spawn_named("miner::miner", interval_miner::run(Arc::clone(&self), ticks_rx, cancellation.child_token()));
-        spawn_named("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx, cancellation.child_token()));
+        spawn_named("miner::miner", interval_miner::run(Arc::clone(&self), ticks_rx));
+        spawn_named("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx));
 
         Ok(())
     }
@@ -316,17 +315,16 @@ mod interval_miner {
 
     use tokio::sync::mpsc;
     use tokio::time::Instant;
-    use tokio_util::sync::CancellationToken;
 
     use crate::eth::BlockMiner;
-    use crate::ext::warn_task_cancellation;
-    use crate::ext::warn_task_rx_closed;
+    use crate::infra::tracing::warn_task_rx_closed;
+    use crate::GlobalState;
 
-    pub async fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>, cancellation: CancellationToken) {
+    pub async fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>) {
+        const TASK_NAME: &str = "interval-miner-ticker";
+
         while let Some(tick) = ticks_rx.recv().await {
-            // check cancellation
-            if cancellation.is_cancelled() {
-                warn_task_cancellation("interval miner");
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }
 
@@ -334,7 +332,7 @@ mod interval_miner {
             tracing::info!(lag_ys = %tick.elapsed().as_micros(), "interval mining block");
             mine_and_commit(&miner).await;
         }
-        warn_task_rx_closed("interval miner");
+        warn_task_rx_closed(TASK_NAME);
     }
 
     #[inline(always)]
@@ -370,12 +368,13 @@ mod interval_miner_ticker {
     use chrono::Utc;
     use tokio::sync::mpsc;
     use tokio::time::Instant;
-    use tokio_util::sync::CancellationToken;
 
-    use crate::ext::warn_task_cancellation;
-    use crate::ext::warn_task_rx_closed;
+    use crate::infra::tracing::warn_task_rx_closed;
+    use crate::GlobalState;
 
-    pub async fn run(block_time: Duration, ticks_tx: mpsc::UnboundedSender<Instant>, cancellation: CancellationToken) {
+    pub async fn run(block_time: Duration, ticks_tx: mpsc::UnboundedSender<Instant>) {
+        const TASK_NAME: &str = "interval-miner-ticker";
+
         // sync to next second
         let next_second = (Utc::now() + Duration::from_secs(1)).with_nanosecond(0).unwrap();
         thread::sleep((next_second - Utc::now()).to_std().unwrap());
@@ -387,16 +386,13 @@ mod interval_miner_ticker {
         // keep ticking
         ticker.tick().await;
         loop {
-            // check cancellation
-            if cancellation.is_cancelled() {
-                warn_task_cancellation("interval miner ticker");
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }
 
-            // await next tick
             let tick = ticker.tick().await;
             if ticks_tx.send(tick).is_err() {
-                warn_task_rx_closed("interval miner ticker");
+                warn_task_rx_closed(TASK_NAME);
                 break;
             };
         }

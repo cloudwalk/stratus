@@ -13,9 +13,7 @@ use display_json::DebugAsJson;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
-use tokio_util::sync::CancellationToken;
 
-use crate::bin_name;
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmConfig;
@@ -42,13 +40,14 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
-use crate::ext::warn_task_tx_closed;
+use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
+use crate::GlobalState;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
     let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
-    let env_filename = format!("config/{}.env.{}", bin_name(), env);
+    let env_filename = format!("config/{}.env.{}", binary_name(), env);
 
     println!("reading env file: {}", env_filename);
     if let Err(e) = dotenvy::from_filename(env_filename) {
@@ -170,6 +169,8 @@ impl ExecutorConfig {
         relayer: Option<Arc<TransactionRelayer>>,
         consensus: Option<Arc<Consensus>>,
     ) -> Arc<Executor> {
+        const TASK_NAME: &str = "evm-thread";
+
         let num_evms = max(self.num_evms, 1);
         tracing::info!(config = ?self, "starting executor");
 
@@ -202,12 +203,18 @@ impl ExecutorConfig {
 
                 // keep executing transactions until the channel is closed
                 while let Ok((input, tx)) = evm_rx.recv() {
+                    if GlobalState::warn_if_shutdown(TASK_NAME) {
+                        return;
+                    }
+
+                    // execute
                     let result = evm.execute(input);
                     if let Err(e) = tx.send(result) {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
                     };
                 }
-                warn_task_tx_closed("evm thread");
+
+                warn_task_tx_closed(TASK_NAME);
             })
             .expect("spawning evm threads should not fail");
         }
@@ -237,12 +244,7 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    pub async fn init(
-        &self,
-        storage: Arc<StratusStorage>,
-        consensus: Option<Arc<Consensus>>,
-        cancellation: CancellationToken,
-    ) -> anyhow::Result<Arc<BlockMiner>> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
         // create miner
@@ -271,7 +273,7 @@ impl MinerConfig {
 
         // enable interval miner
         if miner.is_interval_miner_mode() {
-            Arc::clone(&miner).spawn_interval_miner(cancellation)?;
+            Arc::clone(&miner).spawn_interval_miner()?;
         }
 
         Ok(miner)
@@ -791,8 +793,10 @@ impl FromStr for ValidatorMethodConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Parsers
+// Helpers
 // -----------------------------------------------------------------------------
+
+/// Parses a duration specified using human-time notation or fallback to milliseconds.
 fn parse_duration(s: &str) -> anyhow::Result<Duration> {
     // try millis
     let millis: Result<u64, _> = s.parse();
@@ -807,4 +811,16 @@ fn parse_duration(s: &str) -> anyhow::Result<Duration> {
 
     // error
     Err(anyhow!("invalid duration format: {}", s))
+}
+
+/// Gets the current binary basename.
+fn binary_name() -> String {
+    let binary = std::env::current_exe().unwrap();
+    let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
+
+    if binary_basename.starts_with("test_") {
+        "tests".to_string()
+    } else {
+        binary_basename
+    }
 }
