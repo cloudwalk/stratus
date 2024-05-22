@@ -21,12 +21,10 @@ use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::not;
-use stratus::log_and_err;
-use stratus::utils::signal_handler;
 use stratus::GlobalServices;
+use stratus::GlobalState;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
 
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
@@ -40,18 +38,15 @@ const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 2_000_000;
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ImporterOfflineConfig>::init();
+    let global_services = GlobalServices::<ImporterOfflineConfig>::init()?;
     global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
-    // init cancellation handler
-    let cancellation = signal_handler();
-
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let storage = config.storage.init().await?;
-    let miner = config.miner.init(Arc::clone(&storage), None, cancellation.clone()).await?;
+    let miner = config.miner.init(Arc::clone(&storage), None).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), None, None).await;
 
     // init block snapshots to export
@@ -85,13 +80,11 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // execute thread: external rpc storage loader
     let storage_thread = thread::Builder::new().name("storage-loader".into());
     let storage_tokio = Handle::current();
-    let storage_cancellation = cancellation.clone();
     let _ = storage_thread.spawn(move || {
         let _tokio_guard = storage_tokio.enter();
 
         let result = storage_tokio.block_on(execute_external_rpc_storage_loader(
             rpc_storage,
-            storage_cancellation,
             config.blocks_by_fetch,
             config.paralellism,
             block_start,
@@ -106,18 +99,9 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // execute thread: block importer
     let importer_thread = thread::Builder::new().name("block-importer".into());
     let importer_tokio = Handle::current();
-    let importer_cancellation = cancellation.clone();
     let importer_join = importer_thread.spawn(move || {
         let _tokio_guard = importer_tokio.enter();
-        let result = importer_tokio.block_on(execute_block_importer(
-            executor,
-            miner,
-            storage,
-            csv,
-            importer_cancellation,
-            backlog_rx,
-            block_snapshots,
-        ));
+        let result = importer_tokio.block_on(execute_block_importer(executor, miner, storage, csv, backlog_rx, block_snapshots));
         if let Err(e) = result {
             tracing::error!(reason = ?e, "block-importer failed");
         }
@@ -138,31 +122,30 @@ async fn execute_block_importer(
     miner: Arc<BlockMiner>,
     storage: Arc<StratusStorage>,
     mut csv: Option<CsvExporter>,
-    cancellation: CancellationToken,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
     blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
-    tracing::info!("block importer starting");
+    const TASK_NAME: &str = "external-block-executor";
+    tracing::info!("starting {}", TASK_NAME);
 
-    // import blocks and transactions in foreground
-    let reason = loop {
-        // retrieve new tasks to execute
+    loop {
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
+            return Ok(());
+        };
+
+        // retrieve new tasks to execute or exit
         let Some((blocks, receipts)) = backlog_rx.recv().await else {
-            cancellation.cancel();
-            break "block loader finished or failed";
+            tracing::info!("{} has no more blocks to process", TASK_NAME);
+            return Ok(());
         };
 
-        if cancellation.is_cancelled() {
-            break "exiting block importer";
-        };
-
+        // imports block transactions
         let block_start = blocks.first().unwrap().number();
         let block_end = blocks.last().unwrap().number();
         let block_last_index = blocks.len() - 1;
         let receipts = ExternalReceipts::from(receipts);
 
-        // imports block transactions
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
             async {
@@ -187,10 +170,7 @@ async fn execute_block_importer(
             }
             .await?;
         }
-    };
-
-    tracing::info!(%reason, "block importer finished");
-    Ok(())
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -200,7 +180,6 @@ async fn execute_block_importer(
 async fn execute_external_rpc_storage_loader(
     // services
     rpc_storage: Arc<dyn ExternalRpcStorage>,
-    cancellation: CancellationToken,
     // data
     blocks_by_fetch: usize,
     paralellism: usize,
@@ -208,14 +187,15 @@ async fn execute_external_rpc_storage_loader(
     end: BlockNumber,
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
-    tracing::info!(%start, %end, "external rpc storage loader starting");
+    const TASK_NAME: &str = "external-block-loader";
+    tracing::info!(%start, %end, "starting {}", TASK_NAME);
 
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (blocks_by_fetch - 1), end);
 
-        let task = load_blocks_and_receipts(Arc::clone(&rpc_storage), cancellation.clone(), start, end);
+        let task = load_blocks_and_receipts(Arc::clone(&rpc_storage), start, end);
         tasks.push(task);
 
         start += blocks_by_fetch;
@@ -223,46 +203,37 @@ async fn execute_external_rpc_storage_loader(
 
     // execute loads in parallel
     let mut tasks = futures::stream::iter(tasks).buffered(paralellism);
-    let reason = loop {
+    loop {
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
+            return Ok(());
+        };
+
         // retrieve next batch of loaded blocks
+        // if finished, do not cancel, it is expected to finish
         let Some(result) = tasks.next().await else {
-            break "no more blocks to process";
+            tracing::info!("{} has no more blocks to process", TASK_NAME);
+            return Ok(());
         };
 
         // check if executed correctly
         let Ok((blocks, receipts)) = result else {
-            cancellation.cancel();
-            break "block or receipt fetch failed";
+            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt")));
         };
 
         // check blocks were really loaded
         if blocks.is_empty() {
-            cancellation.cancel();
-            return log_and_err!("no blocks returned when they were expected");
+            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected")));
         }
 
         // send to backlog
         if backlog.send((blocks, receipts)).await.is_err() {
-            tracing::error!("failed to send task to importer");
-            cancellation.cancel();
-            return log_and_err!("failed to send blocks and receipts to importer");
+            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer")));
         };
-    };
-
-    tracing::info!(%reason, "external rpc storage loader finished");
-    Ok(())
+    }
 }
 
-async fn load_blocks_and_receipts(
-    rpc_storage: Arc<dyn ExternalRpcStorage>,
-    cancellation: CancellationToken,
-    start: BlockNumber,
-    end: BlockNumber,
-) -> anyhow::Result<BacklogTask> {
+async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, start: BlockNumber, end: BlockNumber) -> anyhow::Result<BacklogTask> {
     tracing::info!(%start, %end, "retrieving blocks and receipts");
-    if cancellation.is_cancelled() {
-        return Err(anyhow!("cancelled"));
-    }
     let blocks_task = rpc_storage.read_blocks_in_range(start, end);
     let receipts_task = rpc_storage.read_receipts_in_range(start, end);
     try_join!(blocks_task, receipts_task)
