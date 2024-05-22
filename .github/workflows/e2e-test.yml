@@ -54,3 +54,23 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
+
+  e2e-clock-stratus:
+    name: E2E Clock Stratus in-memory
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: 'e2e-clock-stratus'
+
+    concurrency:
+      group: ${{ github.workflow }}-clock-inmemory-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-clock-stratus-rocks:
+    name: E2E Clock Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: 'e2e-clock-stratus-rocks'
+
+    concurrency:
+      group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true

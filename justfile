@@ -272,6 +272,42 @@ e2e-stratus-postgres test="":
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
 
+# E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
+e2e-clock-stratus:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    just build || exit 1
+    cargo run  --release --bin stratus --features dev, -- --block-time 1000 -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Validating block time"
+    ./utils/block-time-check.sh
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
+# E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
+e2e-clock-stratus-rocks:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    just build || exit 1
+    cargo run  --release --bin stratus --features dev, -- --block-time 1000 --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Validating block time"
+    ./utils/block-time-check.sh
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
 # E2E: Lint and format code
 e2e-lint:
     #!/bin/bash
