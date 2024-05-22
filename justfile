@@ -311,7 +311,7 @@ e2e-clock-stratus-rocks:
 # Checks if the average block time is within the expected range
 block-time-check:
     #!/bin/bash
-    sleep_interval=10
+    sleep_interval=180
     error_margin=0.05
     success=1
 
