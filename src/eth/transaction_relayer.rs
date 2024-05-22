@@ -3,16 +3,22 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
+use daggy::stable_dag::StableDag;
 use daggy::Dag;
+use daggy::Walker;
 use ethers_core::types::Transaction;
 
+use futures::future::join_all;
 use itertools::Itertools;
 
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::NodeIndex;
+use petgraph::visit::IntoNodeIdentifiers;
+use petgraph::visit::IntoNodeReferences;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
@@ -140,23 +146,21 @@ impl ExternalRelayer {
         let block: Block = row.payload.try_into()?;
         let block_number = block.header.number;
 
-        let (dag, component_roots) = Self::compute_tx_dags(block.transactions);
+        let dag = Self::compute_tx_dags(block.transactions);
 
-        self.relay_dag(dag, component_roots);
+        self.relay_dag(dag).await?;
 
         Ok(Some(block_number))
     }
 
-
-    fn compute_tx_dags(block_transactions: Vec<TransactionMined>) -> (Dag<Option<TransactionMined>, i32>, Vec<NodeIndex>) {
+    fn compute_tx_dags(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionInput, i32> {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
         let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
-        let mut dag = Dag::new();
+        let mut dag = StableDag::new();
 
         for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
-            let node_idx = dag.add_node(Some(tx));
-            let tx = dag.node_weight(node_idx).unwrap().as_ref().unwrap();
+            let node_idx = dag.add_node(tx.input);
             node_indexes.insert(tx.transaction_index, node_idx);
 
             for (address, change) in &tx.execution.changes {
@@ -188,11 +192,16 @@ impl ExternalRelayer {
             }
         }
 
-        let component_roots = tarjan_scc(&dag).into_iter().map(|component| component.into_iter().min().unwrap()).collect();
-        (
-            dag,
-            component_roots
-        )
+        dag
+    }
+
+    pub async fn relay_and_check_mempool(&self, tx_input: TransactionInput) -> anyhow::Result<()> {
+        let hash = tx_input.hash;
+        self.substrate_chain.send_raw_transaction(Transaction::from(tx_input).rlp()).await?;
+        while self.substrate_chain.get_transaction(hash).await?.is_none() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        Ok(())
     }
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
@@ -227,8 +236,34 @@ impl ExternalRelayer {
         Ok(())
     }
 
-    pub async fn relay_dag(&self, dag: Dag<Option<TransactionMined>, i32>, component_roots: Vec<NodeIndex>) -> anyhow::Result<()> {
-        todo!();
+    fn take_roots(dag: &mut StableDag<TransactionInput, i32>) -> Option<Vec<TransactionInput>> {
+        let mut root_indexes = vec![];
+        for index in dag.node_identifiers() {
+            if dag.parents(index).walk_next(&dag).is_none() {
+                root_indexes.push(index);
+            }
+        }
+
+        let mut roots = vec![];
+        while let Some(root) = root_indexes.pop() {
+            roots.push(dag.remove_node(root).unwrap());
+        }
+
+        if roots.is_empty() {
+            None
+        } else {
+            Some(roots)
+        }
+    }
+
+    async fn relay_dag(&self, mut dag: StableDag<TransactionInput, i32>) -> anyhow::Result<()> {
+        while let Some(roots) = Self::take_roots(&mut dag) {
+            let futures = roots.into_iter().map(|root_tx| {
+                self.relay_and_check_mempool(root_tx)
+            });
+            join_all(futures).await;
+        }
+        Ok(())
     }
 }
 
