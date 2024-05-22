@@ -19,7 +19,6 @@ use stratus::eth::Executor;
 use stratus::ext::DisplayExt;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
-use stratus::infra::tracing::warn_task_cancellation;
 use stratus::infra::tracing::warn_task_rx_closed;
 use stratus::infra::tracing::warn_task_tx_closed;
 use stratus::infra::BlockchainClient;
@@ -119,8 +118,7 @@ async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, m
     const TASK_NAME: &str = "block-executor";
 
     while let Some((block, receipts)) = backlog_rx.recv().await {
-        if GlobalState::is_shutdown() {
-            warn_task_cancellation(TASK_NAME);
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
             return;
         }
 
@@ -144,7 +142,8 @@ async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, m
             metrics::inc_import_online_mined_block(start.elapsed());
         }
     }
-    warn_task_tx_closed("block-executor");
+
+    warn_task_tx_closed(TASK_NAME);
 }
 
 // -----------------------------------------------------------------------------
@@ -174,9 +173,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
     };
 
     loop {
-        // check cancellation
-        if GlobalState::is_shutdown() {
-            warn_task_cancellation(TASK_NAME);
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
             return;
         }
         tracing::info!("fetching current block number");
@@ -245,9 +242,7 @@ async fn start_block_fetcher(chain: Arc<BlockchainClient>, backlog_tx: mpsc::Unb
     const TASK_NAME: &str = "external-block-fetcher";
 
     loop {
-        // check cancellation
-        if GlobalState::is_shutdown() {
-            warn_task_cancellation(TASK_NAME);
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
             return;
         }
 

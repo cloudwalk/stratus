@@ -21,7 +21,6 @@ use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::not;
-use stratus::infra::tracing::warn_task_cancellation;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::runtime::Handle;
@@ -131,9 +130,7 @@ async fn execute_block_importer(
     tracing::info!("starting {}", TASK_NAME);
 
     loop {
-        // check cancellation
-        if GlobalState::is_shutdown() {
-            warn_task_cancellation(TASK_NAME);
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
             return Ok(());
         };
 
@@ -207,9 +204,7 @@ async fn execute_external_rpc_storage_loader(
     // execute loads in parallel
     let mut tasks = futures::stream::iter(tasks).buffered(paralellism);
     loop {
-        // check cancellation
-        if GlobalState::is_shutdown() {
-            warn_task_cancellation(TASK_NAME);
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
             return Ok(());
         };
 

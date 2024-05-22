@@ -19,7 +19,6 @@ use crate::ext::spawn_named;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-use crate::infra::tracing::warn_task_cancellation;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::GlobalState;
 
@@ -62,12 +61,12 @@ impl RpcSubscriptions {
 
     /// Spawns a new task to clean up closed subscriptions from time to time.
     fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>) -> JoinHandle<anyhow::Result<()>> {
-        tracing::info!("spawning rpc subscriptions cleaner");
+        const TASK_NAME: &str = "rpc-subscription-cleaner";
+        tracing::info!("spawning {}", TASK_NAME);
 
         spawn_named("rpc::sub::cleaner", async move {
             loop {
-                if GlobalState::is_shutdown() {
-                    warn_task_cancellation("rpc subscription cleaner");
+                if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
@@ -92,17 +91,17 @@ impl RpcSubscriptions {
 
     /// Spawns a new task that notifies subscribers about new executed transactions.
     fn spawn_new_pending_txs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<Hash>) -> JoinHandle<anyhow::Result<()>> {
-        tracing::info!("spawning rpc newPendingTransactions notifier");
+        const TASK_NAME: &str = "rpc-newPendingTransactions-notifier";
+        tracing::info!("spawning {}", TASK_NAME);
 
         spawn_named("rpc::sub::newPendingTransactions", async move {
             loop {
-                if GlobalState::is_shutdown() {
-                    warn_task_cancellation("rpc newPendingTransactions notifier");
+                if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
                 let Ok(hash) = rx.recv().await else {
-                    warn_task_tx_closed("rpc newPendingTransactions notifier");
+                    warn_task_tx_closed(TASK_NAME);
                     break;
                 };
 
@@ -115,17 +114,17 @@ impl RpcSubscriptions {
 
     /// Spawns a new task that notifies subscribers about new created blocks.
     fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<BlockHeader>) -> JoinHandle<anyhow::Result<()>> {
-        tracing::info!("spawning rpc newHeads notifier");
+        const TASK_NAME: &str = "rpc-newHeads-notifier";
+        tracing::info!("spawning {}", TASK_NAME);
 
         spawn_named("rpc::sub::newHeads", async move {
             loop {
-                if GlobalState::is_shutdown() {
-                    warn_task_cancellation("rpc newHeads notifier");
+                if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
                 let Ok(header) = rx.recv().await else {
-                    warn_task_tx_closed("rpc newHeads notifier");
+                    warn_task_tx_closed(TASK_NAME);
                     break;
                 };
 
@@ -138,17 +137,17 @@ impl RpcSubscriptions {
 
     /// Spawns a new task that notifies subscribers about new transactions logs.
     fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
-        tracing::info!("spawning rpc logs notifier");
+        const TASK_NAME: &str = "rpc-logs-notifier";
+        tracing::info!("spawning {}", TASK_NAME);
 
         spawn_named("rpc::sub::logs", async move {
             loop {
-                if GlobalState::is_shutdown() {
-                    warn_task_cancellation("rpc logs notifier");
+                if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
                 let Ok(log) = rx.recv().await else {
-                    warn_task_tx_closed("rpc logs notifier");
+                    warn_task_tx_closed(TASK_NAME);
                     break;
                 };
 

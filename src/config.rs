@@ -40,7 +40,6 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
-use crate::infra::tracing::warn_task_cancellation;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
@@ -204,9 +203,7 @@ impl ExecutorConfig {
 
                 // keep executing transactions until the channel is closed
                 while let Ok((input, tx)) = evm_rx.recv() {
-                    // check cancellation
-                    if GlobalState::is_shutdown() {
-                        warn_task_cancellation(TASK_NAME);
+                    if GlobalState::warn_if_shutdown(TASK_NAME) {
                         return;
                     }
 

@@ -9,6 +9,7 @@ use tokio_util::sync::CancellationToken;
 use crate::config::load_dotenv;
 use crate::config::WithCommonConfig;
 use crate::infra;
+use crate::infra::tracing::warn_task_cancellation;
 use crate::utils::spawn_signal_handler;
 
 // -----------------------------------------------------------------------------
@@ -73,7 +74,6 @@ static CANCELLATION: Lazy<CancellationToken> = Lazy::new(CancellationToken::new)
 pub struct GlobalState;
 
 impl GlobalState {
-    #[track_caller]
     /// Shutdown the application.
     ///
     /// Returns the formatted reason for shutdown.
@@ -86,6 +86,15 @@ impl GlobalState {
     /// Checks if the application is being shutdown.
     pub fn is_shutdown() -> bool {
         CANCELLATION.is_cancelled()
+    }
+
+    /// Checks if the application is being shutdown. Emits an warning with the task name in case it is.
+    pub fn warn_if_shutdown(task_name: &str) -> bool {
+        let shutdown = Self::is_shutdown();
+        if shutdown {
+            warn_task_cancellation(task_name);
+        }
+        shutdown
     }
 
     /// Awaits until a shutdown is received.

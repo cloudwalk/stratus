@@ -317,7 +317,6 @@ mod interval_miner {
     use tokio::time::Instant;
 
     use crate::eth::BlockMiner;
-    use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
@@ -325,9 +324,7 @@ mod interval_miner {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         while let Some(tick) = ticks_rx.recv().await {
-            // check cancellation
-            if GlobalState::is_shutdown() {
-                warn_task_cancellation(TASK_NAME);
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }
 
@@ -372,7 +369,6 @@ mod interval_miner_ticker {
     use tokio::sync::mpsc;
     use tokio::time::Instant;
 
-    use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
@@ -390,13 +386,10 @@ mod interval_miner_ticker {
         // keep ticking
         ticker.tick().await;
         loop {
-            // check cancellation
-            if GlobalState::is_shutdown() {
-                warn_task_cancellation(TASK_NAME);
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }
 
-            // await next tick
             let tick = ticker.tick().await;
             if ticks_tx.send(tick).is_err() {
                 warn_task_rx_closed(TASK_NAME);
