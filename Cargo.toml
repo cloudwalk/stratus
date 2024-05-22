@@ -61,7 +61,11 @@ ethereum-types = "=0.14.1"
 ethers-core = "=2.0.14"
 evm-disassembler = "=0.5.0"
 keccak-hasher = "=0.15.3" # this version must be compatible with triehash
+
 revm = { version = "=8.0.0", features = ["asm-keccak"] }
+[target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
+revm = { version = "8.0.0", default-features = false }
+
 rlp = "=0.5.2"
 triehash = "=0.8.4"
 
@@ -157,6 +161,7 @@ metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
 
+# Tools to comunicate with other pods
 kubernetes = ["kube", "k8s-openapi"]
 
 # XXX: Enable external transaction parallel execution.

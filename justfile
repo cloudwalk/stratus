@@ -469,6 +469,8 @@ local-chaos-setup:
     @echo $(pwd)
     @echo "Installing dependencies..."
     ./chaos/install-dependencies.sh
+    @echo "Cleaning up any existing Kind cluster..."
+    kind delete cluster --name local-testing || true
     @echo "Setting up Kind cluster..."
     kind create cluster --name local-testing
     @echo "Configuring kubectl to use Kind cluster..."

@@ -37,6 +37,7 @@ e2e-contracts/integration/tsconfig.json
 /target
 vendor
 stratus.log
+kubeconfig.yaml
 
 # OS specific
 .DS_Store
