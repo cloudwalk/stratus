@@ -326,7 +326,7 @@ mod interval_miner {
         while let Some(tick) = ticks_rx.recv().await {
             // check cancellation
             if cancellation.is_cancelled() {
-                warn_task_cancellation("interval-miner");
+                warn_task_cancellation("interval miner");
                 return;
             }
 
@@ -334,7 +334,7 @@ mod interval_miner {
             tracing::info!(lag_ys = %tick.elapsed().as_micros(), "interval mining block");
             mine_and_commit(&miner).await;
         }
-        warn_task_rx_closed("interval-miner");
+        warn_task_rx_closed("interval miner");
     }
 
     #[inline(always)]
@@ -389,14 +389,14 @@ mod interval_miner_ticker {
         loop {
             // check cancellation
             if cancellation.is_cancelled() {
-                warn_task_cancellation("interval-miner-ticker");
+                warn_task_cancellation("interval miner ticker");
                 return;
             }
 
             // await next tick
             let tick = ticker.tick().await;
             if ticks_tx.send(tick).is_err() {
-                warn_task_rx_closed("interval-miner-ticker");
+                warn_task_rx_closed("interval miner ticker");
                 break;
             };
         }
