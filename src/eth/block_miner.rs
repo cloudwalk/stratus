@@ -48,7 +48,7 @@ pub struct BlockMiner {
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>) -> Self {
-        tracing::info!("starting block miner");
+        tracing::info!(?mode, "starting block miner");
         Self {
             storage,
             mode,
@@ -411,7 +411,7 @@ mod interval_miner_ticker {
 }
 
 /// Indicates when the miner will mine new blocks.
-#[derive(strum::EnumIs)]
+#[derive(Debug, strum::EnumIs)]
 pub enum BlockMinerMode {
     /// Mines a new block for each transaction execution.
     Automine,
