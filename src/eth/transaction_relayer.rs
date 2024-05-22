@@ -119,6 +119,7 @@ impl ExternalRelayer {
         })
     }
 
+    /// Polls the next block to be relayed and relays it to Substrate.
     pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
         let Some(row) = sqlx::query!(
             r#"UPDATE relayer_blocks
@@ -143,9 +144,20 @@ impl ExternalRelayer {
 
         self.relay_dag(dag).await?;
 
+        todo!("compare receipts");
+
         Ok(Some(block_number))
     }
 
+    /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
+    /// Each vertex of the graph is a transaction, and two vertices are connected iff they conflict
+    /// on either a slot or balance.
+    /// The direction of an edge connecting the transactions A and B is always from
+    /// `min(A.transaction_index, B.transaction_index)` to `max(A.transaction_index, B.transaction_index)`.
+    /// Possible issues: this accounts for writes but not for reads, a transaction that reads a certain
+    ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
+    ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
+    ///     and contract calls that is not taken into consideration yet.
     fn compute_tx_dags(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionInput, i32> {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
@@ -188,6 +200,8 @@ impl ExternalRelayer {
         dag
     }
 
+    /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
+    /// calling eth_getTransactionByHash.
     pub async fn relay_and_check_mempool(&self, tx_input: TransactionInput) -> anyhow::Result<()> {
         let hash = tx_input.hash;
         self.substrate_chain.send_raw_transaction(Transaction::from(tx_input).rlp()).await?;
@@ -229,6 +243,9 @@ impl ExternalRelayer {
         Ok(())
     }
 
+    /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
+    /// and by extension creating new roots for a future call. Returns `None` if the graph
+    /// is empty.
     fn take_roots(dag: &mut StableDag<TransactionInput, i32>) -> Option<Vec<TransactionInput>> {
         let mut root_indexes = vec![];
         for index in dag.node_identifiers() {
