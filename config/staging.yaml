@@ -21,6 +21,7 @@ kubernetes:
       service:
         asmRevision: asm-managed-stable
       version: 165baf1646bc39718ec8c5b9c7cfa7fcb9b1db56
+      skipRebuild: true
   apps:
   - name: stratus-api
     dockerfile: ./docker/Dockerfile.run_with_importer
