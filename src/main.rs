@@ -11,12 +11,14 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: StratusConfig) -> anyhow::Result<()> {
+    // init cancellation handler
+    let cancellation = signal_handler();
+
     // init services
     let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
-    let miner = config.miner.init(Arc::clone(&storage), None).await?;
+    let miner = config.miner.init(Arc::clone(&storage), None, cancellation.clone()).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await;
-    let cancellation = signal_handler();
 
     // start rpc server
     serve_rpc(storage, executor, miner, config.address, config.executor.chain_id.into(), cancellation).await?;
