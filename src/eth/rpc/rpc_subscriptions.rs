@@ -9,7 +9,6 @@ use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
-use tokio_util::sync::CancellationToken;
 
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::Hash;
@@ -17,11 +16,12 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::ext::not;
 use crate::ext::spawn_named;
-use crate::ext::warn_task_cancellation;
-use crate::ext::warn_task_tx_closed;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::tracing::warn_task_cancellation;
+use crate::infra::tracing::warn_task_tx_closed;
+use crate::GlobalState;
 
 /// Frequency of cleaning up closed subscriptions.
 const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
@@ -47,31 +47,26 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Creates a new subscriptin manager that automatically spawns all necessary tasks in background.
-    pub fn spawn(
-        rx_pending_txs: broadcast::Receiver<Hash>,
-        rx_blocks: broadcast::Receiver<BlockHeader>,
-        rx_logs: broadcast::Receiver<LogMined>,
-        cancellation: CancellationToken,
-    ) -> Self {
+    pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<BlockHeader>, rx_logs: broadcast::Receiver<LogMined>) -> Self {
         let connected = Arc::new(RpcSubscriptionsConnected::default());
 
-        Self::spawn_subscriptions_cleaner(Arc::clone(&connected), cancellation.child_token());
+        Self::spawn_subscriptions_cleaner(Arc::clone(&connected));
         let handles = RpcSubscriptionsHandles {
-            new_pending_txs: Self::spawn_new_pending_txs_notifier(Arc::clone(&connected), rx_pending_txs, cancellation.child_token()),
-            new_heads: Self::spawn_new_heads_notifier(Arc::clone(&connected), rx_blocks, cancellation.child_token()),
-            logs: Self::spawn_logs_notifier(Arc::clone(&connected), rx_logs, cancellation.child_token()),
+            new_pending_txs: Self::spawn_new_pending_txs_notifier(Arc::clone(&connected), rx_pending_txs),
+            new_heads: Self::spawn_new_heads_notifier(Arc::clone(&connected), rx_blocks),
+            logs: Self::spawn_logs_notifier(Arc::clone(&connected), rx_logs),
         };
 
         Self { connected, handles }
     }
 
     /// Spawns a new task to clean up closed subscriptions from time to time.
-    fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>, cancellation: CancellationToken) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc subscriptions cleaner");
 
         spawn_named("rpc::sub::cleaner", async move {
             loop {
-                if cancellation.is_cancelled() {
+                if GlobalState::is_shutdown() {
                     warn_task_cancellation("rpc subscription cleaner");
                     return Ok(());
                 }
@@ -96,16 +91,12 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new executed transactions.
-    fn spawn_new_pending_txs_notifier(
-        subs: Arc<RpcSubscriptionsConnected>,
-        mut rx: broadcast::Receiver<Hash>,
-        cancellation: CancellationToken,
-    ) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_new_pending_txs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<Hash>) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc newPendingTransactions notifier");
 
         spawn_named("rpc::sub::newPendingTransactions", async move {
             loop {
-                if cancellation.is_cancelled() {
+                if GlobalState::is_shutdown() {
                     warn_task_cancellation("rpc newPendingTransactions notifier");
                     return Ok(());
                 }
@@ -123,16 +114,12 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new created blocks.
-    fn spawn_new_heads_notifier(
-        subs: Arc<RpcSubscriptionsConnected>,
-        mut rx: broadcast::Receiver<BlockHeader>,
-        cancellation: CancellationToken,
-    ) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<BlockHeader>) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc newHeads notifier");
 
         spawn_named("rpc::sub::newHeads", async move {
             loop {
-                if cancellation.is_cancelled() {
+                if GlobalState::is_shutdown() {
                     warn_task_cancellation("rpc newHeads notifier");
                     return Ok(());
                 }
@@ -150,16 +137,12 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new transactions logs.
-    fn spawn_logs_notifier(
-        subs: Arc<RpcSubscriptionsConnected>,
-        mut rx: broadcast::Receiver<LogMined>,
-        cancellation: CancellationToken,
-    ) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
         tracing::info!("spawning rpc logs notifier");
 
         spawn_named("rpc::sub::logs", async move {
             loop {
-                if cancellation.is_cancelled() {
+                if GlobalState::is_shutdown() {
                     warn_task_cancellation("rpc logs notifier");
                     return Ok(());
                 }

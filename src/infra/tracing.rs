@@ -78,3 +78,27 @@ pub async fn init_tracing(url: Option<&String>) {
 
     tracing::info!("started tracing");
 }
+
+/// Emits an warning that a task is exiting because it received a cancenllation signal.
+#[track_caller]
+pub fn warn_task_cancellation(task: &str) -> String {
+    let message = format!("exiting {} because it received a cancellation signal", task);
+    tracing::warn!(%message);
+    message
+}
+
+/// Emits an warning that a task is exiting because the tx side was closed.
+#[track_caller]
+pub fn warn_task_tx_closed(task: &str) -> String {
+    let message = format!("exiting {} because the tx channel on the other side was closed", task);
+    tracing::warn!(%message);
+    message
+}
+
+/// Emits an warning that a task is exiting because the rx side was closed.
+#[track_caller]
+pub fn warn_task_rx_closed(task: &str) -> String {
+    let message = format!("exiting {} because the rx channel on the other side was closed", task);
+    tracing::warn!(%message);
+    message
+}
