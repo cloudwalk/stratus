@@ -122,7 +122,7 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
                 id = %proj.id,
                 method = %proj.method,
                 function = %proj.function.clone().unwrap_or_default(),
-                duration_ms = %elapsed.as_millis(),
+                duration_ys = %elapsed.as_micros(),
                 success = %response.is_success(),
                 result = %response.as_result(),
                 "rpc response"
