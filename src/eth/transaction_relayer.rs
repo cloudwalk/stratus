@@ -1,7 +1,5 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,10 +8,8 @@ use anyhow::Context;
 use daggy::stable_dag::StableDag;
 use daggy::Walker;
 use ethers_core::types::Transaction;
-
 use futures::future::join_all;
 use itertools::Itertools;
-
 use petgraph::graph::NodeIndex;
 use petgraph::visit::IntoNodeIdentifiers;
 use sqlx::postgres::PgPoolOptions;
@@ -34,6 +30,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StratusStorage;
+use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
@@ -142,11 +139,27 @@ impl ExternalRelayer {
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = Self::compute_tx_dag(block.transactions);
 
-        self.relay_dag(dag).await?;
-
-        todo!("compare receipts");
+        self.relay_dag(dag).await?; // do something with result?
 
         Ok(Some(block_number))
+    }
+
+    async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_receipt: PendingTransaction<'_>) -> anyhow::Result<()> {
+        let substrate_receipt = substrate_receipt.await?.unwrap(); // xxx do something with None
+        if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
+            let err_string = compare_error.to_string();
+            let error = log_and_err!("transaction mismatch!").context(err_string.clone());
+            sqlx::query!(
+                "INSERT INTO mismatches (stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3)",
+                serde_json::to_value(stratus_receipt)?,
+                serde_json::to_value(substrate_receipt)?,
+                err_string
+            )
+            .execute(&self.pool)
+            .await?; // should retry? fallback?
+            return error;
+        }
+        Ok(())
     }
 
     /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
@@ -158,41 +171,43 @@ impl ExternalRelayer {
     ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
     ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
     ///     and contract calls that is not taken into consideration yet.
-    fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionInput, i32> {
+    fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionMined, i32> {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
         let mut node_indices: HashMap<Index, NodeIndex> = HashMap::new();
         let mut dag = StableDag::new();
 
         for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
-            let node_idx = dag.add_node(tx.input);
-            node_indices.insert(tx.transaction_index, node_idx);
-
+            let tx_idx = tx.transaction_index;
             for (address, change) in &tx.execution.changes {
                 for (idx, slot_change) in &change.slots {
                     if slot_change.is_modified() {
-                        slot_conflicts.entry(tx.transaction_index).or_default().insert((*address, *idx));
+                        slot_conflicts.entry(tx_idx).or_default().insert((*address, *idx));
                     }
                 }
 
                 if change.balance.is_modified() {
-                    balance_conflicts.entry(tx.transaction_index).or_default().insert(*address);
+                    balance_conflicts.entry(tx_idx).or_default().insert(*address);
                 }
             }
+            let node_idx = dag.add_node(tx);
+            node_indices.insert(tx_idx, node_idx);
         }
 
         for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i+1) {
+            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
                     dag.add_edge(*node_indices.get(&tx1).unwrap(), *node_indices.get(&tx2).unwrap(), 1).unwrap();
+                    // todo: unwrap -> expect
                 }
             }
         }
 
         for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i+1) {
+            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
                     dag.add_edge(*node_indices.get(&tx1).unwrap(), *node_indices.get(&tx2).unwrap(), 1).unwrap();
+                    // todo: unwrap -> expect
                 }
             }
         }
@@ -201,13 +216,16 @@ impl ExternalRelayer {
 
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
     /// calling eth_getTransactionByHash.
-    pub async fn relay_and_check_mempool(&self, tx_input: TransactionInput) -> anyhow::Result<()> {
-        let hash = tx_input.hash;
-        self.substrate_chain.send_raw_transaction(Transaction::from(tx_input).rlp()).await?;
-        while self.substrate_chain.get_transaction(hash).await?.is_none() {
+    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
+        let tx = self
+            .substrate_chain
+            .send_raw_transaction(Transaction::from(tx_mined.input.clone()).rlp())
+            .await?;
+        while self.substrate_chain.get_transaction(tx_mined.input.hash).await?.is_none() {
+            // should retry?
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        Ok(())
+        Ok((tx, ExternalReceipt(tx_mined.into())))
     }
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
@@ -233,7 +251,7 @@ impl ExternalRelayer {
                     err_string
                 )
                 .execute(&self.pool)
-                .await?;
+                .await?; // should retry? fallback?
                 return error;
             }
         } else {
@@ -245,7 +263,7 @@ impl ExternalRelayer {
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
     /// and by extension creating new roots for a future call. Returns `None` if the graph
     /// is empty.
-    fn take_roots(dag: &mut StableDag<TransactionInput, i32>) -> Option<Vec<TransactionInput>> {
+    fn take_roots(dag: &mut StableDag<TransactionMined, i32>) -> Option<Vec<TransactionMined>> {
         let mut root_indices = vec![];
         for index in dag.node_identifiers() {
             if dag.parents(index).walk_next(&dag).is_none() {
@@ -255,7 +273,7 @@ impl ExternalRelayer {
 
         let mut roots = vec![];
         while let Some(root) = root_indices.pop() {
-            roots.push(dag.remove_node(root).unwrap());
+            roots.push(dag.remove_node(root).unwrap()); // todo: unwrap -> expect
         }
 
         if roots.is_empty() {
@@ -265,13 +283,20 @@ impl ExternalRelayer {
         }
     }
 
-    async fn relay_dag(&self, mut dag: StableDag<TransactionInput, i32>) -> anyhow::Result<()> {
+    async fn relay_dag(&self, mut dag: StableDag<TransactionMined, i32>) -> anyhow::Result<()> {
+        let mut results = vec![];
         while let Some(roots) = Self::take_roots(&mut dag) {
-            let futures = roots.into_iter().map(|root_tx| {
-                self.relay_and_check_mempool(root_tx)
-            });
-            join_all(futures).await;
+            let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
+            results.extend(join_all(futures).await); // compare receipts somewhere (a worker? await for compares after relaying all? what to do in case of failure?)
         }
+
+        let futures = results
+            .into_iter()
+            .map_ok(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx)) // do something with errs
+            .collect::<Result<Vec<_>, _>>()?; // do something with this result
+
+        join_all(futures).await; // xxx: do something with the result
+
         Ok(())
     }
 }
