@@ -272,6 +272,110 @@ e2e-stratus-postgres test="":
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
 
+# E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
+e2e-stratus-clock:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    just build || exit 1
+    cargo run  --release --bin stratus --features dev, -- --enable-genesis --enable-test-accounts --block-time 1000 --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Validating block time"
+    block-time-check 300 1000 0.1
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
+# E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
+e2e-stratus-rocks-clock:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    just build || exit 1
+    cargo run  --release --bin stratus --features dev, -- --enable-genesis --enable-test-accounts --block-time 1000 --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Validating block time"
+    block-time-check 300 1000 0.1
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
+# E2E Clock: Builds and runs Stratus Postgres with block-time flag, then validates average block generation time
+e2e-stratus-postgres-clock:
+    #!/bin/bash
+    echo "-> Starting Postgres"
+    docker compose down
+    docker compose up -d || exit 1
+
+    echo "-> Waiting Postgres to start"
+    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Starting Stratus"
+    just build || exit 1
+    cargo run  --release --bin stratus --features dev, -- --enable-genesis --enable-test-accounts --block-time 1000 -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Validating block time"
+    block-time-check 300 1000 0.1
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+
+    echo "-> Killing Postgres"
+    docker compose down
+
+    echo "** -> Stratus log accessible in ./stratus.log **"
+    exit $result_code
+
+# Checks if the average block time is within the expected range
+block-time-check() {
+    local sleep_interval=$1
+    local block_time=$2
+    local error_margin=$3
+    local success=1
+
+    echo "-> Waiting $sleep_interval seconds for blocks to generate"
+    sleep $sleep_interval
+
+    echo "-> Getting info on first block"
+    first_block_info=$(curl https://0.0.0.0:3000 \
+        -H "Content-Type: application/json" \
+        -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["earliest",false],"id":1}')
+
+    echo "-> Getting info on latest block"
+    latest_block_info=$(curl https://0.0.0.0:3000 \
+        -H "Content-Type: application/json" \
+        -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["latest",false],"id":1}')
+
+    echo "-> Calculating average block generation time"
+    first_block_time=$(echo $((16#${first_block_info | jq -r '.result.timestamp'})))
+    latest_block_time=$(echo $((16#${latest_block_info | jq -r '.result.timestamp'})))
+    block_count=$(echo $((16#${latest_block_info | jq -r '.result.number'})))
+
+    average_block_time=$(echo "scale=2; ($latest_block_time - $first_block_time) / $block_count" | bc)
+
+    echo "-> Average block generation time: $average_block_time s"
+
+    if (( $(echo "$average_block_time > 1 + $error_margin" | bc -l) )); then
+        echo "Error: Average block time is too high"
+        return $success
+    fi
+
+    success=0
+    return $success
+}
+
 # E2E: Lint and format code
 e2e-lint:
     #!/bin/bash
