@@ -246,12 +246,12 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    /// Inits [`BlockMiner`] in external mining mode.
+    /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
     pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
         self.init_with_mode(BlockMinerMode::External, storage, consensus).await
     }
 
-    /// Inits [`BlockMiner`] in the configured mining mode.
+    /// Inits [`BlockMiner`] with the configured mining mode.
     pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
         self.init_with_mode(self.block_mode, storage, consensus).await
     }
