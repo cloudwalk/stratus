@@ -140,7 +140,7 @@ impl ExternalRelayer {
         let block: Block = row.payload.try_into()?;
         let block_number = block.header.number;
 
-        let dag = Self::compute_tx_dags(block.transactions);
+        let dag = Self::compute_tx_dag(block.transactions);
 
         self.relay_dag(dag).await?;
 
@@ -158,7 +158,7 @@ impl ExternalRelayer {
     ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
     ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
     ///     and contract calls that is not taken into consideration yet.
-    fn compute_tx_dags(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionInput, i32> {
+    fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionInput, i32> {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
         let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
