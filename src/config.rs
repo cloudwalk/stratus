@@ -36,6 +36,7 @@ use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
+use crate::eth::BlockMinerMode;
 use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
@@ -244,11 +245,26 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
+    /// Inits [`BlockMiner`] in external mining mode.
+    pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init(BlockMinerMode::External, storage, consensus).await
+    }
+
+    /// Inits [`BlockMiner`] in automine or interval miner mode.
+    pub async fn init_automine_or_interval_mode(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
+        let mode = match self.block_time {
+            Some(block_time) => BlockMinerMode::Interval(block_time),
+            None => BlockMinerMode::Automine,
+        };
+        self.init(mode, storage, consensus).await
+    }
+
+    async fn init(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "starting block miner");
 
         // create miner
-        let miner = BlockMiner::new(Arc::clone(&storage), self.block_time, consensus);
+
+        let miner = BlockMiner::new(Arc::clone(&storage), mode, consensus);
         let miner = Arc::new(miner);
 
         // enable genesis block
@@ -272,7 +288,7 @@ impl MinerConfig {
         storage.set_active_block_number_as_next_if_not_set().await?;
 
         // enable interval miner
-        if miner.is_interval_miner_mode() {
+        if miner.mode().is_interval() {
             Arc::clone(&miner).spawn_interval_miner()?;
         }
 

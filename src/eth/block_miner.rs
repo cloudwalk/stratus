@@ -29,8 +29,8 @@ use crate::log_and_err;
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 
-    /// Time duration between blocks.
-    pub block_time: Option<Duration>,
+    /// Mode the block miner is running.
+    mode: BlockMinerMode,
 
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<Hash>,
@@ -47,11 +47,11 @@ pub struct BlockMiner {
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, block_time: Option<Duration>, consensus: Option<Arc<Consensus>>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>) -> Self {
         tracing::info!("starting block miner");
         Self {
             storage,
-            block_time,
+            mode,
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
@@ -62,7 +62,7 @@ impl BlockMiner {
     /// Spawns a new thread that keep mining blocks in the specified interval.
     pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
         // validate
-        let Some(block_time) = self.block_time else {
+        let BlockMinerMode::Interval(block_time) = self.mode else {
             return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
         };
         tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
@@ -75,39 +75,36 @@ impl BlockMiner {
         Ok(())
     }
 
-    /// Checks if miner should run in interval miner mode.
-    pub fn is_interval_miner_mode(&self) -> bool {
-        self.block_time.is_some()
-    }
-
-    /// Checks if miner should run in automine mode.
-    pub fn is_automine_mode(&self) -> bool {
-        not(self.is_interval_miner_mode())
+    /// Returns the mode the miner is running.
+    pub fn mode(&self) -> &BlockMinerMode {
+        &self.mode
     }
 
     /// Persists a transaction execution.
     pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
-        // save execution
+        // save execution to temporary storage
         let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone()).await?;
 
-        // handle interval and automine modes
-        match self.is_interval_miner_mode() {
-            // interval miner mode
-            // * pending transaction consensus
-            // * pending transaction event
-            true => {
+        // decide what to do based on mining mode
+        match self.mode {
+            // * do not consensus transactions
+            // * do not notify pending transactions
+            // * mine block immediately
+            BlockMinerMode::Automine => {
+                self.mine_local_and_commit().await?;
+            }
+            // * consensus transactions
+            // * notify pending transactions
+            BlockMinerMode::Interval(_) => {
                 if let Some(consensus) = &self.consensus {
                     let execution = format!("{:?}", tx_execution.clone());
                     consensus.sender.send(execution).await.unwrap();
                 }
                 let _ = self.notifier_pending_txs.send(tx_hash);
             }
-            // automine mode
-            // * mine block immediatly
-            false => {
-                self.mine_local_and_commit().await?;
-            }
+            // * do nothing, the caller will decide what to do
+            BlockMinerMode::External => {}
         }
 
         Ok(())
@@ -411,4 +408,17 @@ mod interval_miner_ticker {
             };
         }
     }
+}
+
+/// Indicates when the miner will mine new blocks.
+#[derive(strum::EnumIs)]
+pub enum BlockMinerMode {
+    /// Mines a new block for each transaction execution.
+    Automine,
+
+    /// Mines a new block at specified interval.
+    Interval(Duration),
+
+    /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
+    External,
 }
