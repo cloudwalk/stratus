@@ -87,14 +87,28 @@ impl BlockMiner {
 
     /// Persists a transaction execution.
     pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
+        // save execution
         let tx_hash = tx_execution.hash();
-
         self.storage.save_execution(tx_execution.clone()).await?;
-        if let Some(consensus) = &self.consensus {
-            let execution = format!("{:?}", tx_execution.clone());
-            consensus.sender.send(execution).await.unwrap();
+
+        // handle interval and automine modes
+        match self.is_interval_miner_mode() {
+            // interval miner mode
+            // * pending transaction consensus
+            // * pending transaction event
+            true => {
+                if let Some(consensus) = &self.consensus {
+                    let execution = format!("{:?}", tx_execution.clone());
+                    consensus.sender.send(execution).await.unwrap();
+                }
+                let _ = self.notifier_pending_txs.send(tx_hash);
+            }
+            // automine mode
+            // * mine block immediatly
+            false => {
+                self.mine_local_and_commit().await?;
+            }
         }
-        let _ = self.notifier_pending_txs.send(tx_hash);
 
         Ok(())
     }

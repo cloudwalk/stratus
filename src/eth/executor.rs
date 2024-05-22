@@ -52,9 +52,6 @@ pub struct Executor {
     /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Arc<BlockMiner>,
 
-    /// Bool indicating whether to enable auto mining or not.
-    automine: bool,
-
     /// Provider for sending rpc calls to substrate
     relayer: Option<Arc<TransactionRelayer>>,
 
@@ -75,14 +72,12 @@ impl Executor {
         num_evms: usize,
         consensus: Option<Arc<Consensus>>,
     ) -> Self {
-        let automine = miner.is_automine_mode();
-        tracing::info!(%num_evms, %automine, "starting executor");
+        tracing::info!(%num_evms, "starting executor");
 
         Self {
             evm_tx,
             num_evms,
             miner,
-            automine,
             storage,
             relayer,
             consensus,
@@ -291,11 +286,6 @@ impl Executor {
                             metrics::inc_executor_transact(start.elapsed(), false, function);
                             return Err(e);
                         }
-                    }
-
-                    // auto mine needed for e2e contract tests
-                    if self.automine {
-                        self.miner.mine_local_and_commit().await?;
                     }
 
                     break tx_execution;
