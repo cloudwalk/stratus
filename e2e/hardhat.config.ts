@@ -28,12 +28,6 @@ const config: HardhatUserConfig = {
                 accountsBalance: "18446744073709551615", // u64::max
             },
         },
-        anvil: {
-            url: "http://localhost:8546",
-            accounts: {
-                mnemonic: ACCOUNTS_MNEMONIC,
-            },
-        },
         stratus: {
             url: "http://localhost:3000",
             accounts: {
