@@ -272,6 +272,42 @@ e2e-stratus-postgres test="":
     echo "** -> Stratus log accessible in ./stratus.log **"
     exit $result_code
 
+# E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
+e2e-clock-stratus:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    just build || exit 1
+    cargo run  --release --bin stratus --features dev, -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Validating block time"
+    ./utils/block-time-check.sh
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
+# E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
+e2e-clock-stratus-rocks:
+    #!/bin/bash
+    echo "-> Starting Stratus"
+    just build || exit 1
+    cargo run  --release --bin stratus --features dev, -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+
+    echo "-> Waiting Stratus to start"
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    echo "-> Validating block time"
+    ./utils/block-time-check.sh
+    result_code=$?
+
+    echo "-> Killing Stratus"
+    killport 3000
+    exit $result_code
+
 # E2E: Lint and format code
 e2e-lint:
     #!/bin/bash
@@ -450,15 +486,23 @@ local-chaos-setup:
     @echo $(pwd)
     @echo "Installing dependencies..."
     ./chaos/install-dependencies.sh
-    @echo "Cleaning up any existing Kind cluster..."
-    kind delete cluster --name local-testing || true
-    @echo "Setting up Kind cluster..."
-    kind create cluster --name local-testing
+    @echo "Checking if Kind cluster exists..."
+    if ! kind get clusters | grep -q local-testing; then \
+        echo "Setting up Kind cluster..."; \
+        kind create cluster --name local-testing; \
+        kind get kubeconfig --name local-testing > kubeconfig.yaml; \
+    else \
+        echo "Kind cluster already exists."; \
+    fi
     @echo "Configuring kubectl to use Kind cluster..."
-    kind get kubeconfig --name local-testing > kubeconfig.yaml
     export KUBECONFIG=$(pwd)/kubeconfig.yaml
-    @echo "Building Docker image..."
-    docker build -t local/run_with_importer -f ./docker/Dockerfile.run_with_importer .
+    @echo "Checking if Docker image is already built..."
+    if ! docker images | grep -q local/run_with_importer; then \
+        echo "Building Docker image..."; \
+        docker build -t local/run_with_importer -f ./docker/Dockerfile.run_with_importer .; \
+    else \
+        echo "Docker image already built."; \
+    fi
     @echo "Loading Docker image into Kind..."
     kind load docker-image local/run_with_importer --name local-testing
     @echo "Deploying application..."
@@ -474,7 +518,6 @@ local-chaos-cleanup:
     @echo "Deleting Kind cluster..."
     kind delete cluster --name local-testing
     @echo "Cleanup complete."
-
 
 # Chaos Testing: Run chaos test
 local-chaos-test:

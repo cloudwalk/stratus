@@ -16,18 +16,18 @@ use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
-use stratus::ext::warn_task_cancellation;
-use stratus::ext::warn_task_tx_closed;
+use stratus::ext::DisplayExt;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
+use stratus::infra::tracing::warn_task_rx_closed;
+use stratus::infra::tracing::warn_task_tx_closed;
 use stratus::infra::BlockchainClient;
-use stratus::utils::signal_handler;
 use stratus::GlobalServices;
+use stratus::GlobalState;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::sleep;
 use tokio::time::timeout;
-use tokio_util::sync::CancellationToken;
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -55,23 +55,19 @@ const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 // -----------------------------------------------------------------------------
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ImporterOnlineConfig>::init();
+    let global_services = GlobalServices::<ImporterOnlineConfig>::init()?;
     global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
-    // init cancellation handler
-    let cancellation = signal_handler();
-
     // init server
     let storage = config.storage.init().await?;
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
-
-    let miner = config.miner.init(Arc::clone(&storage), None, None, cancellation.clone()).await?;
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await; //XXX TODO implement the consensus here, in case of it being a follower, it should not even enter here
     let chain = Arc::new(BlockchainClient::new_http_ws(&config.base.external_rpc, config.base.external_rpc_ws.as_deref()).await?);
 
-    let result = run_importer_online(executor, miner, storage, chain, cancellation, config.base.sync_interval).await;
+    let result = run_importer_online(executor, miner, storage, chain, config.base.sync_interval).await;
     if let Err(ref e) = result {
         tracing::error!(reason = ?e, "importer-online failed");
     }
@@ -83,7 +79,6 @@ pub async fn run_importer_online(
     miner: Arc<BlockMiner>,
     storage: Arc<StratusStorage>,
     chain: Arc<BlockchainClient>,
-    cancellation: CancellationToken,
     sync_interval: Duration,
 ) -> anyhow::Result<()> {
     // start from last imported block
@@ -96,21 +91,18 @@ pub async fn run_importer_online(
 
     // spawn block executor:
     // it executes and mines blocks and expects to receive them via channel in the correct order.
-    let executor_cancellation = cancellation.clone();
-    let task_executor = tokio::spawn(start_block_executor(executor, miner, backlog_rx, executor_cancellation));
+    let task_executor = tokio::spawn(start_block_executor(executor, miner, backlog_rx));
 
     // spawn block number:
     // it keeps track of the blockchain current block number.
     let number_fetcher_chain = Arc::clone(&chain);
-    let number_fetcher_cancellation = cancellation.clone();
-    let task_number_fetcher = tokio::spawn(start_number_fetcher(number_fetcher_chain, number_fetcher_cancellation, sync_interval));
+    let task_number_fetcher = tokio::spawn(start_number_fetcher(number_fetcher_chain, sync_interval));
 
     // spawn block fetcher:
     // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
     // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
     let block_fetcher_chain = Arc::clone(&chain);
-    let block_fetcher_cancellation = cancellation.clone();
-    let task_block_fetcher = tokio::spawn(start_block_fetcher(block_fetcher_chain, block_fetcher_cancellation, backlog_tx, number));
+    let task_block_fetcher = tokio::spawn(start_block_fetcher(block_fetcher_chain, backlog_tx, number));
 
     // await all tasks
     try_join!(task_executor, task_block_fetcher, task_number_fetcher)?;
@@ -122,16 +114,12 @@ pub async fn run_importer_online(
 // -----------------------------------------------------------------------------
 
 // Executes external blocks and persist them to storage.
-async fn start_block_executor(
-    executor: Arc<Executor>,
-    miner: Arc<BlockMiner>,
-    mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
-    cancellation: CancellationToken,
-) {
+async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>) {
+    const TASK_NAME: &str = "block-executor";
+
     while let Some((block, receipts)) = backlog_rx.recv().await {
-        if cancellation.is_cancelled() {
-            warn_task_cancellation("block-executor");
-            break;
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
+            return;
         }
 
         #[cfg(feature = "metrics")]
@@ -139,15 +127,13 @@ async fn start_block_executor(
 
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
-        if let Err(e) = executor.reexecute_external(&block, &receipts).await {
-            tracing::error!(reason = ?e, number = %block.number(), "cancelling block-executor because failed to reexecute block");
-            cancellation.cancel();
-            break;
+        if executor.reexecute_external(&block, &receipts).await.is_err() {
+            GlobalState::shutdown_from(TASK_NAME, "failed to re-execute block");
+            return;
         };
-        if let Err(e) = miner.mine_external_mixed_and_commit().await {
-            tracing::error!(reason = ?e, number = %block.number(), "cancelling block-executor because failed to mine external block");
-            cancellation.cancel();
-            break;
+        if miner.mine_external_mixed_and_commit().await.is_err() {
+            GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+            return;
         };
 
         #[cfg(feature = "metrics")]
@@ -156,7 +142,8 @@ async fn start_block_executor(
             metrics::inc_import_online_mined_block(start.elapsed());
         }
     }
-    warn_task_tx_closed("block-executor");
+
+    warn_task_tx_closed(TASK_NAME);
 }
 
 // -----------------------------------------------------------------------------
@@ -164,31 +151,30 @@ async fn start_block_executor(
 // -----------------------------------------------------------------------------
 
 /// Retrieves the blockchain current block number.
-async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: CancellationToken, sync_interval: Duration) {
+async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Duration) {
+    const TASK_NAME: &str = "external-number-fetcher";
+
     // subscribe to newHeads event if WS is enabled
     let mut sub_new_heads = match chain.is_ws_enabled() {
         true => {
-            tracing::info!("subscribing number-fetcher to newHeads event");
+            tracing::info!("subscribing {} to newHeads event", TASK_NAME);
             match chain.subscribe_new_heads().await {
                 Ok(sub) => Some(sub),
-                Err(e) => {
-                    tracing::error!(reason = ?e, "cancelling number-fetcher because cannot subscribe to newHeads event");
-                    cancellation.cancel();
+                Err(_) => {
+                    GlobalState::shutdown_from(TASK_NAME, "cannot subscribe to newHeads event");
                     return;
                 }
             }
         }
         false => {
-            tracing::warn!("number-fetcher blockchain client does not have websocket enabled");
+            tracing::warn!("{} blockchain client does not have websocket enabled", TASK_NAME);
             None
         }
     };
 
     loop {
-        // check cancellation
-        if cancellation.is_cancelled() {
-            warn_task_cancellation("number-fetcher");
-            break;
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
+            return;
         }
         tracing::info!("fetching current block number");
 
@@ -234,7 +220,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: Cancel
             Ok(number) => {
                 tracing::info!(
                     %number,
-                    sync_interval = %humantime::Duration::from(sync_interval),
+                    sync_interval = %sync_interval.to_string_ext(),
                     "fetched current block number via http. awaiting sync interval to retrieve again."
                 );
                 RPC_CURRENT_BLOCK.store(number.as_u64(), Ordering::SeqCst);
@@ -252,16 +238,12 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, cancellation: Cancel
 // -----------------------------------------------------------------------------
 
 /// Retrieves blocks and receipts.
-async fn start_block_fetcher(
-    chain: Arc<BlockchainClient>,
-    cancellation: CancellationToken,
-    backlog_tx: mpsc::UnboundedSender<(ExternalBlock, Vec<ExternalReceipt>)>,
-    mut number: BlockNumber,
-) {
+async fn start_block_fetcher(chain: Arc<BlockchainClient>, backlog_tx: mpsc::UnboundedSender<(ExternalBlock, Vec<ExternalReceipt>)>, mut number: BlockNumber) {
+    const TASK_NAME: &str = "external-block-fetcher";
+
     loop {
-        if cancellation.is_cancelled() {
-            warn_task_cancellation("block-fetcher");
-            break;
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
+            return;
         }
 
         // if we are ahead of current block number, await until we are behind again
@@ -286,9 +268,8 @@ async fn start_block_fetcher(
         let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
         while let Some((block, receipts)) = tasks.next().await {
             if backlog_tx.send((block, receipts)).is_err() {
-                tracing::error!("cancelling block-fetcher because backlog channel was closed by the other side");
-                cancellation.cancel();
-                break;
+                warn_task_rx_closed(TASK_NAME);
+                return;
             }
         }
     }

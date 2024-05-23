@@ -1,5 +1,9 @@
 //! Standard library extensions.
 
+use std::time::Duration;
+
+use anyhow::anyhow;
+
 // -----------------------------------------------------------------------------
 // Macros
 // -----------------------------------------------------------------------------
@@ -98,6 +102,27 @@ macro_rules! log_and_err {
 }
 
 // -----------------------------------------------------------------------------
+// Duration
+// -----------------------------------------------------------------------------
+
+/// Parses a duration specified using human-time notation or fallback to milliseconds.
+pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
+    // try millis
+    let millis: Result<u64, _> = s.parse();
+    if let Ok(millis) = millis {
+        return Ok(Duration::from_millis(millis));
+    }
+
+    // try humantime
+    if let Ok(parsed) = humantime::parse_duration(s) {
+        return Ok(parsed);
+    }
+
+    // error
+    Err(anyhow!("invalid duration format: {}", s))
+}
+
+// -----------------------------------------------------------------------------
 // Option
 // -----------------------------------------------------------------------------
 
@@ -114,21 +139,19 @@ impl<T> OptionExt<T> for Option<T> {
 }
 
 // -----------------------------------------------------------------------------
-// Tracing
+// Display
 // -----------------------------------------------------------------------------
 
-/// Emits an warnign that a task is exiting because it received a cancenllation signal.
-#[track_caller]
-pub fn warn_task_cancellation(task: &str) {
-    let message = format!("exiting {} because it received a cancellation signal", task);
-    tracing::warn!(%message);
+/// Allows to implement `to_string` for types that does not have it.
+pub trait DisplayExt {
+    /// `to_string` for types that does not have it implemented.
+    fn to_string_ext(&self) -> String;
 }
 
-/// Emits an warnign that a task is exiting because the tx signal it is reading was closed.
-#[track_caller]
-pub fn warn_task_tx_closed(task: &str) {
-    let message = format!("exiting {} because the tx channel on the other side was closed", task);
-    tracing::warn!(%message);
+impl DisplayExt for std::time::Duration {
+    fn to_string_ext(&self) -> String {
+        humantime::Duration::from(*self).to_string()
+    }
 }
 
 // -----------------------------------------------------------------------------

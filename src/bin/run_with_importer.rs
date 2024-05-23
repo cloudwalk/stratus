@@ -7,18 +7,17 @@ use stratus::config::RunWithImporterConfig;
 use stratus::eth::consensus::Consensus;
 use stratus::eth::rpc::serve_rpc;
 use stratus::infra::BlockchainClient;
-use stratus::utils::signal_handler;
 use stratus::GlobalServices;
+use stratus::GlobalState;
 use tokio::join;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<RunWithImporterConfig>::init();
+    let global_services = GlobalServices::<RunWithImporterConfig>::init()?;
     global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
-    // init cancellation handler
-    let cancellation = signal_handler();
+    const TASK_NAME: &str = "run-with-importer";
 
     // init services
     let storage = config.storage.init().await?;
@@ -31,7 +30,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let external_relayer = if let Some(c) = config.external_relayer { Some(c.init().await) } else { None };
     let miner = config
         .miner
-        .init(Arc::clone(&storage), Some(Arc::clone(&consensus)), external_relayer, cancellation.clone())
+        .init_external_mode(Arc::clone(&storage), Some(Arc::clone(&consensus)), external_relayer)
         .await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, Some(consensus)).await;
 
@@ -39,28 +38,16 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let rpc_executor = Arc::clone(&executor);
     let rpc_miner = Arc::clone(&miner);
 
-    let rpc_cancellation = cancellation.clone();
-
     // run rpc and importer-online in parallel
     let rpc_task = async move {
-        let res = serve_rpc(
-            rpc_storage,
-            rpc_executor,
-            rpc_miner,
-            config.address,
-            config.executor.chain_id.into(),
-            rpc_cancellation.clone(),
-        )
-        .await;
-        tracing::warn!("serve_rpc finished, cancelling tasks");
-        rpc_cancellation.cancel();
+        let res = serve_rpc(rpc_storage, rpc_executor, rpc_miner, config.address, config.executor.chain_id.into()).await;
+        GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");
         res
     };
 
     let importer_task = async move {
-        let res = run_importer_online(executor, miner, storage, chain, cancellation.clone(), config.online.sync_interval).await;
-        tracing::warn!("run_importer_online finished, cancelling tasks");
-        cancellation.cancel();
+        let res = run_importer_online(executor, miner, storage, chain, config.online.sync_interval).await;
+        GlobalState::shutdown_from(TASK_NAME, "importer online finished unexpectedly");
         res
     };
 
