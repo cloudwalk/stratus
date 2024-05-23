@@ -113,4 +113,9 @@ impl ExecutionAccountChanges {
     pub fn is_account_update(&self) -> bool {
         not(self.new_account)
     }
+
+    /// Checks if the Nonce, Balance or Bytecode are modified
+    pub fn is_account_change(&self) -> bool {
+        self.nonce.is_modified() || self.balance.is_modified() || self.bytecode.is_modified()
+    }
 }
