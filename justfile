@@ -176,7 +176,7 @@ e2e network="stratus" block-mode="automine" test="":
     fi
 
 # E2E: Starts and execute Hardhat tests in Hardhat
-e2e-hardhat test="":
+e2e-hardhat block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -189,13 +189,13 @@ e2e-hardhat test="":
     wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
-    just e2e hardhat automine {{test}}
+    just e2e hardhat {{block-mode}} {{test}}
 
     echo "-> Killing Hardhat"
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus test="":
+e2e-stratus block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -209,7 +209,7 @@ e2e-stratus test="":
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus automine {{test}}
+    just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -217,7 +217,7 @@ e2e-stratus test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-rocks test="":
+e2e-stratus-rocks block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -231,7 +231,7 @@ e2e-stratus-rocks test="":
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus automine {{test}}
+    just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -239,7 +239,7 @@ e2e-stratus-rocks test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-postgres test="":
+e2e-stratus-postgres block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -260,7 +260,7 @@ e2e-stratus-postgres test="":
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus automine {{test}}
+    just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
