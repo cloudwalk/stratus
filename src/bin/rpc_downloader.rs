@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
-    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc).await?);
+    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout).await?);
 
     // download balances and blocks
     download_balances(Arc::clone(&rpc_storage), &chain, config.initial_accounts).await?;

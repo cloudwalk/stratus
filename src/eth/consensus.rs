@@ -149,7 +149,7 @@ impl Consensus {
     }
 
     async fn append_entries(follower: &str, entries: Vec<Entry>) -> Result<(), anyhow::Error> {
-        let client = BlockchainClient::new_http_ws(follower, None).await?;
+        let client = BlockchainClient::new_http_ws(follower, None, Duration::from_secs(2)).await?;
 
         for attempt in 1..=RETRY_ATTEMPTS {
             let response = client.append_entries(entries.clone()).await;

@@ -24,9 +24,6 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 use crate::log_and_err;
 
-/// Default timeout for blockchain operations.
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
-
 #[derive(Debug)]
 pub struct BlockchainClient {
     http: HttpClient,
@@ -37,16 +34,16 @@ pub struct BlockchainClient {
 
 impl BlockchainClient {
     /// Creates a new RPC client connected only to HTTP.
-    pub async fn new_http(http_url: &str) -> anyhow::Result<Self> {
-        Self::new_http_ws(http_url, None).await
+    pub async fn new_http(http_url: &str, timeout: Duration) -> anyhow::Result<Self> {
+        Self::new_http_ws(http_url, None, timeout).await
     }
 
     /// Creates a new RPC client connected to HTTP and optionally to WS.
-    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>) -> anyhow::Result<Self> {
+    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
         tracing::info!(%http_url, "starting blockchain client");
 
         // build http provider
-        let http = match HttpClientBuilder::default().request_timeout(DEFAULT_TIMEOUT).build(http_url) {
+        let http = match HttpClientBuilder::default().request_timeout(timeout).build(http_url) {
             Ok(http) => http,
             Err(e) => {
                 tracing::error!(reason = ?e, url = %http_url, "failed to create blockchain http client");
@@ -56,7 +53,7 @@ impl BlockchainClient {
 
         // build ws provider
         let (ws, ws_url) = if let Some(ws_url) = ws_url {
-            match WsClientBuilder::new().connection_timeout(DEFAULT_TIMEOUT).build(ws_url).await {
+            match WsClientBuilder::new().connection_timeout(timeout).build(ws_url).await {
                 Ok(ws) => (Some(ws), Some(ws_url.to_string())),
                 Err(e) => {
                     tracing::error!(reason = ?e, url = %ws_url, "failed to create blockchain websocket client");
