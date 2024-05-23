@@ -148,27 +148,26 @@ async fn execute_block_importer(
 
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
-            async {
-                // re-execute block
-                executor.reexecute_external(&block, &receipts).await?;
-
-                // mine block
-                let mined_block = miner.mine_external().await?;
-
-                // export to csv OR permanent storage
-                match csv {
-                    Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
-                    None => miner.commit(mined_block.clone()).await?,
-                };
-
-                // export snapshot for tests
-                if blocks_to_export_snapshot.contains(mined_block.number()) {
-                    export_snapshot(&block, &receipts, &mined_block)?;
-                }
-
-                anyhow::Ok(())
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
+                return Ok(());
             }
-            .await?;
+
+            // re-execute block
+            executor.reexecute_external(&block, &receipts).await?;
+
+            // mine block
+            let mined_block = miner.mine_external().await?;
+
+            // export to csv OR permanent storage
+            match csv {
+                Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
+                None => miner.commit(mined_block.clone()).await?,
+            };
+
+            // export snapshot for tests
+            if blocks_to_export_snapshot.contains(mined_block.number()) {
+                export_snapshot(&block, &receipts, &mined_block)?;
+            }
         }
     }
 }
