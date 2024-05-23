@@ -1,6 +1,4 @@
 use std::env;
-use std::fs::File;
-use std::io::Read;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -28,7 +26,6 @@ pub struct Entry {
 
 pub struct Consensus {
     pub sender: Sender<String>,
-    node_name: String,
     leader_name: String,
     //XXX current_index: AtomicU64,
 }
@@ -37,7 +34,7 @@ impl Consensus {
     //XXX for now we pick the leader name from the environment
     // the correct is to have a leader election algorithm
     pub fn new(leader_name: Option<String>) -> Self {
-        let Some(node_name) = Self::current_node() else {
+        let Some(_node_name) = Self::current_node() else {
             tracing::info!("No consensus module available, running in standalone mode");
             return Self::new_stand_alone();
         };
@@ -55,7 +52,10 @@ impl Consensus {
         tokio::spawn(async move {
             let followers = Self::discover_followers().await.expect("Failed to discover followers");
 
-            tracing::info!("Discovered followers: {}", followers.iter().map(|f| f.to_string()).collect::<Vec<String>>().join(", "));
+            tracing::info!(
+                "Discovered followers: {}",
+                followers.iter().map(|f| f.to_string()).collect::<Vec<String>>().join(", ")
+            );
 
             while let Some(data) = receiver.recv().await {
                 if Self::is_leader(leader_name_clone.clone()) {
@@ -78,11 +78,7 @@ impl Consensus {
             }
         });
 
-        Self {
-            node_name,
-            leader_name,
-            sender,
-        }
+        Self { leader_name, sender }
     }
 
     fn new_stand_alone() -> Self {
@@ -95,7 +91,6 @@ impl Consensus {
         });
 
         Self {
-            node_name: "standalone".to_string(),
             leader_name: "standalone".to_string(),
             sender,
         }
@@ -111,10 +106,8 @@ impl Consensus {
     }
 
     fn current_node() -> Option<String> {
-        let mut file = File::open("/etc/hostname").ok()?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).ok()?;
-        Some(contents.trim().to_string())
+        let pod_name = env::var("MY_POD_NAME").ok()?;
+        Some(pod_name.trim().to_string())
     }
 
     fn current_namespace() -> Option<String> {
