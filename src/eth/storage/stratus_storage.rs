@@ -74,14 +74,14 @@ impl StratusStorage {
         // if does not have the zero block present, should resume from zero
         let zero = self.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
         if zero.is_none() {
-            tracing::info!(number = %0, "block number to resume is ZERO because it does not exist in the storage");
+            tracing::info!(number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
             return Ok(BlockNumber::ZERO);
         }
 
         // try to resume from active block number
         let active_number = self.read_active_block_number().await?;
         if let Some(active_number) = active_number {
-            tracing::info!(number = %active_number, "block number to resume is ACTIVE because it set in the storage");
+            tracing::info!(number = %active_number, reason = %"set in storage", "resume from ACTIVE");
             return Ok(active_number);
         }
 
@@ -90,11 +90,11 @@ impl StratusStorage {
         let mined_block = self.read_block(&BlockSelection::Number(mined_number)).await?;
         match mined_block {
             Some(_) => {
-                tracing::info!(number = %mined_number, "block number to resume is MINED + 1 because it set in the storage and the block exist");
+                tracing::info!(number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
                 Ok(mined_number.next())
             }
             None => {
-                tracing::info!(number = %mined_number, "block number to resume is MINED because it is set in the storage but the block does not exist");
+                tracing::info!(number = %mined_number, reason = %"set in storage but block does not exist", "resume from MINED");
                 Ok(mined_number)
             }
         }
