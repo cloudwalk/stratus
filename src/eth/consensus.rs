@@ -13,6 +13,7 @@ use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
 
 use crate::config::RunWithImporterConfig;
+use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
 const RETRY_ATTEMPTS: u32 = 3;
@@ -127,6 +128,7 @@ impl Consensus {
         (config.online.external_rpc, config.online.external_rpc_ws)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn discover_followers() -> Result<Vec<String>, anyhow::Error> {
         let client = Client::try_default().await?;
         let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
@@ -148,7 +150,11 @@ impl Consensus {
         Ok(followers)
     }
 
+    #[tracing::instrument(skip_all)]
     async fn append_entries(follower: &str, entries: Vec<Entry>) -> Result<(), anyhow::Error> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let client = BlockchainClient::new_http_ws(follower, None, Duration::from_secs(2)).await?;
 
         for attempt in 1..=RETRY_ATTEMPTS {
@@ -163,10 +169,17 @@ impl Consensus {
             sleep(RETRY_DELAY).await;
         }
 
+        #[cfg(feature = "metrics")]
+        metrics::inc_append_entries(start.elapsed());
+
         Err(anyhow!("Failed to append entries to {} after {} attempts", follower, RETRY_ATTEMPTS))
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn append_entries_to_followers(entries: Vec<Entry>, followers: Vec<String>) -> Result<(), anyhow::Error> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         for entry in entries {
             for follower in &followers {
                 if let Err(e) = Self::append_entries(follower, vec![entry.clone()]).await {
@@ -174,6 +187,10 @@ impl Consensus {
                 }
             }
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_append_entries_to_followers(start.elapsed());
+
         Ok(())
     }
 }

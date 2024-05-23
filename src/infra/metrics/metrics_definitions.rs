@@ -173,3 +173,13 @@ metrics! {
     "Number of bytes read."
     gauge rocks_bytes_read{dbname} []
 }
+
+metrics! {
+    group: consensus,
+
+    "Time to run Consensus::apend_entries."
+    histogram_duration append_entries{} [],
+
+    "Time to run Consensus::append_entries_to_followers."
+    histogram_duration append_entries_to_followers{} []
+}
