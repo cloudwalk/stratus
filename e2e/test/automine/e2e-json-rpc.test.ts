@@ -17,7 +17,7 @@ import {
     subscribeAndGetEventWithContract,
 } from "../helpers/rpc";
 
-describe("Multiple Transactions", () => {
+describe("JSON-RPC", () => {
     describe("State", () => {
         it("debug_setHead / hardhat_reset", async () => {
             if (isStratus) {
