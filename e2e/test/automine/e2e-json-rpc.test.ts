@@ -1,8 +1,8 @@
 import { expect } from "chai";
 import { Block } from "web3-types";
 
-import { ALICE, BOB } from "./helpers/account";
-import { isStratus } from "./helpers/network";
+import { ALICE, BOB } from "../helpers/account";
+import { isStratus } from "../helpers/network";
 import {
     CHAIN_ID,
     CHAIN_ID_DEC,
@@ -15,7 +15,7 @@ import {
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
-} from "./helpers/rpc";
+} from "../helpers/rpc";
 
 describe("JSON-RPC", () => {
     describe("State", () => {

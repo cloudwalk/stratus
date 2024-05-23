@@ -160,7 +160,7 @@ test-int name="'*'":
 # ------------------------------------------------------------------------------
 
 # E2E: Execute Hardhat tests in the specified network
-e2e network="stratus" test="":
+e2e network="stratus" block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -170,9 +170,9 @@ e2e network="stratus" test="":
     fi
 
     if [ -z "{{test}}" ]; then
-        npx hardhat test test/*.test.ts --network {{network}}
+        npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}}
     else
-        npx hardhat test test/*.test.ts --network {{network}} --grep "{{test}}"
+        npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}} --grep "{{test}}"
     fi
 
 # E2E: Starts and execute Hardhat tests in Hardhat
@@ -189,7 +189,7 @@ e2e-hardhat test="":
     wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
-    just e2e hardhat {{test}}
+    just e2e hardhat automine {{test}}
 
     echo "-> Killing Hardhat"
     killport 8545
@@ -209,7 +209,7 @@ e2e-stratus test="":
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus {{test}}
+    just e2e stratus automine {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -231,7 +231,7 @@ e2e-stratus-rocks test="":
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus {{test}}
+    just e2e stratus automine {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -260,7 +260,7 @@ e2e-stratus-postgres test="":
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus {{test}}
+    just e2e stratus automine {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
