@@ -203,7 +203,7 @@ e2e-stratus block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -225,7 +225,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -254,7 +254,7 @@ e2e-stratus-postgres block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo

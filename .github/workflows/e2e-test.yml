@@ -26,7 +26,7 @@ on:
 
 jobs:
   e2e-automine-stratus:
-    name: E2E Stratus in-memory
+    name: E2E Automine Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: 'e2e-stratus automine'
@@ -36,7 +36,7 @@ jobs:
       cancel-in-progress: true
 
   e2e-automine-stratus-postgres:
-    name: E2E Stratus Postgres
+    name: E2E Automine Stratus Postgres
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: 'e2e-stratus-postgres automine'
@@ -46,7 +46,7 @@ jobs:
       cancel-in-progress: true
 
   e2e-automine-stratus-rocks:
-    name: E2E Stratus Rocks
+    name: E2E Automine Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: 'e2e-stratus-rocks automine'
