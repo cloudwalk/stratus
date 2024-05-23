@@ -2,6 +2,7 @@
 .vscode
 .tool-versions
 .env
+.idea
 
 # Data
 data/**/*.csv
