@@ -32,7 +32,7 @@ jobs:
       justfile_recipe: 'e2e-stratus automine'
 
     concurrency:
-      group: ${{ github.workflow }}-inmemory-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
   e2e-automine-stratus-postgres:
@@ -42,7 +42,7 @@ jobs:
       justfile_recipe: 'e2e-stratus-postgres automine'
 
     concurrency:
-      group: ${{ github.workflow }}-postgres-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-automine-postgres-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
   e2e-automine-stratus-rocks:
@@ -52,7 +52,7 @@ jobs:
       justfile_recipe: 'e2e-stratus-rocks automine'
 
     concurrency:
-      group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
   e2e-external-stratus:
@@ -62,7 +62,7 @@ jobs:
       justfile_recipe: 'e2e-stratus external'
 
     concurrency:
-      group: ${{ github.workflow }}-inmemory-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-external-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
   e2e-external-stratus-postgres:
@@ -72,7 +72,7 @@ jobs:
       justfile_recipe: 'e2e-stratus-postgres external'
 
     concurrency:
-      group: ${{ github.workflow }}-postgres-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-external-postgres-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
   e2e-external-stratus-rocks:
@@ -82,7 +82,7 @@ jobs:
       justfile_recipe: 'e2e-stratus-rocks external'
 
     concurrency:
-      group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
   e2e-clock-stratus:
