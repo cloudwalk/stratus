@@ -2,8 +2,8 @@ import { expect } from "chai";
 import { keccak256 } from "ethers";
 import { Block, Transaction, TransactionReceipt } from "web3-types";
 
-import { ALICE, Account, BOB, randomAccounts } from "./helpers/account";
-import { isStratus } from "./helpers/network";
+import { ALICE, Account, BOB, randomAccounts } from "../helpers/account";
+import { isStratus } from "../helpers/network";
 import {
     CHAIN_ID,
     HASH_EMPTY_TRANSACTIONS,
@@ -19,7 +19,7 @@ import {
     sendGetBalance,
     sendRawTransaction,
     sendReset,
-} from "./helpers/rpc";
+} from "../helpers/rpc";
 
 describe("Transaction: serial transfer", () => {
     var _tx: Transaction;
