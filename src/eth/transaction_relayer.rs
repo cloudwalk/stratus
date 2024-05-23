@@ -197,7 +197,7 @@ impl ExternalRelayer {
         for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1).unwrap();
                     // todo: unwrap -> expect
                 }
             }
@@ -206,7 +206,7 @@ impl ExternalRelayer {
         for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(&tx1).unwrap(), *node_indexes.get(&tx2).unwrap(), 1).unwrap();
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1).unwrap();
                     // todo: unwrap -> expect
                 }
             }
@@ -266,7 +266,7 @@ impl ExternalRelayer {
     fn take_roots(dag: &mut StableDag<TransactionMined, i32>) -> Option<Vec<TransactionMined>> {
         let mut root_indexes = vec![];
         for index in dag.node_identifiers() {
-            if dag.parents(index).walk_next(&dag).is_none() {
+            if dag.parents(index).walk_next(dag).is_none() {
                 root_indexes.push(index);
             }
         }
@@ -435,7 +435,7 @@ mod tests {
         for (test, expected) in tests.into_iter().zip(expected_results) {
             let transactions = test
                 .into_iter()
-                .map(|indexes| indexes.into_iter().map(|idx| SlotIndex::from(idx)))
+                .map(|indexes| indexes.into_iter().map(SlotIndex::from))
                 .enumerate()
                 .map(|(i, indexes)| create_tx(indexes.collect(), i as u64))
                 .collect();

@@ -4,7 +4,7 @@ use stratus::config::ExternalRelayerConfig;
 use stratus::GlobalServices;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ExternalRelayerConfig>::init();
+    let global_services = GlobalServices::<ExternalRelayerConfig>::init()?;
     global_services.runtime.block_on(run(global_services.config))
 }
 

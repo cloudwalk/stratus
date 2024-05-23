@@ -48,7 +48,7 @@ pub struct TransactionMined {
 
 impl HashTrait for TransactionMined {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.input.hash.hash(state)
+        self.input.hash.hash(state);
     }
 }
 
