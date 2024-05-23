@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import { TestContractBalances } from "../typechain-types";
+import { TestContractBalances } from "../../typechain-types";
 import { CHARLIE } from "../helpers/account";
 import {
     calculateSlotPosition,

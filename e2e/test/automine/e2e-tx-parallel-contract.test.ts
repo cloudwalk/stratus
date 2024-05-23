@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import { TestContractBalances, TestContractCounter } from "../typechain-types";
+import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { ALICE, BOB, CHARLIE, randomAccounts } from "../helpers/account";
 import {
     TX_PARAMS,
