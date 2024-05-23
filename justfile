@@ -183,7 +183,7 @@ e2e-hardhat block-mode="automine" test="":
     fi
 
     echo "-> Starting Hardhat"
-    npx hardhat node &
+    BLOCK_MODE={{block-mode}} npx hardhat node &
 
     echo "-> Waiting Hardhat to start"
     wait-service --tcp localhost:8545 -- echo
