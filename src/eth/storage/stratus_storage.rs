@@ -70,6 +70,37 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[tracing::instrument(skip_all)]
+    pub async fn read_block_number_to_resume_import(&self) -> anyhow::Result<BlockNumber> {
+        // if does not have the zero block present, should resume from zero
+        let zero = self.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+        if zero.is_none() {
+            tracing::info!(number = %0, "block number to resume is ZERO because it does not exist in the storage");
+            return Ok(BlockNumber::ZERO);
+        }
+
+        // try to resume from active block number
+        let active_number = self.read_active_block_number().await?;
+        if let Some(active_number) = active_number {
+            tracing::info!(number = %active_number, "block number to resume is ACTIVE because it set in the storage");
+            return Ok(active_number);
+        }
+
+        // fallback to last mined block number
+        let mined_number = self.read_mined_block_number().await?;
+        let mined_block = self.read_block(&BlockSelection::Number(mined_number)).await?;
+        match mined_block {
+            Some(_) => {
+                tracing::info!(number = %mined_number, "block number to resume is MINED + 1 because it set in the storage and the block exist");
+                Ok(mined_number.next())
+            }
+            None => {
+                tracing::info!(number = %mined_number, "block number to resume is MINED because it is set in the storage but the block does not exist");
+                Ok(mined_number)
+            }
+        }
+    }
+
+    #[tracing::instrument(skip_all)]
     pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         #[cfg(feature = "metrics")]
         {
