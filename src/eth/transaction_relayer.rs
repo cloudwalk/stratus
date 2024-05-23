@@ -332,12 +332,22 @@ impl ExternalRelayerClient {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use crate::eth::primitives::{
-        Address, Bytes, CodeHash, EvmExecution, ExecutionAccountChanges, ExecutionResult, ExecutionValueChange, Gas, Hash, Slot, SlotIndex, TransactionInput,
-        TransactionMined, UnixTime,
-    };
 
     use super::ExternalRelayer;
+    use crate::eth::primitives::Address;
+    use crate::eth::primitives::Bytes;
+    use crate::eth::primitives::CodeHash;
+    use crate::eth::primitives::EvmExecution;
+    use crate::eth::primitives::ExecutionAccountChanges;
+    use crate::eth::primitives::ExecutionResult;
+    use crate::eth::primitives::ExecutionValueChange;
+    use crate::eth::primitives::Gas;
+    use crate::eth::primitives::Hash;
+    use crate::eth::primitives::Slot;
+    use crate::eth::primitives::SlotIndex;
+    use crate::eth::primitives::TransactionInput;
+    use crate::eth::primitives::TransactionMined;
+    use crate::eth::primitives::UnixTime;
     const ADDRESS: Address = Address::ZERO;
 
     fn create_tx(changed_slots_inidices: HashSet<SlotIndex>, tx_idx: u64) -> TransactionMined {
