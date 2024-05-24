@@ -1,7 +1,9 @@
 mod importer_online;
 
 use stratus::config::ExternalRelayerConfig;
-use stratus::GlobalServices;
+use stratus::{GlobalServices, GlobalState};
+
+const TASK_NAME: &str = "relayer";
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<ExternalRelayerConfig>::init()?;
@@ -14,6 +16,10 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
     let relayer = config.relayer.init().await?;
 
     loop {
+        if GlobalState::warn_if_shutdown(TASK_NAME) {
+            return Ok(());
+        };
+
         let block_number = match relayer.relay_next_block().await {
             Ok(bnum) => bnum,
             Err(err) => {

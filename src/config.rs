@@ -353,17 +353,16 @@ impl ExternalRelayerClientConfig {
 }
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-#[group(requires_all = ["url", "connections", "acquire_timeout", "forward_to", "backoff"])]
 pub struct ExternalRelayerServerConfig {
-    #[arg(long = "relayer-db-url", env = "RELAYER_DB_URL", required = false)]
+    #[arg(long = "relayer-db-url", env = "RELAYER_DB_URL")]
     pub url: String,
-    #[arg(long = "relayer-db-connections", env = "RELAYER_DB_CONNECTIONS", required = false)]
+    #[arg(long = "relayer-db-connections", env = "RELAYER_DB_CONNECTIONS", default_value = "5")]
     pub connections: u32,
-    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", required = false)]
+    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", default_value = "1s")]
     pub acquire_timeout: Duration,
-    #[arg(long = "relayer-forward-to", env = "RELAYER_FORWARD_TO", required = false)]
+    #[arg(long = "relayer-forward-to", env = "RELAYER_FORWARD_TO")]
     pub forward_to: String,
-    #[arg(long = "relayer-db-backoff", value_parser=parse_duration, env = "RELAYER_DB_BACKOFF", required = false)]
+    #[arg(long = "relayer-db-backoff", value_parser=parse_duration, env = "RELAYER_DB_BACKOFF", default_value = "10ms")]
     pub backoff: Duration,
 }
 
