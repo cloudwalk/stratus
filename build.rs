@@ -17,6 +17,8 @@ fn main() {
     println!("cargo:rerun-if-changed=static/");
     // fixture files that are "inserted" into test code
     println!("cargo:rerun-if-changed=tests/");
+    // retrigger database compile-time checks
+    println!("cargo:rerun-if-changed=.sqlx/");
 
     update_signature_file();
 }

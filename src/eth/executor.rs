@@ -94,8 +94,6 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        tracing::info!(number = %block.number(), "reexecuting external block");
-
         // track active block number
         let storage = &self.storage;
         storage.set_active_external_block(block.clone()).await?;

@@ -130,8 +130,10 @@ async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, m
 
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
+
+        tracing::info!(number = %block.number(), txs_len = block.transactions.len(), "reexecuting external block");
         if executor.reexecute_external(&block, &receipts).await.is_err() {
-            GlobalState::shutdown_from(TASK_NAME, "failed to re-execute block");
+            GlobalState::shutdown_from(TASK_NAME, "failed to re-execute external block");
             return;
         };
         if miner.mine_external_mixed_and_commit().await.is_err() {
