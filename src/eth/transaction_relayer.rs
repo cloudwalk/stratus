@@ -134,9 +134,11 @@ impl ExternalRelayer {
         else {
             return Ok(None);
         };
-
         let block: Block = row.payload.try_into()?;
         let block_number = block.header.number;
+
+        tracing::debug!(?block_number, "relaying block");
+
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = Self::compute_tx_dag(block.transactions);
 
@@ -220,10 +222,13 @@ impl ExternalRelayer {
     /// calling eth_getTransactionByHash.
     #[tracing::instrument(skip_all)]
     pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
+        tracing::debug!(?tx_mined.input.hash, "relaying transaction");
         let tx = self
             .substrate_chain
             .send_raw_transaction(Transaction::from(tx_mined.input.clone()).rlp())
             .await?;
+
+        tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
         while self.substrate_chain.get_transaction(tx_mined.input.hash).await?.is_none() {
             // should retry?
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -289,6 +294,7 @@ impl ExternalRelayer {
 
     #[tracing::instrument(skip_all)]
     async fn relay_dag(&self, mut dag: StableDag<TransactionMined, i32>) -> anyhow::Result<()> {
+        tracing::debug!("relaying transactions");
         let mut results = vec![];
         while let Some(roots) = Self::take_roots(&mut dag) {
             let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));

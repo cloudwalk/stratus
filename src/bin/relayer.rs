@@ -11,6 +11,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
+    tracing::info!(?TASK_NAME, "starting");
+
     // init services
     let backoff = config.relayer.backoff;
     let relayer = config.relayer.init().await?;
@@ -30,7 +32,10 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
 
         match block_number {
             Some(block_number) => tracing::info!(?block_number, "relayed"),
-            None => tokio::time::sleep(backoff).await,
+            None => {
+                tracing::info!("no pending block found");
+                tokio::time::sleep(backoff).await
+            },
         };
     }
 }
