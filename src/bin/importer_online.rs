@@ -65,7 +65,14 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await; //XXX TODO implement the consensus here, in case of it being a follower, it should not even enter here
-    let chain = Arc::new(BlockchainClient::new_http_ws(&config.base.external_rpc, config.base.external_rpc_ws.as_deref()).await?);
+    let chain = Arc::new(
+        BlockchainClient::new_http_ws(
+            &config.base.external_rpc,
+            config.base.external_rpc_ws.as_deref(),
+            config.base.external_rpc_timeout,
+        )
+        .await?,
+    );
 
     let result = run_importer_online(executor, miner, storage, chain, config.base.sync_interval).await;
     if let Err(ref e) = result {
@@ -81,11 +88,7 @@ pub async fn run_importer_online(
     chain: Arc<BlockchainClient>,
     sync_interval: Duration,
 ) -> anyhow::Result<()> {
-    // start from last imported block
-    let mut number = storage.read_mined_block_number().await?;
-    if number != BlockNumber::from(0) {
-        number = number.next();
-    }
+    let number = storage.read_block_number_to_resume_import().await?;
 
     let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
 

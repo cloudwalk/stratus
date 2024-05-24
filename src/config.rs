@@ -322,6 +322,10 @@ pub struct IntegratedRelayerConfig {
     /// RPC address to forward transactions to.
     #[arg(long = "forward-to", env = "FORWARD_TO")]
     pub forward_to: Option<String>,
+
+    /// Timeout for blockchain requests (relayer)
+    #[arg(long = "relayer-timeout", value_parser=parse_duration, env = "RELAYER_TIMEOUT", default_value = "2s")]
+    pub relayer_timeout: Duration,
 }
 
 impl IntegratedRelayerConfig {
@@ -330,7 +334,7 @@ impl IntegratedRelayerConfig {
 
         match self.forward_to {
             Some(ref forward_to) => {
-                let chain = BlockchainClient::new_http(forward_to).await?;
+                let chain = BlockchainClient::new_http(forward_to, self.relayer_timeout).await?;
                 let relayer = TransactionRelayer::new(storage, chain);
                 Ok(Some(Arc::new(relayer)))
             }
@@ -426,6 +430,10 @@ pub struct RpcDownloaderConfig {
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
+
+    /// Timeout for blockchain requests
+    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
+    pub external_rpc_timeout: Duration,
 
     /// Number of parallel downloads.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
@@ -536,6 +544,10 @@ pub struct ImporterOnlineBaseConfig {
     /// External RPC WS endpoint to sync blocks with Stratus.
     #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]
     pub external_rpc_ws: Option<String>,
+
+    /// Timeout for blockchain requests (importer online)
+    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
+    pub external_rpc_timeout: Duration,
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
     pub sync_interval: Duration,

@@ -24,7 +24,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let consensus = Arc::new(Consensus::new(config.clone().leader_node)); // in development, with no leader configured, the current node ends up being the leader
     let (http_url, ws_url) = consensus.get_chain_url(config.clone());
     consensus.sender.send("Consensus initialized.".to_string()).await.unwrap();
-    let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref()).await?);
+    let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref(), config.online.external_rpc_timeout).await?);
 
     let relayer = config.relayer.init(Arc::clone(&storage)).await?;
     let external_relayer = if let Some(c) = config.external_relayer { Some(c.init().await) } else { None };

@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { TestContractBalances } from "../typechain-types";
-import { CHARLIE } from "./helpers/account";
+import { CHARLIE } from "../helpers/account";
 import {
     calculateSlotPosition,
     CHAIN_ID,
@@ -14,7 +14,7 @@ import {
     sendReset,
     toHex,
     toPaddedHex,
-} from "./helpers/rpc";
+} from "../helpers/rpc";
 import { Transaction } from "web3-types";
 import { network } from "hardhat";
 

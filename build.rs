@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 
 use glob::glob;
@@ -13,16 +11,34 @@ use nom::sequence::separated_pair;
 use nom::IResult;
 
 fn main() {
-    generate_signature_maps();
+    // any code change
+    println!("cargo:rerun-if-changed=src/");
+    // used in signatures codegen
+    println!("cargo:rerun-if-changed=static/");
+    // fixture files that are "inserted" into test code
+    println!("cargo:rerun-if-changed=tests/");
+
+    update_signature_file();
 }
 
 // -----------------------------------------------------------------------------
 // Solidity signatures
 // -----------------------------------------------------------------------------
+
+fn update_signature_file() {
+    let signatures_file_content = generate_signature_maps_file();
+
+    let signature_file_path = out_dir().join("signatures.rs");
+
+    if let Err(err) = fs::write(&signature_file_path, signatures_file_content) {
+        panic!("failed to write to file {signature_file_path:?}: reason={err:?}");
+    }
+}
+
 const SIGNATURES_DIR: &str = "static/contracts/*.signatures";
 
 /// Generates the `signatures.rs` file containing a static PHF map with Solidity hashes and their description.
-fn generate_signature_maps() {
+fn generate_signature_maps_file() -> String {
     // list all signature files to be parsed
     let signature_files: Vec<PathBuf> = glob(SIGNATURES_DIR)
         .expect("Listing signature files should not fail")
@@ -43,10 +59,9 @@ fn generate_signature_maps() {
         populate_signature_maps(&signatures_content, &mut seen, &mut signatures_4_bytes, &mut signatures_32_bytes, prefix);
     }
 
-    // write signatures.rs file
-    write!(
-        &mut create_file("signatures.rs"),
-        "
+    format!(
+        "// WARNING: This file was auto-generated in `build.rs`, you're not supposed to manually edit it
+
         /// Mapping between 4 byte signatures and Solidity function and error signatures.
         pub static SIGNATURES_4_BYTES: phf::Map<[u8; 4], &'static str> = {};
 
@@ -56,7 +71,6 @@ fn generate_signature_maps() {
         signatures_4_bytes.build(),
         signatures_32_bytes.build()
     )
-    .expect("File writing should not fail");
 }
 
 fn populate_signature_maps(
@@ -97,11 +111,7 @@ fn parse_signature(input: &str) -> IResult<&str, (Vec<u8>, &str)> {
 // Helpers
 // -----------------------------------------------------------------------------
 
-/// Creates a file in the OUT_DIR directory with the provided name.
-fn create_file(filename: &'static str) -> File {
-    let mut path = PathBuf::new();
-    path.push(env::var("OUT_DIR").expect("Rust compiler shoult set OUT_DIR"));
-    path.push(filename);
-
-    File::create(path).expect("File creation should not fail")
+/// Read compiler ENV var OUT_DIR
+fn out_dir() -> PathBuf {
+    env::var_os("OUT_DIR").map(PathBuf::from).expect("Compiler should set OUT_DIR")
 }

@@ -10,7 +10,6 @@ use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
-use stratus::eth::primitives::BlockSelection;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
@@ -20,7 +19,6 @@ use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
-use stratus::ext::not;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::runtime::Handle;
@@ -55,7 +53,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
-        None => block_number_to_start(&storage).await?,
+        None => storage.read_block_number_to_resume_import().await?,
     };
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
@@ -148,27 +146,26 @@ async fn execute_block_importer(
 
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
         for (block_index, block) in blocks.into_iter().enumerate() {
-            async {
-                // re-execute block
-                executor.reexecute_external(&block, &receipts).await?;
-
-                // mine block
-                let mined_block = miner.mine_external().await?;
-
-                // export to csv OR permanent storage
-                match csv {
-                    Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
-                    None => miner.commit(mined_block.clone()).await?,
-                };
-
-                // export snapshot for tests
-                if blocks_to_export_snapshot.contains(mined_block.number()) {
-                    export_snapshot(&block, &receipts, &mined_block)?;
-                }
-
-                anyhow::Ok(())
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
+                return Ok(());
             }
-            .await?;
+
+            // re-execute block
+            executor.reexecute_external(&block, &receipts).await?;
+
+            // mine block
+            let mined_block = miner.mine_external().await?;
+
+            // export to csv OR permanent storage
+            match csv {
+                Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
+                None => miner.commit(mined_block.clone()).await?,
+            };
+
+            // export snapshot for tests
+            if blocks_to_export_snapshot.contains(mined_block.number()) {
+                export_snapshot(&block, &receipts, &mined_block)?;
+            }
         }
     }
 }
@@ -237,25 +234,6 @@ async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, star
     let blocks_task = rpc_storage.read_blocks_in_range(start, end);
     let receipts_task = rpc_storage.read_receipts_in_range(start, end);
     try_join!(blocks_task, receipts_task)
-}
-
-// Finds the block number to start the import job.
-async fn block_number_to_start(storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
-    // when has an active number, resume from it because it was not imported yet.
-    let active_number = storage.read_active_block_number().await?;
-    if let Some(active_number) = active_number {
-        return Ok(active_number);
-    }
-
-    // fallback to last mined block
-    // if mined is zero, we need to check if we have the zero block or not to decide if we start from zero or the next.
-    // if mined is not zero, then can assume it is the next number after it.
-    let mut mined_number = storage.read_mined_block_number().await?;
-    let zero_block = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
-    if not(mined_number.is_zero()) || zero_block.is_some() {
-        mined_number = mined_number.next();
-    }
-    Ok(mined_number)
 }
 
 // Finds the block number to stop the import job.
