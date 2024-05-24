@@ -35,7 +35,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
             Some(block_number) => tracing::info!(?block_number, "relayed"),
             None => {
                 tracing::info!("no pending block found");
-                tokio::time::sleep(backoff).await
+                tokio::time::sleep(backoff).await;
             }
         };
     }

@@ -74,7 +74,7 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
             };
         });
     } else {
-        registry.init()
+        registry.init();
     }
 
     tracing::info!("started tracing");
