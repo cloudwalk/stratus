@@ -120,11 +120,13 @@ impl Consensus {
     // later we want the leader to GENERATE blocks
     // and even later we want this sync to be replaced by a gossip protocol or raft
     pub fn get_chain_url(&self, config: RunWithImporterConfig) -> (String, Option<String>) {
-        if Self::is_follower(self.leader_name.clone()) {
-            if let Some(namespace) = Self::current_namespace() {
-                return (format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None);
-            }
-        }
+        //XXX HACK temporarily removed this so we have no delay
+        //XXX if Self::is_follower(self.leader_name.clone()) {
+        //XXX     if let Some(namespace) = Self::current_namespace() {
+        //XXX         return (format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None);
+        //XXX     }
+        //XXX }
+        //XXX HACK temporarily removed this so we have no delay
         (config.online.external_rpc, config.online.external_rpc_ws)
     }
 
