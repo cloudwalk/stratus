@@ -44,7 +44,7 @@ pub async fn init_tracing(url: Option<&String>) {
 
     // configure tokio console layer
     println!("tracing enabling tokio console");
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+    //let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
 
     // configure opentelemetry layer
     let opentelemetry_layer = match url {
@@ -65,16 +65,16 @@ pub async fn init_tracing(url: Option<&String>) {
     // init registry
     tracing_subscriber::registry()
         .with(stdout_layer)
-        .with(console_layer)
+        //.with(console_layer)
         .with(opentelemetry_layer)
         .init();
 
-    // init tokio console server
+/*    // init tokio console server
     spawn_named("console::grpc-server", async move {
         if let Err(e) = console_server.serve().await {
             tracing::error!(reason = ?e, "failed to start tokio-console server");
         };
-    });
+    });*/
 
     tracing::info!("started tracing");
 }
