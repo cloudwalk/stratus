@@ -13,6 +13,7 @@ use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
 
 use crate::config::RunWithImporterConfig;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
