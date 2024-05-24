@@ -50,6 +50,9 @@ const PARALLEL_RECEIPTS: usize = 100;
 /// Timeout for new newHeads event before fallback to polling.
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 
+/// Time to wait before we starting retrieving receipts because they are not immediatly available after the block is retrieved.
+const BACKOFF_RECEIPTS: Duration = Duration::from_millis(10);
+
 // -----------------------------------------------------------------------------
 // Execution
 // -----------------------------------------------------------------------------
@@ -284,6 +287,9 @@ async fn start_block_fetcher(chain: Arc<BlockchainClient>, backlog_tx: mpsc::Unb
 async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
     // fetch block
     let block = fetch_block(Arc::clone(&chain), number).await;
+
+    // wait some time until receipts are available
+    let _ = tokio::time::sleep(BACKOFF_RECEIPTS).await;
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
