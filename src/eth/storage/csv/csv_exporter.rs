@@ -364,7 +364,7 @@ impl CsvExporter {
 
     fn export_account_changes(&mut self, now: String, number: BlockNumber, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
         for change in changes {
-            if change.is_account_creation() {
+            if change.is_creation() {
                 self.accounts_id.value += 1;
                 let change_bytecode = change.bytecode.take_ref().and_then(|x| x.clone().map(to_bytea)).unwrap_or(NULL.to_string());
                 let row = [

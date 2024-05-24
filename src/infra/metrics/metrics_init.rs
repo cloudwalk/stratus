@@ -7,6 +7,7 @@ use metrics_exporter_prometheus::Matcher;
 use metrics_exporter_prometheus::PrometheusBuilder;
 
 use crate::config::MetricsHistogramKind;
+use crate::infra::metrics::metrics_for_consensus;
 use crate::infra::metrics::metrics_for_evm;
 use crate::infra::metrics::metrics_for_executor;
 use crate::infra::metrics::metrics_for_importer_online;
@@ -39,6 +40,7 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
     metrics.extend(metrics_for_storage_read());
     metrics.extend(metrics_for_storage_write());
     metrics.extend(metrics_for_rocks());
+    metrics.extend(metrics_for_consensus());
 
     // init exporter
     let mut builder = PrometheusBuilder::new();
