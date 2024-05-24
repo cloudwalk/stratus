@@ -131,16 +131,24 @@ impl BlockchainClient {
         }
     }
 
-    /// Retrieves a transaction.
+    /// Retrieves a transaction by hash.
     pub async fn get_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
+        tracing::debug!(%hash, "retrieving transaction");
+
         let hash = serde_json::to_value(hash)?;
-        Ok(self
+
+        let result = self
             .http
             .request::<Option<Transaction>, Vec<JsonValue>>("eth_getTransactionByHash", vec![hash])
-            .await?)
+            .await;
+
+        match result {
+            Ok(tx) => Ok(tx),
+            Err(e) => log_and_err!(reason = e, "failed to retrieve transaction by hash"),
+        }
     }
 
-    /// Retrieves a transaction receipt.
+    /// Retrieves a transaction receipt by hash.
     pub async fn get_transaction_receipt(&self, hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
         tracing::debug!(%hash, "retrieving transaction receipt");
 
