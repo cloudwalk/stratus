@@ -384,7 +384,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
             })
             .collect();
 
-        // handle created accounts (contracts)
+        // handle account created (contracts) or touched (everything else)
         if account_created {
             // parse bytecode slots
             let slot_indexes: HashSet<SlotAccess> = match account.bytecode {
@@ -398,9 +398,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
             // track account
             let account_changes = ExecutionAccountChanges::from_modified_values(account, account_modified_slots);
             execution_changes.insert(account_changes.address, account_changes);
-        }
-        // handle touched accounts (everything else that is not a contract)
-        else if account_touched {
+        } else if account_touched {
             let Some(account_changes) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
                 panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
