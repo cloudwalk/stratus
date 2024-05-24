@@ -111,7 +111,7 @@ impl ExternalRelayer {
             .expect("should not fail to create pgpool");
 
         Ok(Self {
-            substrate_chain: BlockchainClient::new_http(&config.forward_to).await?,
+            substrate_chain: BlockchainClient::new_http(&config.forward_to, config.rpc_timeout).await?,
             pool,
         })
     }

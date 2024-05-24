@@ -1,7 +1,8 @@
 mod importer_online;
 
 use stratus::config::ExternalRelayerConfig;
-use stratus::{GlobalServices, GlobalState};
+use stratus::GlobalServices;
+use stratus::GlobalState;
 
 const TASK_NAME: &str = "relayer";
 
@@ -35,7 +36,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
             None => {
                 tracing::info!("no pending block found");
                 tokio::time::sleep(backoff).await
-            },
+            }
         };
     }
 }

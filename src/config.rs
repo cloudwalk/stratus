@@ -362,16 +362,29 @@ impl ExternalRelayerClientConfig {
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ExternalRelayerServerConfig {
-    #[arg(long = "relayer-db-url", env = "RELAYER_DB_URL")]
+    /// Postgresql url.
+    #[arg(long = "db-url", env = "DB_URL")]
     pub url: String,
-    #[arg(long = "relayer-db-connections", env = "RELAYER_DB_CONNECTIONS", default_value = "5")]
+
+    /// Connections to database.
+    #[arg(long = "db-connections", env = "DB_CONNECTIONS", default_value = "5")]
     pub connections: u32,
-    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", default_value = "1s")]
+
+    /// Timeout to acquire connections to the database.
+    #[arg(long = "db-timeout", value_parser=parse_duration, env = "DB_TIMEOUT", default_value = "1s")]
     pub acquire_timeout: Duration,
-    #[arg(long = "relayer-forward-to", env = "RELAYER_FORWARD_TO")]
+
+    /// RPC to forward to.
+    #[arg(long = "forward-to", env = "RELAYER_FORWARD_TO")]
     pub forward_to: String,
-    #[arg(long = "relayer-db-backoff", value_parser=parse_duration, env = "RELAYER_DB_BACKOFF", default_value = "10ms")]
+
+    /// Backoff.
+    #[arg(long = "backoff", value_parser=parse_duration, env = "BACKOFF", default_value = "10ms")]
     pub backoff: Duration,
+
+    /// RPC response timeout.
+    #[arg(long = "rpc-timeout", value_parser=parse_duration, env = "RPC_TIMEOUT", default_value = "2s")]
+    pub rpc_timeout: Duration,
 }
 
 impl ExternalRelayerServerConfig {
