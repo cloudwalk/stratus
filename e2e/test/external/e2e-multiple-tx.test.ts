@@ -20,7 +20,7 @@ describe("Multiple Transactions Per Block", () => {
             expectedCounterPartyBalance += amount;
         }
 
-        for (const account of randomAccounts(3)) {
+        for (const account of randomAccounts(100)) {
             signedTxs.push(await account.signWeiTransfer(counterParty.address, 0));
         }
 
@@ -45,7 +45,7 @@ describe("Multiple Transactions Per Block", () => {
             expect(latestBlockAfterMining.transactions.map((tx: any) => tx.hash)).to.include(txHash);
         }
 
-        // check if transactions receipt
+        // check if transactions receipt are valid
         for (let txHash of txHashes) {
             const receipt = await send('eth_getTransactionReceipt', [txHash]);
             expect(receipt).to.exist;
