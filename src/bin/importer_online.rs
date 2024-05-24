@@ -181,11 +181,11 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
         if GlobalState::warn_if_shutdown(TASK_NAME) {
             return;
         }
-        tracing::info!("fetching current block number");
 
         // if we have a subscription, try to read from subscription.
         // in case of failure, re-subscribe because current subscription may have been dropped in the server.
         if let Some(sub) = &mut sub_new_heads {
+            tracing::info!("awaiting block number from newHeads subscription");
             let resubscribe = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                 Ok(Some(Ok(block))) => {
                     tracing::info!(number = %block.number(), "newHeads event received");
@@ -259,12 +259,12 @@ async fn start_block_fetcher(chain: Arc<BlockchainClient>, backlog_tx: mpsc::Unb
         }
 
         // we are behind current, so we will fetch multiple blocks in parallel to catch up
-        let mut block_diff = rpc_current_number.saturating_sub(number.as_u64());
-        block_diff = min(block_diff, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+        let mut blocks_to_fetch = rpc_current_number.saturating_sub(number.as_u64()) + 1;
+        blocks_to_fetch = min(blocks_to_fetch, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
 
-        let mut tasks = Vec::with_capacity(block_diff as usize);
-        while block_diff > 0 {
-            block_diff -= 1;
+        let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
+        while blocks_to_fetch > 0 {
+            blocks_to_fetch -= 1;
             tasks.push(fetch_block_and_receipts(Arc::clone(&chain), number));
             number = number.next();
         }
