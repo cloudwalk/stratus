@@ -117,6 +117,7 @@ impl ExternalRelayer {
     }
 
     /// Polls the next block to be relayed and relays it to Substrate.
+    #[tracing::instrument(skip_all)]
     pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
         let Some(row) = sqlx::query!(
             r#"UPDATE relayer_blocks
@@ -171,6 +172,7 @@ impl ExternalRelayer {
     ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
     ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
     ///     and contract calls that is not taken into consideration yet.
+    #[tracing::instrument(skip_all)]
     fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionMined, i32> {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
@@ -216,6 +218,7 @@ impl ExternalRelayer {
 
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
     /// calling eth_getTransactionByHash.
+    #[tracing::instrument(skip_all)]
     pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
         let tx = self
             .substrate_chain
@@ -263,6 +266,7 @@ impl ExternalRelayer {
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
     /// and by extension creating new roots for a future call. Returns `None` if the graph
     /// is empty.
+    #[tracing::instrument(skip_all)]
     fn take_roots(dag: &mut StableDag<TransactionMined, i32>) -> Option<Vec<TransactionMined>> {
         let mut root_indexes = vec![];
         for index in dag.node_identifiers() {
@@ -283,6 +287,7 @@ impl ExternalRelayer {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     async fn relay_dag(&self, mut dag: StableDag<TransactionMined, i32>) -> anyhow::Result<()> {
         let mut results = vec![];
         while let Some(roots) = Self::take_roots(&mut dag) {
