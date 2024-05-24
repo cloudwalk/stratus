@@ -93,6 +93,10 @@ pub struct CommonConfig {
     /// Url to the tracing collector (Opentelemetry over gRPC)
     #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
     pub tracing_url: Option<String>,
+
+    /// Enables tokio-console.
+    #[arg(long = "enable-tokio-console", env = "ENABLE_TOKIO_CONSOLE", default_value="true")]
+    pub enable_tokio_console: bool,
 }
 
 impl WithCommonConfig for CommonConfig {

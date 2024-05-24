@@ -18,7 +18,7 @@ use crate::ext::not;
 use crate::ext::spawn_named;
 
 /// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>) {
+pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     println!("starting tracing");
 
     // configure stdout layer
@@ -42,10 +42,6 @@ pub async fn init_tracing(url: Option<&String>) {
             .boxed()
     };
 
-    // configure tokio console layer
-    println!("tracing enabling tokio console");
-    //let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
-
     // configure opentelemetry layer
     let opentelemetry_layer = match url {
         Some(url) => {
@@ -63,18 +59,23 @@ pub async fn init_tracing(url: Option<&String>) {
     };
 
     // init registry
-    tracing_subscriber::registry()
-        .with(stdout_layer)
-        //.with(console_layer)
-        .with(opentelemetry_layer)
-        .init();
+    let registry = tracing_subscriber::registry().with(stdout_layer).with(opentelemetry_layer);
 
-/*    // init tokio console server
-    spawn_named("console::grpc-server", async move {
-        if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, "failed to start tokio-console server");
-        };
-    });*/
+    if enable_console {
+        // configure tokio console layer
+        println!("tracing enabling tokio console");
+        let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+        registry.with(console_layer).init();
+
+        // init tokio console server
+        spawn_named("console::grpc-server", async move {
+            if let Err(e) = console_server.serve().await {
+                tracing::error!(reason = ?e, "failed to start tokio-console server");
+            };
+        });
+    } else {
+        registry.init()
+    }
 
     tracing::info!("started tracing");
 }
