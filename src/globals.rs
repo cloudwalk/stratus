@@ -56,7 +56,7 @@ where
         runtime.block_on(spawn_signal_handler())?;
 
         // init tracing
-        runtime.block_on(infra::init_tracing(config.common().tracing_url.as_ref(), config.common().enable_tokio_console));
+        runtime.block_on(infra::init_tracing(config.common().tracing_url.as_ref(), !config.common().disable_tokio_console));
 
         Ok(Self {
             config,
