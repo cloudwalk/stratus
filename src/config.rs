@@ -363,7 +363,7 @@ pub struct ExternalRelayerServerConfig {
     pub acquire_timeout: Duration,
     #[arg(long = "relayer-forward-to", env = "RELAYER_FORWARD_TO", required = false)]
     pub forward_to: String,
-    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", required = false)]
+    #[arg(long = "relayer-db-backoff", value_parser=parse_duration, env = "RELAYER_DB_BACKOFF", required = false)]
     pub backoff: Duration,
 }
 
