@@ -1,0 +1,56 @@
+name: Check Features
+
+on:
+  pull_request:
+    branches:
+      - '*'
+    paths:
+      - 'src/**'
+      - '.github/workflows/check-features.yml'
+      - 'justfile'
+      - 'Cargo.toml'
+    
+  workflow_dispatch:
+
+jobs:
+  check_features:
+    name: Check Features
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Cache Cargo Registry and Target Directory
+        uses: actions/cache@v4.0.2
+        id: cache-cargo
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: ${{ runner.os }}-v2-cargo-stable-release-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-v2-cargo-stable-release-
+
+      - name: Set up Rust
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - name: Set up Just
+        uses: extractions/setup-just@v1
+
+      - name: Set up Test Dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+          cargo install cargo-hack || true
+
+      - name: Run e2e tests
+        run: just check-features
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          RUST_LOG: off
+          RELEASE: 1
