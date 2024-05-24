@@ -31,6 +31,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StratusStorage;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
+use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
@@ -119,6 +120,9 @@ impl ExternalRelayer {
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(skip_all)]
     pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let Some(row) = sqlx::query!(
             r#"UPDATE relayer_blocks
                 SET relayed = true
@@ -143,6 +147,9 @@ impl ExternalRelayer {
         let dag = Self::compute_tx_dag(block.transactions);
 
         self.relay_dag(dag).await?; // do something with result?
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_next_block(start.elapsed());
 
         Ok(Some(block_number))
     }
@@ -176,6 +183,9 @@ impl ExternalRelayer {
     ///     and contract calls that is not taken into consideration yet.
     #[tracing::instrument(skip_all)]
     fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionMined, i32> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
         let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
@@ -215,6 +225,10 @@ impl ExternalRelayer {
                 }
             }
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_compute_tx_dag(start.elapsed());
+
         dag
     }
 
@@ -223,6 +237,9 @@ impl ExternalRelayer {
     #[tracing::instrument(skip_all)]
     pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
         tracing::debug!(?tx_mined.input.hash, "relaying transaction");
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let tx = self
             .substrate_chain
             .send_raw_transaction(Transaction::from(tx_mined.input.clone()).rlp())
@@ -233,6 +250,9 @@ impl ExternalRelayer {
             // should retry?
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_and_check_mempool(start.elapsed());
         Ok((tx, ExternalReceipt(tx_mined.into())))
     }
 
@@ -273,6 +293,9 @@ impl ExternalRelayer {
     /// is empty.
     #[tracing::instrument(skip_all)]
     fn take_roots(dag: &mut StableDag<TransactionMined, i32>) -> Option<Vec<TransactionMined>> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let mut root_indexes = vec![];
         for index in dag.node_identifiers() {
             if dag.parents(index).walk_next(dag).is_none() {
@@ -285,6 +308,9 @@ impl ExternalRelayer {
             roots.push(dag.remove_node(root).unwrap()); // todo: unwrap -> expect
         }
 
+        #[cfg(feature = "metrics")]
+        metrics::inc_take_roots(start.elapsed());
+
         if roots.is_empty() {
             None
         } else {
@@ -295,6 +321,9 @@ impl ExternalRelayer {
     #[tracing::instrument(skip_all)]
     async fn relay_dag(&self, mut dag: StableDag<TransactionMined, i32>) -> anyhow::Result<()> {
         tracing::debug!("relaying transactions");
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let mut results = vec![];
         while let Some(roots) = Self::take_roots(&mut dag) {
             let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
@@ -307,6 +336,9 @@ impl ExternalRelayer {
             .collect::<Result<Vec<_>, _>>()?; // do something with this result
 
         join_all(futures).await; // xxx: do something with the result
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_dag(start.elapsed());
 
         Ok(())
     }
