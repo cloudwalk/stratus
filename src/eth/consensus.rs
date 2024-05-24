@@ -11,6 +11,13 @@ use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
+use tonic::transport::Channel;
+use tonic::{Request, Response, Status};
+pub mod raft {
+    tonic::include_proto!("raft");
+}
+use raft::raft_service_server::{RaftService, RaftServiceServer};
+use raft::{AppendEntriesRequest, AppendEntriesResponse, Entry, raft_service_client::RaftServiceClient};
 
 use crate::config::RunWithImporterConfig;
 use crate::infra::BlockchainClient;
@@ -19,7 +26,7 @@ const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Entry {
+pub struct LogEntry {
     index: u64,
     data: String,
 }
@@ -65,7 +72,7 @@ impl Consensus {
 
                     //TODO use gRPC instead of jsonrpc
                     //FIXME for now, this has no colateral efects, but it will have in the future
-                    match Self::append_entries_to_followers(vec![Entry { index: 0, data: data.clone() }], followers.clone()).await {
+                    match Self::append_entries_to_followers(vec![LogEntry { index: 0, data: data.clone() }], followers.clone()).await {
                         Ok(_) => {
                             tracing::info!("Data sent to followers: {}", data);
                         }
@@ -148,15 +155,23 @@ impl Consensus {
         Ok(followers)
     }
 
-    async fn append_entries(follower: &str, entries: Vec<Entry>) -> Result<(), anyhow::Error> {
-        let client = BlockchainClient::new_http_ws(follower, None, Duration::from_secs(2)).await?;
+    async fn append_entries(follower: String, entries: Vec<LogEntry>) -> Result<(), anyhow::Error> {
+        let mut client = RaftServiceClient::connect(follower.clone()).await?;
 
         for attempt in 1..=RETRY_ATTEMPTS {
-            let response = client.append_entries(entries.clone()).await;
+            let grpc_entries: Vec<Entry> = entries.iter().map(|e| Entry {
+                index: e.index,
+                data: e.data.clone(),
+            }).collect();
+
+            let request = Request::new(AppendEntriesRequest { entries: grpc_entries });
+            let response = client.append_entries(request).await;
             match response {
                 Ok(resp) => {
-                    tracing::debug!("Entries appended to follower {}: attempt {}: {:?}", follower, attempt, resp);
-                    return Ok(());
+                    if resp.into_inner().success {
+                        tracing::debug!("Entries appended to follower {}: attempt {}: success", follower, attempt);
+                        return Ok(());
+                    }
                 }
                 Err(e) => tracing::error!("Error appending entries to follower {}: attempt {}: {:?}", follower, attempt, e),
             }
@@ -166,7 +181,7 @@ impl Consensus {
         Err(anyhow!("Failed to append entries to {} after {} attempts", follower, RETRY_ATTEMPTS))
     }
 
-    pub async fn append_entries_to_followers(entries: Vec<Entry>, followers: Vec<String>) -> Result<(), anyhow::Error> {
+    pub async fn append_entries_to_followers(entries: Vec<LogEntry>, followers: Vec<String>) -> Result<(), anyhow::Error> {
         for entry in entries {
             for follower in &followers {
                 if let Err(e) = Self::append_entries(follower, vec![entry.clone()]).await {
