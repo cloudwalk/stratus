@@ -65,15 +65,15 @@ impl Consensus {
 
                     //TODO use gRPC instead of jsonrpc
                     //FIXME for now, this has no colateral efects, but it will have in the future
-                    match Self::append_entries_to_followers(vec![Entry { index: 0, data: data.clone() }], followers.clone()).await {
-                        Ok(_) => {
-                            tracing::info!("Data sent to followers: {}", data);
-                        }
-                        Err(e) => {
-                            //TODO rediscover followers on comunication error
-                            tracing::error!("Failed to send data to followers: {}", e);
-                        }
-                    }
+                    //XXX match Self::append_entries_to_followers(vec![Entry { index: 0, data: data.clone() }], followers.clone()).await {
+                    //XXX     Ok(_) => {
+                    //XXX         tracing::info!("Data sent to followers: {}", data);
+                    //XXX     }
+                    //XXX     Err(e) => {
+                    //XXX         //TODO rediscover followers on comunication error
+                    //XXX         tracing::error!("Failed to send data to followers: {}", e);
+                    //XXX     }
+                    //XXX }
                 }
             }
         });
