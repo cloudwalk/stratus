@@ -12,6 +12,7 @@ import {
     send,
     sendAndGetError,
     sendExpect,
+    sendEvmMine,
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
@@ -104,7 +105,7 @@ describe("JSON-RPC", () => {
 
         it("evm_mine", async () => {
             let prev_number = (await latest()).block_number;
-            await send("evm_mine", []);
+            await sendEvmMine();
             expect((await latest()).block_number).eq(prev_number + 1);
         });
 
@@ -112,20 +113,20 @@ describe("JSON-RPC", () => {
             let target = Math.floor(Date.now() / 1000) + 10;
             it("Should set the next block timestamp", async () => {
                 await send("evm_setNextBlockTimestamp", [target]);
-                await send("evm_mine", []);
+                await sendEvmMine();
                 expect((await latest()).timestamp).eq(target);
             });
 
             it("Should offset subsequent timestamps", async () => {
                 await new Promise((resolve) => setTimeout(resolve, 1000));
-                await send("evm_mine", []);
+                await sendEvmMine();
                 expect((await latest()).timestamp).to.be.greaterThan(target);
             });
 
             it("Should reset the changes when sending 0", async () => {
                 await send("evm_setNextBlockTimestamp", [0]);
                 let mined_timestamp = Math.floor(Date.now() / 1000);
-                await send("evm_mine", []);
+                await sendEvmMine();
                 let latest_timestamp = (await latest()).timestamp;
                 expect(latest_timestamp)
                     .gte(mined_timestamp)
@@ -136,10 +137,10 @@ describe("JSON-RPC", () => {
                 const past = Math.floor(Date.now() / 1000);
                 await new Promise((resolve) => setTimeout(resolve, 2000));
                 await send("evm_setNextBlockTimestamp", [past]);
-                await send("evm_mine", []);
+                await sendEvmMine();
                 expect((await latest()).timestamp).eq(past);
                 await new Promise((resolve) => setTimeout(resolve, 1000));
-                await send("evm_mine", []);
+                await sendEvmMine();
                 expect((await latest()).timestamp)
                     .to.be.greaterThan(past)
                     .lessThan(Math.floor(Date.now() / 1000));

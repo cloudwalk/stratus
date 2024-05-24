@@ -206,6 +206,12 @@ export async function sendGetBlockNumber(): Promise<number> {
     return parseInt(result, 16);
 }
 
+/// Mines a block.
+export async function sendEvmMine(): Promise<any> {
+    const result = await send("evm_mine", []);
+    return result;
+}
+
 /// Open a WebSocket connection and return the socket
 export function openWebSocketConnection(): WebSocket {
     const socket = new WebSocket(providerUrl.replace("http", "ws"));
