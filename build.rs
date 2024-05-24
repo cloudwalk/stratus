@@ -30,7 +30,9 @@ fn update_signature_file() {
 
     let signature_file_path = out_dir().join("signatures.rs");
 
-    update_file_if_contents_changed(signatures_file_content, signature_file_path);
+    if let Err(err) = fs::write(&signature_file_path, signatures_file_content) {
+        panic!("failed to write to file {signature_file_path:?}: reason={err:?}");
+    }
 }
 
 const SIGNATURES_DIR: &str = "static/contracts/*.signatures";
@@ -108,20 +110,6 @@ fn parse_signature(input: &str) -> IResult<&str, (Vec<u8>, &str)> {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-fn update_file_if_contents_changed(new_contents: String, path: PathBuf) {
-    let current_file_contents = fs::read(&path);
-
-    if current_file_contents.is_ok_and(|contents| contents == new_contents.as_bytes()) {
-        // do nothing, file is already written
-        // by not writting it again, we avoid retriggering compilation
-    } else {
-        // update it
-        if let Err(err) = fs::write(&path, new_contents) {
-            panic!("failed to write to file {path:?}: reason={err:?}");
-        }
-    }
-}
 
 /// Read compiler ENV var OUT_DIR
 fn out_dir() -> PathBuf {
