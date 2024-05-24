@@ -160,7 +160,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
     const TASK_NAME: &str = "external-number-fetcher";
 
     // subscribe to newHeads event if WS is enabled
-    let mut sub_new_heads = match chain.is_ws_enabled() {
+    let mut sub_new_heads = match chain.supports_ws() {
         true => {
             tracing::info!("subscribing {} to newHeads event", TASK_NAME);
             match chain.subscribe_new_heads().await {
@@ -208,7 +208,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
 
             // resubscribe if necessary
             // only update the existing subscription if succedeed, otherwise we will try again in the iteration of the loop
-            if chain.is_ws_enabled() && resubscribe {
+            if chain.supports_ws() && resubscribe {
                 tracing::info!("resubscribing to newHeads event");
                 match chain.subscribe_new_heads().await {
                     Ok(sub) => sub_new_heads = Some(sub),
@@ -221,7 +221,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
 
         // fallback to polling
         tracing::warn!("number-fetcher falling back to http polling because subscription failed or it not enabled");
-        match chain.get_current_block_number().await {
+        match chain.fetch_block_number().await {
             Ok(number) => {
                 tracing::info!(
                     %number,
@@ -300,7 +300,7 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
     let mut backoff = 10;
     loop {
         tracing::info!(%number, "fetching block");
-        let block = match chain.get_block_by_number(number).await {
+        let block = match chain.fetch_block(number).await {
             Ok(json) => json,
             Err(e) => {
                 backoff *= 2;
@@ -334,7 +334,7 @@ async fn fetch_receipt(chain: Arc<BlockchainClient>, number: BlockNumber, hash: 
     loop {
         tracing::info!(%number, %hash, "fetching receipt");
 
-        match chain.get_transaction_receipt(hash).await {
+        match chain.fetch_receipt(hash).await {
             Ok(Some(receipt)) => return receipt,
             Ok(None) => {
                 tracing::warn!(%number, %hash, "receipt not available yet because block is not mined. retrying now.");

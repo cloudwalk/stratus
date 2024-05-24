@@ -158,7 +158,7 @@ impl Consensus {
         let client = BlockchainClient::new_http_ws(follower, None, Duration::from_secs(2)).await?;
 
         for attempt in 1..=RETRY_ATTEMPTS {
-            let response = client.append_entries(entries.clone()).await;
+            let response = client.send_append_entries(entries.clone()).await;
             match response {
                 Ok(resp) => {
                     tracing::debug!("Entries appended to follower {}: attempt {}: {:?}", follower, attempt, resp);
