@@ -181,6 +181,7 @@ impl ExternalRelayer {
     ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
     ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
     ///     and contract calls that is not taken into consideration yet.
+    /// If this algorithm is correct we could do away with StableDag and use StableGraph instead, for better performance
     #[tracing::instrument(skip_all)]
     fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionMined, i32> {
         #[cfg(feature = "metrics")]
