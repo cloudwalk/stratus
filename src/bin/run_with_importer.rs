@@ -10,6 +10,7 @@ use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::join;
+use tokio::time::sleep;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RunWithImporterConfig>::init()?;
@@ -36,9 +37,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     // run rpc and importer-online in parallel
     let rpc_task = async move {
-        let res = serve_rpc(rpc_storage, rpc_executor, rpc_miner, config.address, config.executor.chain_id.into()).await;
-        GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");
-        res
+        //XXX we want it to sync without the server
+        sleep(std::time::Duration::from_secs(12)).await;
     };
 
     let importer_task = async move {
@@ -50,7 +50,6 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     // await both services to finish
     let (rpc_result, importer_result) = join!(rpc_task, importer_task);
     tracing::debug!(?rpc_result, ?importer_result, "rpc and importer tasks finished");
-    rpc_result?;
     importer_result?;
 
     Ok(())
