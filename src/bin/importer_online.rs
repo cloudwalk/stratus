@@ -51,7 +51,7 @@ const PARALLEL_RECEIPTS: usize = 100;
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 
 /// Time to wait before we starting retrieving receipts because they are not immediatly available after the block is retrieved.
-const BACKOFF_RECEIPTS: Duration = Duration::from_millis(10);
+const BACKOFF_RECEIPTS: Duration = Duration::from_millis(45);
 
 // -----------------------------------------------------------------------------
 // Execution
