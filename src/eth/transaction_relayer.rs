@@ -240,6 +240,7 @@ impl ExternalRelayer {
         tracing::debug!(?tx_mined.input.hash, "relaying transaction");
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+        tracing::debug!(?tx_mined.input);
         let ethers_tx = Transaction::from(tx_mined.input.clone());
         tracing::debug!(?ethers_tx);
         let tx = self
