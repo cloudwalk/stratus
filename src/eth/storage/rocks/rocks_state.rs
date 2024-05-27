@@ -7,7 +7,6 @@ use anyhow::anyhow;
 use anyhow::Context;
 use futures::future::join_all;
 use itertools::Itertools;
-use num_traits::cast::ToPrimitive;
 use tokio::sync::mpsc;
 use tokio::task;
 use tokio::task::JoinHandle;
@@ -110,9 +109,9 @@ impl RocksStorageState {
     }
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
-        let account_block_number = self.accounts.get_current_block_number();
-
-        Ok((account_block_number.to_u64().unwrap_or(0u64)).into())
+        let block_number = self.blocks_by_number.last().map(|(num, _)| num).unwrap_or_default();
+        tracing::error!(?block_number);
+        Ok((u64::from(block_number)).into())
     }
 
     pub async fn sync_data(&self) -> anyhow::Result<()> {
