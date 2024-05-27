@@ -6,19 +6,25 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::api::Api;
 use kube::api::ListParams;
 use kube::Client;
+use raft::raft_service_server::RaftService;
+use raft::raft_service_server::RaftServiceServer;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
-use tonic::{transport::Server, Request, Response, Status};
-use raft::raft_service_server::{RaftService, RaftServiceServer};
+use tonic::transport::Server;
+use tonic::Request;
+use tonic::Response;
+use tonic::Status;
 
 pub mod raft {
     tonic::include_proto!("raft");
 }
 use raft::raft_service_client::RaftServiceClient;
-use raft::{AppendEntriesRequest, AppendEntriesResponse, Entry};
+use raft::AppendEntriesRequest;
+use raft::AppendEntriesResponse;
+use raft::Entry;
 
 use crate::config::RunWithImporterConfig;
 use crate::infra::metrics;
@@ -112,11 +118,7 @@ impl Consensus {
 
             let raft_service = RaftServiceImpl;
 
-            Server::builder()
-                .add_service(RaftServiceServer::new(raft_service))
-                .serve(addr)
-                .await
-                .unwrap();
+            Server::builder().add_service(RaftServiceServer::new(raft_service)).serve(addr).await.unwrap();
         });
     }
 
@@ -231,10 +233,7 @@ pub struct RaftServiceImpl;
 
 #[tonic::async_trait]
 impl RaftService for RaftServiceImpl {
-    async fn append_entries(
-        &self,
-        request: Request<AppendEntriesRequest>,
-    ) -> Result<Response<AppendEntriesResponse>, Status> {
+    async fn append_entries(&self, request: Request<AppendEntriesRequest>) -> Result<Response<AppendEntriesResponse>, Status> {
         let entries = request.into_inner().entries;
         // Process the entries here
 
