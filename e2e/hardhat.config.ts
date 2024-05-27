@@ -28,6 +28,7 @@ const config: HardhatUserConfig = {
                 mnemonic: ACCOUNTS_MNEMONIC,
                 accountsBalance: "18446744073709551615", // u64::max
             },
+            loggingEnabled: true,
         },
         stratus: {
             url: "http://localhost:3000",

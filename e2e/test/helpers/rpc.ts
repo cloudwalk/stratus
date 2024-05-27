@@ -1,6 +1,6 @@
 import axios from "axios";
 import { expect } from "chai";
-import { JsonRpcProvider, keccak256 } from "ethers";
+import { providers, JsonRpcProvider, keccak256 } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 import { Numbers } from "web3-types";
@@ -40,7 +40,17 @@ let providerUrl = (config.networks[currentNetwork() as string] as HttpNetworkCon
 if (!providerUrl) {
     providerUrl = "http://localhost:8545";
 }
-export const ETHERJS = new JsonRpcProvider(providerUrl);
+
+let ETHERJS = new JsonRpcProvider(providerUrl);
+
+export function updateProviderUrl(newUrl: string) {
+    providerUrl = newUrl;
+    ETHERJS = new JsonRpcProvider(providerUrl);
+}
+
+export function getProvider() {
+    return ETHERJS;
+}
 
 // Configure RPC logger if RPC_LOG env-var is configured.
 function log(event: any) {

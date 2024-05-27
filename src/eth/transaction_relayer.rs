@@ -31,6 +31,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StratusStorage;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
