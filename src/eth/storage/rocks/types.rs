@@ -229,6 +229,12 @@ impl From<BlockNumberRocksdb> for BlockNumber {
     }
 }
 
+impl From<BlockNumberRocksdb> for u64 {
+    fn from(value: BlockNumberRocksdb) -> Self {
+        value.0.as_u64()
+    }
+}
+
 #[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndexRocksdb(U256);
 
