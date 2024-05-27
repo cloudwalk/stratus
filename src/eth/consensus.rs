@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::env;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -17,6 +20,7 @@ use tonic::transport::Server;
 use tonic::Request;
 use tonic::Response;
 use tonic::Status;
+use tonic::transport::Channel;
 
 pub mod raft {
     tonic::include_proto!("raft");
@@ -38,9 +42,15 @@ pub struct LogEntry {
     data: String,
 }
 
+#[derive(Clone)]
+struct Peer {
+    address: String,
+    client: RaftServiceClient<Channel>,
+}
+
 pub struct Consensus {
     pub sender: Sender<String>,
-    leader_name: String,
+    leader_name: String, //XXX check the peers instead of using it
     //XXX current_index: AtomicU64,
 }
 
@@ -68,7 +78,7 @@ impl Consensus {
 
             tracing::info!(
                 "Discovered followers: {}",
-                followers.iter().map(|f| f.to_string()).collect::<Vec<String>>().join(", ")
+                followers.iter().map(|f| f.address.to_string()).collect::<Vec<String>>().join(", ")
             );
 
             while let Some(data) = receiver.recv().await {
@@ -154,7 +164,7 @@ impl Consensus {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn discover_followers() -> Result<Vec<String>, anyhow::Error> {
+    pub async fn discover_followers() -> Result<Vec<Peer>, anyhow::Error> {
         let client = Client::try_default().await?;
         let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
 
@@ -166,7 +176,14 @@ impl Consensus {
             if let Some(pod_name) = p.metadata.name {
                 if pod_name != Self::current_node().unwrap() {
                     if let Some(namespace) = Self::current_namespace() {
-                        followers.push(format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace));
+                        let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
+                        let client = RaftServiceClient::connect(address.clone()).await?;
+
+                        let peer = Peer {
+                            address,
+                            client,
+                        };
+                        followers.push(peer);
                     }
                 }
             }
@@ -175,11 +192,9 @@ impl Consensus {
         Ok(followers)
     }
 
-    async fn append_entries(follower: String, entries: Vec<LogEntry>) -> Result<(), anyhow::Error> {
+    async fn append_entries(mut follower: Peer, entries: Vec<LogEntry>) -> Result<(), anyhow::Error> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-
-        let mut client = RaftServiceClient::connect(follower.clone()).await?;
 
         for attempt in 1..=RETRY_ATTEMPTS {
             let grpc_entries: Vec<Entry> = entries
@@ -191,23 +206,23 @@ impl Consensus {
                 .collect();
 
             let request = Request::new(AppendEntriesRequest { entries: grpc_entries });
-            let response = client.append_entries(request).await;
+            let response = follower.client.append_entries(request).await;
 
             match response {
                 Ok(resp) =>
                     if resp.into_inner().success {
                         #[cfg(not(feature = "metrics"))]
-                        tracing::debug!("Entries appended to follower {}: attempt {}: success", follower, attempt);
+                        tracing::debug!("Entries appended to follower {}: attempt {}: success", follower.address, attempt);
                         #[cfg(feature = "metrics")]
                         tracing::debug!(
                             "Entries appended to follower {}: attempt {}: success time_elapsed: {:?}",
-                            follower,
+                            follower.address,
                             attempt,
                             start.elapsed()
                         );
                         return Ok(());
                     },
-                Err(e) => tracing::error!("Error appending entries to follower {}: attempt {}: {:?}", follower, attempt, e),
+                Err(e) => tracing::error!("Error appending entries to follower {}: attempt {}: {:?}", follower.address, attempt, e),
             }
             sleep(RETRY_DELAY).await;
         }
@@ -215,17 +230,17 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        Err(anyhow!("Failed to append entries to {} after {} attempts", follower, RETRY_ATTEMPTS))
+        Err(anyhow!("Failed to append entries to {} after {} attempts", follower.address, RETRY_ATTEMPTS))
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn append_entries_to_followers(entries: Vec<LogEntry>, followers: Vec<String>) -> Result<(), anyhow::Error> {
+    pub async fn append_entries_to_followers(entries: Vec<LogEntry>, followers: Vec<Peer>) -> Result<(), anyhow::Error> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
         for entry in entries {
             for follower in &followers {
                 if let Err(e) = Self::append_entries(follower.clone(), vec![entry.clone()]).await {
-                    tracing::debug!("Error appending entry to follower {}: {:?}", follower, e);
+                    tracing::debug!("Error appending entry to follower {}: {:?}", follower.address, e);
                 }
             }
         }
