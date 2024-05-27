@@ -469,20 +469,17 @@ impl RocksStorageState {
             })
             .map(|((tx_hash, _), _)| match self.read_transaction(&tx_hash.into()) {
                 Ok(Some(tx)) => Ok(tx.logs),
-                Ok(None) => {
-                    Err(anyhow!("the transaction the log was supposed to be in was not found")).with_context(|| format!("tx_hash = {:?}", tx_hash))
-                }
+                Ok(None) => Err(anyhow!("the transaction the log was supposed to be in was not found")).with_context(|| format!("tx_hash = {:?}", tx_hash)),
                 Err(err) => Err(err),
             })
             .flatten_ok()
             .filter_map(|log_res| match log_res {
-                Ok(log) => {
+                Ok(log) =>
                     if filter.matches(&log) {
                         Some(Ok(log))
                     } else {
                         None
-                    }
-                }
+                    },
                 err => Some(err),
             })
             .collect()
