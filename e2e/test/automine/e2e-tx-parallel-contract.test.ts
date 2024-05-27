@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { TestContractBalances, TestContractCounter } from "../typechain-types";
-import { ALICE, BOB, CHARLIE, randomAccounts } from "./helpers/account";
+import { ALICE, BOB, CHARLIE, randomAccounts } from "../helpers/account";
 import {
     TX_PARAMS,
     deployTestContractBalances,
@@ -9,7 +9,7 @@ import {
     sendGetNonce,
     sendRawTransactions,
     sendReset,
-} from "./helpers/rpc";
+} from "../helpers/rpc";
 
 describe("Transaction: parallel TestContractBalances", async () => {
     var _contract: TestContractBalances;

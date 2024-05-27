@@ -10,7 +10,6 @@ use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
-use stratus::eth::primitives::BlockSelection;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
@@ -20,11 +19,11 @@ use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
-use stratus::ext::not;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
@@ -55,7 +54,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
-        None => block_number_to_start(&storage).await?,
+        None => storage.read_block_number_to_resume_import().await?,
     };
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
@@ -129,12 +128,13 @@ async fn execute_block_importer(
     const TASK_NAME: &str = "external-block-executor";
     tracing::info!("starting {}", TASK_NAME);
 
+    // receives blocks and receipts from the backlog to reexecute and import
     loop {
         if GlobalState::warn_if_shutdown(TASK_NAME) {
             return Ok(());
         };
 
-        // retrieve new tasks to execute or exit
+        // receive new tasks to execute, or exit
         let Some((blocks, receipts)) = backlog_rx.recv().await else {
             tracing::info!("{} has no more blocks to process", TASK_NAME);
             return Ok(());
@@ -143,33 +143,56 @@ async fn execute_block_importer(
         // imports block transactions
         let block_start = blocks.first().unwrap().number();
         let block_end = blocks.last().unwrap().number();
+        let blocks_len = blocks.len();
         let block_last_index = blocks.len() - 1;
         let receipts = ExternalReceipts::from(receipts);
 
-        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "importing blocks");
+        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "reexecuting (and importing) blocks");
+        let mut transaction_count = 0;
+        let instant_before_execution = Instant::now();
+
         for (block_index, block) in blocks.into_iter().enumerate() {
-            async {
-                // re-execute block
-                executor.reexecute_external(&block, &receipts).await?;
-
-                // mine block
-                let mined_block = miner.mine_external().await?;
-
-                // export to csv OR permanent storage
-                match csv {
-                    Some(ref mut csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
-                    None => miner.commit(mined_block.clone()).await?,
-                };
-
-                // export snapshot for tests
-                if blocks_to_export_snapshot.contains(mined_block.number()) {
-                    export_snapshot(&block, &receipts, &mined_block)?;
-                }
-
-                anyhow::Ok(())
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
+                return Ok(());
             }
-            .await?;
+
+            // re-execute (and import) block
+            executor.reexecute_external(&block, &receipts).await?;
+            transaction_count += block.transactions.len();
+
+            // mine block
+            let mined_block = miner.mine_external().await?;
+
+            // export snapshot for tests
+            if blocks_to_export_snapshot.contains(mined_block.number()) {
+                export_snapshot(&block, &receipts, &mined_block)?;
+            }
+
+            // export to csv OR permanent storage
+            match &mut csv {
+                Some(csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
+                None => miner.commit(mined_block.clone()).await?,
+            }
         }
+
+        let seconds_elapsed = match instant_before_execution.elapsed().as_secs() as usize {
+            // avoid division by zero
+            0 => 1,
+            non_zero => non_zero,
+        };
+        let tps = transaction_count.checked_div(seconds_elapsed).unwrap_or(transaction_count);
+        let minutes_elapsed = seconds_elapsed as f64 / 60.0;
+        let blocks_per_minute = blocks_len as f64 / minutes_elapsed;
+        tracing::info!(
+            tps,
+            blocks_per_minute = format_args!("{blocks_per_minute:.2}"),
+            seconds_elapsed,
+            %block_start,
+            %block_end,
+            transaction_count,
+            receipts = receipts.len(),
+            "reexecuted blocks batch",
+        );
     }
 }
 
@@ -233,29 +256,10 @@ async fn execute_external_rpc_storage_loader(
 }
 
 async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, start: BlockNumber, end: BlockNumber) -> anyhow::Result<BacklogTask> {
-    tracing::info!(%start, %end, "retrieving blocks and receipts");
+    tracing::info!(%start, %end, "loading blocks and receipts");
     let blocks_task = rpc_storage.read_blocks_in_range(start, end);
     let receipts_task = rpc_storage.read_receipts_in_range(start, end);
     try_join!(blocks_task, receipts_task)
-}
-
-// Finds the block number to start the import job.
-async fn block_number_to_start(storage: &StratusStorage) -> anyhow::Result<BlockNumber> {
-    // when has an active number, resume from it because it was not imported yet.
-    let active_number = storage.read_active_block_number().await?;
-    if let Some(active_number) = active_number {
-        return Ok(active_number);
-    }
-
-    // fallback to last mined block
-    // if mined is zero, we need to check if we have the zero block or not to decide if we start from zero or the next.
-    // if mined is not zero, then can assume it is the next number after it.
-    let mut mined_number = storage.read_mined_block_number().await?;
-    let zero_block = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
-    if not(mined_number.is_zero()) || zero_block.is_some() {
-        mined_number = mined_number.next();
-    }
-    Ok(mined_number)
 }
 
 // Finds the block number to stop the import job.

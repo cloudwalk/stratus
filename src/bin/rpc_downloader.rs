@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
-    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc).await?);
+    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout).await?);
 
     // download balances and blocks
     download_balances(Arc::clone(&rpc_storage), &chain, config.initial_accounts).await?;
@@ -55,7 +55,7 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &Blo
 
     // download missing balances
     for address in address_to_download {
-        let balance = chain.get_balance(&address, Some(BlockNumber::ZERO)).await?;
+        let balance = chain.fetch_balance(&address, Some(BlockNumber::ZERO)).await?;
         rpc_storage.save_initial_account(address, balance).await?;
     }
 
@@ -65,7 +65,7 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &Blo
 async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<BlockchainClient>, paralellism: usize) -> anyhow::Result<()> {
     // prepare download block tasks
     let mut start = BlockNumber::ZERO;
-    let end = chain.get_current_block_number().await?;
+    let end = chain.fetch_block_number().await?;
     tracing::info!(blocks_by_taks = %BLOCKS_BY_TASK, %start, %end, "preparing block downloads");
 
     let mut tasks = Vec::new();
@@ -108,7 +108,7 @@ async fn download(
 
         loop {
             // retrieve block
-            let block_json = match chain.get_block_by_number(current).await {
+            let block_json = match chain.fetch_block(current).await {
                 Ok(json) => json,
                 Err(e) => {
                     tracing::warn!(reason = ?e, "retrying block download");
@@ -130,7 +130,7 @@ async fn download(
             let mut receipts_json = Vec::with_capacity(hashes.len());
             for hash in hashes {
                 loop {
-                    let receipt = match chain.get_transaction_receipt(hash).await {
+                    let receipt = match chain.fetch_receipt(hash).await {
                         Ok(receipt) => receipt,
                         Err(e) => {
                             tracing::warn!(reason = ?e, "retrying receipt download");

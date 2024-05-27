@@ -192,8 +192,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
         // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
         if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
-            let backup_channel = Arc::clone(&self.state.backup_trigger);
-            backup_channel.send(()).await.unwrap();
+            self.state.backup_trigger.send(()).await.unwrap();
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use rand::Rng;
 use stratus::config::StateValidatorConfig;
@@ -53,7 +54,7 @@ async fn validate_state(
 ) -> anyhow::Result<()> {
     match method {
         ValidatorMethodConfig::Rpc { url } => {
-            let chain = BlockchainClient::new_http(&url).await?;
+            let chain = BlockchainClient::new_http(&url, Duration::from_secs(2)).await?;
             validate_state_rpc(&chain, storage, start, end, max_sample_size, seed).await
         }
         _ => todo!(),
@@ -79,7 +80,7 @@ async fn validate_state_rpc(
     let slots = storage.read_slots_sample(start, end, max_sample_size, seed).await?;
     for sampled_slot in slots {
         let expected_value = chain
-            .get_storage_at(
+            .fetch_storage_at(
                 &sampled_slot.address,
                 &sampled_slot.index,
                 stratus::eth::primitives::StoragePointInTime::Past(sampled_slot.block_number),

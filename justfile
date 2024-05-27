@@ -160,7 +160,7 @@ test-int name="'*'":
 # ------------------------------------------------------------------------------
 
 # E2E: Execute Hardhat tests in the specified network
-e2e network="stratus" test="":
+e2e network="stratus" block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -170,32 +170,32 @@ e2e network="stratus" test="":
     fi
 
     if [ -z "{{test}}" ]; then
-        npx hardhat test test/*.test.ts --network {{network}}
+        npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}}
     else
-        npx hardhat test test/*.test.ts --network {{network}} --grep "{{test}}"
+        npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}} --grep "{{test}}"
     fi
 
 # E2E: Starts and execute Hardhat tests in Hardhat
-e2e-hardhat test="":
+e2e-hardhat block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
 
     echo "-> Starting Hardhat"
-    npx hardhat node &
+    BLOCK_MODE={{block-mode}} npx hardhat node &
 
     echo "-> Waiting Hardhat to start"
     wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
-    just e2e hardhat {{test}}
+    just e2e hardhat {{block-mode}} {{test}}
 
     echo "-> Killing Hardhat"
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus test="":
+e2e-stratus block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -203,13 +203,13 @@ e2e-stratus test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus {{test}}
+    just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -217,7 +217,7 @@ e2e-stratus test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-rocks test="":
+e2e-stratus-rocks block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -225,13 +225,13 @@ e2e-stratus-rocks test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus {{test}}
+    just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -239,7 +239,7 @@ e2e-stratus-rocks test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-postgres test="":
+e2e-stratus-postgres block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -254,13 +254,13 @@ e2e-stratus-postgres test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage {{ database_url }} > stratus.log &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     echo "-> Running E2E tests"
-    just e2e stratus {{test}}
+    just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
     echo "-> Killing Stratus"

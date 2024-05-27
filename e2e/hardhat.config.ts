@@ -21,7 +21,8 @@ const config: HardhatUserConfig = {
             gasPrice: 0,
             initialBaseFeePerGas: 0,
             mining: {
-                auto: true,
+                auto: process.env.BLOCK_MODE === 'automine' || process.env.BLOCK_MODE === '1s',
+                interval: process.env.BLOCK_MODE === 'automine' ? undefined : (process.env.BLOCK_MODE === '1s' ? 1000 : 0)
             },
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,

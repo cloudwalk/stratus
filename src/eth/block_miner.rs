@@ -206,7 +206,7 @@ impl BlockMiner {
 
     /// Persists a mined block to permanent storage and prepares new block.
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
-        tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
+        tracing::info!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 
         // extract fields to use in notifications
         let block_number = *block.number();
