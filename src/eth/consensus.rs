@@ -1,7 +1,4 @@
-use std::collections::HashMap;
 use std::env;
-use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -16,11 +13,11 @@ use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
+use tonic::transport::Channel;
 use tonic::transport::Server;
 use tonic::Request;
 use tonic::Response;
 use tonic::Status;
-use tonic::transport::Channel;
 
 pub mod raft {
     tonic::include_proto!("raft");
@@ -51,7 +48,7 @@ struct Peer {
 pub struct Consensus {
     pub sender: Sender<String>,
     leader_name: String, //XXX check the peers instead of using it
-    //XXX current_index: AtomicU64,
+                         //XXX current_index: AtomicU64,
 }
 
 impl Consensus {
@@ -179,10 +176,7 @@ impl Consensus {
                         let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
                         let client = RaftServiceClient::connect(address.clone()).await?;
 
-                        let peer = Peer {
-                            address,
-                            client,
-                        };
+                        let peer = Peer { address, client };
                         followers.push(peer);
                     }
                 }
