@@ -45,3 +45,8 @@ pub fn calculate_tps_and_bpm(duration: Duration, transaction_count: usize, block
     let blocks_per_minute = block_count as f64 / (seconds_elapsed / 60.0);
     (tps, blocks_per_minute)
 }
+
+pub fn calculate_tps(duration: Duration, transaction_count: usize) -> f64 {
+    let seconds_elapsed = duration.as_secs_f64() + f64::EPSILON;
+    transaction_count as f64 / seconds_elapsed
+}

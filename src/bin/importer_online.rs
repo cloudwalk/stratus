@@ -22,12 +22,14 @@ use stratus::infra::metrics;
 use stratus::infra::tracing::warn_task_rx_closed;
 use stratus::infra::tracing::warn_task_tx_closed;
 use stratus::infra::BlockchainClient;
+use stratus::utils::calculate_tps;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::sleep;
 use tokio::time::timeout;
+use tokio::time::Instant;
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -134,11 +136,24 @@ async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, m
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
 
-        tracing::info!(number = %block.number(), txs_len = block.transactions.len(), "reexecuting external block");
+        let instant_before_execution = Instant::now();
+
         if executor.reexecute_external(&block, &receipts).await.is_err() {
             GlobalState::shutdown_from(TASK_NAME, "failed to re-execute external block");
             return;
         };
+
+        let duration = instant_before_execution.elapsed();
+        let tps = calculate_tps(duration, block.transactions.len());
+
+        tracing::info!(
+            tps,
+            ?duration,
+            block_number = ?block.number(),
+            receipts = receipts.len(),
+            "reexecuted external block",
+        );
+
         if miner.mine_external_mixed_and_commit().await.is_err() {
             GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
             return;

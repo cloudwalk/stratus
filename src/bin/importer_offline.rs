@@ -185,7 +185,6 @@ async fn execute_block_importer(
             ?duration,
             %block_start,
             %block_end,
-            transaction_count,
             receipts = receipts.len(),
             "reexecuted blocks batch",
         );
