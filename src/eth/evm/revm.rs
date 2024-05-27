@@ -319,6 +319,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
     let changes = parse_revm_state(revm_result.state, execution_changes);
 
     tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
+
     EvmExecution {
         block_timestamp: input.block_timestamp,
         receipt_applied: false,
@@ -373,7 +374,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         );
         let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
 
-        // parse revm to internal representation
+        // parse revm types to stratus primitives
         let mut account: Account = (revm_address, revm_account.info).into();
         let account_modified_slots: Vec<Slot> = revm_account
             .storage
@@ -384,7 +385,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
             })
             .collect();
 
-        // status: created
+        // handle account created (contracts) or touched (everything else)
         if account_created {
             // parse bytecode slots
             let slot_indexes: HashSet<SlotAccess> = match account.bytecode {
@@ -395,16 +396,15 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
                 account.add_bytecode_slot_index(index);
             }
 
-            execution_changes.insert(account.address, ExecutionAccountChanges::from_modified_values(account, account_modified_slots));
-        }
-        // status: touched
-        else if account_touched {
-            let Some(touched_account) = execution_changes.get_mut(&address) else {
+            // track account
+            let account_changes = ExecutionAccountChanges::from_modified_values(account, account_modified_slots);
+            execution_changes.insert(account_changes.address, account_changes);
+        } else if account_touched {
+            let Some(account_changes) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
-                // TODO: panic! only when in dev-mode or try to refactor to avoid panic!
                 panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
             };
-            touched_account.apply_modifications(account, account_modified_slots);
+            account_changes.apply_modifications(account, account_modified_slots);
         }
     }
     execution_changes

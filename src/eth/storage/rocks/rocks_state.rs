@@ -398,7 +398,7 @@ impl RocksStorageState {
 
         let account_changes_future = tokio::task::spawn_blocking(move || {
             for change in changes_clone_for_accounts {
-                if change.is_account_change() {
+                if change.is_changed() {
                     let address: AddressRocksdb = change.address.into();
                     let mut account_info_entry = accounts.entry_or_insert_with(address, AccountRocksdb::default);
                     if let Some(nonce) = change.nonce.clone().take_modified() {
