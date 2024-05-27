@@ -6,21 +6,34 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::api::Api;
 use kube::api::ListParams;
 use kube::Client;
+use raft::raft_service_server::RaftService;
+use raft::raft_service_server::RaftServiceServer;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
+use tonic::transport::Server;
+use tonic::Request;
+use tonic::Response;
+use tonic::Status;
+
+pub mod raft {
+    tonic::include_proto!("raft");
+}
+use raft::raft_service_client::RaftServiceClient;
+use raft::AppendEntriesRequest;
+use raft::AppendEntriesResponse;
+use raft::Entry;
 
 use crate::config::RunWithImporterConfig;
 use crate::infra::metrics;
-use crate::infra::BlockchainClient;
 
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Entry {
+pub struct LogEntry {
     index: u64,
     data: String,
 }
@@ -66,19 +79,20 @@ impl Consensus {
 
                     //TODO use gRPC instead of jsonrpc
                     //FIXME for now, this has no colateral efects, but it will have in the future
-                    //XXX match Self::append_entries_to_followers(vec![Entry { index: 0, data: data.clone() }], followers.clone()).await {
-                    //XXX     Ok(_) => {
-                    //XXX         tracing::info!("Data sent to followers: {}", data);
-                    //XXX     }
-                    //XXX     Err(e) => {
-                    //XXX         //TODO rediscover followers on comunication error
-                    //XXX         tracing::error!("Failed to send data to followers: {}", e);
-                    //XXX     }
-                    //XXX }
+                    match Self::append_entries_to_followers(vec![LogEntry { index: 0, data: data.clone() }], followers.clone()).await {
+                        Ok(_) => {
+                            tracing::info!("Data sent to followers: {}", data);
+                        }
+                        Err(e) => {
+                            //TODO rediscover followers on comunication error
+                            tracing::error!("Failed to send data to followers: {}", e);
+                        }
+                    }
                 }
             }
         });
 
+        Self::initialize_server();
         Self { leader_name, sender }
     }
 
@@ -95,6 +109,17 @@ impl Consensus {
             leader_name: "standalone".to_string(),
             sender,
         }
+    }
+
+    fn initialize_server() {
+        tokio::spawn(async move {
+            tracing::info!("Starting consensus module server at port 3777");
+            let addr = "0.0.0.0:3777".parse().unwrap();
+
+            let raft_service = RaftServiceImpl;
+
+            Server::builder().add_service(RaftServiceServer::new(raft_service)).serve(addr).await.unwrap();
+        });
     }
 
     //FIXME TODO automate the way we gather the leader, instead of using a env var
@@ -141,7 +166,7 @@ impl Consensus {
             if let Some(pod_name) = p.metadata.name {
                 if pod_name != Self::current_node().unwrap() {
                     if let Some(namespace) = Self::current_namespace() {
-                        followers.push(format!("http://{}.stratus-api.{}.svc.cluster.local:3000", pod_name, namespace));
+                        followers.push(format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace));
                     }
                 }
             }
@@ -150,20 +175,38 @@ impl Consensus {
         Ok(followers)
     }
 
-    #[tracing::instrument(skip_all)]
-    async fn append_entries(follower: &str, entries: Vec<Entry>) -> Result<(), anyhow::Error> {
+    async fn append_entries(follower: String, entries: Vec<LogEntry>) -> Result<(), anyhow::Error> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let client = BlockchainClient::new_http_ws(follower, None, Duration::from_secs(2)).await?;
+        let mut client = RaftServiceClient::connect(follower.clone()).await?;
 
         for attempt in 1..=RETRY_ATTEMPTS {
-            let response = client.send_append_entries(entries.clone()).await;
+            let grpc_entries: Vec<Entry> = entries
+                .iter()
+                .map(|e| Entry {
+                    index: e.index,
+                    data: e.data.clone(),
+                })
+                .collect();
+
+            let request = Request::new(AppendEntriesRequest { entries: grpc_entries });
+            let response = client.append_entries(request).await;
+
             match response {
-                Ok(resp) => {
-                    tracing::debug!("Entries appended to follower {}: attempt {}: {:?}", follower, attempt, resp);
-                    return Ok(());
-                }
+                Ok(resp) =>
+                    if resp.into_inner().success {
+                        #[cfg(not(feature = "metrics"))]
+                        tracing::debug!("Entries appended to follower {}: attempt {}: success", follower, attempt);
+                        #[cfg(feature = "metrics")]
+                        tracing::debug!(
+                            "Entries appended to follower {}: attempt {}: success time_elapsed: {:?}",
+                            follower,
+                            attempt,
+                            start.elapsed()
+                        );
+                        return Ok(());
+                    },
                 Err(e) => tracing::error!("Error appending entries to follower {}: attempt {}: {:?}", follower, attempt, e),
             }
             sleep(RETRY_DELAY).await;
@@ -176,13 +219,12 @@ impl Consensus {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn append_entries_to_followers(entries: Vec<Entry>, followers: Vec<String>) -> Result<(), anyhow::Error> {
+    pub async fn append_entries_to_followers(entries: Vec<LogEntry>, followers: Vec<String>) -> Result<(), anyhow::Error> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-
         for entry in entries {
             for follower in &followers {
-                if let Err(e) = Self::append_entries(follower, vec![entry.clone()]).await {
+                if let Err(e) = Self::append_entries(follower.clone(), vec![entry.clone()]).await {
                     tracing::debug!("Error appending entry to follower {}: {:?}", follower, e);
                 }
             }
@@ -192,5 +234,22 @@ impl Consensus {
         metrics::inc_append_entries_to_followers(start.elapsed());
 
         Ok(())
+    }
+}
+
+pub struct RaftServiceImpl;
+
+#[tonic::async_trait]
+impl RaftService for RaftServiceImpl {
+    async fn append_entries(&self, request: Request<AppendEntriesRequest>) -> Result<Response<AppendEntriesResponse>, Status> {
+        let entries = request.into_inner().entries;
+        // Process the entries here
+
+        // For example, let's just print the entries
+        for entry in entries {
+            println!("Received entry: {:?}", entry);
+        }
+
+        Ok(Response::new(AppendEntriesResponse { success: true }))
     }
 }
