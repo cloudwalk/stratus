@@ -19,6 +19,7 @@ use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
+use stratus::utils::calculate_tps_and_bpm;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::runtime::Handle;
@@ -175,18 +176,13 @@ async fn execute_block_importer(
             }
         }
 
-        let seconds_elapsed = match instant_before_execution.elapsed().as_secs() as usize {
-            // avoid division by zero
-            0 => 1,
-            non_zero => non_zero,
-        };
-        let tps = transaction_count.checked_div(seconds_elapsed).unwrap_or(transaction_count);
-        let minutes_elapsed = seconds_elapsed as f64 / 60.0;
-        let blocks_per_minute = blocks_len as f64 / minutes_elapsed;
+        let duration = instant_before_execution.elapsed();
+        let (tps, bpm) = calculate_tps_and_bpm(duration, transaction_count, blocks_len);
+
         tracing::info!(
             tps,
-            blocks_per_minute = format_args!("{blocks_per_minute:.2}"),
-            seconds_elapsed,
+            blocks_per_minute = format_args!("{bpm:.2}"),
+            ?duration,
             %block_start,
             %block_end,
             transaction_count,

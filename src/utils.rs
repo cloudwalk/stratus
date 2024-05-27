@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
@@ -35,4 +37,11 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
     });
 
     Ok(())
+}
+
+pub fn calculate_tps_and_bpm(duration: Duration, transaction_count: usize, block_count: usize) -> (f64, f64) {
+    let seconds_elapsed = duration.as_secs_f64() + f64::EPSILON;
+    let tps = transaction_count as f64 / seconds_elapsed;
+    let blocks_per_minute = block_count as f64 / (seconds_elapsed / 60.0);
+    (tps, blocks_per_minute)
 }
