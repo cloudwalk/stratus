@@ -244,18 +244,12 @@ impl ExternalRelayer {
         tracing::debug!(?tx_mined.input.hash, "relaying transaction");
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-        tracing::debug!(?tx_mined.input);
+
         let mut ethers_tx = Transaction::from(tx_mined.input.clone());
-        ethers_tx.transaction_type = Some(1.into());
-        let rlp = ethers_tx.rlp();
-        tracing::debug!(?rlp);
-        let tx = self
-            .substrate_chain
-            .send_raw_transaction(rlp)
-            .await?;
+        let tx = self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await?;
 
         tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
-        while self.substrate_chain.get_transaction(tx_mined.input.hash).await?.is_none() {
+        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await?.is_none() {
             // should retry?
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -263,38 +257,6 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         metrics::inc_relay_and_check_mempool(start.elapsed());
         Ok((tx, ExternalReceipt(tx_mined.into())))
-    }
-
-    /// Forwards the transaction to the external blockchain if the execution was successful on our side.
-    #[tracing::instrument(skip_all)]
-    pub async fn relay(&self, tx_mined: TransactionMined) -> anyhow::Result<()> {
-        tracing::debug!(hash = %tx_mined.input.hash, "forwarding transaction");
-        if tx_mined.is_success() {
-            let tx_input = tx_mined.input.clone();
-            // handle success
-            let Some(external_receipt) = self.substrate_chain.send_raw_transaction(Transaction::from(tx_input).rlp()).await?.await? else {
-                return Err(anyhow!("transaction did not produce a receipt"));
-            };
-
-            let stratus_receipt = ExternalReceipt(tx_mined.into());
-
-            if let Err(compare_error) = external_receipt.compare(&stratus_receipt) {
-                let err_string = compare_error.to_string();
-                let error = log_and_err!("transaction mismatch!").context(err_string.clone());
-                sqlx::query!(
-                    "INSERT INTO mismatches (stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3)",
-                    serde_json::to_value(stratus_receipt)?,
-                    serde_json::to_value(external_receipt)?,
-                    err_string
-                )
-                .execute(&self.pool)
-                .await?; // should retry? fallback?
-                return error;
-            }
-        } else {
-            todo!("create empty transaction and send it or send it with 1 gas (we need to sign it... how??)")
-        }
-        Ok(())
     }
 
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
