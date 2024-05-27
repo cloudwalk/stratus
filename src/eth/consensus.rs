@@ -11,22 +11,17 @@ use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
-
 use tonic::Request;
-
 
 pub mod raft {
     tonic::include_proto!("raft");
 }
 use raft::raft_service_client::RaftServiceClient;
-
 use raft::AppendEntriesRequest;
-
 use raft::Entry;
 
 use crate::config::RunWithImporterConfig;
 use crate::infra::metrics;
-
 
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
