@@ -1,5 +1,6 @@
 use std::env;
 use std::fmt::Debug;
+use std::fmt::Display;
 
 use once_cell::sync::Lazy;
 use sentry::ClientInitGuard;
@@ -74,13 +75,22 @@ static CANCELLATION: Lazy<CancellationToken> = Lazy::new(CancellationToken::new)
 pub struct GlobalState;
 
 impl GlobalState {
-    /// Shutdown the application.
+    /// Shutdown the application, displaying the reason.
     ///
     /// Returns the formatted reason for shutdown.
     pub fn shutdown_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "application is shutting down");
         CANCELLATION.cancel();
         format!("{} {}", caller, reason)
+    }
+
+    /// Shutdown the application, displaying the reason and error.
+    ///
+    /// Returns the formatted reason for shutdown.
+    pub fn shutdown_with_caller_and_err(caller: &str, reason: &str, error: impl Display) -> String {
+        tracing::warn!(%caller, %reason, %error, "application is shutting down");
+        CANCELLATION.cancel();
+        format!("{} {}: {}", caller, reason, error)
     }
 
     /// Checks if the application is being shutdown.

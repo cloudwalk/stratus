@@ -138,8 +138,8 @@ async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, m
 
         let instant_before_execution = Instant::now();
 
-        if executor.reexecute_external(&block, &receipts).await.is_err() {
-            GlobalState::shutdown_from(TASK_NAME, "failed to re-execute external block");
+        if let Err(err) = executor.reexecute_external(&block, &receipts).await {
+            GlobalState::shutdown_with_caller_and_err(TASK_NAME, "failed to re-execute external block", err);
             return;
         };
 
@@ -154,8 +154,8 @@ async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, m
             "reexecuted external block",
         );
 
-        if miner.mine_external_mixed_and_commit().await.is_err() {
-            GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+        if let Err(err) = miner.mine_external_mixed_and_commit().await {
+            GlobalState::shutdown_with_caller_and_err(TASK_NAME, "failed to mine external block", err);
             return;
         };
 
@@ -183,8 +183,8 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
             tracing::info!("subscribing {} to newHeads event", TASK_NAME);
             match chain.subscribe_new_heads().await {
                 Ok(sub) => Some(sub),
-                Err(_) => {
-                    GlobalState::shutdown_from(TASK_NAME, "cannot subscribe to newHeads event");
+                Err(err) => {
+                    GlobalState::shutdown_with_caller_and_err(TASK_NAME, "cannot subscribe to newHeads event", err);
                     return;
                 }
             }
