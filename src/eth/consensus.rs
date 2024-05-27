@@ -196,7 +196,15 @@ impl Consensus {
             match response {
                 Ok(resp) =>
                     if resp.into_inner().success {
+                        #[cfg(not(feature = "metrics"))]
                         tracing::debug!("Entries appended to follower {}: attempt {}: success", follower, attempt);
+                        #[cfg(feature = "metrics")]
+                        tracing::debug!(
+                            "Entries appended to follower {}: attempt {}: success time_elapsed: {:?}",
+                            follower,
+                            attempt,
+                            start.elapsed()
+                        );
                         return Ok(());
                     },
                 Err(e) => tracing::error!("Error appending entries to follower {}: attempt {}: {:?}", follower, attempt, e),
@@ -205,10 +213,7 @@ impl Consensus {
         }
 
         #[cfg(feature = "metrics")]
-        {
-            metrics::inc_append_entries(start.elapsed());
-            tracing::debug!("Time elapsed appending to followers: {:?}", start.elapsed());
-        }
+        metrics::inc_append_entries(start.elapsed());
 
         Err(anyhow!("Failed to append entries to {} after {} attempts", follower, RETRY_ATTEMPTS))
     }
