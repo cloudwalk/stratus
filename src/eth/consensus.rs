@@ -205,7 +205,10 @@ impl Consensus {
         }
 
         #[cfg(feature = "metrics")]
-        metrics::inc_append_entries(start.elapsed());
+        {
+            metrics::inc_append_entries(start.elapsed());
+            tracing::debug!("Time elapsed appending to followers: {:?}", start.elapsed());
+        }
 
         Err(anyhow!("Failed to append entries to {} after {} attempts", follower, RETRY_ATTEMPTS))
     }
