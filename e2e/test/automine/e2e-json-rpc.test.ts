@@ -88,7 +88,7 @@ describe("JSON-RPC", () => {
             (await sendExpect("eth_blockNumber")).eq(ZERO);
             await sendEvmMine();
             (await sendExpect("eth_blockNumber")).eq(ONE);
-            await sendReset()
+            await sendReset();
         });
         it("eth_getBlockByNumber", async function () {
             let block: Block = await send("eth_getBlockByNumber", [ZERO, true]);
