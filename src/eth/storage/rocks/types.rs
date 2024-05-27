@@ -482,6 +482,7 @@ impl From<TransactionInputRocksdb> for TransactionInput {
             v: item.v,
             r: item.r,
             s: item.s,
+            tx_type: None
         }
     }
 }
