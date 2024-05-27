@@ -16,6 +16,7 @@ import {
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
+    ONE,
 } from "../helpers/rpc";
 
 describe("JSON-RPC", () => {
@@ -66,7 +67,7 @@ describe("JSON-RPC", () => {
             let gas = await send("eth_estimateGas", [tx]);
             expect(gas).match(HEX_PATTERN, "format");
 
-            const gasDec = parseInt(gas, 16); 
+            const gasDec = parseInt(gas, 16);
             expect(gasDec).to.be.greaterThan(0).and.lessThan(1_000_000);
         });
     });
@@ -85,6 +86,9 @@ describe("JSON-RPC", () => {
     describe("Block", () => {
         it("eth_blockNumber", async function () {
             (await sendExpect("eth_blockNumber")).eq(ZERO);
+            await sendEvmMine();
+            (await sendExpect("eth_blockNumber")).eq(ONE);
+            await sendReset()
         });
         it("eth_getBlockByNumber", async function () {
             let block: Block = await send("eth_getBlockByNumber", [ZERO, true]);
