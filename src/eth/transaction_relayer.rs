@@ -242,10 +242,11 @@ impl ExternalRelayer {
         let start = metrics::now();
         tracing::debug!(?tx_mined.input);
         let ethers_tx = Transaction::from(tx_mined.input.clone());
-        tracing::debug!(?ethers_tx);
+        let rlp = ethers_tx.rlp();
+        tracing::debug!(?rlp);
         let tx = self
             .substrate_chain
-            .send_raw_transaction(ethers_tx.rlp())
+            .send_raw_transaction(rlp)
             .await?;
 
         tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
