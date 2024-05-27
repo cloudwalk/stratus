@@ -11,12 +11,15 @@ use nom::sequence::separated_pair;
 use nom::IResult;
 
 fn main() {
+    tonic_build::compile_protos("proto/raft.proto").unwrap();
     // any code change
     println!("cargo:rerun-if-changed=src/");
     // used in signatures codegen
     println!("cargo:rerun-if-changed=static/");
     // fixture files that are "inserted" into test code
     println!("cargo:rerun-if-changed=tests/");
+    // retrigger database compile-time checks
+    println!("cargo:rerun-if-changed=.sqlx/");
 
     update_signature_file();
 }

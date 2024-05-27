@@ -34,6 +34,10 @@ use crate::log_and_err;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
+    /// This is needed for relaying transactions correctly, a transaction sent as Legacy should
+    /// be relayed using rlp to the legacy format, the same is true for the other possible formats.
+    /// Otherwise we'd need to re-sign the transactions to always encode in the same format.
+    pub tx_type: Option<U64>,
     /// TODO: Optional for external/older transactions, but it should be required for newer transactions.
     ///
     /// Maybe TransactionInput should be split into two structs for representing these two different requirements.
@@ -72,6 +76,7 @@ impl TransactionInput {
 impl Dummy<Faker> for TransactionInput {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
+            tx_type: Some(rng.next_u64().into()),
             chain_id: faker.fake_with_rng(rng),
             hash: faker.fake_with_rng(rng),
             nonce: faker.fake_with_rng(rng),
@@ -141,6 +146,7 @@ fn try_from_ethers_transaction(value: EthersTransaction, compute_signer: bool) -
     };
 
     Ok(TransactionInput {
+        tx_type: value.transaction_type,
         chain_id: match value.chain_id {
             Some(chain_id) => Some(chain_id.try_into()?),
             None => None,
@@ -179,6 +185,7 @@ impl From<TransactionInput> for EthersTransaction {
             v: value.v,
             r: value.r,
             s: value.s,
+            transaction_type: value.tx_type,
             ..Default::default()
         }
     }

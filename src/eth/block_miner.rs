@@ -94,6 +94,11 @@ impl BlockMiner {
         let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone()).await?;
 
+        if let Some(consensus) = &self.consensus {
+            let execution = format!("{:?}", tx_execution.clone());
+            consensus.sender.send(execution).await.unwrap();
+        }
+
         // decide what to do based on mining mode
         match self.mode {
             // * do not consensus transactions
@@ -106,10 +111,6 @@ impl BlockMiner {
             // * consensus transactions
             // * notify pending transactions
             BlockMinerMode::Interval(_) => {
-                if let Some(consensus) = &self.consensus {
-                    let execution = format!("{:?}", tx_execution.clone());
-                    consensus.sender.send(execution).await.unwrap();
-                }
                 let _ = self.notifier_pending_txs.send(tx_hash);
             }
             // * do nothing, the caller will decide what to do
@@ -211,7 +212,7 @@ impl BlockMiner {
 
     /// Persists a mined block to permanent storage and prepares new block.
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
-        tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
+        tracing::info!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 
         // extract fields to use in notifications
         let block_number = *block.number();

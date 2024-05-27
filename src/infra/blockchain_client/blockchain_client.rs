@@ -72,52 +72,58 @@ impl BlockchainClient {
         };
 
         // check health before assuming it is ok
-        client.check_health().await?;
+        client.fetch_listening().await?;
 
         Ok(client)
     }
 
-    /// Checks if the current blockchain client is connected to the WS.
-    pub fn is_ws_enabled(&self) -> bool {
+    // -------------------------------------------------------------------------
+    // Websocket
+    // -------------------------------------------------------------------------
+
+    /// Checks if the supports websocket connection.
+    pub fn supports_ws(&self) -> bool {
         self.ws.is_some()
     }
 
-    /// Appends entries to followers.
-    pub async fn append_entries(&self, entries: Vec<crate::eth::consensus::Entry>) -> anyhow::Result<()> {
-        tracing::debug!(?entries, "appending entries");
-        let entries = serde_json::to_value(entries)?;
-        self.http.request::<(), Vec<JsonValue>>("stratus_appendEntries", vec![entries]).await?;
-        Ok(())
+    /// Validates it is connected to websocket and returns a reference to the websocket client.
+    fn require_ws(&self) -> anyhow::Result<&WsClient> {
+        match &self.ws {
+            Some(ws) => Ok(ws),
+            None => log_and_err!("blockchain client not connected to websocket"),
+        }
     }
 
-    /// Sends a signed transaction.
-    pub async fn send_raw_transaction(&self, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
-        let tx = serde_json::to_value(tx)?;
-        let hash = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await?;
-        Ok(PendingTransaction::new(hash, self))
-    }
+    // -------------------------------------------------------------------------
+    // RPC queries
+    // -------------------------------------------------------------------------
 
     /// Checks if the blockchain is listening.
-    pub async fn check_health(&self) -> anyhow::Result<()> {
-        tracing::debug!("checking blockchain health");
-        match self.http.request::<bool, Vec<()>>("net_listening", vec![]).await {
+    pub async fn fetch_listening(&self) -> anyhow::Result<()> {
+        tracing::debug!("fetching listening status");
+
+        let result = self.http.request::<bool, Vec<()>>("net_listening", vec![]).await;
+        match result {
             Ok(_) => Ok(()),
-            Err(e) => log_and_err!(reason = e, "failed to check blockchain health"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch listening status"),
         }
     }
 
     /// Retrieves the current block number.
-    pub async fn get_current_block_number(&self) -> anyhow::Result<BlockNumber> {
-        tracing::debug!("retrieving current block number");
-        match self.http.request::<BlockNumber, Vec<()>>("eth_blockNumber", vec![]).await {
+    pub async fn fetch_block_number(&self) -> anyhow::Result<BlockNumber> {
+        tracing::debug!("fetching block number");
+
+        let result = self.http.request::<BlockNumber, Vec<()>>("eth_blockNumber", vec![]).await;
+
+        match result {
             Ok(number) => Ok(number),
-            Err(e) => log_and_err!(reason = e, "failed to retrieve current block number"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch current block number"),
         }
     }
 
-    /// Retrieves a block by number.
-    pub async fn get_block_by_number(&self, number: BlockNumber) -> anyhow::Result<JsonValue> {
-        tracing::debug!(%number, "retrieving block");
+    /// Fetches a block by number.
+    pub async fn fetch_block(&self, number: BlockNumber) -> anyhow::Result<JsonValue> {
+        tracing::debug!(%number, "fetching block");
 
         let number = serde_json::to_value(number)?;
         let result = self
@@ -127,22 +133,30 @@ impl BlockchainClient {
 
         match result {
             Ok(block) => Ok(block),
-            Err(e) => log_and_err!(reason = e, "failed to retrieve block by number"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch block by number"),
         }
     }
 
-    /// Retrieves a transaction.
-    pub async fn get_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
+    /// Fetches a transaction by hash.
+    pub async fn fetch_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
+        tracing::debug!(%hash, "fetching transaction");
+
         let hash = serde_json::to_value(hash)?;
-        Ok(self
+
+        let result = self
             .http
             .request::<Option<Transaction>, Vec<JsonValue>>("eth_getTransactionByHash", vec![hash])
-            .await?)
+            .await;
+
+        match result {
+            Ok(tx) => Ok(tx),
+            Err(e) => log_and_err!(reason = e, "failed to fetch transaction by hash"),
+        }
     }
 
-    /// Retrieves a transaction receipt.
-    pub async fn get_transaction_receipt(&self, hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
-        tracing::debug!(%hash, "retrieving transaction receipt");
+    /// Fetches a receipt by hash.
+    pub async fn fetch_receipt(&self, hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
+        tracing::debug!(%hash, "fetching transaction receipt");
 
         let hash = serde_json::to_value(hash)?;
         let result = self
@@ -152,13 +166,13 @@ impl BlockchainClient {
 
         match result {
             Ok(receipt) => Ok(receipt),
-            Err(e) => log_and_err!(reason = e, "failed to retrieve transaction receipt by hash"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch transaction receipt by hash"),
         }
     }
 
-    /// Retrieves an account balance at some block.
-    pub async fn get_balance(&self, address: &Address, number: Option<BlockNumber>) -> anyhow::Result<Wei> {
-        tracing::debug!(%address, ?number, "retrieving account balance");
+    /// Fetches account balance by address and block number.
+    pub async fn fetch_balance(&self, address: &Address, number: Option<BlockNumber>) -> anyhow::Result<Wei> {
+        tracing::debug!(%address, ?number, "fetching account balance");
 
         let address = serde_json::to_value(address)?;
         let number = serde_json::to_value(number)?;
@@ -166,13 +180,13 @@ impl BlockchainClient {
 
         match result {
             Ok(receipt) => Ok(receipt),
-            Err(e) => log_and_err!(reason = e, "failed to retrieve account balance"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
         }
     }
 
-    /// Retrieves a slot at some block.
-    pub async fn get_storage_at(&self, address: &Address, index: &SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<SlotValue> {
-        tracing::debug!(%address, ?point_in_time, "retrieving account balance");
+    /// Fetches a slot by a slot at some block.
+    pub async fn fetch_storage_at(&self, address: &Address, index: &SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<SlotValue> {
+        tracing::debug!(%address, ?point_in_time, "fetching account balance");
 
         let address = serde_json::to_value(address)?;
         let index = serde_json::to_value(index)?;
@@ -187,9 +201,30 @@ impl BlockchainClient {
 
         match result {
             Ok(value) => Ok(value),
-            Err(e) => log_and_err!(reason = e, "failed to retrieve account balance"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
         }
     }
+
+    // -------------------------------------------------------------------------
+    // RPC mutations
+    // -------------------------------------------------------------------------
+
+    /// Sends a signed transaction.
+    pub async fn send_raw_transaction(&self, hash: Hash, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
+        tracing::debug!(%hash, "sending raw transaction");
+
+        let tx = serde_json::to_value(tx)?;
+        let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await;
+
+        match result {
+            Ok(hash) => Ok(PendingTransaction::new(hash, self)),
+            Err(e) => log_and_err!(reason = e, "failed to send raw transaction"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // RPC subscriptions
+    // -------------------------------------------------------------------------
 
     pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<ExternalBlock>> {
         tracing::debug!("subscribing to newHeads event");
@@ -198,17 +233,10 @@ impl BlockchainClient {
         let result = ws
             .subscribe::<ExternalBlock, Vec<JsonValue>>("eth_subscribe", vec![JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
             .await;
+
         match result {
             Ok(sub) => Ok(sub),
             Err(e) => log_and_err!(reason = e, "failed to subscribe to newHeads event"),
-        }
-    }
-
-    /// Validates client is connected to websocket and returns a reference to it.
-    fn require_ws(&self) -> anyhow::Result<&WsClient> {
-        match &self.ws {
-            Some(ws) => Ok(ws),
-            None => log_and_err!("blockchain client not connected websocket endpoint"),
         }
     }
 }

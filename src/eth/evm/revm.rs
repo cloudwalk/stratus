@@ -319,6 +319,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
     let changes = parse_revm_state(revm_result.state, execution_changes);
 
     tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
+
     EvmExecution {
         block_timestamp: input.block_timestamp,
         receipt_applied: false,

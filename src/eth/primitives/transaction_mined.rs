@@ -107,6 +107,7 @@ impl From<TransactionMined> for EthersTransaction {
             v: input.v,
             r: input.r,
             s: input.s,
+            transaction_type: input.tx_type,
             ..Default::default()
         }
     }
