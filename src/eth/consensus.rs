@@ -11,14 +11,14 @@ use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
-use tonic::Request;
+use tonic::{transport::Server, Request, Response, Status};
+use raft::raft_service_server::{RaftService, RaftServiceServer};
 
 pub mod raft {
     tonic::include_proto!("raft");
 }
 use raft::raft_service_client::RaftServiceClient;
-use raft::AppendEntriesRequest;
-use raft::Entry;
+use raft::{AppendEntriesRequest, AppendEntriesResponse, Entry};
 
 use crate::config::RunWithImporterConfig;
 use crate::infra::metrics;
@@ -86,6 +86,7 @@ impl Consensus {
             }
         });
 
+        Self::initialize_server();
         Self { leader_name, sender }
     }
 
@@ -102,6 +103,21 @@ impl Consensus {
             leader_name: "standalone".to_string(),
             sender,
         }
+    }
+
+    fn initialize_server() {
+        tokio::spawn(async move {
+            tracing::info!("Starting consensus module server at port 3777");
+            let addr = "0.0.0.0:3777".parse().unwrap();
+
+            let raft_service = RaftServiceImpl;
+
+            Server::builder()
+                .add_service(RaftServiceServer::new(raft_service))
+                .serve(addr)
+                .await
+                .unwrap();
+        });
     }
 
     //FIXME TODO automate the way we gather the leader, instead of using a env var
@@ -148,7 +164,7 @@ impl Consensus {
             if let Some(pod_name) = p.metadata.name {
                 if pod_name != Self::current_node().unwrap() {
                     if let Some(namespace) = Self::current_namespace() {
-                        followers.push(format!("http://{}.stratus-api.{}.svc.cluster.local:3000", pod_name, namespace));
+                        followers.push(format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace));
                     }
                 }
             }
@@ -208,5 +224,25 @@ impl Consensus {
         metrics::inc_append_entries_to_followers(start.elapsed());
 
         Ok(())
+    }
+}
+
+pub struct RaftServiceImpl;
+
+#[tonic::async_trait]
+impl RaftService for RaftServiceImpl {
+    async fn append_entries(
+        &self,
+        request: Request<AppendEntriesRequest>,
+    ) -> Result<Response<AppendEntriesResponse>, Status> {
+        let entries = request.into_inner().entries;
+        // Process the entries here
+
+        // For example, let's just print the entries
+        for entry in entries {
+            println!("Received entry: {:?}", entry);
+        }
+
+        Ok(Response::new(AppendEntriesResponse { success: true }))
     }
 }
