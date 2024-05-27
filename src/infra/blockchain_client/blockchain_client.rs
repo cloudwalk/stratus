@@ -209,19 +209,6 @@ impl BlockchainClient {
     // RPC mutations
     // -------------------------------------------------------------------------
 
-    /// Appends entries to followers.
-    pub async fn send_append_entries(&self, entries: Vec<crate::eth::consensus::Entry>) -> anyhow::Result<()> {
-        tracing::debug!(?entries, "appending entries");
-
-        let entries = serde_json::to_value(entries)?;
-        let result = self.http.request::<(), Vec<JsonValue>>("stratus_appendEntries", vec![entries]).await;
-
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => log_and_err!(reason = e, "failed to send append entries"),
-        }
-    }
-
     /// Sends a signed transaction.
     pub async fn send_raw_transaction(&self, hash: Hash, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
         tracing::debug!(%hash, "sending raw transaction");

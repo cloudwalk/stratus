@@ -11,17 +11,22 @@ use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
-use tonic::transport::Channel;
-use tonic::{Request, Response, Status};
+
+use tonic::Request;
+
+
 pub mod raft {
     tonic::include_proto!("raft");
 }
-use raft::raft_service_server::{RaftService, RaftServiceServer};
-use raft::{AppendEntriesRequest, AppendEntriesResponse, Entry, raft_service_client::RaftServiceClient};
+use raft::raft_service_client::RaftServiceClient;
+
+use raft::AppendEntriesRequest;
+
+use raft::Entry;
 
 use crate::config::RunWithImporterConfig;
 use crate::infra::metrics;
-use crate::infra::BlockchainClient;
+
 
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
@@ -158,27 +163,29 @@ impl Consensus {
     }
 
     async fn append_entries(follower: String, entries: Vec<LogEntry>) -> Result<(), anyhow::Error> {
-      #[cfg(feature = "metrics")]
-      let start = metrics::now();
-      
-      let mut client = RaftServiceClient::connect(follower.clone()).await?;
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        let mut client = RaftServiceClient::connect(follower.clone()).await?;
 
         for attempt in 1..=RETRY_ATTEMPTS {
-            let grpc_entries: Vec<Entry> = entries.iter().map(|e| Entry {
-                index: e.index,
-                data: e.data.clone(),
-            }).collect();
+            let grpc_entries: Vec<Entry> = entries
+                .iter()
+                .map(|e| Entry {
+                    index: e.index,
+                    data: e.data.clone(),
+                })
+                .collect();
 
             let request = Request::new(AppendEntriesRequest { entries: grpc_entries });
             let response = client.append_entries(request).await;
 
             match response {
-                Ok(resp) => {
+                Ok(resp) =>
                     if resp.into_inner().success {
                         tracing::debug!("Entries appended to follower {}: attempt {}: success", follower, attempt);
                         return Ok(());
-                    }
-                }
+                    },
                 Err(e) => tracing::error!("Error appending entries to follower {}: attempt {}: {:?}", follower, attempt, e),
             }
             sleep(RETRY_DELAY).await;
@@ -196,7 +203,7 @@ impl Consensus {
         let start = metrics::now();
         for entry in entries {
             for follower in &followers {
-                if let Err(e) = Self::append_entries(follower, vec![entry.clone()]).await {
+                if let Err(e) = Self::append_entries(follower.clone(), vec![entry.clone()]).await {
                     tracing::debug!("Error appending entry to follower {}: {:?}", follower, e);
                 }
             }
