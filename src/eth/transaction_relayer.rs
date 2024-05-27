@@ -245,7 +245,7 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let mut ethers_tx = Transaction::from(tx_mined.input.clone());
+        let ethers_tx = Transaction::from(tx_mined.input.clone());
         let tx = self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await?;
 
         tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
