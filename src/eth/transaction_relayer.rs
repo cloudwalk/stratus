@@ -365,6 +365,7 @@ impl ExternalRelayerClient {
     }
 
     pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
+        tracing::debug!(?block.header.number, "sending block to relayer");
         let block_number = block.header.number;
         sqlx::query!("INSERT INTO relayer_blocks VALUES ($1, $2)", block_number as _, serde_json::to_value(block)?)
             .execute(&self.pool)
