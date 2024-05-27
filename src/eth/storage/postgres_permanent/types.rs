@@ -78,6 +78,7 @@ impl PostgresTransaction {
             r: self.r.into(),
             s: self.s.into(),
             value: self.value,
+            tx_type: None,
         };
         TransactionMined {
             transaction_index: self.idx_in_block,
