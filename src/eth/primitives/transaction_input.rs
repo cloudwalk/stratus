@@ -170,7 +170,7 @@ impl From<TransactionInput> for EthersTransaction {
             chain_id: value.chain_id.map_into(),
             hash: value.hash.into(),
             nonce: value.nonce.into(),
-            from: value.from.into(),
+            from: value.signer.into(),
             to: value.to.map_into(),
             value: value.value.into(),
             input: value.input.clone().into(),
@@ -179,14 +179,7 @@ impl From<TransactionInput> for EthersTransaction {
             v: value.v,
             r: value.r,
             s: value.s,
-            block_hash: None,
-            block_number: None,
-            transaction_index: None,
-            transaction_type: None,
-            access_list: None,
-            max_priority_fee_per_gas: None,
-            max_fee_per_gas: None,
-            other: OtherFields::default(),
+            ..Default::default()
         }
     }
 }
