@@ -242,7 +242,8 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
         tracing::debug!(?tx_mined.input);
-        let ethers_tx = Transaction::from(tx_mined.input.clone());
+        let mut ethers_tx = Transaction::from(tx_mined.input.clone());
+        ethers_tx.transaction_type = Some(1.into());
         let rlp = ethers_tx.rlp();
         tracing::debug!(?rlp);
         let tx = self
