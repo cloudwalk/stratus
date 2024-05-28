@@ -34,7 +34,7 @@ const config: HardhatUserConfig = {
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,
             },
-            timeout: 300000,
+            timeout: 40000,
         },
     },
 };

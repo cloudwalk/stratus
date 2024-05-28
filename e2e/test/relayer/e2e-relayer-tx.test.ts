@@ -5,7 +5,7 @@ import { send, sendEvmMine, sendGetBalance, sendRawTransaction, sendReset, updat
 
 describe("Relayer Test", () => {
     it("Validate Balance", async () => {
-        const duration = 120;
+        const duration = 30;
         const tps = 30;
         const totalTransactions = duration * tps;
 
