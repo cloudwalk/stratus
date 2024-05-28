@@ -5,8 +5,7 @@ import { send, sendEvmMine, sendGetBalance, sendRawTransaction, sendReset, updat
 
 describe("Relayer Test", () => {
     it("Validate Balance", async () => {
-        //setupNetworks();
-        const duration = 30;
+        const duration = 120;
         const tps = 30;
         const totalTransactions = duration * tps;
 
@@ -48,7 +47,29 @@ describe("Relayer Test", () => {
             console.log('Tx number and current time', i, new Date().toISOString());
         }
 
-        await sleep(duration * 1000 * 2)
+        await sleep(1000);
+
+        const aliceStratusBalance = await sendGetBalance(ALICE.address);
+        const bobStratusBalance = await sendGetBalance(BOB.address);
+        const charlieStratusBalance = await sendGetBalance(CHARLIE.address);
+        console.log('aliceStratusBalance', aliceStratusBalance);
+        console.log('bobStratusBalance', bobStratusBalance);
+        console.log('charlieStratusBalance', charlieStratusBalance);
+
+        updateProviderUrl('http://localhost:8545');
+
+        await sleep(1000);
+
+        const aliceHardhatBalance = await sendGetBalance(ALICE.address);
+        const bobHardhatBalance = await sendGetBalance(BOB.address);
+        const charlieHardhatBalance = await sendGetBalance(CHARLIE.address);
+        console.log('aliceHardhatBalance', aliceHardhatBalance);
+        console.log('bobHardhatBalance', bobHardhatBalance);
+        console.log('charlieHardhatBalance', charlieHardhatBalance);
+
+        expect(aliceStratusBalance).to.equal(aliceHardhatBalance);
+        expect(bobStratusBalance).to.equal(bobHardhatBalance);
+        expect(charlieStratusBalance).to.equal(charlieHardhatBalance);
 });
 /* 
     it("Validate 1 Tx Relayed", async () => {
@@ -117,17 +138,6 @@ describe("Relayer Test", () => {
     });
 */
 });
-
-
-async function setupNetworks() {
-    updateProviderUrl('http://localhost:3000');
-    await sendReset();
-
-    updateProviderUrl('http://localhost:8545');
-    await send("hardhat_reset");
-
-    updateProviderUrl('http://localhost:3000');
-}
 
 function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
