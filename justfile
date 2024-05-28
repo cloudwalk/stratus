@@ -368,7 +368,7 @@ e2e-relayer-external-up:
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
 
     # Start Stratus binary
-    cargo run --release --bin stratus --no-default-features --features "dev,rocks,kubernetes" -- --enable-genesis --enable-test-accounts --block-mode external --perm-storage=rocks --relayer-db-url "postgres://postgres:123@localhost:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    cargo run --release --bin stratus --no-default-features --features "dev,rocks,kubernetes" -- --enable-test-accounts --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@localhost:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo   
@@ -378,7 +378,7 @@ e2e-relayer-external-up:
         (
             cd e2e
             npm install
-            BLOCK_MODE=external npx hardhat node > ../e2e_logs/hardhat.log &
+            BLOCK_MODE=1s npx hardhat node > ../e2e_logs/hardhat.log &
         )
     fi
 
@@ -409,6 +409,8 @@ e2e-relayer-external-down:
 
     # Kill Stratus
     killport 3000
+    stratus_pid=$(pgrep -f 'stratus')
+    kill $stratus_pid
 
     # Stop Postgres
     docker-compose down -v
