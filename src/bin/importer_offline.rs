@@ -238,7 +238,7 @@ async fn execute_external_rpc_storage_loader(
         let (blocks, receipts) = match result {
             Ok((blocks, receipts)) => (blocks, receipts),
             Err(e) => {
-                let message = "failed to fetch block os receipt";
+                let message = "failed to fetch block or receipt";
                 tracing::error!(reason = ?e, message);
                 return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, message)));
             }
