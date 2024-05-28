@@ -20,6 +20,7 @@ use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::ResultExt;
+use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::GlobalServices;
 use stratus::GlobalState;
@@ -81,34 +82,44 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // execute thread: external rpc storage loader
     let storage_thread = thread::Builder::new().name("storage-loader".into());
     let storage_tokio = Handle::current();
-    let _ = storage_thread.spawn(move || {
-        let _tokio_guard = storage_tokio.enter();
+    let storage_loader_thread = storage_thread
+        .spawn(move || {
+            let _tokio_guard = storage_tokio.enter();
 
-        let result = storage_tokio.block_on(execute_external_rpc_storage_loader(
-            rpc_storage,
-            config.blocks_by_fetch,
-            config.paralellism,
-            block_start,
-            block_end,
-            backlog_tx,
-        ));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "storage-loader failed");
-        }
-    });
+            let result = storage_tokio.block_on(execute_external_rpc_storage_loader(
+                rpc_storage,
+                config.blocks_by_fetch,
+                config.paralellism,
+                block_start,
+                block_end,
+                backlog_tx,
+            ));
+            if let Err(e) = result {
+                tracing::error!(reason = ?e, "storage-loader failed");
+            }
+        })
+        .expect("spawning storage-loader thread should not fail");
 
     // execute thread: block importer
     let importer_thread = thread::Builder::new().name("block-importer".into());
     let importer_tokio = Handle::current();
-    let importer_join = importer_thread.spawn(move || {
-        let _tokio_guard = importer_tokio.enter();
-        let result = importer_tokio.block_on(execute_block_importer(executor, miner, storage, csv, backlog_rx, block_snapshots));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "block-importer failed");
-        }
-    })?;
+    let block_importer_thread = importer_thread
+        .spawn(move || {
+            let _tokio_guard = importer_tokio.enter();
+            let result = importer_tokio.block_on(execute_block_importer(executor, miner, storage, csv, backlog_rx, block_snapshots));
+            if let Err(e) = result {
+                tracing::error!(reason = ?e, "block-importer failed");
+            }
+        })
+        .expect("spawning block-importer thread should not fail");
 
-    let _ = importer_join.join();
+    // await tasks
+    if let Err(e) = block_importer_thread.join() {
+        tracing::error!(reason = ?e, "block-importer thread failed");
+    }
+    if let Err(e) = storage_loader_thread.join() {
+        tracing::error!(reason = ?e, "storage-loader thread failed");
+    }
 
     Ok(())
 }
@@ -238,17 +249,15 @@ async fn execute_external_rpc_storage_loader(
         let (blocks, receipts) = match result {
             Ok((blocks, receipts)) => (blocks, receipts),
             Err(e) => {
-                let message = "failed to fetch block or receipt";
-                tracing::error!(reason = ?e, message);
-                return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, message)));
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt");
+                return log_and_err!(reason = e, message);
             }
         };
 
         // check blocks were really loaded
         if blocks.is_empty() {
             let message = GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected");
-            tracing::error!(%message);
-            return Err(anyhow!(message));
+            return log_and_err!(message);
         }
 
         // send to backlog
