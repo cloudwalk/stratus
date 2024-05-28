@@ -33,7 +33,7 @@ pub async fn init_tracing(url: Option<&String>) {
             .with_filter(EnvFilter::from_default_env())
             .boxed()
     } else {
-        println!("tracing registry  enabling text logs");
+        println!("tracing registry enabling text logs");
         fmt::Layer::default()
             .with_target(false)
             .with_thread_ids(true)
