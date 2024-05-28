@@ -235,9 +235,9 @@ impl Consensus {
         let start = metrics::now();
         for entry in entries {
             for follower in &followers {
-                if let Err(e) = Self::append_entries(follower.clone(), vec![entry.clone()]).await {
-                    tracing::debug!("Error appending entry to follower {}: {:?}", follower.address, e);
-                }
+                //XXX if let Err(e) = Self::append_entries(follower.clone(), vec![entry.clone()]).await {
+                //XXX     tracing::debug!("Error appending entry to follower {}: {:?}", follower.address, e);
+                //XXX }
             }
         }
 
@@ -253,13 +253,13 @@ pub struct RaftServiceImpl;
 #[tonic::async_trait]
 impl RaftService for RaftServiceImpl {
     async fn append_entries(&self, request: Request<AppendEntriesRequest>) -> Result<Response<AppendEntriesResponse>, Status> {
-        let entries = request.into_inner().entries;
-        // Process the entries here
+        //XXX let entries = request.into_inner().entries;
+        //XXX // Process the entries here
 
-        // For example, let's just print the entries
-        for entry in entries {
-            println!("Received entry: {:?}", entry);
-        }
+        //XXX // For example, let's just print the entries
+        //XXX for entry in entries {
+        //XXX     println!("Received entry: {:?}", entry);
+        //XXX }
 
         Ok(Response::new(AppendEntriesResponse { success: true }))
     }
