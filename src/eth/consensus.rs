@@ -22,13 +22,18 @@ pub mod append_entry {
 }
 
 use append_entry::append_entry_service_client::AppendEntryServiceClient;
-use append_entry::append_entry_service_server::{AppendEntryService, AppendEntryServiceServer};
-use append_entry::{AppendTransactionExecutionsRequest, AppendTransactionExecutionsResponse, AppendBlockCommitRequest, AppendBlockCommitResponse, StatusCode, TransactionExecution, BlockHeader};
-
-use crate::config::RunWithImporterConfig;
-use crate::infra::metrics;
+use append_entry::append_entry_service_server::AppendEntryService;
+use append_entry::append_entry_service_server::AppendEntryServiceServer;
+use append_entry::AppendBlockCommitRequest;
+use append_entry::AppendBlockCommitResponse;
+use append_entry::AppendTransactionExecutionsRequest;
+use append_entry::AppendTransactionExecutionsResponse;
+use append_entry::BlockHeader;
+use append_entry::StatusCode;
 
 use super::primitives::Block;
+use crate::config::RunWithImporterConfig;
+use crate::infra::metrics;
 
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
@@ -83,7 +88,6 @@ impl Consensus {
                     //TODO add data to consensus-log-transactions
                     //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
                     tracing::info!(number = ?data.number(), "received block to send to followers");
-
 
                     //TODO use gRPC instead of jsonrpc
                     //FIXME for now, this has no colateral efects, but it will have in the future
@@ -191,7 +195,14 @@ impl Consensus {
         Ok(followers)
     }
 
-    async fn append_block_commit(mut follower: Peer, header: BlockHeader, transaction_hashes: Vec<String>, term: u64, prev_log_index: u64, prev_log_term: u64) -> Result<(), anyhow::Error> {
+    async fn append_block_commit(
+        mut follower: Peer,
+        header: BlockHeader,
+        transaction_hashes: Vec<String>,
+        term: u64,
+        prev_log_index: u64,
+        prev_log_term: u64,
+    ) -> Result<(), anyhow::Error> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -209,8 +220,8 @@ impl Consensus {
             match response {
                 Ok(resp) => {
                     let resp = resp.into_inner();
-                    match StatusCode::from_i32(resp.status) {
-                        Some(StatusCode::AppendSuccess) => {
+                    match StatusCode::try_from(resp.status) {
+                        Ok(StatusCode::AppendSuccess) => {
                             #[cfg(not(feature = "metrics"))]
                             tracing::debug!("Block commit appended to follower {}: attempt {}: success", follower.address, attempt);
                             #[cfg(feature = "metrics")]
@@ -235,11 +246,15 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        Err(anyhow!("Failed to append block commit to {} after {} attempts", follower.address, RETRY_ATTEMPTS))
+        Err(anyhow!(
+            "Failed to append block commit to {} after {} attempts",
+            follower.address,
+            RETRY_ATTEMPTS
+        ))
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn append_block_commit_to_followers(data: Block, followers: Vec<Peer>) -> Result<(), anyhow::Error> {
+    pub async fn append_block_commit_to_followers(_data: Block, followers: Vec<Peer>) -> Result<(), anyhow::Error> {
         let header = BlockHeader {
             number: 0,
             hash: "hash".to_string(),
@@ -270,7 +285,16 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
         for follower in &followers {
-            if let Err(e) = Self::append_block_commit(follower.clone(), header.clone(), transaction_hashes.clone(), term, prev_log_index, prev_log_term).await {
+            if let Err(e) = Self::append_block_commit(
+                follower.clone(),
+                header.clone(),
+                transaction_hashes.clone(),
+                term,
+                prev_log_index,
+                prev_log_term,
+            )
+            .await
+            {
                 tracing::debug!("Error appending block commit to follower {}: {:?}", follower.address, e);
             }
         }
@@ -280,14 +304,16 @@ impl Consensus {
 
         Ok(())
     }
-
 }
 
 pub struct AppendEntryServiceImpl;
 
 #[tonic::async_trait]
 impl AppendEntryService for AppendEntryServiceImpl {
-    async fn append_transaction_executions(&self, request: Request<AppendTransactionExecutionsRequest>) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
+    async fn append_transaction_executions(
+        &self,
+        request: Request<AppendTransactionExecutionsRequest>,
+    ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
         let executions = request.into_inner().executions;
         // Process the transaction executions here
 
