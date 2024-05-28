@@ -131,6 +131,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
         module.register_async_method("evm_mine", evm_mine)?;
         module.register_async_method("debug_setHead", debug_set_head)?;
+        module.register_async_method("debug_readAllSlotsFromAccount", debug_read_all_slots)?;
     }
 
     // stratus health check
@@ -210,6 +211,12 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
         None => return log_and_err!("reading latest block returned None")?,
     }
     Ok(serde_json::to_value(timestamp).expect_infallible())
+}
+
+#[cfg(feature = "dev")]
+async fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let (_, address) = next_rpc_param::<Address>(params.sequence())?;
+    Ok(serde_json::to_value(ctx.storage.read_all_slots(&address).await?).expect_infallible())
 }
 
 // Status

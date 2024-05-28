@@ -219,6 +219,17 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(slots)
     }
 
+    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        let state = self.lock_read().await;
+
+        let Some(account) = state.accounts.get(address) else {
+            tracing::trace!(%address, "account not found in permanent");
+            return Ok(Default::default());
+        };
+
+        Ok(account.slots.clone().into_iter().map(|(_, slot)| slot.get_current()).collect())
+    }
+
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 

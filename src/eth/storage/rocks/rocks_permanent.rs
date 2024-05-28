@@ -9,6 +9,8 @@ use async_trait::async_trait;
 use futures::future::join_all;
 
 use super::rocks_state::RocksStorageState;
+use super::types::AddressRocksdb;
+use super::types::SlotIndexRocksdb;
 use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -228,5 +230,19 @@ impl PermanentStorage for RocksPermanentStorage {
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
         todo!()
+    }
+
+    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        let address: AddressRocksdb = (*address).into();
+        Ok(self
+            .state
+            .account_slots
+            .iter_from((address, SlotIndexRocksdb::from(0)), rocksdb::Direction::Forward)
+            .take_while(|((addr, _), _)| &address == addr)
+            .map(|((_, idx), value)| Slot {
+                index: idx.into(),
+                value: value.into(),
+            })
+            .collect())
     }
 }
