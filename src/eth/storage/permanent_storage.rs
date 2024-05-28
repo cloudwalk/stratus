@@ -81,6 +81,9 @@ pub trait PermanentStorage: Send + Sync {
     /// Retrieves a random sample of slots, from the provided start and end blocks.
     async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
 
+    /// Retrieves all current slots associated to an address.
+    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>>;
+
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------

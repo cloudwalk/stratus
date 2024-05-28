@@ -97,6 +97,10 @@ impl PermanentStorage for PostgresPermanentStorage {
         PermanentStorageKind::Postgres { url: self.url.clone() }
     }
 
+    async fn read_all_slots(&self, _address: &Address) -> anyhow::Result<Vec<Slot>> {
+        todo!();
+    }
+
     async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
         let conn = self.pool.acquire().await?;
         let conn = conn.leak();
