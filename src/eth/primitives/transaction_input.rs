@@ -11,7 +11,6 @@ use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
-use ethers_core::types::OtherFields;
 use ethers_core::types::Transaction as EthersTransaction;
 use fake::Dummy;
 use fake::Fake;

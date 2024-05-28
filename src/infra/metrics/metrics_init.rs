@@ -30,7 +30,7 @@ const BUCKET_FOR_DURATION: [f64; 37] = [
 ///
 /// Default configuration runs metrics exporter on port 9000.
 pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
-    tracing::info!("starting metrics");
+    tracing::info!("creating metrics exporter");
 
     // get metric definitions
     let mut metrics = Vec::new();
@@ -57,7 +57,7 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
         }
     }
 
-    builder.install().expect("failed to start metrics");
+    builder.install().expect("failed to create metrics exporter");
 
     // init metric description (always after provider started)
     for metric in &metrics {

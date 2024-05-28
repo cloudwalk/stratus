@@ -27,6 +27,7 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
+use crate::ext::ResultExt;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -114,13 +115,13 @@ impl Block {
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
         let json_rpc_format: EthersBlock<EthersTransaction> = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
         let json_rpc_format: EthersBlock<H256> = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 
     /// Returns the block number.

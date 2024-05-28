@@ -55,7 +55,7 @@ pub struct BlockMiner {
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>, relayer_client: Option<ExternalRelayerClient>) -> Self {
-        tracing::info!(?mode, "starting block miner");
+        tracing::info!(?mode, "creating block miner");
         Self {
             storage,
             mode,
