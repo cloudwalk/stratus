@@ -219,13 +219,13 @@ impl BlockMiner {
         let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
 
-        // persist block
-        self.storage.save_block(block.clone()).await?;
-        self.storage.set_mined_block_number(block_number).await?;
-
         if let Some(relayer) = &self.relayer_client {
-            relayer.send_to_relayer(block).await?; // TODO: do this through a channel to another task
+            relayer.send_to_relayer(block.clone()).await?;
         }
+
+        // persist block
+        self.storage.save_block(block).await?;
+        self.storage.set_mined_block_number(block_number).await?;
 
         // notify
         for log in block_logs {
