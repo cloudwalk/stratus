@@ -246,7 +246,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
         }
 
         // fallback to polling
-        tracing::warn!("number-fetcher falling back to http polling because subscription failed or it not enabled");
+        tracing::warn!("number-fetcher falling back to http polling because subscription failed or it is not enabled");
         match chain.fetch_block_number().await {
             Ok(number) => {
                 tracing::info!(
