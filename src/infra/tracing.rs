@@ -77,6 +77,12 @@ pub async fn init_tracing(url: Option<&String>) {
     });
 }
 
+/// Emits an info message that a task was spawned to backgroud.
+#[track_caller]
+pub fn info_task_spawn(name: &str) {
+    tracing::info!(%name, "spawning task");
+}
+
 /// Emits an warning that a task is exiting because it received a cancenllation signal.
 ///
 /// Returns the formatted tracing message.

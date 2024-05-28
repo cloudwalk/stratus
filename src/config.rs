@@ -42,6 +42,7 @@ use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
+use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
@@ -191,6 +192,8 @@ impl ExecutorConfig {
             // spawn thread that will run evm
             // todo: needs a way to signal error like a cancellation token in case it fails to initialize
             let t = thread::Builder::new().name("evm".into());
+
+            info_task_spawn("evm");
             t.spawn(move || {
                 // init tokio
                 let _tokio_guard = evm_tokio.enter();

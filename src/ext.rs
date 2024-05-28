@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 
+use crate::infra::tracing::info_task_spawn;
+
 // -----------------------------------------------------------------------------
 // Macros
 // -----------------------------------------------------------------------------
@@ -185,6 +187,7 @@ pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + S
 where
     T: Send + 'static,
 {
+    info_task_spawn(name);
     tokio::task::Builder::new().name(name).spawn(task).expect("spawning named task should not fail")
 }
 

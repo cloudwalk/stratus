@@ -61,8 +61,7 @@ pub async fn serve_rpc(
     chain_id: ChainId,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-
-    tracing::info!("creating task {}", TASK_NAME);
+    tracing::info!("creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
