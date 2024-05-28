@@ -227,7 +227,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
             return Ok(Default::default());
         };
 
-        Ok(account.slots.clone().into_iter().map(|(_, slot)| slot.get_current()).collect())
+        Ok(account.slots.clone().into_values().map(|slot| slot.get_current()).collect())
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
