@@ -138,7 +138,7 @@ impl RocksStorageState {
         state
     }
 
-    pub fn listen_for_backup_trigger(&self, mut rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
+    fn listen_for_backup_trigger(&self, mut rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
         tracing::info!("starting rocksdb backup trigger listener");
 
         let db = Arc::clone(&self.db);
@@ -528,26 +528,23 @@ impl RocksStorageState {
     }
 
     /// Writes accounts to state (does not write to account history)
-    pub fn write_accounts(&self, accounts: Vec<Account>, block_number: BlockNumber) {
-        let mut account_batch = vec![];
-        for account in accounts {
-            account_batch.push(account.into());
-        }
+    pub fn write_accounts(&self, accounts: Vec<Account>) {
+        let accounts = accounts.into_iter().map(Into::into).collect_vec();
 
         let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(account_batch, Some(block_number.into()), &mut batch);
+        self.accounts.prepare_batch_insertion(accounts, None, &mut batch);
         self.accounts.db.write(batch).unwrap();
     }
 
     /// Writes slots to state (does not write to slot history)
-    pub fn write_slots(&self, slots: Vec<(Address, Slot)>, block_number: BlockNumber) {
-        let mut slot_batch = vec![];
+    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) {
+        let slots = slots
+            .into_iter()
+            .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()))
+            .collect_vec();
 
-        for (address, slot) in slots {
-            slot_batch.push(((address.into(), slot.index.into()), slot.value.into()));
-        }
         let mut batch = WriteBatch::default();
-        self.account_slots.prepare_batch_insertion(slot_batch, Some(block_number.into()), &mut batch);
+        self.account_slots.prepare_batch_insertion(slots, None, &mut batch);
         self.account_slots.db.write(batch).unwrap();
     }
 
