@@ -202,8 +202,9 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        // reset block number
-        let block_number_u64: u64 = block_number.into();
+        let block_number_u64 = block_number.as_u64();
+
+        // update block number
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
             if block_number_u64 <= current {
                 Some(block_number_u64)

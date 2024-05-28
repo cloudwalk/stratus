@@ -96,19 +96,6 @@ where
             .collect())
     }
 
-    pub fn get_current_block_number(&self) -> u64 {
-        let Ok(serialized_key) = bincode::serialize(&"current_block") else {
-            return 0;
-        };
-        let cf = self.handle();
-
-        let Ok(Some(value_bytes)) = self.db.get_cf(&cf, serialized_key) else {
-            return 0;
-        };
-
-        bincode::deserialize(&value_bytes).ok().unwrap_or(0)
-    }
-
     pub fn get_index_block_number(&self) -> u64 {
         self.last_index().map(|(block_number, _)| block_number).unwrap_or(0)
     }
