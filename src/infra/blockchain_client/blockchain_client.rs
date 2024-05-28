@@ -6,11 +6,14 @@ use ethers_core::types::Transaction;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
 use jsonrpsee::core::client::SubscriptionClientT;
+use jsonrpsee::core::ClientError;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::ws_client::WsClient;
 use jsonrpsee::ws_client::WsClientBuilder;
 use serde_json::Value as JsonValue;
+use tokio::sync::RwLock;
+use tokio::sync::RwLockReadGuard;
 
 use super::pending_transaction::PendingTransaction;
 use crate::eth::primitives::Address;
@@ -22,14 +25,16 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
+use crate::ext::DisplayExt;
+use crate::ext::ResultExt;
 use crate::log_and_err;
 
 #[derive(Debug)]
 pub struct BlockchainClient {
     http: HttpClient,
-    pub http_url: String,
-    ws: Option<WsClient>,
-    pub ws_url: Option<String>,
+    ws: Option<RwLock<WsClient>>,
+    ws_url: Option<String>,
+    timeout: Duration,
 }
 
 impl BlockchainClient {
@@ -40,41 +45,51 @@ impl BlockchainClient {
 
     /// Creates a new RPC client connected to HTTP and optionally to WS.
     pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
-        tracing::info!(%http_url, "starting blockchain client");
+        tracing::info!(%http_url, "creating blockchain client");
 
         // build http provider
-        let http = match HttpClientBuilder::default().request_timeout(timeout).build(http_url) {
-            Ok(http) => http,
-            Err(e) => {
-                tracing::error!(reason = ?e, url = %http_url, "failed to create blockchain http client");
-                return Err(e).context("failed to create blockchain http client");
-            }
-        };
+        let http = Self::build_http_client(http_url, timeout)?;
 
         // build ws provider
-        let (ws, ws_url) = if let Some(ws_url) = ws_url {
-            match WsClientBuilder::new().connection_timeout(timeout).build(ws_url).await {
-                Ok(ws) => (Some(ws), Some(ws_url.to_string())),
-                Err(e) => {
-                    tracing::error!(reason = ?e, url = %ws_url, "failed to create blockchain websocket client");
-                    return Err(e).context("failed to create blockchain websocket client");
-                }
-            }
+        let ws = if let Some(ws_url) = ws_url {
+            Some(RwLock::new(Self::build_ws_client(ws_url, timeout).await?))
         } else {
-            (None, None)
+            None
         };
 
         let client = Self {
             http,
-            http_url: http_url.to_string(),
             ws,
-            ws_url,
+            ws_url: ws_url.map(|x| x.to_owned()),
+            timeout,
         };
 
         // check health before assuming it is ok
         client.fetch_listening().await?;
 
         Ok(client)
+    }
+
+    fn build_http_client(url: &str, timeout: Duration) -> anyhow::Result<HttpClient> {
+        tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain http client");
+        match HttpClientBuilder::default().request_timeout(timeout).build(url) {
+            Ok(http) => Ok(http),
+            Err(e) => {
+                tracing::error!(reason = ?e, %url, timeout = %timeout.to_string_ext(), "failed to create blockchain http client");
+                Err(e).context("failed to create blockchain http client")
+            }
+        }
+    }
+
+    async fn build_ws_client(url: &str, timeout: Duration) -> anyhow::Result<WsClient> {
+        tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain websocket client");
+        match WsClientBuilder::new().connection_timeout(timeout).build(url).await {
+            Ok(ws) => Ok(ws),
+            Err(e) => {
+                tracing::error!(reason = ?e, %url, timeout = %timeout.to_string_ext(), "failed to create blockchain websocket client");
+                Err(e).context("failed to create blockchain websocket client")
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -87,9 +102,9 @@ impl BlockchainClient {
     }
 
     /// Validates it is connected to websocket and returns a reference to the websocket client.
-    fn require_ws(&self) -> anyhow::Result<&WsClient> {
+    async fn require_ws(&self) -> anyhow::Result<RwLockReadGuard<'_, WsClient>> {
         match &self.ws {
-            Some(ws) => Ok(ws),
+            Some(ws) => Ok(ws.read().await),
             None => log_and_err!("blockchain client not connected to websocket"),
         }
     }
@@ -109,7 +124,7 @@ impl BlockchainClient {
         }
     }
 
-    /// Retrieves the current block number.
+    /// Fetches the current block number.
     pub async fn fetch_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("fetching block number");
 
@@ -125,7 +140,7 @@ impl BlockchainClient {
     pub async fn fetch_block(&self, number: BlockNumber) -> anyhow::Result<JsonValue> {
         tracing::debug!(%number, "fetching block");
 
-        let number = serde_json::to_value(number)?;
+        let number = serde_json::to_value(number).expect_infallible();
         let result = self
             .http
             .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number, JsonValue::Bool(true)])
@@ -141,7 +156,7 @@ impl BlockchainClient {
     pub async fn fetch_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
         tracing::debug!(%hash, "fetching transaction");
 
-        let hash = serde_json::to_value(hash)?;
+        let hash = serde_json::to_value(hash).expect_infallible();
 
         let result = self
             .http
@@ -158,7 +173,7 @@ impl BlockchainClient {
     pub async fn fetch_receipt(&self, hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
         tracing::debug!(%hash, "fetching transaction receipt");
 
-        let hash = serde_json::to_value(hash)?;
+        let hash = serde_json::to_value(hash).expect_infallible();
         let result = self
             .http
             .request::<Option<ExternalReceipt>, Vec<JsonValue>>("eth_getTransactionReceipt", vec![hash])
@@ -174,8 +189,8 @@ impl BlockchainClient {
     pub async fn fetch_balance(&self, address: &Address, number: Option<BlockNumber>) -> anyhow::Result<Wei> {
         tracing::debug!(%address, ?number, "fetching account balance");
 
-        let address = serde_json::to_value(address)?;
-        let number = serde_json::to_value(number)?;
+        let address = serde_json::to_value(address).expect_infallible();
+        let number = serde_json::to_value(number).expect_infallible();
         let result = self.http.request::<Wei, Vec<JsonValue>>("eth_getBalance", vec![address, number]).await;
 
         match result {
@@ -188,11 +203,11 @@ impl BlockchainClient {
     pub async fn fetch_storage_at(&self, address: &Address, index: &SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<SlotValue> {
         tracing::debug!(%address, ?point_in_time, "fetching account balance");
 
-        let address = serde_json::to_value(address)?;
-        let index = serde_json::to_value(index)?;
+        let address = serde_json::to_value(address).expect_infallible();
+        let index = serde_json::to_value(index).expect_infallible();
         let number = match point_in_time {
-            StoragePointInTime::Present => serde_json::to_value("latest")?,
-            StoragePointInTime::Past(number) => serde_json::to_value(number)?,
+            StoragePointInTime::Present => serde_json::to_value("latest").expect_infallible(),
+            StoragePointInTime::Past(number) => serde_json::to_value(number).expect_infallible(),
         };
         let result = self
             .http
@@ -209,24 +224,11 @@ impl BlockchainClient {
     // RPC mutations
     // -------------------------------------------------------------------------
 
-    /// Appends entries to followers.
-    pub async fn send_append_entries(&self, entries: Vec<crate::eth::consensus::Entry>) -> anyhow::Result<()> {
-        tracing::debug!(?entries, "appending entries");
-
-        let entries = serde_json::to_value(entries)?;
-        let result = self.http.request::<(), Vec<JsonValue>>("stratus_appendEntries", vec![entries]).await;
-
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => log_and_err!(reason = e, "failed to send append entries"),
-        }
-    }
-
     /// Sends a signed transaction.
     pub async fn send_raw_transaction(&self, hash: Hash, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
         tracing::debug!(%hash, "sending raw transaction");
 
-        let tx = serde_json::to_value(tx)?;
+        let tx = serde_json::to_value(tx).expect_infallible();
         let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await;
 
         match result {
@@ -241,15 +243,38 @@ impl BlockchainClient {
 
     pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<ExternalBlock>> {
         tracing::debug!("subscribing to newHeads event");
+        let ws = self.require_ws().await?;
 
-        let ws = self.require_ws()?;
-        let result = ws
-            .subscribe::<ExternalBlock, Vec<JsonValue>>("eth_subscribe", vec![JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
-            .await;
+        let mut first_attempt = true;
+        loop {
+            let result = ws
+                .subscribe::<ExternalBlock, Vec<JsonValue>>("eth_subscribe", vec![JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
+                .await;
 
-        match result {
-            Ok(sub) => Ok(sub),
-            Err(e) => log_and_err!(reason = e, "failed to subscribe to newHeads event"),
+            match result {
+                // subscribed
+                Ok(sub) => return Ok(sub),
+
+                // failed and need to reconnect
+                e @ Err(ClientError::RestartNeeded(_)) => {
+                    // will try to reconnect websocket client only in first attempt
+                    if first_attempt {
+                        tracing::error!(%first_attempt, reason = ?e, "failed to subscribe to newHeads event. trying to reconnect websocket client now.");
+                    } else {
+                        tracing::error!(%first_attempt, reason = ?e, "failed to subscribe to newHeads event. will not try to reconnect websocket client.");
+                        return e.context("failed to subscribe to newHeads event");
+                    }
+                    first_attempt = false;
+
+                    // reconnect websocket client
+                    let new_ws_client = Self::build_ws_client(self.ws_url.as_ref().unwrap(), self.timeout).await?;
+                    let mut current_ws_client = self.ws.as_ref().unwrap().write().await;
+                    let _ = std::mem::replace(&mut *current_ws_client, new_ws_client);
+                }
+
+                // failed and cannot do anything
+                Err(e) => return log_and_err!(reason = e, "failed to subscribe to newHeads event"),
+            }
         }
     }
 }

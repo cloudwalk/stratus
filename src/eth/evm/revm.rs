@@ -5,6 +5,7 @@
 //! interacting with the project's storage backend to manage state. `Revm` embodies the practical application
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
+use std::cmp::min;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -54,6 +55,9 @@ use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
+/// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
+const GAS_MAX_LIMIT: u64 = 1_000_000_000;
+
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Revm {
     evm: RevmEvm<'static, (), RevmSession>,
@@ -63,7 +67,7 @@ impl Revm {
     /// Creates a new instance of the Revm ready to be used.
     #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(storage: Arc<StratusStorage>, config: EvmConfig) -> Self {
-        tracing::info!(?config, "starting revm");
+        tracing::info!(?config, "creating revm");
 
         // configure handler
         let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
@@ -128,7 +132,7 @@ impl Evm for Revm {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create(CreateScheme::Create),
         };
-        tx_env.gas_limit = input.gas_limit.into();
+        tx_env.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
         tx_env.gas_price = input.gas_price.into();
         tx_env.chain_id = input.chain_id.map_into();
         tx_env.nonce = input.nonce.map_into();
