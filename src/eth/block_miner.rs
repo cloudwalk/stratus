@@ -89,10 +89,10 @@ impl BlockMiner {
         let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone()).await?;
 
-        if let Some(consensus) = &self.consensus {
-            let execution = format!("{:?}", tx_execution.clone());
-            consensus.sender.send(execution).await.unwrap();
-        }
+        //TODO implement full gRPC for tx execution: if let Some(consensus) = &self.consensus {
+        //TODO implement full gRPC for tx execution:     let execution = format!("{:?}", tx_execution.clone());
+        //TODO implement full gRPC for tx execution:     consensus.sender.send(execution).await.unwrap();
+        //TODO implement full gRPC for tx execution: }
 
         // decide what to do based on mining mode
         match self.mode {
@@ -213,6 +213,10 @@ impl BlockMiner {
         let block_number = *block.number();
         let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
+
+        if let Some(consensus) = &self.consensus {
+            consensus.sender.send(block.clone()).await?;
+        }
 
         // persist block
         self.storage.save_block(block).await?;

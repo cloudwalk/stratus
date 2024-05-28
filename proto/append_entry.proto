@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package append_entry;
+
+// Enum to represent status codes
+enum StatusCode {
+    OK = 0; // Request was processed successfully. No further action needed.
+    ERROR = 1; // General error. Investigate the cause.
+    NOT_LEADER = 2; // Node is not the current leader. Retry with the correct leader.
+    LEADER_CHANGED = 3; // Leadership has changed. Re-evaluate the leader and retry.
+    LOG_MISMATCH = 4; // Log mismatch. Adjust prevLogIndex and prevLogTerm, then resend entries.
+    TERM_MISMATCH = 5; // Term mismatch. Leader’s term outdated, step down and initiate a new election.
+    RETRY = 6; // Temporary issue. Wait and retry the request.
+    APPEND_SUCCESS = 7; // Entry appended successfully. Update commit index.
+    APPEND_FAILURE_GENERAL = 8; // General failure. Retry or investigate.
+    TERM_OUTDATED = 9; // Leader’s term outdated. Leader should step down.
+    STORAGE_ERROR = 10; // Persistent storage error. Handle the error and retry.
+    LEADER_COMMIT_INDEX_ADVANCED = 11; // Leader’s commit index advanced. Follower needs to catch up.
+    FOLLOWER_IN_CANDIDATE_STATE = 12; // Follower is in candidate state. Leader may need to step down.
+    FOLLOWER_IN_LEADER_STATE = 13; // Follower believes it is the leader. Resolve split-brain scenario.
+    ENTRY_ALREADY_EXISTS = 14; // Entry already exists. Verify log consistency.
+    RETRY_LATER = 15; // Follower requests retry later. Wait and retry the request.
+}
+
+// Transaction Execution message
+message Transaction {
+    string hash = 1;
+    string nonce = 2;
+    string blockHash = 3;
+    string blockNumber = 4;
+    string transactionIndex = 5;
+    string from = 6;
+    string to = 7;
+    string value = 8;
+    string gasPrice = 9;
+    string gas = 10;
+    string input = 11;
+    string v = 12;
+    string r = 13;
+    string s = 14;
+    string type = 15;
+    string chainId = 16;
+    string publicKey = 17;
+    string raw = 18;
+    string standardV = 19;
+}
+
+// Transaction Receipt message
+message Receipt {
+    string transactionHash = 1;
+    string transactionIndex = 2;
+    string blockHash = 3;
+    string blockNumber = 4;
+    string from = 5;
+    string to = 6;
+    string cumulativeGasUsed = 7;
+    string gasUsed = 8;
+    string contractAddress = 9;
+    repeated Log logs = 10;
+    string status = 11;
+    string logsBloom = 12;
+    string effectiveGasPrice = 13;
+}
+
+// Log message
+message Log {
+    string address = 1;
+    repeated string topics = 2;
+    string data = 3;
+    string blockHash = 4;
+    string blockNumber = 5;
+    string transactionHash = 6;
+    string transactionIndex = 7;
+    string logIndex = 8;
+    string transactionLogIndex = 9;
+    bool removed = 10;
+}
+
+// Execution Result message
+message ExecutionResult {
+    int64 block_timestamp = 1;
+    bool receipt_applied = 2;
+    string result = 3;
+    string output = 4;
+    repeated Log logs = 5;
+    string gas = 6;
+}
+
+// Transaction Execution message
+message TransactionExecution {
+    Transaction tx = 1;
+    Receipt receipt = 2;
+    ExecutionResult result = 3;
+}
+
+// Append Transaction Execution message
+message AppendTransactionExecutionsRequest {
+    uint64 term = 1;
+    uint64 prevLogIndex = 2;
+    uint64 prevLogTerm = 3;
+    repeated TransactionExecution executions = 4;
+}
+
+message AppendTransactionExecutionsResponse {
+    StatusCode status = 1;
+    string message = 2;
+    uint64 last_committed_block_number = 3;
+}
+
+// Block Header message
+message BlockHeader {
+    uint64 number = 1;
+    string hash = 2;
+    string transactions_root = 3;
+    string gas_used = 4;
+    string gas_limit = 5;
+    string bloom = 6;
+    uint64 timestamp = 7;
+    string parent_hash = 8;
+    string author = 9;
+    bytes extra_data = 10;
+    string miner = 11;
+    string difficulty = 12;
+    string receipts_root = 13;
+    string uncle_hash = 14;
+    uint64 size = 15;
+    string state_root = 16;
+    string total_difficulty = 17;
+    string nonce = 18;
+}
+
+// Append Block Commit message
+message AppendBlockCommitRequest {
+    uint64 term = 1;
+    uint64 prevLogIndex = 2;
+    uint64 prevLogTerm = 3;
+    BlockHeader header = 4;
+    repeated string transactionHashes = 5;
+}
+
+message AppendBlockCommitResponse {
+    StatusCode status = 1;
+    string message = 2;
+    uint64 last_committed_block_number = 3;
+}
+
+// Service definition
+service AppendEntryService {
+    rpc AppendTransactionExecutions (AppendTransactionExecutionsRequest) returns (AppendTransactionExecutionsResponse);
+    rpc AppendBlockCommit (AppendBlockCommitRequest) returns (AppendBlockCommitResponse);
+}
