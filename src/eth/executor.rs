@@ -37,6 +37,7 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::TransactionRelayer;
+use crate::ext::ResultExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
@@ -209,8 +210,8 @@ impl Executor {
         let mut evm_result = match evm_result {
             Ok(inner) => inner,
             Err(e) => {
-                let json_tx = serde_json::to_string(&tx).unwrap();
-                let json_receipt = serde_json::to_string(&receipt).unwrap();
+                let json_tx = serde_json::to_string(&tx).expect_infallible();
+                let json_receipt = serde_json::to_string(&receipt).expect_infallible();
                 tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
                 return Err(e);
             }
@@ -228,9 +229,9 @@ impl Executor {
 
         // ensure it matches receipt before saving
         if let Err(e) = evm_result.execution.compare_with_receipt(receipt) {
-            let json_tx = serde_json::to_string(&tx).unwrap();
-            let json_receipt = serde_json::to_string(&receipt).unwrap();
-            let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).unwrap();
+            let json_tx = serde_json::to_string(&tx).expect_infallible();
+            let json_receipt = serde_json::to_string(&receipt).expect_infallible();
+            let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).expect_infallible();
             tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
             return Err(e);
         };

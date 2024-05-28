@@ -29,7 +29,6 @@ use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::sleep;
 use tokio::time::timeout;
-use tokio::time::Instant;
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -135,27 +134,30 @@ async fn start_block_executor(executor: Arc<Executor>, miner: Arc<BlockMiner>, m
 
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
-
-        let instant_before_execution = Instant::now();
-
-        if executor.reexecute_external(&block, &receipts).await.is_err() {
-            GlobalState::shutdown_from(TASK_NAME, "failed to re-execute external block");
+        if let Err(e) = executor.reexecute_external(&block, &receipts).await {
+            let message = GlobalState::shutdown_from(TASK_NAME, "failed to re-execute external block");
+            tracing::error!(reason = ?e, %message);
             return;
         };
 
-        let duration = instant_before_execution.elapsed();
-        let tps = calculate_tps(duration, block.transactions.len());
+        // statistics
+        #[cfg(feature = "metrics")]
+        {
+            let duration = start.elapsed();
+            let tps = calculate_tps(duration, block.transactions.len());
 
-        tracing::info!(
-            tps,
-            ?duration,
-            block_number = ?block.number(),
-            receipts = receipts.len(),
-            "reexecuted external block",
-        );
+            tracing::info!(
+                tps,
+                duraton = %duration.to_string_ext(),
+                block_number = ?block.number(),
+                receipts = receipts.len(),
+                "reexecuted external block",
+            );
+        }
 
-        if miner.mine_external_mixed_and_commit().await.is_err() {
-            GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+        if let Err(e) = miner.mine_external_mixed_and_commit().await {
+            let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+            tracing::error!(reason = ?e, %message);
             return;
         };
 

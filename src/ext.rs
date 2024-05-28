@@ -44,8 +44,10 @@ macro_rules! gen_test_serde {
         paste::paste! {
             #[test]
             pub fn [<serde_ $type:snake>]() {
+                use $crate::ext::ResultExt;
+
                 let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let json = serde_json::to_string(&value).unwrap();
+                let json = serde_json::to_string(&value).expect_infallible();
                 assert_eq!(serde_json::from_str::<$type>(&json).unwrap(), value);
             }
         }
@@ -120,6 +122,25 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
 
     // error
     Err(anyhow!("invalid duration format: {}", s))
+}
+
+// -----------------------------------------------------------------------------
+// Result
+// -----------------------------------------------------------------------------
+
+/// Extensions for `Result<T, E>`.
+pub trait ResultExt<T, E> {
+    /// Unwraps a result informing that this operation is expected to be infallible.
+    fn expect_infallible(self) -> T;
+}
+
+impl<T> ResultExt<T, serde_json::Error> for Result<T, serde_json::Error>
+where
+    T: Sized,
+{
+    fn expect_infallible(self) -> T {
+        self.expect("serialization should be infallible")
+    }
 }
 
 // -----------------------------------------------------------------------------

@@ -19,6 +19,7 @@ use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
+use stratus::ext::ResultExt;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::GlobalServices;
 use stratus::GlobalState;
@@ -234,13 +235,20 @@ async fn execute_external_rpc_storage_loader(
         };
 
         // check if executed correctly
-        let Ok((blocks, receipts)) = result else {
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt")));
+        let (blocks, receipts) = match result {
+            Ok((blocks, receipts)) => (blocks, receipts),
+            Err(e) => {
+                let message = "failed to fetch block os receipt";
+                tracing::error!(reason = ?e, message);
+                return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, message)));
+            }
         };
 
         // check blocks were really loaded
         if blocks.is_empty() {
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected")));
+            let message = "no blocks return when they were expected";
+            tracing::error!(%message);
+            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, message)));
         }
 
         // send to backlog
@@ -279,9 +287,15 @@ fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalR
     fs::create_dir_all(&dir)?;
 
     // write json
-    fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block)?)?;
-    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(&receipts_snapshot)?)?;
-    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&state_snapshot)?)?;
+    fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block).expect_infallible())?;
+    fs::write(
+        format!("{}/receipts.json", dir),
+        serde_json::to_string_pretty(&receipts_snapshot).expect_infallible(),
+    )?;
+    fs::write(
+        format!("{}/snapshot.json", dir),
+        serde_json::to_string_pretty(&state_snapshot).expect_infallible(),
+    )?;
 
     Ok(())
 }
