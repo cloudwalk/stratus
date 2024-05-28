@@ -219,47 +219,23 @@ impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Ser
 }
 
 /// Custom iterator for navigating RocksDB entries.
-///
-/// This iterator is designed to skip over specific keys used for internal control purposes, such as:
-/// - `"current_block"`: Used to indicate the current block number in the database.
-/// - Keys representing index keys (if deserialized as `u64`): Used for various indexing purposes.
-///
-/// The iterator will:
-/// - Ignore any entries where the key is `"current_block"`.
-/// - Attempt to deserialize all other keys to the generic type `K`. If deserialization fails, it assumes
-///   the key might be an index key or improperly formatted, and skips it.
 impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> Iterator
     for RocksDBIterator<'a, K, V>
 {
     type Item = (K, V);
 
-    /// Retrieves the next key-value pair from the database, skipping over special control keys and
-    /// potentially misformatted keys.
+    /// Retrieves the next key-value pair from the database.
     ///
     /// Returns:
     /// - `Some((K, V))` if a valid key-value pair is found.
     /// - `None` if there are no more items to process, or if only special/control keys remain.
     fn next(&mut self) -> Option<Self::Item> {
-        for key_value_result in self.iter.by_ref() {
-            let Ok((key, value)) = key_value_result else { continue };
+        let next = self.iter.next()?;
+        let (key, value) = next.unwrap();
 
-            // Check if the key is a special 'current_block' key and skip it
-            if key == bincode::serialize(&"current_block").unwrap().into_boxed_slice() {
-                continue; // Move to the next key-value pair
-            }
-
-            // Attempt to deserialize the key to type `K`
-            if let Ok(deserialized_key) = bincode::deserialize::<K>(&key) {
-                // Attempt to deserialize the value to type `V`
-                if let Ok(deserialized_value) = bincode::deserialize::<V>(&value) {
-                    // Return the deserialized key-value pair if both are successful
-                    return Some((deserialized_key, deserialized_value));
-                }
-            }
-            // If deserialization fails, continue to the next item
-        }
-        // Return None if all items are processed or if all remaining items fail conditions
-        None
+        let deserialized_key = bincode::deserialize::<K>(&key).unwrap();
+        let deserialized_value = bincode::deserialize::<V>(&value).unwrap();
+        Some((deserialized_key, deserialized_value))
     }
 }
 
