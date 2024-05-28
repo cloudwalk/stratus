@@ -6,6 +6,8 @@ import { sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
 describe("Transaction: parallel transfer", () => {
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).eq("0x0");
     });
     it("Sends parallel requests", async () => {
         const counterParty = randomAccounts(1)[0];

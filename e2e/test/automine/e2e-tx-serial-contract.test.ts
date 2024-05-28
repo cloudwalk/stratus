@@ -28,6 +28,8 @@ describe("Transaction: serial TestContractBalances", () => {
 
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).eq("0x0");
     });
 
     it("Contract is deployed", async () => {

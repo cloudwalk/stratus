@@ -16,6 +16,8 @@ describe("Transaction: parallel TestContractBalances", async () => {
 
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).eq("0x0");
     });
 
     it("Deploy TestContractBalances", async () => {
@@ -98,6 +100,8 @@ describe("Transaction: parallel TestContractCounter", async () => {
 
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).eq("0x0");
     });
 
     it("Deploy TestContractCounter", async () => {
