@@ -11,7 +11,7 @@ use nom::sequence::separated_pair;
 use nom::IResult;
 
 fn main() {
-    tonic_build::compile_protos("proto/raft.proto").unwrap();
+    tonic_build::compile_protos("proto/append_entry.proto").unwrap();
     // any code change
     println!("cargo:rerun-if-changed=src/");
     // used in signatures codegen
