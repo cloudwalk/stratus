@@ -47,7 +47,7 @@ describe("Relayer Test", () => {
             console.log('Tx number and current time', i, new Date().toISOString());
         }
 
-        await sleep(1000);
+        await sleep(2000);
 
         const aliceStratusBalance = await sendGetBalance(ALICE.address);
         const bobStratusBalance = await sendGetBalance(BOB.address);
@@ -58,7 +58,7 @@ describe("Relayer Test", () => {
 
         updateProviderUrl('http://localhost:8545');
 
-        await sleep(1000);
+        await sleep(2000);
 
         const aliceHardhatBalance = await sendGetBalance(ALICE.address);
         const bobHardhatBalance = await sendGetBalance(BOB.address);
