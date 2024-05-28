@@ -124,7 +124,7 @@ impl BlockchainClient {
         }
     }
 
-    /// Retrieves the current block number.
+    /// Fetches the current block number.
     pub async fn fetch_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("fetching block number");
 

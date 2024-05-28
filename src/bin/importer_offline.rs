@@ -20,6 +20,7 @@ use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::ResultExt;
+use stratus::infra::tracing::info_task_spawn;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::GlobalServices;
@@ -82,6 +83,8 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // execute thread: external rpc storage loader
     let storage_thread = thread::Builder::new().name("storage-loader".into());
     let storage_tokio = Handle::current();
+
+    info_task_spawn("storage-loader");
     let storage_loader_thread = storage_thread
         .spawn(move || {
             let _tokio_guard = storage_tokio.enter();
@@ -103,6 +106,8 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // execute thread: block importer
     let importer_thread = thread::Builder::new().name("block-importer".into());
     let importer_tokio = Handle::current();
+
+    info_task_spawn("block-importer");
     let block_importer_thread = importer_thread
         .spawn(move || {
             let _tokio_guard = importer_tokio.enter();
@@ -139,7 +144,6 @@ async fn execute_block_importer(
     blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-executor";
-    tracing::info!("creating task {}", TASK_NAME);
 
     // receives blocks and receipts from the backlog to reexecute and import
     loop {

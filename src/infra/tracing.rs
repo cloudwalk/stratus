@@ -33,7 +33,7 @@ pub async fn init_tracing(url: Option<&String>) {
             .with_filter(EnvFilter::from_default_env())
             .boxed()
     } else {
-        println!("tracing registry  enabling text logs");
+        println!("tracing registry enabling text logs");
         fmt::Layer::default()
             .with_target(false)
             .with_thread_ids(true)
@@ -75,6 +75,12 @@ pub async fn init_tracing(url: Option<&String>) {
             tracing::error!(reason = ?e, "failed to create tokio-console server");
         };
     });
+}
+
+/// Emits an info message that a task was spawned to backgroud.
+#[track_caller]
+pub fn info_task_spawn(name: &str) {
+    tracing::info!(%name, "spawning task");
 }
 
 /// Emits an warning that a task is exiting because it received a cancenllation signal.
