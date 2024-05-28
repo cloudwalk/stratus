@@ -19,6 +19,10 @@ use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
+use stratus::ext::ResultExt;
+use stratus::infra::tracing::info_task_spawn;
+use stratus::log_and_err;
+use stratus::utils::calculate_tps_and_bpm;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::runtime::Handle;
@@ -79,34 +83,48 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // execute thread: external rpc storage loader
     let storage_thread = thread::Builder::new().name("storage-loader".into());
     let storage_tokio = Handle::current();
-    let _ = storage_thread.spawn(move || {
-        let _tokio_guard = storage_tokio.enter();
 
-        let result = storage_tokio.block_on(execute_external_rpc_storage_loader(
-            rpc_storage,
-            config.blocks_by_fetch,
-            config.paralellism,
-            block_start,
-            block_end,
-            backlog_tx,
-        ));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "storage-loader failed");
-        }
-    });
+    info_task_spawn("storage-loader");
+    let storage_loader_thread = storage_thread
+        .spawn(move || {
+            let _tokio_guard = storage_tokio.enter();
+
+            let result = storage_tokio.block_on(execute_external_rpc_storage_loader(
+                rpc_storage,
+                config.blocks_by_fetch,
+                config.paralellism,
+                block_start,
+                block_end,
+                backlog_tx,
+            ));
+            if let Err(e) = result {
+                tracing::error!(reason = ?e, "storage-loader failed");
+            }
+        })
+        .expect("spawning storage-loader thread should not fail");
 
     // execute thread: block importer
     let importer_thread = thread::Builder::new().name("block-importer".into());
     let importer_tokio = Handle::current();
-    let importer_join = importer_thread.spawn(move || {
-        let _tokio_guard = importer_tokio.enter();
-        let result = importer_tokio.block_on(execute_block_importer(executor, miner, storage, csv, backlog_rx, block_snapshots));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "block-importer failed");
-        }
-    })?;
 
-    let _ = importer_join.join();
+    info_task_spawn("block-importer");
+    let block_importer_thread = importer_thread
+        .spawn(move || {
+            let _tokio_guard = importer_tokio.enter();
+            let result = importer_tokio.block_on(execute_block_importer(executor, miner, storage, csv, backlog_rx, block_snapshots));
+            if let Err(e) = result {
+                tracing::error!(reason = ?e, "block-importer failed");
+            }
+        })
+        .expect("spawning block-importer thread should not fail");
+
+    // await tasks
+    if let Err(e) = block_importer_thread.join() {
+        tracing::error!(reason = ?e, "block-importer thread failed");
+    }
+    if let Err(e) = storage_loader_thread.join() {
+        tracing::error!(reason = ?e, "storage-loader thread failed");
+    }
 
     Ok(())
 }
@@ -126,7 +144,6 @@ async fn execute_block_importer(
     blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-executor";
-    tracing::info!("starting {}", TASK_NAME);
 
     // receives blocks and receipts from the backlog to reexecute and import
     loop {
@@ -175,21 +192,15 @@ async fn execute_block_importer(
             }
         }
 
-        let seconds_elapsed = match instant_before_execution.elapsed().as_secs() as usize {
-            // avoid division by zero
-            0 => 1,
-            non_zero => non_zero,
-        };
-        let tps = transaction_count.checked_div(seconds_elapsed).unwrap_or(transaction_count);
-        let minutes_elapsed = seconds_elapsed as f64 / 60.0;
-        let blocks_per_minute = blocks_len as f64 / minutes_elapsed;
+        let duration = instant_before_execution.elapsed();
+        let (tps, bpm) = calculate_tps_and_bpm(duration, transaction_count, blocks_len);
+
         tracing::info!(
             tps,
-            blocks_per_minute = format_args!("{blocks_per_minute:.2}"),
-            seconds_elapsed,
+            blocks_per_minute = format_args!("{bpm:.2}"),
+            ?duration,
             %block_start,
             %block_end,
-            transaction_count,
             receipts = receipts.len(),
             "reexecuted blocks batch",
         );
@@ -211,7 +222,7 @@ async fn execute_external_rpc_storage_loader(
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-loader";
-    tracing::info!(%start, %end, "starting {}", TASK_NAME);
+    tracing::info!(%start, %end, "creating task {}", TASK_NAME);
 
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();
@@ -239,13 +250,18 @@ async fn execute_external_rpc_storage_loader(
         };
 
         // check if executed correctly
-        let Ok((blocks, receipts)) = result else {
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt")));
+        let (blocks, receipts) = match result {
+            Ok((blocks, receipts)) => (blocks, receipts),
+            Err(e) => {
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt");
+                return log_and_err!(reason = e, message);
+            }
         };
 
         // check blocks were really loaded
         if blocks.is_empty() {
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected")));
+            let message = GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected");
+            return log_and_err!(message);
         }
 
         // send to backlog
@@ -284,9 +300,15 @@ fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalR
     fs::create_dir_all(&dir)?;
 
     // write json
-    fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block)?)?;
-    fs::write(format!("{}/receipts.json", dir), serde_json::to_string_pretty(&receipts_snapshot)?)?;
-    fs::write(format!("{}/snapshot.json", dir), serde_json::to_string_pretty(&state_snapshot)?)?;
+    fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block).expect_infallible())?;
+    fs::write(
+        format!("{}/receipts.json", dir),
+        serde_json::to_string_pretty(&receipts_snapshot).expect_infallible(),
+    )?;
+    fs::write(
+        format!("{}/snapshot.json", dir),
+        serde_json::to_string_pretty(&state_snapshot).expect_infallible(),
+    )?;
 
     Ok(())
 }

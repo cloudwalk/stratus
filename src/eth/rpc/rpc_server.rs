@@ -42,6 +42,7 @@ use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::Executor;
+use crate::ext::ResultExt;
 use crate::infra::tracing::warn_task_cancellation;
 use crate::GlobalState;
 
@@ -60,8 +61,7 @@ pub async fn serve_rpc(
     chain_id: ChainId,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-
-    tracing::info!("starting {}", TASK_NAME);
+    tracing::info!("creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
@@ -131,6 +131,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_async_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
         module.register_async_method("evm_mine", evm_mine)?;
         module.register_async_method("debug_setHead", debug_set_head)?;
+        module.register_async_method("debug_readAllSlotsFromAccount", debug_read_all_slots)?;
     }
 
     // stratus health check
@@ -189,13 +190,13 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number).await?;
-    Ok(serde_json::to_value(number).unwrap())
+    Ok(serde_json::to_value(number).expect_infallible())
 }
 
 #[cfg(feature = "dev")]
 async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     ctx.miner.mine_local_and_commit().await?;
-    Ok(serde_json::to_value(true).unwrap())
+    Ok(serde_json::to_value(true).expect_infallible())
 }
 
 #[cfg(feature = "dev")]
@@ -209,7 +210,13 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>) 
         Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
         None => return log_and_err!("reading latest block returned None")?,
     }
-    Ok(serde_json::to_value(timestamp).unwrap())
+    Ok(serde_json::to_value(timestamp).expect_infallible())
+}
+
+#[cfg(feature = "dev")]
+async fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let (_, address) = next_rpc_param::<Address>(params.sequence())?;
+    Ok(serde_json::to_value(ctx.storage.read_all_slots(&address).await?).expect_infallible())
 }
 
 // Status
@@ -256,7 +263,7 @@ async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
 #[tracing::instrument(skip_all)]
 async fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let number = ctx.storage.read_mined_block_number().await?;
-    Ok(serde_json::to_value(number).unwrap())
+    Ok(serde_json::to_value(number).expect_infallible())
 }
 
 #[tracing::instrument(skip_all)]

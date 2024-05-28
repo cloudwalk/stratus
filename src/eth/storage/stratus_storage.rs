@@ -327,6 +327,11 @@ impl StratusStorage {
         Ok(slots)
     }
 
+    #[tracing::instrument(skip_all)]
+    pub async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        self.perm.read_all_slots(address).await
+    }
+
     // -------------------------------------------------------------------------
     // Blocks
     // -------------------------------------------------------------------------
