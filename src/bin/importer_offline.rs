@@ -246,9 +246,9 @@ async fn execute_external_rpc_storage_loader(
 
         // check blocks were really loaded
         if blocks.is_empty() {
-            let message = "no blocks return when they were expected";
+            let message = GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected");
             tracing::error!(%message);
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, message)));
+            return Err(anyhow!(message));
         }
 
         // send to backlog
