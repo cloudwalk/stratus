@@ -41,7 +41,7 @@ if (!providerUrl) {
     providerUrl = "http://localhost:8545";
 }
 
-let ETHERJS = new JsonRpcProvider(providerUrl);
+export let ETHERJS = new JsonRpcProvider(providerUrl);
 
 export function updateProviderUrl(newUrl: string) {
     providerUrl = newUrl;
