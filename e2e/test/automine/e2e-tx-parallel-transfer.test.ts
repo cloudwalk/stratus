@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { TEST_ACCOUNTS, randomAccounts } from "../helpers/account";
-import { sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
+import { proveTxs, sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
 
 describe("Transaction: parallel transfer", () => {
     it("Resets blockchain", async () => {
@@ -26,8 +26,8 @@ describe("Transaction: parallel transfer", () => {
             signedTxs.push(await account.signWeiTransfer(counterParty.address, 0));
         }
 
-        // send transactions in parallel
-        await sendRawTransactions(signedTxs);
+        // send transactions in parallel and wait for minting
+        await proveTxs(sendRawTransactions(signedTxs));
 
         // verify
         expect(await sendGetBalance(counterParty.address)).eq(expectedCounterPartyBalance);

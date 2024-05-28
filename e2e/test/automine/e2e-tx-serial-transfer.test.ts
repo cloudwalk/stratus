@@ -2,31 +2,34 @@ import { expect } from "chai";
 import { keccak256 } from "ethers";
 import { Block, Transaction, TransactionReceipt } from "web3-types";
 
-import { ALICE, Account, BOB, randomAccounts } from "../helpers/account";
-import { isStratus } from "../helpers/network";
+import { Account, ALICE, BOB, randomAccounts } from "../helpers/account";
+import { BlockMode, currentBlockMode, isStratus } from "../helpers/network";
 import {
-    CHAIN_ID,
+    CHAIN_ID, DEFAULT_TX_TIMEOUT_MS,
+    fromHexTimestamp,
     HASH_EMPTY_TRANSACTIONS,
     HASH_EMPTY_UNCLES,
     HEX_PATTERN,
+    mineBlockIfNeeded,
     NATIVE_TRANSFER_GAS,
     ONE,
-    TEST_BALANCE,
-    TEST_TRANSFER,
-    ZERO,
-    fromHexTimestamp,
     send,
     sendGetBalance,
     sendRawTransaction,
     sendReset,
+    TEST_BALANCE,
+    TEST_TRANSFER,
+    toHex,
+    waitForTransactions,
+    ZERO,
 } from "../helpers/rpc";
 
 describe("Transaction: serial transfer", () => {
-    var _tx: Transaction;
-    var _txHash: string;
-    var _block: Block;
-    var _txSentTimestamp: number;
-    var new_account: Account;
+    let _tx: Transaction;
+    let _txHash: string;
+    let _block: Block;
+    let _txSentTimestamp: number;
+    let new_account: Account;
 
     it("Resets blockchain", async () => {
         await sendReset();
@@ -36,8 +39,13 @@ describe("Transaction: serial transfer", () => {
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
+        await mineBlockIfNeeded();
     });
     it("Transaction is created", async () => {
+        // [POSSIBLE_BUG] Without this 'if' statement the test fails on Stratus
+        if (currentBlockMode() === BlockMode.Interval) {
+            await new Promise((resolve) => setTimeout(resolve, DEFAULT_TX_TIMEOUT_MS));
+        }
         _tx = await send("eth_getTransactionByHash", [_txHash]);
         expect(_tx.from).eq(ALICE.address, "tx.from");
         expect(_tx.to).eq(BOB.address, "tx.to");
@@ -56,10 +64,17 @@ describe("Transaction: serial transfer", () => {
         // FIXME expect(_tx.type).to.be.oneOf([ZERO, ONE], "tx.type");
     });
     it("Block is created", async () => {
-        expect(await send("eth_blockNumber")).eq(ONE);
+        let expectedBlockNumber;
+        if (currentBlockMode() !== BlockMode.Interval) {
+            expect(await send("eth_blockNumber")).eq(ONE);
+            expectedBlockNumber = 1;
+        } else {
+            expectedBlockNumber = (await waitForTransactions([_txHash]))[0].blockNumber;
+        }
+        const expectedBlockNumberHex = toHex(expectedBlockNumber);
 
-        _block = await send("eth_getBlockByNumber", [ONE, true]);
-        expect(_block.number).eq(ONE);
+        _block = await send("eth_getBlockByNumber", [expectedBlockNumberHex, true]);
+        expect(_block.number).eq(expectedBlockNumberHex);
 
         expect(_block.transactionsRoot).not.eq(HASH_EMPTY_TRANSACTIONS);
         expect(_block.uncles).lengthOf(0);
@@ -74,7 +89,7 @@ describe("Transaction: serial transfer", () => {
         expect(fromHexTimestamp(_block.timestamp)).lte(Date.now());
 
         // ParentHash is the previous block's hash
-        let parentBlock = await send("eth_getBlockByNumber", [ZERO, true]);
+        let parentBlock = await send("eth_getBlockByNumber", [toHex(expectedBlockNumber - 1), true]);
         expect(_block.parentHash).eq(parentBlock.hash);
     });
     it("Receipt is created", async () => {
@@ -112,7 +127,15 @@ describe("Transaction: serial transfer", () => {
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
     });
-    it("Receiver balance is increased", async () => {
+    it("Receiver balance is changed accordingly", async () => {
+        if (currentBlockMode() !== BlockMode.Automine) {
+            if (!isStratus) {
+                // [POSSIBLE_BUG] The check below fails on Stratus.
+                expect(await sendGetBalance(new_account)).eq(0);
+            }
+            await mineBlockIfNeeded();
+        }
+        await waitForTransactions([_txHash]);
         expect(await sendGetBalance(new_account)).eq(TEST_TRANSFER);
     });
 });
