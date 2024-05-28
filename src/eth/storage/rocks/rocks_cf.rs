@@ -96,10 +96,6 @@ where
             .collect())
     }
 
-    pub fn get_index_block_number(&self) -> u64 {
-        self.last_index().map(|(block_number, _)| block_number).unwrap_or(0)
-    }
-
     // Mimics the 'insert' functionality of a HashMap
     pub fn insert(&self, key: K, value: V) {
         let cf = self.handle();
@@ -184,13 +180,6 @@ where
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
         RocksDBIterator::<K, V>::new(iter)
-    }
-
-    pub fn last_index(&self) -> Option<(u64, Vec<K>)> {
-        let cf = self.handle();
-
-        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
-        IndexedRocksDBIterator::<K>::new(iter).next()
     }
 
     pub fn last(&self) -> Option<(K, V)> {
