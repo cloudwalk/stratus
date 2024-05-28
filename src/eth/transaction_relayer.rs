@@ -30,6 +30,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StratusStorage;
+use crate::ext::ResultExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -159,21 +160,58 @@ impl ExternalRelayer {
     }
 
     async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_receipt: PendingTransaction<'_>) -> anyhow::Result<()> {
-        let substrate_receipt = substrate_receipt.await?.unwrap(); // xxx do something with None
-        if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
-            let err_string = compare_error.to_string();
-            let error = log_and_err!("transaction mismatch!").context(err_string.clone());
-            sqlx::query!(
-                "INSERT INTO mismatches (stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3)",
-                serde_json::to_value(stratus_receipt)?,
-                serde_json::to_value(substrate_receipt)?,
-                err_string
-            )
-            .execute(&self.pool)
-            .await?; // should retry? fallback?
-            return error;
+        match substrate_receipt.await {
+            Ok(Some(substrate_receipt)) => {
+                if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
+                    let err_string = compare_error.to_string();
+                    let error = log_and_err!("transaction mismatch!").context(err_string.clone());
+                    self.save_mismatch(stratus_receipt, Some(substrate_receipt), &err_string).await;
+                    error
+                } else {
+                    Ok(())
+                }
+            }
+            Ok(None) => {
+                self.save_mismatch(stratus_receipt, None, "no receipt returned by substrate").await;
+                Err(anyhow!("no receipt returned by substrate"))
+            }
+            Err(error) => {
+                let error = error.context("failed to fetch substrate receipt");
+                let err_str = error.to_string();
+                self.save_mismatch(stratus_receipt, None, &err_str.to_string()).await;
+                Err(error)
+            }
         }
-        Ok(())
+    }
+
+    async fn save_mismatch(&self, stratus_receipt: ExternalReceipt, substrate_receipt: Option<ExternalReceipt>, err_string: &str) {
+        let hash = stratus_receipt.hash().to_string();
+        let stratus_json = serde_json::to_value(stratus_receipt).expect_infallible();
+        let substrate_json = serde_json::to_value(substrate_receipt).expect_infallible();
+        let res = sqlx::query!(
+            "INSERT INTO mismatches (hash, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4)",
+            &hash,
+            &stratus_json,
+            &substrate_json,
+            err_string
+        )
+        .execute(&self.pool)
+        .await; // should fallback is case of error?
+        if let Err(err) = res {
+            let mut file = File::create(format!("data/mismatched_transactions/{}.json", hash))
+                .await
+                .expect("opening the file should not fail");
+            let json = serde_json::json!(
+                {
+                    "stratus_receipt": stratus_json,
+                    "substrate_receipt": substrate_json,
+                }
+            );
+            file.write_all(json.to_string().as_bytes())
+                .await
+                .expect("writing the mismatch to a file should not fail");
+            tracing::error!(?err, "failed to save mismatch, saving to file");
+        }
     }
 
     /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
@@ -249,14 +287,30 @@ impl ExternalRelayer {
         let tx = self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await?;
 
         tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
+        let mut tries = 0;
         while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await?.is_none() {
-            // should retry?
+            if tries > 50 {
+                return Err(anyhow!("transaction was not found in mempool after 500ms"));
+            }
             tokio::time::sleep(Duration::from_millis(10)).await;
+            tries += 1;
         }
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_and_check_mempool(start.elapsed());
         Ok((tx, ExternalReceipt(tx_mined.into())))
+    }
+
+    pub async fn relay(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
+        match self.relay_and_check_mempool(tx_mined.clone()).await {
+            Err(err) => {
+                let err = err.context("relay and check mempool failed");
+                let err_string = err.to_string();
+                self.save_mismatch(ExternalReceipt(tx_mined.into()), None, &err_string).await;
+                Err(err)
+            }
+            ok => ok,
+        }
     }
 
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
@@ -297,14 +351,18 @@ impl ExternalRelayer {
 
         let mut results = vec![];
         while let Some(roots) = Self::take_roots(&mut dag) {
-            let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
-            results.extend(join_all(futures).await); // compare receipts somewhere (a worker? await for compares after relaying all? what to do in case of failure?)
+            let futures = roots.into_iter().map(|root_tx| self.relay(root_tx));
+            for result in join_all(futures).await {
+                match result {
+                    Ok(res) => results.push(res),
+                    Err(err) => tracing::error!(?err),
+                }
+            }
         }
 
         let futures = results
             .into_iter()
-            .map_ok(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx)) // do something with errs
-            .collect::<Result<Vec<_>, _>>()?; // do something with this result
+            .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
 
         join_all(futures).await; // xxx: do something with the result
 

@@ -6,6 +6,7 @@ create table relayer_blocks(
 
 create table mismatches(
     id serial primary key not null,
+    hash text not null,
     stratus_receipt jsonb not null,
     substrate_receipt jsonb not null,
     error text not null
