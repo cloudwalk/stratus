@@ -63,6 +63,7 @@ cfg_if::cfg_if! {
 }
 
 lazy_static! {
+    /// Map setting presets for each Column Family
     static ref CF_OPTIONS_MAP: HashMap<&'static str, Options> = hmap! {
         "accounts" => DbConfig::Default.to_options(CacheSetting::Enabled(15 * GIGABYTE)),
         "accounts_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
@@ -108,9 +109,10 @@ impl RocksStorageState {
         let db_path = path.as_ref().to_path_buf();
         let (backup_trigger_tx, backup_trigger_rx) = mpsc::channel::<()>(1);
 
-        // granular settings for each Column Family to be created
+        // settings for each Column Family to be created
         let cf_options_iter = CF_OPTIONS_MAP.iter().map(|(name, opts)| (*name, opts.clone()));
 
+        // options for the "default" column family (unused)
         let db_options = DbConfig::Default.to_options(CacheSetting::Disabled);
 
         let db = create_or_open_db(&db_path, &db_options, cf_options_iter).unwrap();
