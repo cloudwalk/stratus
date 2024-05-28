@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use anyhow::Result;
+use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
 use rocksdb::Options;
@@ -39,9 +40,13 @@ where
         }
     }
 
+    fn handle(&self) -> Arc<BoundColumnFamily> {
+        self.db.cf_handle(&self.column_family).unwrap()
+    }
+
     // Clears the database
     pub fn clear(&self) -> Result<()> {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         // try clearing everything
         let first = self.db.iterator_cf(&cf, IteratorMode::Start).next();
@@ -62,7 +67,7 @@ where
 
     pub fn get(&self, key: &K) -> Option<V> {
         let Ok(serialized_key) = bincode::serialize(key) else { return None };
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
         let Ok(Some(value_bytes)) = self.db.get_cf(&cf, serialized_key) else {
             return None;
         };
@@ -95,7 +100,7 @@ where
         let Ok(serialized_key) = bincode::serialize(&"current_block") else {
             return 0;
         };
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         let Ok(Some(value_bytes)) = self.db.get_cf(&cf, serialized_key) else {
             return 0;
@@ -110,7 +115,7 @@ where
 
     // Mimics the 'insert' functionality of a HashMap
     pub fn insert(&self, key: K, value: V) {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         let serialized_key = bincode::serialize(&key).unwrap();
         let serialized_value = bincode::serialize(&value).unwrap();
@@ -118,7 +123,7 @@ where
     }
 
     pub fn prepare_batch_insertion(&self, changes: Vec<(K, V)>, current_block: Option<u64>, batch: &mut WriteBatch) {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         for (key, value) in changes {
             let serialized_key = bincode::serialize(&key).unwrap();
@@ -159,7 +164,7 @@ where
     // Deletes an entry from the database by key
     pub fn delete(&self, key: &K) -> Result<()> {
         let serialized_key = bincode::serialize(key)?;
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         self.db.delete_cf(&cf, serialized_key)?;
         Ok(())
@@ -168,7 +173,7 @@ where
     // Deletes an entry from the database by key
     pub fn delete_index(&self, key: u64) -> Result<()> {
         let serialized_key = bincode::serialize(&key)?;
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
         //XXX check if value is a vec that can be deserialized as a safety measure
         self.db.delete_cf(&cf, serialized_key)?;
         Ok(())
@@ -190,21 +195,21 @@ where
     }
 
     pub fn iter_start(&self) -> RocksDBIterator<K, V> {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
         RocksDBIterator::<K, V>::new(iter)
     }
 
     pub fn iter_end(&self) -> RocksDBIterator<K, V> {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         RocksDBIterator::<K, V>::new(iter)
     }
 
     pub fn indexed_iter_end(&self) -> IndexedRocksDBIterator<K> {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         IndexedRocksDBIterator::<K>::new(iter)
@@ -215,22 +220,22 @@ where
         key_prefix: P,
         direction: rocksdb::Direction,
     ) -> RocksDBIterator<K, V> {
+        let cf = self.handle();
         let serialized_key = bincode::serialize(&key_prefix).unwrap();
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
         RocksDBIterator::<K, V>::new(iter)
     }
 
     pub fn last_index(&self) -> Option<(u64, Vec<K>)> {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         IndexedRocksDBIterator::<K>::new(iter).next()
     }
 
     pub fn last(&self) -> Option<(K, V)> {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
+        let cf = self.handle();
 
         let mut iter = self.db.iterator_cf(&cf, IteratorMode::End);
         if let Some(Ok((k, v))) = iter.next() {
