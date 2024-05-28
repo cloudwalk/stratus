@@ -161,7 +161,7 @@ impl ExternalRelayer {
 
     async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_receipt: PendingTransaction<'_>) -> anyhow::Result<()> {
         match substrate_receipt.await {
-            Ok(Some(substrate_receipt)) => {
+            Ok(Some(substrate_receipt)) =>
                 if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -169,8 +169,7 @@ impl ExternalRelayer {
                     error
                 } else {
                     Ok(())
-                }
-            }
+                },
             Ok(None) => {
                 self.save_mismatch(stratus_receipt, None, "no receipt returned by substrate").await;
                 Err(anyhow!("no receipt returned by substrate"))
