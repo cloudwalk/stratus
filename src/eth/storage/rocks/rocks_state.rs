@@ -4,9 +4,9 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use anyhow::Context;
 use futures::future::join_all;
 use itertools::Itertools;
-use num_traits::cast::ToPrimitive;
 use tokio::sync::mpsc;
 use tokio::task;
 use tokio::task::JoinHandle;
@@ -109,9 +109,9 @@ impl RocksStorageState {
     }
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
-        let account_block_number = self.accounts.get_current_block_number();
-
-        Ok((account_block_number.to_u64().unwrap_or(0u64)).into())
+        let block_number = self.blocks_by_number.last().map(|(num, _)| num).unwrap_or_default();
+        tracing::error!(?block_number);
+        Ok((u64::from(block_number)).into())
     }
 
     pub async fn sync_data(&self) -> anyhow::Result<()> {
@@ -442,17 +442,17 @@ impl RocksStorageState {
 
     pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         match self.transactions.get(&(*tx_hash).into()) {
-            Some(transaction) => match self.blocks_by_number.get(&transaction) {
+            Some(block_number) => match self.blocks_by_number.get(&block_number) {
                 Some(block) => {
                     tracing::trace!(%tx_hash, "transaction found");
                     match block.transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash) {
                         Some(tx) => Ok(Some(tx.into())),
-                        None => log_and_err!("transaction was not found in block"),
+                        None => log_and_err!("transaction was not found in block")
+                            .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
                     }
                 }
-                None => {
-                    log_and_err!("the block that the transaction was supposed to be in was not found")
-                }
+                None => log_and_err!("the block that the transaction was supposed to be in was not found")
+                    .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
             },
             None => Ok(None),
         }
@@ -468,7 +468,7 @@ impl RocksStorageState {
             })
             .map(|((tx_hash, _), _)| match self.read_transaction(&tx_hash.into()) {
                 Ok(Some(tx)) => Ok(tx.logs),
-                Ok(None) => Err(anyhow!("the transaction the log was supposed to be in was not found")),
+                Ok(None) => Err(anyhow!("the transaction the log was supposed to be in was not found")).with_context(|| format!("tx_hash = {:?}", tx_hash)),
                 Err(err) => Err(err),
             })
             .flatten_ok()

@@ -12,3 +12,4 @@
 !static/
 !.sqlx/
 !build.rs
+!proto
