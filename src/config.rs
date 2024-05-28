@@ -103,7 +103,7 @@ impl CommonConfig {
     /// Initializes Tokio runtime.
     pub fn init_runtime(&self) -> Runtime {
         print!(
-            "starting tokio runtime; async_threads={}; blocking_threads={}",
+            "creating tokio runtime; async_threads={}; blocking_threads={}",
             self.num_async_threads, self.num_blocking_threads
         );
 
@@ -114,7 +114,7 @@ impl CommonConfig {
             .max_blocking_threads(self.num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
             .build()
-            .expect("failed to start tokio runtime");
+            .expect("failed to create tokio runtime");
 
         runtime
     }
@@ -174,7 +174,7 @@ impl ExecutorConfig {
         const TASK_NAME: &str = "evm-thread";
 
         let num_evms = max(self.num_evms, 1);
-        tracing::info!(config = ?self, "starting executor");
+        tracing::info!(config = ?self, "creating executor");
 
         // spawn evm in background using native threads
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
@@ -257,7 +257,7 @@ impl MinerConfig {
     }
 
     async fn init_with_mode(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        tracing::info!(config = ?self, "starting block miner");
+        tracing::info!(config = ?self, "creating block miner");
 
         // create miner
 
@@ -309,7 +309,7 @@ pub struct RelayerConfig {
 
 impl RelayerConfig {
     pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
-        tracing::info!(config = ?self, "starting transaction relayer");
+        tracing::info!(config = ?self, "creating transaction relayer");
 
         match self.forward_to {
             Some(ref forward_to) => {
@@ -635,7 +635,7 @@ pub enum ExternalRpcStorageKind {
 impl ExternalRpcStorageConfig {
     /// Initializes external rpc storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
-        tracing::info!(config = ?self, "starting external rpc storage");
+        tracing::info!(config = ?self, "creating external rpc storage");
 
         match self.external_rpc_storage_kind {
             ExternalRpcStorageKind::Postgres { ref url } => {
@@ -681,7 +681,7 @@ pub enum TemporaryStorageKind {
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
-        tracing::info!(config = ?self, "starting temporary storage");
+        tracing::info!(config = ?self, "creating temporary storage");
 
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
@@ -733,7 +733,7 @@ pub enum PermanentStorageKind {
 impl PermanentStorageConfig {
     /// Initializes permanent storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
-        tracing::info!(config = ?self, "starting permanent storage");
+        tracing::info!(config = ?self, "creating permanent storage");
 
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),

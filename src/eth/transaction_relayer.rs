@@ -21,7 +21,7 @@ pub struct TransactionRelayer {
 impl TransactionRelayer {
     /// Creates a new [`TransactionRelayer`].
     pub fn new(storage: Arc<StratusStorage>, chain: BlockchainClient) -> Self {
-        tracing::info!(?chain, "starting transaction relayer");
+        tracing::info!(?chain, "creating transaction relayer");
         Self { storage, chain }
     }
 
