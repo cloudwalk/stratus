@@ -193,7 +193,7 @@ impl ExecutorConfig {
             // todo: needs a way to signal error like a cancellation token in case it fails to initialize
             let t = thread::Builder::new().name("evm".into());
 
-            info_task_spawn("evm");
+            info_task_spawn(TASK_NAME);
             t.spawn(move || {
                 // init tokio
                 let _tokio_guard = evm_tokio.enter();
