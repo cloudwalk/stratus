@@ -2,12 +2,10 @@ use rocksdb::BlockBasedOptions;
 use rocksdb::Cache;
 use rocksdb::Options;
 
-const GIGABYTE: usize = 1024 * 1024 * 1024;
-const CACHE_SIZE: usize = 30 * GIGABYTE;
-
 #[derive(Debug, Clone, Copy)]
 pub enum CacheSetting {
-    Enabled,
+    /// Enabled cache with the given size in bytes
+    Enabled(usize),
     Disabled,
 }
 
@@ -151,8 +149,8 @@ impl DbConfig {
                 opts.set_plain_table_factory(&pt_opts);
             }
         }
-        if let CacheSetting::Enabled = cache_setting {
-            let cache = Cache::new_lru_cache(CACHE_SIZE);
+        if let CacheSetting::Enabled(cache_size) = cache_setting {
+            let cache = Cache::new_lru_cache(cache_size);
             block_based_options.set_block_cache(&cache);
         }
         opts.set_block_based_table_factory(&block_based_options);

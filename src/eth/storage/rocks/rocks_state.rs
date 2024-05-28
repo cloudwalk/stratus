@@ -48,6 +48,7 @@ use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::ext::named_spawn;
 use crate::ext::OptionExt;
 use crate::log_and_err;
+use crate::utils::GIGABYTE;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "metrics")] {
@@ -63,9 +64,9 @@ cfg_if::cfg_if! {
 
 lazy_static! {
     static ref CF_OPTIONS_MAP: HashMap<&'static str, Options> = hmap! {
-        "accounts" => DbConfig::Default.to_options(CacheSetting::Enabled),
+        "accounts" => DbConfig::Default.to_options(CacheSetting::Enabled(15 * GIGABYTE)),
         "accounts_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
-        "account_slots" => DbConfig::Default.to_options(CacheSetting::Enabled),
+        "account_slots" => DbConfig::Default.to_options(CacheSetting::Enabled(45 * GIGABYTE)),
         "account_slots_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
         "transactions" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "blocks_by_number" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
