@@ -35,7 +35,7 @@ pub struct PostgresExternalRpcStorageConfig {
 impl PostgresExternalRpcStorage {
     /// Creates a new [`PostgresExternalRpcStorage`].
     pub async fn new(config: PostgresExternalRpcStorageConfig) -> anyhow::Result<Self> {
-        tracing::info!(?config, "starting postgres external rpc storage");
+        tracing::info!(?config, "creating postgres external rpc storage");
 
         let result = PgPoolOptions::new()
             .min_connections(config.connections)
@@ -46,7 +46,7 @@ impl PostgresExternalRpcStorage {
 
         let pool = match result {
             Ok(pool) => pool,
-            Err(e) => return log_and_err!(reason = e, "failed to start postgres external rpc storage"),
+            Err(e) => return log_and_err!(reason = e, "failed to create postgres external rpc storage"),
         };
 
         Ok(Self { pool })

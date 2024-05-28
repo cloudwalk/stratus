@@ -45,31 +45,24 @@ impl BlockchainClient {
 
     /// Creates a new RPC client connected to HTTP and optionally to WS.
     pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
-        tracing::info!(%http_url, "starting blockchain client");
+        tracing::info!(%http_url, "creating blockchain client");
 
         // build http provider
-        let http = match Self::build_http_client(http_url, timeout) {
-            Ok(http) => http,
-            Err(e) => {
-                tracing::error!(reason = ?e, url = %http_url, "failed to create blockchain http client");
-                return Err(e).context("failed to create blockchain http client");
-            }
-        };
+        let http = Self::build_http_client(http_url, timeout)?;
 
         // build ws provider
-        let (ws, ws_url) = if let Some(ws_url) = ws_url {
-            match Self::build_ws_client(ws_url, timeout).await {
-                Ok(ws) => (Some(RwLock::new(ws)), Some(ws_url.to_string())),
-                Err(e) => {
-                    tracing::error!(reason = ?e, url = %ws_url, "failed to create blockchain websocket client");
-                    return Err(e).context("failed to create blockchain websocket client");
-                }
-            }
+        let ws = if let Some(ws_url) = ws_url {
+            Some(RwLock::new(Self::build_ws_client(ws_url, timeout).await?))
         } else {
-            (None, None)
+            None
         };
 
-        let client = Self { http, ws, ws_url, timeout };
+        let client = Self {
+            http,
+            ws,
+            ws_url: ws_url.map(|x| x.to_owned()),
+            timeout,
+        };
 
         // check health before assuming it is ok
         client.fetch_listening().await?;

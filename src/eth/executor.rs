@@ -73,7 +73,7 @@ impl Executor {
         num_evms: usize,
         consensus: Option<Arc<Consensus>>,
     ) -> Self {
-        tracing::info!(%num_evms, "starting executor");
+        tracing::info!(%num_evms, "creating executor");
 
         Self {
             evm_tx,

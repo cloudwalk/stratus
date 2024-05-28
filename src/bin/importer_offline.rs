@@ -139,7 +139,7 @@ async fn execute_block_importer(
     blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-executor";
-    tracing::info!("starting {}", TASK_NAME);
+    tracing::info!("creating task {}", TASK_NAME);
 
     // receives blocks and receipts from the backlog to reexecute and import
     loop {
@@ -218,7 +218,7 @@ async fn execute_external_rpc_storage_loader(
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-loader";
-    tracing::info!(%start, %end, "starting {}", TASK_NAME);
+    tracing::info!(%start, %end, "creating task {}", TASK_NAME);
 
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();

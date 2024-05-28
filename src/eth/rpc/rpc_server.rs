@@ -62,7 +62,7 @@ pub async fn serve_rpc(
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
 
-    tracing::info!("starting {}", TASK_NAME);
+    tracing::info!("creating task {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
