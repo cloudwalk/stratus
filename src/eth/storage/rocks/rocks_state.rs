@@ -302,7 +302,7 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
 
                 let mut batch = WriteBatch::default();
-                self_accounts_clone.prepare_batch_insertion(accounts_temp_vec, Some(block_number.into()), &mut batch);
+                self_accounts_clone.prepare_batch_insertion(accounts_temp_vec, &mut batch);
                 self_accounts_clone.db.write(batch).unwrap();
 
                 info!("Accounts updated up to block number {}", block_number);
@@ -333,7 +333,7 @@ impl RocksStorageState {
                     .collect::<Vec<_>>();
 
                 let mut batch = WriteBatch::default();
-                self_account_slots_clone.prepare_batch_insertion(slots_temp_vec, Some(block_number.into()), &mut batch);
+                self_account_slots_clone.prepare_batch_insertion(slots_temp_vec, &mut batch);
                 self_account_slots_clone.db.write(batch).unwrap();
             }
         });
@@ -378,8 +378,8 @@ impl RocksStorageState {
             }
         }
 
-        accounts.prepare_batch_insertion(account_changes, Some(block_number.into()), batch);
-        accounts_history.prepare_batch_insertion_indexed(account_history_changes, block_number.into(), batch);
+        accounts.prepare_batch_insertion(account_changes, batch);
+        accounts_history.prepare_batch_insertion(account_history_changes, batch);
 
         let mut slot_changes = Vec::new();
         let mut slot_history_changes = Vec::new();
@@ -394,8 +394,8 @@ impl RocksStorageState {
                 }
             }
         }
-        account_slots.prepare_batch_insertion(slot_changes, Some(block_number.into()), batch);
-        account_slots_history.prepare_batch_insertion_indexed(slot_history_changes, block_number.into(), batch);
+        account_slots.prepare_batch_insertion(slot_changes, batch);
+        account_slots_history.prepare_batch_insertion(slot_history_changes, batch);
     }
 
     pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
@@ -532,7 +532,7 @@ impl RocksStorageState {
         let accounts = accounts.into_iter().map(Into::into).collect_vec();
 
         let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(accounts, None, &mut batch);
+        self.accounts.prepare_batch_insertion(accounts, &mut batch);
         self.accounts.db.write(batch).unwrap();
     }
 
@@ -544,7 +544,7 @@ impl RocksStorageState {
             .collect_vec();
 
         let mut batch = WriteBatch::default();
-        self.account_slots.prepare_batch_insertion(slots, None, &mut batch);
+        self.account_slots.prepare_batch_insertion(slots, &mut batch);
         self.account_slots.db.write(batch).unwrap();
     }
 

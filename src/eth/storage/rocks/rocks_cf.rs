@@ -122,7 +122,7 @@ where
         self.db.put_cf(&cf, serialized_key, serialized_value).unwrap();
     }
 
-    pub fn prepare_batch_insertion(&self, changes: Vec<(K, V)>, current_block: Option<u64>, batch: &mut WriteBatch) {
+    pub fn prepare_batch_insertion(&self, changes: Vec<(K, V)>, batch: &mut WriteBatch) {
         let cf = self.handle();
 
         for (key, value) in changes {
@@ -131,34 +131,6 @@ where
             // Add each serialized key-value pair to the batch
             batch.put_cf(&cf, serialized_key, serialized_value);
         }
-
-        if let Some(current_block) = current_block {
-            let serialized_block_key = bincode::serialize(&"current_block").unwrap();
-            let serialized_block_value = bincode::serialize(&current_block).unwrap();
-            batch.put_cf(&cf, serialized_block_key, serialized_block_value);
-        }
-    }
-
-    /// inserts data but keep a block as key pointing to the keys inserted in a given block
-    /// this makes for faster search based on block_number, ergo index
-    pub fn prepare_batch_insertion_indexed(&self, changes: Vec<(K, V)>, current_block: u64, batch: &mut WriteBatch) {
-        let cf = self.db.cf_handle(&self.column_family).unwrap();
-
-        let mut keys = vec![];
-
-        for (key, value) in changes {
-            let serialized_key = bincode::serialize(&key).unwrap();
-            let serialized_value = bincode::serialize(&value).unwrap();
-
-            keys.push(key);
-
-            // Add each serialized key-value pair to the batch
-            batch.put_cf(&cf, serialized_key, serialized_value);
-        }
-
-        let serialized_block_value = bincode::serialize(&current_block).unwrap();
-        let serialized_keys = bincode::serialize(&keys).unwrap();
-        batch.put_cf(&cf, serialized_block_value, serialized_keys);
     }
 
     // Deletes an entry from the database by key

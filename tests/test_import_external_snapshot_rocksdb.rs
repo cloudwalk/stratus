@@ -2,7 +2,6 @@ mod test_import_external_snapshot_common;
 
 #[cfg(feature = "rocks")]
 pub mod rocks_test {
-    use stratus::eth::primitives::BlockNumber;
     use stratus::eth::storage::PermanentStorage;
     use stratus::eth::storage::RocksPermanentStorage;
     use stratus::infra::docker::Docker;
@@ -20,7 +19,7 @@ pub mod rocks_test {
 
             let rocks = RocksPermanentStorage::new().await.unwrap();
             rocks.save_accounts(accounts).await.unwrap();
-            rocks.state.write_slots(slots, BlockNumber::ZERO);
+            rocks.state.write_slots(slots);
 
             common::execute_test("RocksDB", &global_services.config, &docker, rocks, block, receipts).await;
         });
