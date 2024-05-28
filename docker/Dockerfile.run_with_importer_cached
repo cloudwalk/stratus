@@ -1,0 +1,52 @@
+# Use BuildKit for better caching
+# syntax=docker/dockerfile:1.2
+
+# Build stage
+FROM rust:1.75 as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt update && apt-get install -y libclang-dev cmake gcc
+
+# Copy the Cargo.toml and Cargo.lock files to leverage Docker's caching
+COPY Cargo.toml Cargo.lock ./
+
+ENV CARGO_INCREMENTAL=1
+
+# Create a dummy main.rs to cache dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# This layer caches dependencies
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --bin run-with-importer --features metrics,rocks || true
+
+# Remove the dummy main.rs
+RUN rm -rf src
+
+# Copy the actual source code
+COPY src /app/src
+COPY static /app/static
+COPY .sqlx /app/.sqlx
+COPY build.rs /app/build.rs
+COPY Cargo.toml /app/Cargo.toml
+COPY Cargo.lock /app/Cargo.lock
+COPY .cargo .cargo
+COPY config /app/config
+
+ENV CARGO_PROFILE_RELEASE_DEBUG=1
+ENV JSON_LOGS=1
+ENV NO_COLOR=1
+ENV ENABLE_TEST_ACCOUNTS=1
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --bin run-with-importer --features metrics,rocks,dev
+
+# Runtime
+FROM rust:1.75 as runtime
+WORKDIR /app
+COPY --from=builder /app/target/release/run-with-importer /app/run-with-importer
+COPY --from=builder /app/config/* /app/config/
+
+CMD ["sh", "-c", "/app/run-with-importer"]
