@@ -80,9 +80,9 @@ tower = "=0.4.13"
 console-subscriber = "=0.2.0"
 metrics = { version = "=0.21.1", optional = true }
 metrics-exporter-prometheus = { version = "=0.12.2", optional = true }
-opentelemetry = "=0.23.0"
-opentelemetry_sdk = { version = "=0.23.0", features = ["rt-tokio"] }
-opentelemetry-otlp = "=0.16.0"
+opentelemetry = "=0.22.0"
+opentelemetry_sdk = { version = "=0.22.1", features = ["rt-tokio"] }
+opentelemetry-otlp = "=0.15.0"
 sentry = "=0.33.0"
 tracing = { version = "=0.1.40", features = ["attributes"] }
 tracing-opentelemetry = "=0.23.0"
@@ -104,10 +104,10 @@ fake = { version = "=2.9.2", features = ["derive"] }
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=9.0.0", features = ["asm-keccak"]}
+revm = { version = "=8.0.0", features = ["asm-keccak"]}
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=9.0.0" }
+revm = { version = "=8.0.0" }
 
 # ------------------------------------------------------------------------------
 # Dev dependencies
