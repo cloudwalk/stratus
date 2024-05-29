@@ -1,11 +1,11 @@
 #[cfg(feature = "kubernetes")]
 pub mod consensus_kube {
     use std::env;
+    use std::sync::atomic::AtomicU64;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
     use std::time::Duration;
 
-    use ::metrics::atomics::AtomicU64;
     use anyhow::anyhow;
     use k8s_openapi::api::core::v1::Pod;
     use kube::api::Api;
@@ -362,7 +362,7 @@ pub mod consensus_mock {
     }
 
     impl Consensus {
-        pub fn new(_leader_name: Option<String>) -> Arc::<Self> {
+        pub fn new(_leader_name: Option<String>) -> Arc<Self> {
             todo!()
         }
 
