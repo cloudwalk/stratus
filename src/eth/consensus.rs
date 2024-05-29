@@ -17,6 +17,8 @@ pub mod consensus_kube {
     use tonic::Response;
     use tonic::Status;
 
+    use crate::channel_read;
+
     pub mod append_entry {
         tonic::include_proto!("append_entry");
     }
@@ -78,7 +80,7 @@ pub mod consensus_kube {
                     followers.iter().map(|f| f.address.to_string()).collect::<Vec<String>>().join(", ")
                 );
 
-                while let Some(data) = receiver.recv().await {
+                while let Some(data) = channel_read!(receiver) {
                     if Self::is_leader(leader_name_clone.clone()) {
                         //TODO add data to consensus-log-transactions
                         //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
@@ -107,7 +109,7 @@ pub mod consensus_kube {
             let (sender, mut receiver) = mpsc::channel::<Block>(32);
 
             tokio::spawn(async move {
-                while let Some(data) = receiver.recv().await {
+                while let Some(data) = channel_read!(receiver) {
                     tracing::info!(number = data.header.number.as_u64(), "Received block");
                 }
             });

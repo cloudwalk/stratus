@@ -6,8 +6,6 @@
 //! The module enables the specification and verification of the network for
 //! which a particular transaction is intended.
 
-use std::fmt::Display;
-
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
@@ -24,7 +22,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(U64);
 
 impl ChainId {
@@ -34,12 +32,6 @@ impl ChainId {
 
     pub fn inner_value(&self) -> U64 {
         self.0
-    }
-}
-
-impl Display for ChainId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

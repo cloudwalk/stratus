@@ -69,7 +69,7 @@ impl ExternalRelayer {
         let block: Block = row.payload.try_into()?;
         let block_number = block.header.number;
 
-        tracing::debug!(?block_number, "relaying block");
+        tracing::debug!(number = %block_number, "relaying block");
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(block.transactions);
