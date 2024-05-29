@@ -183,3 +183,22 @@ metrics! {
     "Time to run Consensus::append_entries_to_followers."
     histogram_duration append_entries_to_followers{} []
 }
+
+metrics! {
+    group: external_relayer,
+
+    "Time to run ExternalRelayer::relay_next_block."
+    histogram_duration relay_next_block{} [],
+
+    "Time to run ExternalRelayer::compute_tx_dag."
+    histogram_duration compute_tx_dag{} [],
+
+    "Time to run ExternalRelayer::relay_and_check_mempool."
+    histogram_duration relay_and_check_mempool{} [],
+
+    "Time to run ExternalRelayer::take_roots."
+    histogram_duration take_roots{} [],
+
+    "Time to run ExternalRelayer::relay_dag."
+    histogram_duration relay_dag{} []
+}
