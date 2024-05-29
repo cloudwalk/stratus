@@ -55,7 +55,7 @@ jobs:
           cargo install wait-service || true
           cargo install cargo-hack || true
 
-      - name: Run e2e tests
+      - name: Run cargo checks
         run: just check-features
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
