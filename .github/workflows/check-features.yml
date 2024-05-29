@@ -11,6 +11,13 @@ on:
       - '.github/workflows/check-features.yml'
       - 'justfile'
       - 'Cargo.toml'
+      
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
     
   workflow_dispatch:
 
