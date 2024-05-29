@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy
     if: ${{ inputs.environment == 'production' }}
+    continue-on-error: true
     steps:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
