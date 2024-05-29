@@ -45,6 +45,9 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01
           rustup component add rust-docs
       
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
       - name: Set up Just
         uses: extractions/setup-just@v1
 
