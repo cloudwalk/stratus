@@ -125,9 +125,6 @@ impl ExternalRelayer {
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(skip_all)]
     pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         let Some(row) = sqlx::query!(
             r#"UPDATE relayer_blocks
                 SET relayed = true
@@ -151,17 +148,20 @@ impl ExternalRelayer {
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = Self::compute_tx_dag(block.transactions);
 
-        self.relay_dag(dag).await?; // do something with result?
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        self.relay_dag(dag).await?; // if Ok mark block as sucess if Err mark it as failed or smth like that
 
         #[cfg(feature = "metrics")]
-        metrics::inc_relay_next_block(start.elapsed());
+        metrics::inc_relay_dag(start.elapsed());
 
         Ok(Some(block_number))
     }
 
     async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_receipt: PendingTransaction<'_>) -> anyhow::Result<()> {
         match substrate_receipt.await {
-            Ok(Some(substrate_receipt)) =>
+            Ok(Some(substrate_receipt)) => {
                 if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -169,7 +169,8 @@ impl ExternalRelayer {
                     error
                 } else {
                     Ok(())
-                },
+                }
+            }
             Ok(None) => {
                 self.save_mismatch(stratus_receipt, None, "no receipt returned by substrate").await;
                 Err(anyhow!("no receipt returned by substrate"))
@@ -183,6 +184,7 @@ impl ExternalRelayer {
         }
     }
 
+    /// Save a transaction mismatch to postgres, if it fails, save it to a file.
     async fn save_mismatch(&self, stratus_receipt: ExternalReceipt, substrate_receipt: Option<ExternalReceipt>, err_string: &str) {
         let hash = stratus_receipt.hash().to_string();
         let stratus_json = serde_json::to_value(stratus_receipt).expect_infallible();
@@ -279,8 +281,6 @@ impl ExternalRelayer {
     #[tracing::instrument(skip_all)]
     pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
         tracing::debug!(?tx_mined.input.hash, "relaying transaction");
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
 
         let ethers_tx = Transaction::from(tx_mined.input.clone());
         let tx = self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await?;
@@ -295,13 +295,14 @@ impl ExternalRelayer {
             tries += 1;
         }
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_relay_and_check_mempool(start.elapsed());
         Ok((tx, ExternalReceipt(tx_mined.into())))
     }
 
     pub async fn relay(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
-        match self.relay_and_check_mempool(tx_mined.clone()).await {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        let res = match self.relay_and_check_mempool(tx_mined.clone()).await {
             Err(err) => {
                 let err = err.context("relay and check mempool failed");
                 let err_string = err.to_string();
@@ -309,7 +310,12 @@ impl ExternalRelayer {
                 Err(err)
             }
             ok => ok,
-        }
+        };
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_and_check_mempool(start.elapsed());
+
+        res
     }
 
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
@@ -345,8 +351,7 @@ impl ExternalRelayer {
     #[tracing::instrument(skip_all)]
     async fn relay_dag(&self, mut dag: StableDag<TransactionMined, i32>) -> anyhow::Result<()> {
         tracing::debug!("relaying transactions");
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        let mut tx_failed = false;
 
         let mut results = vec![];
         while let Some(roots) = Self::take_roots(&mut dag) {
@@ -354,7 +359,10 @@ impl ExternalRelayer {
             for result in join_all(futures).await {
                 match result {
                     Ok(res) => results.push(res),
-                    Err(err) => tracing::error!(?err),
+                    Err(err) => {
+                        tracing::error!(?err);
+                        tx_failed = true;
+                    }
                 }
             }
         }
@@ -363,10 +371,15 @@ impl ExternalRelayer {
             .into_iter()
             .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
 
-        join_all(futures).await; // xxx: do something with the result
+        join_all(futures)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .context("some transactions failed")?;
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_relay_dag(start.elapsed());
+        if tx_failed {
+            return Err(anyhow!("some transactions failed"));
+        }
 
         Ok(())
     }

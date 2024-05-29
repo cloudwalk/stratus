@@ -1,6 +1,8 @@
 mod importer_online;
 
 use stratus::config::ExternalRelayerConfig;
+#[cfg(feature = "metrics")]
+use stratus::infra::metrics;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 
@@ -23,8 +25,14 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
             return Ok(());
         };
 
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
         let block_number = match relayer.relay_next_block().await {
-            Ok(bnum) => bnum,
+            Ok(block_number) => {
+                #[cfg(feature = "metrics")]
+                metrics::inc_relay_next_block(start.elapsed());
+                block_number
+            }
             Err(err) => {
                 tracing::error!(?err, "error relaying next block");
                 continue;
