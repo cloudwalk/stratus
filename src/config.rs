@@ -23,6 +23,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::relayer::ExternalRelayer;
+use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
@@ -92,6 +94,10 @@ pub struct CommonConfig {
     /// Url to the tracing collector (Opentelemetry over gRPC)
     #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
     pub tracing_url: Option<String>,
+
+    /// Enables tokio-console.
+    #[arg(long = "disable-tokio-console", env = "DISABLE_TOKIO_CONSOLE", default_value = "false")]
+    pub disable_tokio_console: bool,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -250,21 +256,36 @@ pub struct MinerConfig {
 
 impl MinerConfig {
     /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(BlockMinerMode::External, storage, consensus).await
+    pub async fn init_external_mode(
+        &self,
+        storage: Arc<StratusStorage>,
+        consensus: Option<Arc<Consensus>>,
+        relayer: Option<ExternalRelayerClient>,
+    ) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(BlockMinerMode::External, storage, consensus, relayer).await
     }
 
     /// Inits [`BlockMiner`] with the configured mining mode.
-    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(self.block_mode, storage, consensus).await
+    pub async fn init(
+        &self,
+        storage: Arc<StratusStorage>,
+        consensus: Option<Arc<Consensus>>,
+        relayer: Option<ExternalRelayerClient>,
+    ) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(self.block_mode, storage, consensus, relayer).await
     }
 
-    async fn init_with_mode(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
+    async fn init_with_mode(
+        &self,
+        mode: BlockMinerMode,
+        storage: Arc<StratusStorage>,
+        consensus: Option<Arc<Consensus>>,
+        relayer: Option<ExternalRelayerClient>,
+    ) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "creating block miner");
 
         // create miner
-
-        let miner = BlockMiner::new(Arc::clone(&storage), mode, consensus);
+        let miner = BlockMiner::new(Arc::clone(&storage), mode, consensus, relayer);
         let miner = Arc::new(miner);
 
         // enable genesis block
@@ -300,7 +321,7 @@ impl MinerConfig {
 // Config: Relayer
 // -----------------------------------------------------------------------------
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct RelayerConfig {
+pub struct IntegratedRelayerConfig {
     /// RPC address to forward transactions to.
     #[arg(long = "forward-to", env = "FORWARD_TO")]
     pub forward_to: Option<String>,
@@ -310,7 +331,7 @@ pub struct RelayerConfig {
     pub relayer_timeout: Duration,
 }
 
-impl RelayerConfig {
+impl IntegratedRelayerConfig {
     pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
         tracing::info!(config = ?self, "creating transaction relayer");
 
@@ -322,6 +343,56 @@ impl RelayerConfig {
             }
             None => Ok(None),
         }
+    }
+}
+
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[group(requires_all = ["url", "connections", "acquire_timeout"])]
+pub struct ExternalRelayerClientConfig {
+    #[arg(long = "relayer-db-url", env = "RELAYER_DB_URL", required = false)]
+    pub url: String,
+    #[arg(long = "relayer-db-connections", env = "RELAYER_DB_CONNECTIONS", required = false)]
+    pub connections: u32,
+    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", required = false)]
+    pub acquire_timeout: Duration,
+}
+
+impl ExternalRelayerClientConfig {
+    pub async fn init(self) -> ExternalRelayerClient {
+        ExternalRelayerClient::new(self).await
+    }
+}
+
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct ExternalRelayerServerConfig {
+    /// Postgresql url.
+    #[arg(long = "db-url", env = "DB_URL")]
+    pub url: String,
+
+    /// Connections to database.
+    #[arg(long = "db-connections", env = "DB_CONNECTIONS", default_value = "5")]
+    pub connections: u32,
+
+    /// Timeout to acquire connections to the database.
+    #[arg(long = "db-timeout", value_parser=parse_duration, env = "DB_TIMEOUT", default_value = "1s")]
+    pub acquire_timeout: Duration,
+
+    /// RPC to forward to.
+    #[arg(long = "forward-to", env = "RELAYER_FORWARD_TO")]
+    pub forward_to: String,
+
+    /// Backoff.
+    #[arg(long = "backoff", value_parser=parse_duration, env = "BACKOFF", default_value = "10ms")]
+    pub backoff: Duration,
+
+    /// RPC response timeout.
+    #[arg(long = "rpc-timeout", value_parser=parse_duration, env = "RPC_TIMEOUT", default_value = "2s")]
+    pub rpc_timeout: Duration,
+}
+
+impl ExternalRelayerServerConfig {
+    pub async fn init(self) -> anyhow::Result<ExternalRelayer> {
+        ExternalRelayer::new(self).await
     }
 }
 
@@ -343,7 +414,10 @@ pub struct StratusConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub external_relayer: Option<ExternalRelayerClientConfig>,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -464,7 +538,7 @@ pub struct ImporterOnlineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -520,7 +594,10 @@ pub struct RunWithImporterConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub external_relayer: Option<ExternalRelayerClientConfig>,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -592,7 +669,7 @@ pub struct IntegrationTestConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -661,6 +738,26 @@ impl FromStr for ExternalRpcStorageKind {
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown external rpc storage: {}", s)),
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: ExternalRelayer
+// -----------------------------------------------------------------------------
+
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct ExternalRelayerConfig {
+    #[clap(flatten)]
+    pub relayer: ExternalRelayerServerConfig,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+impl WithCommonConfig for ExternalRelayerConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
     }
 }
 

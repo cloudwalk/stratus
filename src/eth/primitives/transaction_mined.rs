@@ -6,6 +6,8 @@
 //! tracking transaction history and understanding the state of transactions in
 //! the blockchain.
 
+use std::hash::Hash as HashTrait;
+
 use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;
@@ -43,6 +45,12 @@ pub struct TransactionMined {
 
     /// Block hash where the transaction was mined.
     pub block_hash: Hash,
+}
+
+impl HashTrait for TransactionMined {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.input.hash.hash(state);
+    }
 }
 
 impl TransactionMined {
