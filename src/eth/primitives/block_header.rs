@@ -16,7 +16,8 @@ use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
-use crate::eth::consensus::append_entry;
+#[cfg(feature = "kubernetes")]
+use crate::eth::consensus::consensus_kube::append_entry;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -164,6 +165,7 @@ where
     }
 }
 
+#[cfg(feature = "kubernetes")]
 impl From<&BlockHeader> for append_entry::BlockHeader {
     fn from(block_header: &BlockHeader) -> Self {
         append_entry::BlockHeader {
