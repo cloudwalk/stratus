@@ -21,7 +21,7 @@ pub struct TransactionRelayer {
 impl TransactionRelayer {
     /// Creates a new [`TransactionRelayer`].
     pub fn new(storage: Arc<StratusStorage>, chain: BlockchainClient) -> Self {
-        tracing::info!(?chain, "starting transaction relayer");
+        tracing::info!(?chain, "creating transaction relayer");
         Self { storage, chain }
     }
 
@@ -39,7 +39,10 @@ impl TransactionRelayer {
         }
 
         // handle local success
-        let pending_tx = self.chain.send_raw_transaction(Transaction::from(tx_input.clone()).rlp()).await?;
+        let pending_tx = self
+            .chain
+            .send_raw_transaction(tx_input.hash, Transaction::from(tx_input.clone()).rlp())
+            .await?;
 
         let Some(receipt) = pending_tx.await? else {
             return Err(anyhow!("transaction did not produce a receipt"));

@@ -51,7 +51,7 @@ pub struct BlockMiner {
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>) -> Self {
-        tracing::info!(?mode, "starting block miner");
+        tracing::info!(?mode, "creating block miner");
         Self {
             storage,
             mode,
@@ -89,6 +89,11 @@ impl BlockMiner {
         let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone()).await?;
 
+        //TODO implement full gRPC for tx execution: if let Some(consensus) = &self.consensus {
+        //TODO implement full gRPC for tx execution:     let execution = format!("{:?}", tx_execution.clone());
+        //TODO implement full gRPC for tx execution:     consensus.sender.send(execution).await.unwrap();
+        //TODO implement full gRPC for tx execution: }
+
         // decide what to do based on mining mode
         match self.mode {
             // * do not consensus transactions
@@ -101,10 +106,6 @@ impl BlockMiner {
             // * consensus transactions
             // * notify pending transactions
             BlockMinerMode::Interval(_) => {
-                if let Some(consensus) = &self.consensus {
-                    let execution = format!("{:?}", tx_execution.clone());
-                    consensus.sender.send(execution).await.unwrap();
-                }
                 let _ = self.notifier_pending_txs.send(tx_hash);
             }
             // * do nothing, the caller will decide what to do
@@ -206,12 +207,16 @@ impl BlockMiner {
 
     /// Persists a mined block to permanent storage and prepares new block.
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
-        tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
+        tracing::info!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 
         // extract fields to use in notifications
         let block_number = *block.number();
         let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
+
+        if let Some(consensus) = &self.consensus {
+            consensus.sender.send(block.clone()).await?;
+        }
 
         // persist block
         self.storage.save_block(block).await?;

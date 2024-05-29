@@ -9,6 +9,8 @@ use async_trait::async_trait;
 use futures::future::join_all;
 
 use super::rocks_state::RocksStorageState;
+use super::types::AddressRocksdb;
+use super::types::SlotIndexRocksdb;
 use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -40,7 +42,7 @@ pub struct RocksPermanentStorage {
 
 impl RocksPermanentStorage {
     pub async fn new() -> anyhow::Result<Self> {
-        tracing::info!("starting rocksdb storage");
+        tracing::info!("creating rocksdb storage");
 
         let state = RocksStorageState::new();
         state.sync_data().await?;
@@ -192,8 +194,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
         // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
         if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
-            let backup_channel = Arc::clone(&self.state.backup_trigger);
-            backup_channel.send(()).await.unwrap();
+            self.state.backup_trigger.send(()).await.unwrap();
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 
@@ -229,5 +230,19 @@ impl PermanentStorage for RocksPermanentStorage {
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
         todo!()
+    }
+
+    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        let address: AddressRocksdb = (*address).into();
+        Ok(self
+            .state
+            .account_slots
+            .iter_from((address, SlotIndexRocksdb::from(0)), rocksdb::Direction::Forward)
+            .take_while(|((addr, _), _)| &address == addr)
+            .map(|((_, idx), value)| Slot {
+                index: idx.into(),
+                value: value.into(),
+            })
+            .collect())
     }
 }

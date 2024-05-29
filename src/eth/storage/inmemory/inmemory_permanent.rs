@@ -102,7 +102,7 @@ impl InMemoryPermanentStorage {
 
     /// Creates a new InMemoryPermanentStorage from a snapshot dump.
     pub fn from_snapshot(state: InMemoryPermanentStorageState) -> Self {
-        tracing::info!("starting inmemory permanent storage from snapshot");
+        tracing::info!("creating inmemory permanent storage from snapshot");
         Self {
             state: RwLock::new(state),
             block_number: AtomicU64::new(0),
@@ -126,7 +126,7 @@ impl InMemoryPermanentStorage {
 
 impl Default for InMemoryPermanentStorage {
     fn default() -> Self {
-        tracing::info!("starting inmemory permanent storage");
+        tracing::info!("creating inmemory permanent storage");
         Self {
             state: RwLock::new(InMemoryPermanentStorageState::default()),
             block_number: Default::default(),
@@ -217,6 +217,17 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
 
         Ok(slots)
+    }
+
+    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        let state = self.lock_read().await;
+
+        let Some(account) = state.accounts.get(address) else {
+            tracing::trace!(%address, "account not found in permanent");
+            return Ok(Default::default());
+        };
+
+        Ok(account.slots.clone().into_values().map(|slot| slot.get_current()).collect())
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {

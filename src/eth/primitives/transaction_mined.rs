@@ -20,6 +20,7 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
 use crate::ext::OptionExt;
+use crate::ext::ResultExt;
 use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
@@ -67,13 +68,13 @@ impl TransactionMined {
     /// Serializes itself to JSON-RPC transaction format.
     pub fn to_json_rpc_transaction(self) -> JsonValue {
         let json_rpc_format: EthersTransaction = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 
     /// Serializes itself to JSON-RPC receipt format.
     pub fn to_json_rpc_receipt(self) -> JsonValue {
         let json_rpc_format: EthersReceipt = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 }
 
@@ -99,6 +100,7 @@ impl From<TransactionMined> for EthersTransaction {
             v: input.v,
             r: input.r,
             s: input.s,
+            transaction_type: input.tx_type,
             ..Default::default()
         }
     }

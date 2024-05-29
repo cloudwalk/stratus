@@ -93,7 +93,7 @@ impl<'a> Future for PendingTransaction<'a> {
         match this.state {
             PendingTxState::InitialDelay(fut) => {
                 futures_util::ready!(fut.as_mut().poll(ctx));
-                let fut = Box::pin(this.provider.get_transaction(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_transaction(*this.tx_hash));
                 *this.state = PendingTxState::GettingTx(fut);
                 ctx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -102,7 +102,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 // Wait the polling period so that we do not spam the chain when no
                 // new block has been mined
                 let _ready = futures_util::ready!(this.interval.poll_next_unpin(ctx));
-                let fut = Box::pin(this.provider.get_transaction(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_transaction(*this.tx_hash));
                 *this.state = PendingTxState::GettingTx(fut);
                 ctx.waker().wake_by_ref();
             }
@@ -139,7 +139,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 }
 
                 // Start polling for the receipt now
-                let fut = Box::pin(this.provider.get_transaction_receipt(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_receipt(*this.tx_hash));
                 *this.state = PendingTxState::GettingReceipt(fut);
                 ctx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -148,7 +148,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 // Wait the polling period so that we do not spam the chain when no
                 // new block has been mined
                 let _ready = futures_util::ready!(this.interval.poll_next_unpin(ctx));
-                let fut = Box::pin(this.provider.get_transaction_receipt(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_receipt(*this.tx_hash));
                 *this.state = PendingTxState::GettingReceipt(fut);
                 ctx.waker().wake_by_ref();
             }
