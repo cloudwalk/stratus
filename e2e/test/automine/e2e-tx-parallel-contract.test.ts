@@ -9,6 +9,7 @@ import {
     sendGetNonce,
     sendRawTransactions,
     sendReset,
+    send
 } from "../helpers/rpc";
 
 describe("Transaction: parallel TestContractBalances", async () => {
