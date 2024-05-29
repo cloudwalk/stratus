@@ -254,28 +254,8 @@ impl Consensus {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn append_block_commit_to_followers(_data: Block, followers: Vec<Peer>) -> Result<(), anyhow::Error> {
-        let header = BlockHeader {
-            number: 0,
-            hash: "hash".to_string(),
-            transactions_root: "root".to_string(),
-            gas_used: "0".to_string(),
-            gas_limit: "0".to_string(),
-            bloom: "bloom".to_string(),
-            timestamp: 0,
-            parent_hash: "parent_hash".to_string(),
-            author: "author".to_string(),
-            extra_data: vec![],
-            miner: "miner".to_string(),
-            difficulty: "difficulty".to_string(),
-            receipts_root: "receipts_root".to_string(),
-            uncle_hash: "uncle_hash".to_string(),
-            size: 0,
-            state_root: "state_root".to_string(),
-            total_difficulty: "total_difficulty".to_string(),
-            nonce: "nonce".to_string(),
-        };
-
+    pub async fn append_block_commit_to_followers(block: Block, followers: Vec<Peer>) -> Result<(), anyhow::Error> {
+        let header: BlockHeader = (&block.header).into();
         let transaction_hashes = vec!["hash1".to_string(), "hash2".to_string()]; // Replace with actual transaction hashes
 
         let term = 0; // Populate with actual term
