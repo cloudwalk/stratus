@@ -23,6 +23,7 @@ use stratus::infra::tracing::warn_task_rx_closed;
 use stratus::infra::tracing::warn_task_tx_closed;
 use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
+#[cfg(feature = "metrics")]
 use stratus::utils::calculate_tps;
 use stratus::GlobalServices;
 use stratus::GlobalState;
