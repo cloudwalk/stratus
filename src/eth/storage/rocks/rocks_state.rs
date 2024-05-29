@@ -13,16 +13,7 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
-use super::rocks_db::DbConfig;
-use super::rocks_db::RocksDb;
-use super::types::AccountRocksdb;
-use super::types::AddressRocksdb;
-use super::types::BlockNumberRocksdb;
-use super::types::BlockRocksdb;
-use super::types::HashRocksdb;
-use super::types::IndexRocksdb;
-use super::types::SlotIndexRocksdb;
-use super::types::SlotValueRocksdb;
+use crate::channel_read;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -36,6 +27,16 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::rocks::rocks_db::DbConfig;
+use crate::eth::storage::rocks::rocks_db::RocksDb;
+use crate::eth::storage::rocks::types::AccountRocksdb;
+use crate::eth::storage::rocks::types::AddressRocksdb;
+use crate::eth::storage::rocks::types::BlockNumberRocksdb;
+use crate::eth::storage::rocks::types::BlockRocksdb;
+use crate::eth::storage::rocks::types::HashRocksdb;
+use crate::eth::storage::rocks::types::IndexRocksdb;
+use crate::eth::storage::rocks::types::SlotIndexRocksdb;
+use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
@@ -93,7 +94,7 @@ impl RocksStorageState {
 
         tokio::spawn(async move {
             let mut rx = rx;
-            while rx.recv().await.is_some() {
+            while channel_read!(rx).is_some() {
                 accounts.backup().unwrap();
                 accounts_history.backup().unwrap();
                 account_slots.backup().unwrap();
@@ -110,7 +111,7 @@ impl RocksStorageState {
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
         let block_number = self.blocks_by_number.last().map(|(num, _)| num).unwrap_or_default();
-        tracing::warn!(?block_number, "preloaded block_number");
+        tracing::info!(number = %block_number, "preloaded block_number");
         Ok((u64::from(block_number)).into())
     }
 

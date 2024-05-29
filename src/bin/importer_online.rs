@@ -7,6 +7,7 @@ use std::time::Duration;
 use futures::try_join;
 use futures::StreamExt;
 use serde::Deserialize;
+use stratus::channel_read;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
@@ -132,7 +133,7 @@ async fn start_block_executor(
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "block-executor";
 
-    while let Some((block, receipts)) = backlog_rx.recv().await {
+    while let Some((block, receipts)) = channel_read!(backlog_rx) {
         if GlobalState::warn_if_shutdown(TASK_NAME) {
             return Ok(());
         }
@@ -143,7 +144,7 @@ async fn start_block_executor(
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
         if let Err(e) = executor.reexecute_external(&block, &receipts).await {
-            let message = GlobalState::shutdown_from(TASK_NAME, "failed to re-execute external block");
+            let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
             return log_and_err!(reason = e, message);
         };
 

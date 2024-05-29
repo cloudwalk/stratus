@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
 use itertools::Itertools;
+use stratus::channel_read;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
@@ -152,7 +153,7 @@ async fn execute_block_importer(
         };
 
         // receive new tasks to execute, or exit
-        let Some((blocks, receipts)) = backlog_rx.recv().await else {
+        let Some((blocks, receipts)) = channel_read!(backlog_rx) else {
             tracing::info!("{} has no more blocks to process", TASK_NAME);
             return Ok(());
         };

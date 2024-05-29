@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
@@ -14,15 +12,9 @@ use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Size(U64);
-
-impl Display for Size {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 impl Dummy<Faker> for Size {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
