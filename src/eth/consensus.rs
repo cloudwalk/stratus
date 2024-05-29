@@ -1,6 +1,9 @@
 #[cfg(feature = "kubernetes")]
 pub mod consensus_kube {
     use std::env;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
     use std::time::Duration;
 
     use anyhow::anyhow;
@@ -10,6 +13,7 @@ pub mod consensus_kube {
     use kube::Client;
     use tokio::sync::mpsc::Sender;
     use tokio::sync::mpsc::{self};
+    use tokio::sync::Mutex;
     use tokio::time::sleep;
     use tonic::transport::Channel;
     use tonic::transport::Server;
@@ -49,14 +53,14 @@ pub mod consensus_kube {
 
     pub struct Consensus {
         pub sender: Sender<Block>,
-        leader_name: String, //XXX check the peers instead of using it
-                             //XXX current_index: AtomicU64,
+        leader_name: String,                  //XXX check the peers instead of using it
+        last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
     }
 
     impl Consensus {
         //XXX for now we pick the leader name from the environment
         // the correct is to have a leader election algorithm
-        pub fn new(leader_name: Option<String>) -> Self {
+        pub fn new(leader_name: Option<String>) -> Arc<Self> {
             let Some(_node_name) = Self::current_node() else {
                 tracing::info!("No consensus module available, running in standalone mode");
                 return Self::new_stand_alone();
@@ -101,11 +105,19 @@ pub mod consensus_kube {
                 }
             });
 
-            Self::initialize_server();
-            Self { leader_name, sender }
+            let last_arrived_block_number = AtomicU64::new(0); //TODO load from consensus storage
+
+            let consensus = Self {
+                leader_name,
+                sender,
+                last_arrived_block_number,
+            };
+            let consensus = Arc::new(consensus);
+            Self::initialize_server(Arc::clone(&consensus));
+            consensus
         }
 
-        fn new_stand_alone() -> Self {
+        fn new_stand_alone() -> Arc<Self> {
             let (sender, mut receiver) = mpsc::channel::<Block>(32);
 
             tokio::spawn(async move {
@@ -114,18 +126,23 @@ pub mod consensus_kube {
                 }
             });
 
-            Self {
+            let last_arrived_block_number = AtomicU64::new(0);
+
+            Arc::new(Self {
                 leader_name: "standalone".to_string(),
                 sender,
-            }
+                last_arrived_block_number,
+            })
         }
 
-        fn initialize_server() {
+        fn initialize_server(consensus: Arc<Consensus>) {
             tokio::spawn(async move {
                 tracing::info!("Starting append entry service at port 3777");
                 let addr = "0.0.0.0:3777".parse().unwrap();
 
-                let append_entry_service = AppendEntryServiceImpl;
+                let append_entry_service = AppendEntryServiceImpl {
+                    consensus: Mutex::new(consensus),
+                };
 
                 Server::builder()
                     .add_service(AppendEntryServiceServer::new(append_entry_service))
@@ -283,7 +300,9 @@ pub mod consensus_kube {
         }
     }
 
-    pub struct AppendEntryServiceImpl;
+    pub struct AppendEntryServiceImpl {
+        consensus: Mutex<Arc<Consensus>>,
+    }
 
     #[tonic::async_trait]
     impl AppendEntryService for AppendEntryServiceImpl {
@@ -311,10 +330,21 @@ pub mod consensus_kube {
 
             tracing::info!(number = header.number, "appending new block");
 
+            let consensus = self.consensus.lock().await;
+            let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
+
+            consensus.last_arrived_block_number.store(header.number, Ordering::SeqCst);
+
+            tracing::info!(
+                last_last_arrived_block_number = last_last_arrived_block_number,
+                new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
+                "last arrived block number set",
+            );
+
             Ok(Response::new(AppendBlockCommitResponse {
                 status: StatusCode::AppendSuccess as i32,
                 message: "Block Commit appended successfully".into(),
-                last_committed_block_number: 0,
+                last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
             }))
         }
     }
@@ -322,6 +352,8 @@ pub mod consensus_kube {
 
 #[cfg(not(feature = "kubernetes"))]
 pub mod consensus_mock {
+    use std::sync::Arc;
+
     use tokio::sync::mpsc::Sender;
 
     use crate::config::RunWithImporterConfig;
@@ -332,7 +364,7 @@ pub mod consensus_mock {
     }
 
     impl Consensus {
-        pub fn new(_leader_name: Option<String>) -> Self {
+        pub fn new(_leader_name: Option<String>) -> Arc<Self> {
             todo!()
         }
 
