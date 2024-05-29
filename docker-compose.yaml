@@ -36,7 +36,7 @@ services:
       - "--log.level=debug"
 
   jaeger:
-    image: jaegertracing/all-in-one:1.56
+    image: jaegertracing/all-in-one:1.57
     environment:
       SPAN_STORAGE_TYPE: badger
       BADGER_EPHEMERAL: false
@@ -45,8 +45,8 @@ services:
     volumes:
       - /tmp:/badger
     ports:
-      - 16686:16686
       - 4317:4317
+      - 16686:16686
 
 volumes:
   postgres-data:

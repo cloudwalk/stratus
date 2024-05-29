@@ -46,7 +46,7 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     let opentelemetry_layer = match url {
         Some(url) => {
             println!("tracing registry enabling opentelemetry exporter | url={}", url);
-            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service", "stratus")]));
+            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")]));
             let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
 
             let tracer = opentelemetry_otlp::new_pipeline()

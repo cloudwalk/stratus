@@ -233,15 +233,9 @@ impl BlockMiner {
 
         // notify
         for log in block_logs {
-            let tx_hash = log.block_hash;
-            let log_index = log.log_index;
-            if self.notifier_logs.send(log).is_err() {
-                tracing::error!(number = %block_number, hash = %tx_hash, index = %log_index, "failed to send transaction log notification");
-            };
+            let _ = self.notifier_logs.send(log);
         }
-        if self.notifier_blocks.send(block_header).is_err() {
-            tracing::error!(number = %block_number, "failed to send new block notification");
-        };
+        let _ = self.notifier_blocks.send(block_header);
 
         Ok(())
     }
