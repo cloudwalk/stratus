@@ -31,7 +31,10 @@ pub mod storage;
 
 pub use block_miner::BlockMiner;
 pub use block_miner::BlockMinerMode;
-pub use consensus::Consensus;
+#[cfg(feature = "kubernetes")]
+pub use consensus::consensus_kube::Consensus;
+#[cfg(not(feature = "kubernetes"))]
+pub use consensus::consensus_mock::Consensus;
 pub use executor::EvmTask;
 pub use executor::Executor;
 pub use relayer::TransactionRelayer;

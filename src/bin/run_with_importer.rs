@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
-use stratus::eth::consensus::Consensus;
 use stratus::eth::rpc::serve_rpc;
+use stratus::eth::Consensus;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
 use stratus::GlobalState;
