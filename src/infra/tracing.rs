@@ -50,14 +50,17 @@ pub async fn init_tracing(url: Option<&String>) {
     let opentelemetry_layer = match url {
         Some(url) => {
             println!("tracing registry enabling opentelemetry");
+            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")]));
+            let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
+
             let tracer = opentelemetry_otlp::new_pipeline()
                 .tracing()
-                .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint(url))
-                .with_trace_config(trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")])))
+                .with_exporter(tracer_exporter)
+                .with_trace_config(tracer_config)
                 .install_batch(runtime::Tokio)
                 .unwrap();
-
-            Some(tracing_opentelemetry::layer().with_tracked_inactivity(false).with_tracer(tracer))
+            let layer = tracing_opentelemetry::layer().with_tracked_inactivity(false).with_tracer(tracer);
+            Some(layer)
         }
         None => None,
     };
