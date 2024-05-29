@@ -53,7 +53,7 @@ check:
 # Stratus: Check all features individually using cargo hack
 check-features *args="":
     command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack; } 
-    cargo hack check --each-feature --keep-going --exclude-all-features {{args}}
+    cargo hack check --each-feature --keep-going {{args}}
 
 # Stratus: Clean build artifacts
 clean:
