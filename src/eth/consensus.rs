@@ -350,6 +350,8 @@ pub mod consensus_kube {
 
 #[cfg(not(feature = "kubernetes"))]
 pub mod consensus_mock {
+    use std::sync::Arc;
+
     use tokio::sync::mpsc::Sender;
 
     use crate::config::RunWithImporterConfig;
@@ -360,7 +362,7 @@ pub mod consensus_mock {
     }
 
     impl Consensus {
-        pub fn new(_leader_name: Option<String>) -> Self {
+        pub fn new(_leader_name: Option<String>) -> Arc::<Self> {
             todo!()
         }
 
