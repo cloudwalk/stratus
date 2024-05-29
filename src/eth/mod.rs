@@ -25,13 +25,13 @@ pub mod consensus;
 pub mod evm;
 mod executor;
 pub mod primitives;
+pub mod relayer;
 pub mod rpc;
 pub mod storage;
-pub mod transaction_relayer;
 
 pub use block_miner::BlockMiner;
 pub use block_miner::BlockMinerMode;
 pub use consensus::Consensus;
 pub use executor::EvmTask;
 pub use executor::Executor;
-pub use transaction_relayer::TransactionRelayer;
+pub use relayer::TransactionRelayer;

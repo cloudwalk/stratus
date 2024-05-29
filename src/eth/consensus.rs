@@ -33,6 +33,7 @@ use append_entry::StatusCode;
 
 use super::primitives::Block;
 use crate::config::RunWithImporterConfig;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
 const RETRY_ATTEMPTS: u32 = 3;

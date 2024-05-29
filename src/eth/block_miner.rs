@@ -22,6 +22,7 @@ use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
@@ -44,13 +45,16 @@ pub struct BlockMiner {
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
 
+    /// External relayer client
+    relayer_client: Option<ExternalRelayerClient>,
+
     /// Consensus logic.
     consensus: Option<Arc<Consensus>>,
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>, relayer_client: Option<ExternalRelayerClient>) -> Self {
         tracing::info!(?mode, "creating block miner");
         Self {
             storage,
@@ -58,6 +62,7 @@ impl BlockMiner {
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
+            relayer_client,
             consensus,
         }
     }
@@ -213,6 +218,10 @@ impl BlockMiner {
         let block_number = *block.number();
         let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
+
+        if let Some(relayer) = &self.relayer_client {
+            relayer.send_to_relayer(block.clone()).await?;
+        }
 
         if let Some(consensus) = &self.consensus {
             consensus.sender.send(block.clone()).await?;
