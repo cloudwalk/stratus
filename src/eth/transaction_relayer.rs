@@ -146,7 +146,7 @@ impl ExternalRelayer {
         tracing::debug!(?block_number, "relaying block");
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
-        let dag = Self::compute_tx_dag(block.transactions);
+        let dag = TransactionDag::new(block.transactions);
 
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -215,6 +215,90 @@ impl ExternalRelayer {
         }
     }
 
+    /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
+    /// calling eth_getTransactionByHash.
+    #[tracing::instrument(skip_all)]
+    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
+        tracing::debug!(?tx_mined.input.hash, "relaying transaction");
+
+        let ethers_tx = Transaction::from(tx_mined.input.clone());
+        let tx = self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await?;
+
+        tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
+        let mut tries = 0;
+        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await?.is_none() {
+            if tries > 50 {
+                return Err(anyhow!("transaction was not found in mempool after 500ms"));
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            tries += 1;
+        }
+
+        Ok((tx, ExternalReceipt(tx_mined.into())))
+    }
+
+    pub async fn relay(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        let res = match self.relay_and_check_mempool(tx_mined.clone()).await {
+            Err(err) => {
+                let err = err.context("relay and check mempool failed");
+                let err_string = err.to_string();
+                self.save_mismatch(ExternalReceipt(tx_mined.into()), None, &err_string).await;
+                Err(err)
+            }
+            ok => ok,
+        };
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_and_check_mempool(start.elapsed());
+
+        res
+    }
+
+    #[tracing::instrument(skip_all)]
+    async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<()> {
+        tracing::debug!("relaying transactions");
+        let mut tx_failed = false;
+
+        let mut results = vec![];
+        while let Some(roots) = dag.take_roots() {
+            let futures = roots.into_iter().map(|root_tx| self.relay(root_tx));
+            for result in join_all(futures).await {
+                match result {
+                    Ok(res) => results.push(res),
+                    Err(err) => {
+                        tracing::error!(?err);
+                        tx_failed = true;
+                    }
+                }
+            }
+        }
+
+        let futures = results
+            .into_iter()
+            .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
+
+        join_all(futures)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .context("some transactions failed")?;
+
+        if tx_failed {
+            return Err(anyhow!("some transactions failed"));
+        }
+
+        Ok(())
+    }
+}
+
+struct TransactionDag {
+    dag: StableDag<TransactionMined, i32>,
+}
+
+impl TransactionDag {
     /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
     /// Each vertex of the graph is a transaction, and two vertices are connected iff they conflict
     /// on either a slot or balance.
@@ -226,7 +310,7 @@ impl ExternalRelayer {
     ///     and contract calls that is not taken into consideration yet.
     /// If this algorithm is correct we could do away with StableDag and use StableGraph instead, for better performance
     #[tracing::instrument(skip_all)]
-    fn compute_tx_dag(block_transactions: Vec<TransactionMined>) -> StableDag<TransactionMined, i32> {
+    pub fn new(block_transactions: Vec<TransactionMined>) -> Self {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -273,58 +357,17 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         metrics::inc_compute_tx_dag(start.elapsed());
 
-        dag
-    }
-
-    /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
-    /// calling eth_getTransactionByHash.
-    #[tracing::instrument(skip_all)]
-    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
-        tracing::debug!(?tx_mined.input.hash, "relaying transaction");
-
-        let ethers_tx = Transaction::from(tx_mined.input.clone());
-        let tx = self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await?;
-
-        tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
-        let mut tries = 0;
-        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await?.is_none() {
-            if tries > 50 {
-                return Err(anyhow!("transaction was not found in mempool after 500ms"));
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-            tries += 1;
-        }
-
-        Ok((tx, ExternalReceipt(tx_mined.into())))
-    }
-
-    pub async fn relay(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let res = match self.relay_and_check_mempool(tx_mined.clone()).await {
-            Err(err) => {
-                let err = err.context("relay and check mempool failed");
-                let err_string = err.to_string();
-                self.save_mismatch(ExternalReceipt(tx_mined.into()), None, &err_string).await;
-                Err(err)
-            }
-            ok => ok,
-        };
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_relay_and_check_mempool(start.elapsed());
-
-        res
+        Self { dag }
     }
 
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
     /// and by extension creating new roots for a future call. Returns `None` if the graph
     /// is empty.
     #[tracing::instrument(skip_all)]
-    fn take_roots(dag: &mut StableDag<TransactionMined, i32>) -> Option<Vec<TransactionMined>> {
+    fn take_roots(&mut self) -> Option<Vec<TransactionMined>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+        let dag = &mut self.dag;
 
         let mut root_indexes = vec![];
         for index in dag.node_identifiers() {
@@ -346,42 +389,6 @@ impl ExternalRelayer {
         } else {
             Some(roots)
         }
-    }
-
-    #[tracing::instrument(skip_all)]
-    async fn relay_dag(&self, mut dag: StableDag<TransactionMined, i32>) -> anyhow::Result<()> {
-        tracing::debug!("relaying transactions");
-        let mut tx_failed = false;
-
-        let mut results = vec![];
-        while let Some(roots) = Self::take_roots(&mut dag) {
-            let futures = roots.into_iter().map(|root_tx| self.relay(root_tx));
-            for result in join_all(futures).await {
-                match result {
-                    Ok(res) => results.push(res),
-                    Err(err) => {
-                        tracing::error!(?err);
-                        tx_failed = true;
-                    }
-                }
-            }
-        }
-
-        let futures = results
-            .into_iter()
-            .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
-
-        join_all(futures)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()
-            .context("some transactions failed")?;
-
-        if tx_failed {
-            return Err(anyhow!("some transactions failed"));
-        }
-
-        Ok(())
     }
 }
 
@@ -419,6 +426,7 @@ mod tests {
     use std::collections::HashSet;
 
     use super::ExternalRelayer;
+    use super::TransactionDag;
     use crate::eth::primitives::Address;
     use crate::eth::primitives::Bytes;
     use crate::eth::primitives::CodeHash;
@@ -525,9 +533,9 @@ mod tests {
                 .map(|(i, indexes)| create_tx(indexes.collect(), i as u64))
                 .collect();
 
-            let mut dag = ExternalRelayer::compute_tx_dag(transactions);
+            let mut dag = TransactionDag::new(transactions);
             let mut i = 0;
-            while let Some(roots) = ExternalRelayer::take_roots(&mut dag) {
+            while let Some(roots) = dag.take_roots() {
                 assert_eq!(roots.len(), expected[i].len());
                 assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
                 i += 1;
