@@ -203,17 +203,17 @@ impl PermanentStorage for RocksPermanentStorage {
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let block_number_u64 = block_number.as_u64();
-
         // update block number
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
-            if block_number_u64 <= current {
+            if block_number_u64 < current {
                 Some(block_number_u64)
             } else {
                 None
             }
         });
 
-        self.state.reset_at(block_number).await
+        self.state.reset_at(block_number).await;
+        Ok(())
     }
 
     async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
