@@ -31,7 +31,7 @@ jobs:
           ruby-version: '3.2.2'
 
       - name: Notify Slack
-        run: ruby utils/slack-notifiers/outdated.rb
+        run: ruby utils/slack-notifiers/deploy.rb
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.RELEASE_TRAIN_SLACK_WEBHOOK_URL }}
           GITHUB_SHA: ${{ github.sha }}
