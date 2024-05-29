@@ -77,7 +77,7 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        self.relay_dag(dag).await?; // if Ok mark block as sucess if Err mark it as failed or smth like that
+        self.relay_dag(dag).await?; // todo: if Ok mark block as sucess if Err mark it as failed or smth like that
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_dag(start.elapsed());

@@ -59,8 +59,8 @@ impl TransactionDag {
         for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1).unwrap();
-                    // todo: unwrap -> expect
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1)
+                        .expect("adding an edge between two known vertices should not fail");
                 }
             }
         }
@@ -68,8 +68,8 @@ impl TransactionDag {
         for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1).unwrap();
-                    // todo: unwrap -> expect
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1)
+                        .expect("adding an edge between two known vertices should not fail");
                 }
             }
         }
@@ -98,7 +98,7 @@ impl TransactionDag {
 
         let mut roots = vec![];
         while let Some(root) = root_indexes.pop() {
-            roots.push(dag.remove_node(root).unwrap()); // todo: unwrap -> expect
+            roots.push(dag.remove_node(root).expect("removing a known vertex should not fail"));
         }
 
         #[cfg(feature = "metrics")]
