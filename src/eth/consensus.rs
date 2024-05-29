@@ -300,11 +300,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
     }
 
     async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
-        let header = match request.into_inner().header {
-            Some(header) => header,
-            None => {
-                return Err(Status::invalid_argument("empty block header"));
-            }
+        let Some(header) = request.into_inner().header else {
+            return Err(Status::invalid_argument("empty block header"));
         };
 
         tracing::info!(number = header.number, "appending new block");
