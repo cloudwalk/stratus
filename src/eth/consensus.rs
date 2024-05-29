@@ -6,8 +6,6 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::api::Api;
 use kube::api::ListParams;
 use kube::Client;
-use serde::Deserialize;
-use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::time::sleep;
@@ -38,12 +36,6 @@ use crate::infra::metrics;
 
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BlockEntry {
-    index: u64,
-    data: Block,
-}
 
 #[derive(Clone)]
 struct Peer {
@@ -88,13 +80,13 @@ impl Consensus {
                 if Self::is_leader(leader_name_clone.clone()) {
                     //TODO add data to consensus-log-transactions
                     //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
-                    tracing::info!(number = ?data.number(), "received block to send to followers");
+                    tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
                     //TODO use gRPC instead of jsonrpc
                     //FIXME for now, this has no colateral efects, but it will have in the future
                     match Self::append_block_commit_to_followers(data.clone(), followers.clone()).await {
                         Ok(_) => {
-                            tracing::info!(number = ?data.number(), "Data sent to followers");
+                            tracing::info!(number = data.header.number.as_u64(), "Data sent to followers");
                         }
                         Err(e) => {
                             //TODO rediscover followers on comunication error
@@ -114,7 +106,7 @@ impl Consensus {
 
         tokio::spawn(async move {
             while let Some(data) = receiver.recv().await {
-                tracing::info!(number = ?data.number(), "Received block");
+                tracing::info!(number = data.header.number.as_u64(), "Received block");
             }
         });
 
@@ -296,9 +288,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         request: Request<AppendTransactionExecutionsRequest>,
     ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
         let executions = request.into_inner().executions;
-        // Process the transaction executions here
-
-        // For example, let's just print the executions
+        //TODO Process the transaction executions here
         for execution in executions {
             println!("Received transaction execution: {:?}", execution);
         }
@@ -311,11 +301,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
     }
 
     async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
-        let header = request.into_inner().header;
-        // Process the block commit here
+        let Some(header) = request.into_inner().header else {
+            return Err(Status::invalid_argument("empty block header"));
+        };
 
-        // For example, let's just print the block header
-        println!("Received block commit: {:?}", header);
+        tracing::info!(number = header.number, "appending new block");
 
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
