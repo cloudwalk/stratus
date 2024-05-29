@@ -43,6 +43,10 @@ impl UnixTime {
     pub fn to_i64(&self) -> i64 {
         self.0.try_into().expect("UNIX time is unrealistically high")
     }
+
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
 }
 
 impl FromStr for UnixTime {
