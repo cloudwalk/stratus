@@ -8,8 +8,6 @@ pub mod consensus_kube {
     use kube::api::Api;
     use kube::api::ListParams;
     use kube::Client;
-    use serde::Deserialize;
-    use serde::Serialize;
     use tokio::sync::mpsc::Sender;
     use tokio::sync::mpsc::{self};
     use tokio::time::sleep;
@@ -41,13 +39,11 @@ pub mod consensus_kube {
     const RETRY_ATTEMPTS: u32 = 3;
     const RETRY_DELAY: Duration = Duration::from_millis(10);
 
-
     #[derive(Clone)]
     struct Peer {
         address: String,
         client: AppendEntryServiceClient<Channel>,
     }
-
 
     pub struct Consensus {
         pub sender: Sender<Block>,
@@ -88,130 +84,19 @@ pub mod consensus_kube {
                         //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
-                    //TODO use gRPC instead of jsonrpc
-                    //FIXME for now, this has no colateral efects, but it will have in the future
-                    match Self::append_block_commit_to_followers(data.clone(), followers.clone()).await {
-                        Ok(_) => {
-                            tracing::info!(number = data.header.number.as_u64(), "Data sent to followers");
-                        }
-                        Err(e) => {
-                            //TODO rediscover followers on comunication error
-                            tracing::error!("Failed to send data to followers: {}", e);
+                        //TODO use gRPC instead of jsonrpc
+                        //FIXME for now, this has no colateral efects, but it will have in the future
+                        match Self::append_block_commit_to_followers(data.clone(), followers.clone()).await {
+                            Ok(_) => {
+                                tracing::info!(number = data.header.number.as_u64(), "Data sent to followers");
+                            }
+                            Err(e) => {
+                                //TODO rediscover followers on comunication error
+                                tracing::error!("Failed to send data to followers: {}", e);
+                            }
                         }
                     }
                 }
-            }
-        });
-
-        Self::initialize_server();
-        Self { leader_name, sender }
-    }
-
-    fn new_stand_alone() -> Self {
-        let (sender, mut receiver) = mpsc::channel::<Block>(32);
-
-        tokio::spawn(async move {
-            while let Some(data) = receiver.recv().await {
-                tracing::info!(number = data.header.number.as_u64(), "Received block");
-            }
-        });
-
-        Self {
-            leader_name: "standalone".to_string(),
-            sender,
-        }
-    }
-
-    fn initialize_server() {
-        tokio::spawn(async move {
-            tracing::info!("Starting append entry service at port 3777");
-            let addr = "0.0.0.0:3777".parse().unwrap();
-
-            let append_entry_service = AppendEntryServiceImpl;
-
-            Server::builder()
-                .add_service(AppendEntryServiceServer::new(append_entry_service))
-                .serve(addr)
-                .await
-                .unwrap();
-        });
-    }
-
-    //FIXME TODO automate the way we gather the leader, instead of using a env var
-    pub fn is_leader(leader_name: String) -> bool {
-        Self::current_node().unwrap_or("".to_string()) == leader_name
-    }
-
-    pub fn is_follower(leader_name: String) -> bool {
-        !Self::is_leader(leader_name)
-    }
-
-    fn current_node() -> Option<String> {
-        let pod_name = env::var("MY_POD_NAME").ok()?;
-        Some(pod_name.trim().to_string())
-    }
-
-    fn current_namespace() -> Option<String> {
-        let namespace = env::var("NAMESPACE").ok()?;
-        Some(namespace.trim().to_string())
-    }
-
-    // XXX this is a temporary solution to get the leader node
-    // later we want the leader to GENERATE blocks
-    // and even later we want this sync to be replaced by a gossip protocol or raft
-    pub fn get_chain_url(&self, config: RunWithImporterConfig) -> (String, Option<String>) {
-        if Self::is_follower(self.leader_name.clone()) {
-            if let Some(namespace) = Self::current_namespace() {
-                return (format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None);
-            }
-        }
-        (config.online.external_rpc, config.online.external_rpc_ws)
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub async fn discover_followers() -> Result<Vec<Peer>, anyhow::Error> {
-        let client = Client::try_default().await?;
-        let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
-
-        let lp = ListParams::default().labels("app=stratus-api");
-        let pod_list = pods.list(&lp).await?;
-
-        let mut followers = Vec::new();
-        for p in pod_list.items {
-            if let Some(pod_name) = p.metadata.name {
-                if pod_name != Self::current_node().unwrap() {
-                    if let Some(namespace) = Self::current_namespace() {
-                        let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
-                        let client = AppendEntryServiceClient::connect(address.clone()).await?;
-
-                        let peer = Peer { address, client };
-                        followers.push(peer);
-                    }
-                }
-            }
-        }
-
-        Ok(followers)
-    }
-
-    async fn append_block_commit(
-        mut follower: Peer,
-        header: BlockHeader,
-        transaction_hashes: Vec<String>,
-        term: u64,
-        prev_log_index: u64,
-        prev_log_term: u64,
-    ) -> Result<(), anyhow::Error> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        for attempt in 1..=RETRY_ATTEMPTS {
-            let request = Request::new(AppendBlockCommitRequest {
-                term,
-                prev_log_index,
-                prev_log_term,
-                header: Some(header.clone()),
-                transaction_hashes: transaction_hashes.clone(),
             });
 
             Self::initialize_server();
@@ -223,7 +108,7 @@ pub mod consensus_kube {
 
             tokio::spawn(async move {
                 while let Some(data) = receiver.recv().await {
-                    tracing::info!(number = ?data.number(), "Received block");
+                    tracing::info!(number = data.header.number.as_u64(), "Received block");
                 }
             });
 
@@ -405,9 +290,7 @@ pub mod consensus_kube {
             request: Request<AppendTransactionExecutionsRequest>,
         ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
             let executions = request.into_inner().executions;
-            // Process the transaction executions here
-
-            // For example, let's just print the executions
+            //TODO Process the transaction executions here
             for execution in executions {
                 println!("Received transaction execution: {:?}", execution);
             }
@@ -439,7 +322,6 @@ pub mod consensus_kube {
 pub mod consensus_mock {
     use tokio::sync::mpsc::Sender;
 
-
     use crate::config::RunWithImporterConfig;
     use crate::eth::primitives::Block;
 
@@ -455,38 +337,5 @@ pub mod consensus_mock {
         pub fn get_chain_url(&self, _config: RunWithImporterConfig) -> (String, Option<String>) {
             todo!()
         }
-    }
-#[tonic::async_trait]
-impl AppendEntryService for AppendEntryServiceImpl {
-    async fn append_transaction_executions(
-        &self,
-        request: Request<AppendTransactionExecutionsRequest>,
-    ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
-        let executions = request.into_inner().executions;
-        //TODO Process the transaction executions here
-        for execution in executions {
-            println!("Received transaction execution: {:?}", execution);
-        }
-
-        Ok(Response::new(AppendTransactionExecutionsResponse {
-            status: StatusCode::AppendSuccess as i32,
-            message: "Transaction Executions appended successfully".into(),
-            last_committed_block_number: 0,
-        }))
-    }
-
-    async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
-        let Some(header) = request.into_inner().header else {
-            return Err(Status::invalid_argument("empty block header"));
-        };
-
-        tracing::info!(number = header.number, "appending new block");
-
-        Ok(Response::new(AppendBlockCommitResponse {
-            status: StatusCode::AppendSuccess as i32,
-            message: "Block Commit appended successfully".into(),
-            last_committed_block_number: 0,
-        }))
->>>>>>> origin/main
     }
 }
