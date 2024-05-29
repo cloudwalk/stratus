@@ -41,6 +41,7 @@ use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
+use crate::eth::Consensus;
 use crate::eth::Executor;
 use crate::ext::ResultExt;
 use crate::infra::tracing::warn_task_cancellation;
@@ -56,6 +57,7 @@ pub async fn serve_rpc(
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<BlockMiner>,
+    consensus: Arc<Consensus>,
     // config
     address: SocketAddr,
     chain_id: ChainId,
@@ -80,6 +82,7 @@ pub async fn serve_rpc(
         executor,
         storage,
         miner,
+        consensus,
 
         // subscriptions
         subs: Arc::clone(&subs.connected),
@@ -138,9 +141,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_startup", stratus_startup)?;
     module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_async_method("stratus_liveness", stratus_liveness)?;
-
-    // consensus
-    module.register_async_method("stratus_appendEntries", stratus_append_entries)?;
 
     // blockchain
     module.register_async_method("net_version", net_version)?;
@@ -236,10 +236,6 @@ async fn stratus_readiness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<
 }
 
 async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    Ok(json!(true))
-}
-
-async fn stratus_append_entries(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
