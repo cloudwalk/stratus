@@ -6,7 +6,6 @@
 //! module includes functionality to handle conversions and representations of
 //! indexes, aligning with Ethereum's blockchain data structure needs.
 
-use std::fmt::Display;
 use std::num::TryFromIntError;
 use std::str::FromStr;
 
@@ -23,9 +22,9 @@ use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
 /// Represents a transaction index or log index.
-///
-/// TODO: representing it as u16 is probably wrong because external libs uses u64.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord,
+)]
 pub struct Index(u64);
 
 impl Index {
@@ -38,12 +37,6 @@ impl Index {
 
     pub fn inner_value(&self) -> u64 {
         self.0
-    }
-}
-
-impl Display for Index {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

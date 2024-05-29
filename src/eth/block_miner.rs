@@ -131,7 +131,7 @@ impl BlockMiner {
 
         // validate
         let Some(external_block) = block.external_block else {
-            return log_and_err!("failed to mine external block because there is no external block being re-executed");
+            return log_and_err!("failed to mine external block because there is no external block being reexecuted");
         };
         if not(local_txs.is_empty()) {
             return log_and_err!("failed to mine external block because one of the transactions is a local transaction");
@@ -159,7 +159,7 @@ impl BlockMiner {
 
         // validate
         let Some(external_block) = block.external_block else {
-            return log_and_err!("failed to mine mixed block because there is no external block being re-executed");
+            return log_and_err!("failed to mine mixed block because there is no external block being reexecuted");
         };
 
         // mine external transactions
@@ -233,9 +233,15 @@ impl BlockMiner {
 
         // notify
         for log in block_logs {
-            let _ = self.notifier_logs.send(log);
+            let tx_hash = log.block_hash;
+            let log_index = log.log_index;
+            if self.notifier_logs.send(log).is_err() {
+                tracing::error!(number = %block_number, hash = %tx_hash, index = %log_index, "failed to send transaction log notification");
+            };
         }
-        let _ = self.notifier_blocks.send(block_header);
+        if self.notifier_blocks.send(block_header).is_err() {
+            tracing::error!(number = %block_number, "failed to send new block notification");
+        };
 
         Ok(())
     }
@@ -345,6 +351,7 @@ mod interval_miner {
     use tokio::sync::mpsc;
     use tokio::time::Instant;
 
+    use crate::channel_read;
     use crate::eth::BlockMiner;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
@@ -352,7 +359,7 @@ mod interval_miner {
     pub async fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
-        while let Some(tick) = ticks_rx.recv().await {
+        while let Some(tick) = channel_read!(ticks_rx) {
             if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }

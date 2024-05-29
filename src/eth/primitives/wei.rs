@@ -7,7 +7,6 @@
 //! enabling precise financial operations and conversions within the Ethereum
 //! ecosystem.
 
-use std::fmt::Display;
 use std::str::FromStr;
 
 use ethabi::Token;
@@ -26,7 +25,9 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// Native token amount in wei.
-#[derive(Debug, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize,
+)]
 pub struct Wei(U256);
 
 impl Wei {
@@ -37,12 +38,6 @@ impl Wei {
     /// Checks if current value is zero.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
-    }
-}
-
-impl Display for Wei {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

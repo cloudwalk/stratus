@@ -129,14 +129,14 @@ impl Executor {
                             None => tx,
                             // conflict: reexecute
                             Some(conflicts) => {
-                                tracing::warn!(?conflicts, "re-executing serially because parallel execution conflicted");
+                                tracing::warn!(?conflicts, "reexecuting serially because parallel execution conflicted");
                                 self.reexecute_external_tx(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
                             }
                         },
 
                         // failure: reexecute
                         Err((tx, receipt, e)) => {
-                            tracing::warn!(reason = ?e, "re-executing serially because parallel execution errored");
+                            tracing::warn!(reason = ?e, "reexecuting serially because parallel execution errored");
                             self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?
                         }
                     }
@@ -185,6 +185,8 @@ impl Executor {
         receipt: &'b ExternalReceipt,
         block: &ExternalBlock,
     ) -> anyhow::Result<ExternalTransactionExecution> {
+        tracing::info!(number = %block.number(), hash = %tx.hash(), "reexecuting external transaction");
+
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -212,7 +214,7 @@ impl Executor {
             Err(e) => {
                 let json_tx = serde_json::to_string(&tx).expect_infallible();
                 let json_receipt = serde_json::to_string(&receipt).expect_infallible();
-                tracing::error!(reason = ?e, %json_tx, %json_receipt, "unexpected error reexecuting transaction");
+                tracing::error!(reason = ?e, number = %block.number(), hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
                 return Err(e);
             }
         };
@@ -232,7 +234,7 @@ impl Executor {
             let json_tx = serde_json::to_string(&tx).expect_infallible();
             let json_receipt = serde_json::to_string(&receipt).expect_infallible();
             let json_execution_logs = serde_json::to_string(&evm_result.execution.logs).expect_infallible();
-            tracing::error!(%json_tx, %json_receipt, %json_execution_logs, "mismatch reexecuting transaction");
+            tracing::error!(reason = %"mismatch reexecuting transaction", number = %block.number(), hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
             return Err(e);
         };
 
@@ -257,7 +259,7 @@ impl Executor {
             to = ?tx_input.to,
             data_len = %tx_input.input.len(),
             data = %tx_input.input,
-            "executing transaction"
+            "executing local transaction"
         );
 
         // validate
@@ -323,7 +325,7 @@ impl Executor {
             data_len = input.data.len(),
             data = %input.data,
             ?point_in_time,
-            "executing read-only transaction"
+            "executing read-only local transaction"
         );
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);

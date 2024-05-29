@@ -8,8 +8,6 @@
 //! calculate, track, and limit gas usage in transactions and smart contract
 //! execution.
 
-use std::fmt::Display;
-
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
@@ -25,7 +23,7 @@ use sqlx::types::BigDecimal;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Gas(U64);
 
@@ -35,12 +33,6 @@ impl Gas {
 
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
-    }
-}
-
-impl Display for Gas {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

@@ -24,7 +24,7 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     // configure stdout layer
     let format_as_json = env::var_os("JSON_LOGS").is_some_and(|var| not(var.is_empty()));
     let stdout_layer = if format_as_json {
-        println!("tracing registry  enabling json logs");
+        println!("tracing registry enabling json logs");
         fmt::Layer::default()
             .json()
             .with_target(true)
@@ -35,7 +35,7 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     } else {
         println!("tracing registry enabling text logs");
         fmt::Layer::default()
-            .with_target(false)
+            .with_target(true)
             .with_thread_ids(true)
             .with_thread_names(true)
             .with_filter(EnvFilter::from_default_env())
@@ -45,8 +45,8 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     // configure opentelemetry layer
     let opentelemetry_layer = match url {
         Some(url) => {
-            println!("tracing registry enabling opentelemetry");
-            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")]));
+            println!("tracing registry enabling opentelemetry exporter | url={}", url);
+            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service", "stratus")]));
             let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
 
             let tracer = opentelemetry_otlp::new_pipeline()
@@ -55,10 +55,14 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
                 .with_trace_config(tracer_config)
                 .install_batch(runtime::Tokio)
                 .unwrap();
+
             let layer = tracing_opentelemetry::layer().with_tracked_inactivity(false).with_tracer(tracer);
             Some(layer)
         }
-        None => None,
+        None => {
+            println!("tracing registry NOT enabling opentelemetry exporter");
+            None
+        }
     };
 
     // init registry
