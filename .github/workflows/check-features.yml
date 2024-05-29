@@ -11,7 +11,7 @@ on:
       - '.github/workflows/check-features.yml'
       - 'justfile'
       - 'Cargo.toml'
-      
+
   push:
     branches:
       - main
@@ -51,6 +51,9 @@ jobs:
       - name: Set up Rust
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
         uses: extractions/setup-just@v1
