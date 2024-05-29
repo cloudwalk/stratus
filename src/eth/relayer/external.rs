@@ -163,10 +163,8 @@ impl ExternalRelayer {
     }
 
     pub async fn relay(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let res = match self.relay_and_check_mempool(tx_mined.clone()).await {
+        //metrics::inc_relay_and_check_mempool(start.elapsed());
+        match self.relay_and_check_mempool(tx_mined.clone()).await {
             Err(err) => {
                 let err = err.context("relay and check mempool failed");
                 let err_string = err.to_string();
@@ -174,12 +172,7 @@ impl ExternalRelayer {
                 Err(err)
             }
             ok => ok,
-        };
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_relay_and_check_mempool(start.elapsed());
-
-        res
+        }
     }
 
     #[tracing::instrument(skip_all)]

@@ -3,7 +3,9 @@
 //! TODO: If it becomes a bottleneck, it can be processed asynchronously.
 
 use std::future::Future;
+#[cfg(feature = "metrics")]
 use std::sync::atomic::AtomicU64;
+#[cfg(feature = "metrics")]
 use std::sync::atomic::Ordering;
 use std::task::Poll;
 use std::time::Instant;
@@ -25,6 +27,7 @@ use crate::infra::metrics;
 // -----------------------------------------------------------------------------
 // Global metrics
 // -----------------------------------------------------------------------------
+#[cfg(feature = "metrics")]
 static ACTIVE_REQUESTS: AtomicU64 = AtomicU64::new(0);
 
 // -----------------------------------------------------------------------------
