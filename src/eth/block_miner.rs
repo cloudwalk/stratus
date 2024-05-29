@@ -10,7 +10,6 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
-use super::transaction_relayer::ExternalRelayerClient;
 use super::Consensus;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
@@ -23,6 +22,7 @@ use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
