@@ -5,6 +5,7 @@ use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
+use crate::eth::Consensus;
 use crate::eth::Executor;
 
 pub struct RpcContext {
@@ -19,6 +20,7 @@ pub struct RpcContext {
     pub executor: Arc<Executor>,
     pub miner: Arc<BlockMiner>,
     pub storage: Arc<StratusStorage>,
+    pub consensus: Arc<Consensus>,
     pub subs: Arc<RpcSubscriptionsConnected>,
 }
 
