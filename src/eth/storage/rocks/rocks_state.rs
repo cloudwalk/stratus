@@ -531,7 +531,8 @@ impl RocksStorageState {
     }
 
     /// Writes accounts to state (does not write to account history)
-    pub fn write_accounts(&self, accounts: Vec<Account>) {
+    #[allow(dead_code)]
+    fn write_accounts(&self, accounts: Vec<Account>) {
         let accounts = accounts.into_iter().map(Into::into).collect_vec();
 
         let mut batch = WriteBatch::default();
@@ -540,7 +541,8 @@ impl RocksStorageState {
     }
 
     /// Writes slots to state (does not write to slot history)
-    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) {
+    #[allow(dead_code)]
+    fn write_slots(&self, slots: Vec<(Address, Slot)>) {
         let slots = slots
             .into_iter()
             .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()))

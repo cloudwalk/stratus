@@ -34,8 +34,8 @@ static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
-    pub state: RocksStorageState,
-    pub block_number: AtomicU64,
+    state: RocksStorageState,
+    block_number: AtomicU64,
 }
 
 impl RocksPermanentStorage {
