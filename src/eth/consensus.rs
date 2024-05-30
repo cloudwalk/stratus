@@ -197,7 +197,8 @@ pub mod consensus_kube {
                     if pod_name != Self::current_node().unwrap() {
                         if let Some(namespace) = Self::current_namespace() {
                             let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
-                            let client = AppendEntryServiceClient::connect(address.clone()).await?;
+
+                            let client = Self::retry_connect(address.clone()).await?;
 
                             let peer = Peer { address, client };
                             followers.push(peer);
@@ -207,6 +208,19 @@ pub mod consensus_kube {
             }
 
             Ok(followers)
+        }
+
+        async fn retry_connect(address: String) -> Result<AppendEntryServiceClient<Channel>, anyhow::Error> {
+            for attempt in 1..=RETRY_ATTEMPTS {
+                match AppendEntryServiceClient::connect(address.clone()).await {
+                    Ok(client) => return Ok(client),
+                    Err(e) => {
+                        tracing::warn!("Failed to connect to {}: attempt {} of {}: {:?}", address, attempt, RETRY_ATTEMPTS, e);
+                        sleep(RETRY_DELAY).await;
+                    }
+                }
+            }
+            Err(anyhow!("Failed to connect to {} after {} attempts", address, RETRY_ATTEMPTS))
         }
 
         async fn append_block_commit(
