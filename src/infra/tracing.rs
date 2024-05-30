@@ -46,7 +46,7 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     let opentelemetry_layer = match url {
         Some(url) => {
             println!("tracing registry enabling opentelemetry exporter | url={}", url);
-            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service", "stratus")]));
+            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")]));
             let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
 
             let tracer = opentelemetry_otlp::new_pipeline()
@@ -65,14 +65,11 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
         }
     };
 
-    // init registry
-    let registry = tracing_subscriber::registry().with(stdout_layer).with(opentelemetry_layer);
-
-    if enable_console {
+    // init tokio console registry
+    let tokio_console_layer = if enable_console {
         // configure tokio console layer
         println!("tracing registry enabling tokio console");
         let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
-        registry.with(console_layer).init();
 
         // init tokio console server
         spawn_named("console::grpc-server", async move {
@@ -80,9 +77,17 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
                 tracing::error!(reason = ?e, "failed to create tokio-console server");
             };
         });
+        Some(console_layer)
     } else {
-        registry.init();
-    }
+        None
+    };
+
+    // init registry
+    tracing_subscriber::registry()
+        .with(stdout_layer)
+        .with(opentelemetry_layer)
+        .with(tokio_console_layer)
+        .init();
 }
 
 /// Emits an info message that a task was spawned to backgroud.

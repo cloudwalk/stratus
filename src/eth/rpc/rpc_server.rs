@@ -219,7 +219,10 @@ async fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>) -> anyho
     Ok(serde_json::to_value(ctx.storage.read_all_slots(&address).await?).expect_infallible())
 }
 
+// -----------------------------------------------------------------------------
 // Status
+// -----------------------------------------------------------------------------
+
 async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     stratus_readiness(params, arc).await
 }
@@ -236,34 +239,45 @@ async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<J
     Ok(json!(true))
 }
 
+// -----------------------------------------------------------------------------
 // Blockchain
+// -----------------------------------------------------------------------------
 
+#[tracing::instrument(name = "rpc::net_version", parent = None, skip_all)]
 async fn net_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
     ctx.chain_id.to_string()
 }
 
+#[tracing::instrument(name = "rpc::eth_chainId", parent = None, skip_all)]
 async fn eth_chain_id(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
     hex_num(ctx.chain_id)
 }
 
+#[tracing::instrument(name = "rpc::web3_clientVersion", parent = None, skip_all)]
 async fn web3_client_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
     ctx.client_version.to_owned()
 }
 
+// -----------------------------------------------------------------------------
 // Gas
+// -----------------------------------------------------------------------------
 
+#[tracing::instrument(name = "rpc::eth_gasPrice", parent = None, skip_all)]
 async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>) -> String {
     hex_zero()
 }
 
+// -----------------------------------------------------------------------------
 // Block
-#[tracing::instrument(skip_all)]
+// -----------------------------------------------------------------------------
+
+#[tracing::instrument(name = "rpc::eth_blockNumber", parent = None, skip_all)]
 async fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let number = ctx.storage.read_mined_block_number().await?;
     Ok(serde_json::to_value(number).expect_infallible())
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_getBlock", parent = None, skip_all)]
 async fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (params, block_selection) = next_rpc_param::<BlockSelection>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
@@ -277,13 +291,16 @@ async fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>) -> 
     }
 }
 
+#[tracing::instrument(name = "rpc::eth_getUncleByBlockHashAndIndex", parent = None, skip_all)]
 async fn eth_get_uncle_by_block_hash_and_index(_params: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     Ok(JsonValue::Null)
 }
 
+// -----------------------------------------------------------------------------
 // Transaction
+// -----------------------------------------------------------------------------
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_getTransactionCount", parent = None, skip_all)]
 async fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
@@ -293,7 +310,7 @@ async fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>) -> 
     Ok(hex_num(account.nonce))
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_getTransactionByHash", parent = None, skip_all)]
 async fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     let mined = ctx.storage.read_mined_transaction(&hash).await?;
@@ -304,7 +321,7 @@ async fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>) -
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_getTransactionReceipt", parent = None, skip_all)]
 async fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     match ctx.storage.read_mined_transaction(&hash).await? {
@@ -313,7 +330,7 @@ async fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_estimateGas", parent = None, skip_all)]
 async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
@@ -332,7 +349,7 @@ async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::R
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_Call", parent = None, skip_all)]
 async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
@@ -350,7 +367,7 @@ async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<St
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_sendRawTransaction", parent = None, skip_all)]
 async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data)?;
@@ -371,8 +388,11 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     }
 }
 
+// -----------------------------------------------------------------------------
 // Logs
-#[tracing::instrument(skip_all)]
+// -----------------------------------------------------------------------------
+
+#[tracing::instrument(name = "rpc::eth_getLogs", parent = None, skip_all)]
 async fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, filter_input) = next_rpc_param::<LogFilterInput>(params.sequence())?;
     let filter = filter_input.parse(&ctx.storage).await?;
@@ -381,9 +401,11 @@ async fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Resul
     Ok(JsonValue::Array(logs.into_iter().map(|x| x.to_json_rpc_log()).collect()))
 }
 
+// -----------------------------------------------------------------------------
 // Account
+// -----------------------------------------------------------------------------
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_getBalance", parent = None, skip_all)]
 async fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
@@ -394,7 +416,7 @@ async fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Re
     Ok(hex_num(account.balance))
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_getCode", parent = None, skip_all)]
 async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
@@ -405,9 +427,11 @@ async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Resul
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_null))
 }
 
-// Subscription
+// -----------------------------------------------------------------------------
+// Subscriptions
+// -----------------------------------------------------------------------------
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "rpc::eth_subscribe", parent = None, skip_all)]
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>) -> impl IntoSubscriptionCloseResponse {
     let (params, kind) = next_rpc_param::<String>(params.sequence())?;
     match kind.deref() {
@@ -436,8 +460,11 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     Ok(())
 }
 
+// -----------------------------------------------------------------------------
 // Storage
-#[tracing::instrument(skip_all)]
+// -----------------------------------------------------------------------------
+
+#[tracing::instrument(name = "rpc::eth_getStorageAt", parent = None, skip_all)]
 async fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (params, index) = next_rpc_param::<SlotIndex>(params)?;
