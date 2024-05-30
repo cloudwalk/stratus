@@ -75,7 +75,16 @@ pub mod consensus_kube {
 
             let (sender, mut receiver) = mpsc::channel::<Block>(32);
 
-            let leader_name_clone = leader_name.clone();
+            let last_arrived_block_number = AtomicU64::new(0); //TODO load from consensus storage
+
+            let consensus = Self {
+                leader_name,
+                sender,
+                last_arrived_block_number,
+            };
+            let consensus = Arc::new(consensus);
+
+            let consensus_channel = Arc::clone(&consensus);
             tokio::spawn(async move {
                 let followers = Self::discover_followers().await.expect("Failed to discover followers");
 
@@ -85,7 +94,7 @@ pub mod consensus_kube {
                 );
 
                 while let Some(data) = channel_read!(receiver) {
-                    if Self::is_leader(leader_name_clone.clone()) {
+                    if consensus_channel.is_leader() {
                         //TODO add data to consensus-log-transactions
                         //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
@@ -105,14 +114,6 @@ pub mod consensus_kube {
                 }
             });
 
-            let last_arrived_block_number = AtomicU64::new(0); //TODO load from consensus storage
-
-            let consensus = Self {
-                leader_name,
-                sender,
-                last_arrived_block_number,
-            };
-            let consensus = Arc::new(consensus);
             Self::initialize_server(Arc::clone(&consensus));
             consensus
         }
@@ -153,12 +154,12 @@ pub mod consensus_kube {
         }
 
         //FIXME TODO automate the way we gather the leader, instead of using a env var
-        pub fn is_leader(leader_name: String) -> bool {
-            Self::current_node().unwrap_or("".to_string()) == leader_name
+        pub fn is_leader(&self) -> bool {
+            Self::current_node().unwrap_or("".to_string()) == self.leader_name
         }
 
-        pub fn is_follower(leader_name: String) -> bool {
-            !Self::is_leader(leader_name)
+        pub fn is_follower(&self) -> bool {
+            !self.is_leader()
         }
 
         fn current_node() -> Option<String> {
@@ -175,7 +176,7 @@ pub mod consensus_kube {
         // later we want the leader to GENERATE blocks
         // and even later we want this sync to be replaced by a gossip protocol or raft
         pub fn get_chain_url(&self, config: RunWithImporterConfig) -> (String, Option<String>) {
-            if Self::is_follower(self.leader_name.clone()) {
+            if self.is_follower() {
                 if let Some(namespace) = Self::current_namespace() {
                     return (format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None);
                 }
