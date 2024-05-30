@@ -119,8 +119,8 @@ pub mod consensus_kube {
                 );
 
                 loop {
-                    let mut lock = receiver.lock().await;
-                    if let Some(data) = lock.recv().await {
+                    let mut receiver_lock = receiver.lock().await;
+                    if let Some(data) = receiver_lock.recv().await {
                         if consensus_channel.is_leader() {
                             //TODO add data to consensus-log-transactions
                             //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
