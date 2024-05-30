@@ -181,6 +181,12 @@ pub mod consensus_kube {
             let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
             let storage_block_number: u64 = self.storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into();
 
+            tracing::info!(
+                "last arrived block number: {}, storage block number: {}",
+                last_arrived_block_number,
+                storage_block_number
+            );
+
             last_arrived_block_number > (storage_block_number + 3)
         }
 
