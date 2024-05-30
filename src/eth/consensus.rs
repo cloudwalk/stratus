@@ -404,5 +404,9 @@ pub mod consensus_mock {
         pub fn get_chain_url(&self, _config: RunWithImporterConfig) -> (String, Option<String>) {
             todo!()
         }
+
+        pub async fn should_serve(&self) -> bool {
+            true
+        }
     }
 }
