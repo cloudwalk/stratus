@@ -96,8 +96,8 @@ pub struct CommonConfig {
     pub tracing_url: Option<String>,
 
     /// Enables tokio-console.
-    #[arg(long = "disable-tokio-console", env = "DISABLE_TOKIO_CONSOLE", default_value = "false")]
-    pub disable_tokio_console: bool,
+    #[arg(long = "enable-tokio-console", env = "ENABLE_TOKIO_CONSOLE", default_value = "true")]
+    pub enable_tokio_console: bool,
 }
 
 impl WithCommonConfig for CommonConfig {
