@@ -37,13 +37,6 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:1.57
-    environment:
-      SPAN_STORAGE_TYPE: badger
-      BADGER_EPHEMERAL: false
-      BADGER_DIRECTORY_VALUE: /badger/data
-      BADGER_DIRECTORY_KEY: /badger/key
-    volumes:
-      - /tmp:/badger
     ports:
       - 4317:4317
       - 16686:16686

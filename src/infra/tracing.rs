@@ -35,9 +35,9 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     } else {
         println!("tracing registry enabling text logs");
         fmt::Layer::default()
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_thread_names(true)
+            .with_target(false)
+            .with_thread_ids(false)
+            .with_thread_names(false)
             .with_filter(EnvFilter::from_default_env())
             .boxed()
     };
@@ -56,7 +56,10 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
                 .install_batch(runtime::Tokio)
                 .unwrap();
 
-            let layer = tracing_opentelemetry::layer().with_tracked_inactivity(false).with_tracer(tracer);
+            let layer = tracing_opentelemetry::layer()
+                .with_tracked_inactivity(false)
+                .with_tracer(tracer)
+                .with_filter(EnvFilter::from_default_env());
             Some(layer)
         }
         None => {
