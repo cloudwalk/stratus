@@ -181,7 +181,10 @@ metrics! {
     histogram_duration append_entries{} [],
 
     "Time to run Consensus::append_entries_to_followers."
-    histogram_duration append_entries_to_followers{} []
+    histogram_duration append_entries_to_followers{} [],
+
+    "The diff between what is on the follower database and what it received from Append Entries."
+    gauge append_entries_block_number_diff{} []
 }
 
 metrics! {

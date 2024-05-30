@@ -174,6 +174,7 @@ pub mod consensus_kube {
             !self.is_leader()
         }
 
+        //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
         pub async fn should_serve(&self) -> bool {
             if Self::current_node().is_none() {
                 return false;
@@ -187,7 +188,7 @@ pub mod consensus_kube {
                 storage_block_number
             );
 
-            last_arrived_block_number > (storage_block_number + 3)
+            (last_arrived_block_number - 2) <= storage_block_number
         }
 
         fn current_node() -> Option<String> {
@@ -299,7 +300,7 @@ pub mod consensus_kube {
         #[tracing::instrument(skip_all)]
         pub async fn append_block_commit_to_followers(block: Block, followers: Vec<Peer>) -> Result<(), anyhow::Error> {
             let header: BlockHeader = (&block.header).into();
-            let transaction_hashes = vec!["hash1".to_string(), "hash2".to_string()]; // Replace with actual transaction hashes
+            let transaction_hashes = vec![]; // Replace with actual transaction hashes
 
             let term = 0; // Populate with actual term
             let prev_log_index = 0; // Populate with actual previous log index
@@ -369,6 +370,9 @@ pub mod consensus_kube {
                 new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
                 "last arrived block number set",
             );
+
+            #[cfg(feature = "metrics")]
+            metrics::set_append_entries_block_number_diff(last_last_arrived_block_number - header.number);
 
             Ok(Response::new(AppendBlockCommitResponse {
                 status: StatusCode::AppendSuccess as i32,
