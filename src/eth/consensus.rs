@@ -22,6 +22,8 @@ pub mod consensus_kube {
     use tonic::Status;
 
     use crate::channel_read;
+    use crate::eth::primitives::BlockNumber;
+    use crate::eth::storage::StratusStorage;
 
     pub mod append_entry {
         tonic::include_proto!("append_entry");
@@ -53,6 +55,7 @@ pub mod consensus_kube {
 
     pub struct Consensus {
         pub sender: Sender<Block>,
+        storage: Arc<StratusStorage>,
         leader_name: String,                  //XXX check the peers instead of using it
         last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
     }
@@ -60,15 +63,15 @@ pub mod consensus_kube {
     impl Consensus {
         //XXX for now we pick the leader name from the environment
         // the correct is to have a leader election algorithm
-        pub fn new(leader_name: Option<String>) -> Arc<Self> {
+        pub async fn new(storage: Arc<StratusStorage>, leader_name: Option<String>) -> Arc<Self> {
             let Some(_node_name) = Self::current_node() else {
                 tracing::info!("No consensus module available, running in standalone mode");
-                return Self::new_stand_alone();
+                return Self::new_stand_alone(storage);
             };
 
             let Some(leader_name) = leader_name else {
                 tracing::info!("No leader name provided, running in standalone mode");
-                return Self::new_stand_alone();
+                return Self::new_stand_alone(storage);
             };
 
             tracing::info!("Starting consensus module with leader: {}", leader_name);
@@ -76,10 +79,11 @@ pub mod consensus_kube {
             let (sender, receiver) = mpsc::channel::<Block>(32);
             let receiver = Arc::new(Mutex::new(receiver));
 
-            let last_arrived_block_number = AtomicU64::new(0); //TODO load from consensus storage
+            let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
 
             let consensus = Self {
                 leader_name,
+                storage,
                 sender,
                 last_arrived_block_number,
             };
@@ -91,7 +95,7 @@ pub mod consensus_kube {
             consensus
         }
 
-        fn new_stand_alone() -> Arc<Self> {
+        fn new_stand_alone(storage: Arc<StratusStorage>) -> Arc<Self> {
             let (sender, mut receiver) = mpsc::channel::<Block>(32);
 
             tokio::spawn(async move {
@@ -104,6 +108,7 @@ pub mod consensus_kube {
 
             Arc::new(Self {
                 leader_name: "standalone".to_string(),
+                storage,
                 sender,
                 last_arrived_block_number,
             })
@@ -167,6 +172,16 @@ pub mod consensus_kube {
 
         pub fn is_follower(&self) -> bool {
             !self.is_leader()
+        }
+
+        pub async fn should_serve(&self) -> bool {
+            if Self::current_node().is_none() {
+                return false;
+            }
+            let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
+            let storage_block_number: u64 = self.storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into();
+
+            last_arrived_block_number > (storage_block_number + 3)
         }
 
         fn current_node() -> Option<String> {
