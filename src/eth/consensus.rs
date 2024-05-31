@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -49,15 +50,36 @@ use crate::infra::metrics;
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 
+#[derive(Clone, Debug, PartialEq)]
+enum Role {
+    _Leader, //TODO implement leader election
+    Follower,
+    _Candidate,
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+struct PeerAddress(String);
+
+impl PeerAddress {
+    pub fn inner(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Clone)]
 struct Peer {
-    address: String,
     client: AppendEntryServiceClient<Channel>,
+    last_heartbeat: std::time::Instant, //TODO implement metrics for this
+    match_index: u64,
+    next_index: u64,
+    role: Role,
+    term: u64,
 }
 
 pub struct Consensus {
     pub sender: Sender<Block>,
     storage: Arc<StratusStorage>,
+    peers: Arc<Mutex<HashMap<PeerAddress, Peer>>>,
     leader_name: String,                  //XXX check the peers instead of using it
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
 }
@@ -66,31 +88,29 @@ impl Consensus {
     //XXX for now we pick the leader name from the environment
     // the correct is to have a leader election algorithm
     pub async fn new(storage: Arc<StratusStorage>, leader_name: Option<String>) -> Arc<Self> {
-        let Some(_node_name) = Self::current_node() else {
+        if Self::is_stand_alone() {
             tracing::info!("No consensus module available, running in standalone mode");
             return Self::new_stand_alone(storage);
         };
 
-        let Some(leader_name) = leader_name else {
-            tracing::info!("No leader name provided, running in standalone mode");
-            return Self::new_stand_alone(storage);
-        };
-
-        tracing::info!("Starting consensus module with leader: {}", leader_name);
+        tracing::info!(leader_name = leader_name, "Starting consensus module with leader");
 
         let (sender, receiver) = mpsc::channel::<Block>(32);
         let receiver = Arc::new(Mutex::new(receiver));
 
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
+        let peers = Arc::new(Mutex::new(HashMap::new()));
 
         let consensus = Self {
-            leader_name,
-            storage,
             sender,
+            storage,
+            peers,
+            leader_name: leader_name.clone().unwrap_or_default(),
             last_arrived_block_number,
         };
         let consensus = Arc::new(consensus);
 
+        let _ = Self::discover_peers(Arc::clone(&consensus)).await; //TODO refactor this method to also receive addresses from the environment
         Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
         Self::initialize_server(Arc::clone(&consensus));
 
@@ -107,35 +127,32 @@ impl Consensus {
         });
 
         let last_arrived_block_number = AtomicU64::new(0);
+        let peers = Arc::new(Mutex::new(HashMap::new()));
 
         Arc::new(Self {
             leader_name: "standalone".to_string(),
             storage,
             sender,
+            peers,
             last_arrived_block_number,
         })
     }
 
-    fn initialize_append_entries_channel(consensus_channel: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
+    fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
         tokio::spawn(async move {
-            let followers = Self::discover_followers().await.unwrap_or_default();
-
-            tracing::info!(
-                "Discovered followers: {}",
-                followers.iter().map(|f| f.address.to_string()).collect::<Vec<String>>().join(", ")
-            );
+            let peers = consensus.peers.lock().await;
 
             loop {
                 let mut receiver_lock = receiver.lock().await;
                 if let Some(data) = receiver_lock.recv().await {
-                    if consensus_channel.is_leader() {
+                    if consensus.is_leader() {
                         //TODO add data to consensus-log-transactions
                         //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
                         //TODO use gRPC instead of jsonrpc
                         //FIXME for now, this has no colateral efects, but it will have in the future
-                        match Self::append_block_commit_to_followers(data.clone(), followers.clone()).await {
+                        match Self::append_block_commit_to_followers(data.clone(), peers.clone()).await {
                             Ok(_) => {
                                 tracing::info!(number = data.header.number.as_u64(), "Data sent to followers");
                             }
@@ -220,8 +237,8 @@ impl Consensus {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn discover_followers() -> Result<Vec<Peer>, anyhow::Error> {
-        let mut followers = Vec::new();
+    pub async fn discover_peers(consensus: Arc<Consensus>) -> Result<(), anyhow::Error> {
+        let mut peers: Vec<(String, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
         {
@@ -238,15 +255,28 @@ impl Consensus {
                             let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
                             let client = AppendEntryServiceClient::connect(address.clone()).await?;
 
-                            let peer = Peer { address, client };
-                            followers.push(peer);
+                            let peer = Peer {
+                                client,
+                                last_heartbeat: std::time::Instant::now(),
+                                match_index: 0,
+                                next_index: 0,
+                                role: Role::Follower,
+                                term: 0, // Replace with actual term
+                            };
+                            peers.push((address, peer));
                         }
                     }
                 }
             }
         }
 
-        Ok(followers)
+        let mut peers_lock = consensus.peers.lock().await;
+        for peer in &peers {
+            peers_lock.insert(PeerAddress(peer.0.clone()), peer.1.clone());
+        }
+        tracing::info!(peers = peers.iter().map(|p| p.0.clone()).collect::<Vec<String>>().join(","), "Discovered peers",);
+
+        Ok(())
     }
 
     async fn append_block_commit(
@@ -256,6 +286,7 @@ impl Consensus {
         term: u64,
         prev_log_index: u64,
         prev_log_term: u64,
+        peer_id: String,
     ) -> Result<(), anyhow::Error> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -274,25 +305,28 @@ impl Consensus {
             match response {
                 Ok(resp) => {
                     let resp = resp.into_inner();
+
+                    tracing::debug!(follower = peer_id, last_heartbeat = ?follower.last_heartbeat, match_index = follower.match_index, next_index = follower.next_index, role = ?follower.role, term = follower.term,  "current follower state"); //TODO also move this to metrics
+
                     match StatusCode::try_from(resp.status) {
                         Ok(StatusCode::AppendSuccess) => {
                             #[cfg(not(feature = "metrics"))]
-                            tracing::debug!("Block commit appended to follower {}: attempt {}: success", follower.address, attempt);
+                            tracing::debug!(follower = peer_id, "Block commit appended to follower: attempt {}: success", attempt);
                             #[cfg(feature = "metrics")]
-                            tracing::debug!(
-                                "Block commit appended to follower {}: attempt {}: success time_elapsed: {:?}",
-                                follower.address,
+                            tracing::info!(
+                                follower = peer_id,
+                                "Block commit appended to follower: attempt {}: success time_elapsed: {:?}",
                                 attempt,
                                 start.elapsed()
                             );
                             return Ok(());
                         }
                         _ => {
-                            tracing::error!("Unexpected status from follower {}: {:?}", follower.address, resp.status);
+                            tracing::error!(follower = peer_id, "Unexpected status from follower: {:?}", resp.status);
                         }
                     }
                 }
-                Err(e) => tracing::error!("Error appending block commit to follower {}: attempt {}: {:?}", follower.address, attempt, e),
+                Err(e) => tracing::error!(follower = peer_id, "Error appending block commit to follower, attempt{}: {:?}", attempt, e),
             }
             sleep(RETRY_DELAY).await;
         }
@@ -300,15 +334,11 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        Err(anyhow!(
-            "Failed to append block commit to {} after {} attempts",
-            follower.address,
-            RETRY_ATTEMPTS
-        ))
+        Err(anyhow!("Failed to append block commit to {} after {} attempts", peer_id, RETRY_ATTEMPTS))
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn append_block_commit_to_followers(block: Block, followers: Vec<Peer>) -> Result<(), anyhow::Error> {
+    pub async fn append_block_commit_to_followers(block: Block, followers: HashMap<PeerAddress, Peer>) -> Result<(), anyhow::Error> {
         let header: BlockHeader = (&block.header).into();
         let transaction_hashes = vec![]; // Replace with actual transaction hashes
 
@@ -320,16 +350,17 @@ impl Consensus {
         let start = metrics::now();
         for follower in &followers {
             if let Err(e) = Self::append_block_commit(
-                follower.clone(),
+                follower.1.clone(),
                 header.clone(),
                 transaction_hashes.clone(),
                 term,
                 prev_log_index,
                 prev_log_term,
+                follower.0.inner().to_string(),
             )
             .await
             {
-                tracing::debug!("Error appending block commit to follower {}: {:?}", follower.address, e);
+                tracing::warn!(follower = follower.0.inner().to_string(), "Error appending block commit to follower: {:?}", e);
             }
         }
 

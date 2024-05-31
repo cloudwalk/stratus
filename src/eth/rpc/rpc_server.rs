@@ -146,6 +146,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("net_version", net_version)?;
     module.register_async_method("net_listening", net_listening)?;
     module.register_async_method("eth_chainId", eth_chain_id)?;
+    module.register_async_method("eth_accounts", eth_accounts)?;
     module.register_async_method("web3_clientVersion", web3_client_version)?;
 
     // gas
@@ -253,6 +254,11 @@ async fn net_version(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
 #[tracing::instrument(name = "rpc::eth_chainId", parent = None, skip_all)]
 async fn eth_chain_id(_: Params<'_>, ctx: Arc<RpcContext>) -> String {
     hex_num(ctx.chain_id)
+}
+
+#[tracing::instrument(name = "rpc::eth_accounts", parent = None, skip_all)]
+async fn eth_accounts(_: Params<'_>, _ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(json!([]))
 }
 
 #[tracing::instrument(name = "rpc::web3_clientVersion", parent = None, skip_all)]
