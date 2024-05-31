@@ -30,6 +30,7 @@ use stratus::utils::calculate_tps;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::sync::mpsc;
+use tokio::task::yield_now;
 use tokio::time::sleep;
 use tokio::time::timeout;
 
@@ -59,9 +60,6 @@ const PARALLEL_RECEIPTS: usize = 100;
 
 /// Timeout awaiting for newHeads event before fallback to polling.
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
-
-/// Interval before we check again if we are behind the external rpc current block number.
-const INTERVAL_CATCH_UP: Duration = Duration::from_millis(20);
 
 /// Interval before we starting retrieving receipts because they are not immediately available after the block is retrieved.
 const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
@@ -295,7 +293,7 @@ async fn start_block_fetcher(
         // if we are ahead of current block number, await until we are behind again
         let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
         if importer_block_number.as_u64() > external_rpc_current_block {
-            sleep(INTERVAL_CATCH_UP).await;
+            yield_now().await;
             continue;
         }
 
