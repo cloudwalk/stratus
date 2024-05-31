@@ -37,9 +37,11 @@ describe("Integration Test", function () {
         it("Mint BRLC to Alice", async function () {
             const aliceNonce = await ethers.provider.getTransactionCount(alice.address);
             console.log("Alice nonce: ", aliceNonce);
+            console.log("Alice address: ", alice.address);
 
             let deployerNonce = await ethers.provider.getTransactionCount(deployer.address);
             console.log("Deployer nonce: ", deployerNonce);
+            console.log("Deployer address: ", deployer.address);
 
             const mintaTx = waitReceipt(brlcToken.mint(alice.address, 900, { gasLimit: 5000000, nonce: deployerNonce}));
             console.log("Mint Tx: ", mintaTx);
