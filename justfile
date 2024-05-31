@@ -361,6 +361,8 @@ e2e-relayer:
 e2e-relayer-external-up:
     #!/bin/bash
 
+    mkdir e2e_logs
+
     # Start Postgres
     docker-compose up -V -d
 
@@ -374,11 +376,11 @@ e2e-relayer-external-up:
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo   
 
     # Install npm and start hardhat node in the e2e directory
-    if [ -d e2e ]; then
+    if [ -d e2e-contracts ]; then
         (
-            cd e2e
+            cd e2e-contracts/integration
             npm install
-            BLOCK_MODE=1s npx hardhat node > ../e2e_logs/hardhat.log &
+            BLOCK_MODE=1s npx hardhat node > ../../e2e_logs/hardhat.log &
         )
     fi
 
@@ -389,10 +391,10 @@ e2e-relayer-external-up:
     # Start Relayer External binary
     cargo run --release --bin relayer --no-default-features --features "rocks,kubernetes" -- --db-url postgres://postgres:123@localhost:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://localhost:8545 --backoff 10ms --disable-tokio-console > e2e_logs/relayer.log &
 
-    if [ -d e2e ]; then
+    if [ -d e2e-contracts ]; then
         (
-            cd e2e
-            npx hardhat test test/relayer/*.test.ts --network stratus > ../e2e_logs/test.log 
+            cd e2e-contracts/integration
+            npx hardhat test test/*.test.ts --network stratus > ../../e2e_logs/test.log 
         )
     fi
 
@@ -418,6 +420,9 @@ e2e-relayer-external-down:
 
     # Delete the data directory
     rm -rf ./data
+
+    # Delete zeppelin directory
+    rm -rf ./e2e-contracts/integration/.openzeppelin
 
 # ------------------------------------------------------------------------------
 # Contracts tasks

@@ -22,7 +22,7 @@ export let yieldStreamer: YieldStreamer;
 export let deployer: SignerWithAddress;
 
 /* Providers */
-let providerUrl = (config.networks[network.name] as HttpNetworkConfig).url || "http://localhost:8545";
+let providerUrl = (config.networks[network.name] as HttpNetworkConfig).url || "http://localhost:3000";
 let ETHERJS = new JsonRpcProvider(providerUrl);
 
 export async function setDeployer() {
@@ -36,7 +36,9 @@ export async function waitReceipt(txResponsePromise: Promise<ContractTransaction
 
 export async function deployBRLC() {
     let brlcFactory: ContractFactory = await ethers.getContractFactory("BRLCToken");
-    let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"]);
+    let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"], {
+        txOverrides: { gasLimit: 5000000 },
+    });
     await deployedProxy.waitForDeployment();
     brlcToken = deployedProxy.connect(deployer) as BRLCToken;
 }
