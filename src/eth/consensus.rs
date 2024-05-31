@@ -238,7 +238,7 @@ impl Consensus {
 
     #[tracing::instrument(skip_all)]
     pub async fn discover_peers(consensus: Arc<Consensus>) -> Result<(), anyhow::Error> {
-        let mut peers = Vec::new();
+        let mut peers: Vec<(String, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
         {
