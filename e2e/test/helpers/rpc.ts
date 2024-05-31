@@ -1,6 +1,15 @@
 import axios from "axios";
 import { expect } from "chai";
-import { JsonRpcApiProviderOptions, JsonRpcProvider, keccak256, } from "ethers";
+import {
+    BaseContract,
+    Block,
+    Contract,
+    JsonRpcProvider,
+    JsonRpcApiProviderOptions,
+    keccak256,
+    TransactionReceipt,
+    TransactionResponse
+} from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 import { Numbers } from "web3-types";
@@ -8,7 +17,7 @@ import { WebSocket } from "ws";
 
 import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
-import { currentNetwork, isStratus } from "./network";
+import { currentMiningIntervalInMs, currentNetwork, isStratus } from "./network";
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -19,6 +28,7 @@ export const CHAIN_ID = toHex(CHAIN_ID_DEC);
 export const TX_PARAMS = { chainId: CHAIN_ID, gasPrice: 0, gasLimit: 1_000_000 };
 
 export const HEX_PATTERN = /^0x[\da-fA-F]+$/;
+export const DEFAULT_TX_TIMEOUT_IN_MS = (currentMiningIntervalInMs() ?? 1000) * 2;
 
 // Special numbers
 export const ZERO = "0x0";
@@ -28,6 +38,7 @@ export const TEST_TRANSFER = 12345678;
 export const NATIVE_TRANSFER_GAS = "0x5208"; // 21000
 
 // Special hashes
+export const HASH_ZERO = ethers.ZeroHash;
 export const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";
 export const HASH_EMPTY_TRANSACTIONS = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
 
@@ -318,4 +329,144 @@ export async function subscribeAndGetEventWithContract(
         await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
 
     return event;
+}
+
+
+// Prepares a signed transaction to interact with a contract
+export async function prepareSignedTx(props: {
+    contract: BaseContract,
+    account: Account,
+    methodName: string,
+    methodParameters: any[]
+}): Promise<string> {
+    const { contract, account, methodName, methodParameters } = props;
+    const nonce = await sendGetNonce(account);
+    const tx = await (contract.connect(account.signer()) as Contract)[methodName].populateTransaction(
+        ...methodParameters,
+        {
+            nonce,
+            ...TX_PARAMS,
+        });
+    return await account.signer().signTransaction(tx);
+}
+
+// Polls for receipts of multiple transaction without checking the transaction status
+export async function pollForTransactions(
+    txHashes: string[],
+    options: {
+        timeoutInMs?: number,
+        pollingIntervalInMs?: number
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+): Promise<TransactionReceipt[]> {
+    const { timeoutInMs, pollingIntervalInMs } = normalizePollingOptions(options);
+    const startTimestamp = Date.now();
+    const transactionReceipts: TransactionReceipt[] = [];
+    const remainingTxHashes: Set<string> = new Set(txHashes);
+    while (1) {
+        let requestTimeInMs = Date.now();
+        const receiptPromises: Promise<TransactionReceipt | null>[] = [];
+        for (const txHash of remainingTxHashes) {
+            receiptPromises.push(ETHERJS.getTransactionReceipt(txHash));
+        }
+        const receipts = await Promise.all(receiptPromises);
+        for (const receipt of receipts) {
+            if (receipt) {
+                remainingTxHashes.delete(receipt.hash);
+                transactionReceipts.push(receipt);
+            }
+        }
+        if (remainingTxHashes.size === 0) {
+            break;
+        }
+        const currentTimeInMs = Date.now();
+        if (currentTimeInMs - startTimestamp >= timeoutInMs) {
+            throw new Error(
+                `Failed to wait for transaction minting: timeout of ${timeoutInMs} ms. ` +
+                `Still waiting the transactions with hashes: ${Array.from(remainingTxHashes)}`
+            );
+        }
+        const cycleDurationInMs = currentTimeInMs - requestTimeInMs;
+        if (cycleDurationInMs < pollingIntervalInMs) {
+            await new Promise((resolve) => setTimeout(resolve, pollingIntervalInMs - cycleDurationInMs));
+        }
+    }
+    const orderedTransactionReceipts: TransactionReceipt[] = [];
+    txHashes.forEach(txHash => {
+        const targetReceipt = transactionReceipts.find(receipt => receipt.hash == txHash);
+        if (!targetReceipt) {
+            throw new Error(`Failed to wait for transaction minting: a logical error with hash: ${txHash}`);
+        } else {
+            orderedTransactionReceipts.push(targetReceipt);
+        }
+    });
+    return orderedTransactionReceipts;
+}
+
+// Polls for the receipt of a single transaction without checking the transaction status
+export async function pollForTransaction(
+    tx: TransactionResponse | string | Promise<TransactionResponse> | Promise<string> | null | undefined,
+    options: {
+        timeoutInMs?: number,
+        pollingIntervalInMs?: number
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+): Promise<TransactionReceipt> {
+    if (!tx) {
+        throw new Error("Transaction not found");
+    }
+    tx = await tx;
+    const txHash = (typeof tx === "string") ? tx : tx.hash;
+    const [txReceipt] = await pollForTransactions([txHash], options);
+    return txReceipt;
+}
+
+// Polls for the block with a given number is minted
+export async function pollForBlock(
+    blockNumber: number,
+    options: {
+        timeoutInMs?: number,
+        pollingIntervalInMs?: number
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+): Promise<Block> {
+    const { timeoutInMs, pollingIntervalInMs } = normalizePollingOptions(options);
+    const startTimeInMs = Date.now();
+    let requestTimeInMs = startTimeInMs;
+    let block: Block | null = await ETHERJS.getBlock(blockNumber);
+    while (!block) {
+        if (Date.now() - startTimeInMs >= timeoutInMs) {
+            throw new Error(
+                `Failed to wait for minting of block ${blockNumber}: timeout of ${timeoutInMs} ms. `
+            );
+        }
+        const cycleDurationInMs = Date.now() - requestTimeInMs;
+        if (cycleDurationInMs < pollingIntervalInMs) {
+            await new Promise((resolve) => setTimeout(resolve, pollingIntervalInMs - cycleDurationInMs));
+        }
+        requestTimeInMs = Date.now();
+        block = await ETHERJS.getBlock(blockNumber);
+    }
+    return block;
+}
+
+// Polls for the next block is minted
+export async function pollForNextBlock(
+    options: {
+        timeoutInMs?: number,
+        pollingIntervalInMs?: number
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+): Promise<Block> {
+    const latestBlockNumber = await sendGetBlockNumber();
+    return pollForBlock(latestBlockNumber + 1, options);
+}
+
+// Normalizes the options for poll functions
+function normalizePollingOptions(options: {
+    timeoutInMs?: number;
+    pollingIntervalInMs?: number
+} = {}): { timeoutInMs: number; pollingIntervalInMs: number } {
+    const timeoutInMs: number = options.timeoutInMs ? options.timeoutInMs : DEFAULT_TX_TIMEOUT_IN_MS;
+    const pollingIntervalInMs: number = options.pollingIntervalInMs ? options.pollingIntervalInMs : timeoutInMs / 100;
+    return {
+        timeoutInMs,
+        pollingIntervalInMs
+    };
 }
