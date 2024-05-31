@@ -1,5 +1,5 @@
 import { network } from "hardhat";
-import { defineBlockMiningIntervalInMs } from "./misc";
+import { defineBlockMiningIntervalInMs } from "../../hardhat.config";
 
 export enum Network {
     Stratus = "stratus",

@@ -1,9 +1,21 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
-import { defineBlockMiningIntervalInMs } from "./test/helpers/misc";
 
 const ACCOUNTS_MNEMONIC = "test test test test test test test test test test test junk";
+const MINING_INTERVAL_PATTERN = /^(\d+)s$/;
+
+export function defineBlockMiningIntervalInMs(blockMintingModeTitle?: string): number | undefined {
+    if (blockMintingModeTitle === "external") {
+        return 0;
+    } else {
+        const regexpResults = MINING_INTERVAL_PATTERN.exec(blockMintingModeTitle ?? "");
+        if (regexpResults && regexpResults.length > 1) {
+            return parseInt(regexpResults[1]) * 1000;
+        }
+    }
+    return undefined;
+}
 
 const config: HardhatUserConfig = {
     solidity: {
