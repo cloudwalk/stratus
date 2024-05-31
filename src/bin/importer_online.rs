@@ -30,6 +30,7 @@ use stratus::utils::calculate_tps;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::sync::mpsc;
+use tokio::task::yield_now;
 use tokio::time::sleep;
 use tokio::time::timeout;
 
@@ -295,7 +296,7 @@ async fn start_block_fetcher(
         // if we are ahead of current block number, await until we are behind again
         let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
         if importer_block_number.as_u64() > external_rpc_current_block {
-            sleep(INTERVAL_CATCH_UP).await;
+            yield_now().await;
             continue;
         }
 
