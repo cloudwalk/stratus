@@ -18,6 +18,7 @@ use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::DisplayExt;
+use stratus::if_else;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::tracing::warn_task_rx_closed;
@@ -37,10 +38,16 @@ use tokio::time::timeout;
 // Globals
 // -----------------------------------------------------------------------------
 
-/// Current block number used by the number fetcher and block fetcher.
-///
-/// It is a global to avoid unnecessary synchronization using a channel.
-static RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
+/// Current block number of the external RPC blockchain.
+static EXTERNAL_RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
+
+/// Only sets the external RPC current block number if it is equals or greater than the current one.
+fn set_external_rpc_current_block(new_number: BlockNumber) {
+    let new_number_u64 = new_number.as_u64();
+    let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
+        if_else!(new_number_u64 >= current_number, Some(new_number_u64), None)
+    });
+}
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -51,11 +58,11 @@ const PARALLEL_BLOCKS: usize = 3;
 /// Number of receipts that are downloaded in parallel.
 const PARALLEL_RECEIPTS: usize = 100;
 
-/// Timeout for new newHeads event before fallback to polling.
+/// Timeout awaiting for newHeads event before fallback to polling.
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 
-/// Time to wait before we starting retrieving receipts because they are not immediatly available after the block is retrieved.
-const BACKOFF_RECEIPTS: Duration = Duration::from_millis(45);
+/// Interval before we starting retrieving receipts because they are not immediately available after the block is retrieved.
+const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 
 // -----------------------------------------------------------------------------
 // Execution
@@ -217,7 +224,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
             let resubscribe = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                 Ok(Some(Ok(block))) => {
                     tracing::info!(number = %block.number(), "newHeads event received");
-                    RPC_CURRENT_BLOCK.store(block.number().as_u64(), Ordering::SeqCst);
+                    set_external_rpc_current_block(block.number());
                     continue;
                 }
                 Ok(None) => {
@@ -256,7 +263,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                     sync_interval = %sync_interval.to_string_ext(),
                     "fetched current block number via http. awaiting sync interval to retrieve again."
                 );
-                RPC_CURRENT_BLOCK.store(number.as_u64(), Ordering::SeqCst);
+                set_external_rpc_current_block(number);
                 sleep(sync_interval).await;
             }
             Err(e) => {
@@ -274,7 +281,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
 async fn start_block_fetcher(
     chain: Arc<BlockchainClient>,
     backlog_tx: mpsc::UnboundedSender<(ExternalBlock, Vec<ExternalReceipt>)>,
-    mut number: BlockNumber,
+    mut importer_block_number: BlockNumber,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-fetcher";
 
@@ -284,21 +291,22 @@ async fn start_block_fetcher(
         }
 
         // if we are ahead of current block number, await until we are behind again
-        let rpc_current_number = RPC_CURRENT_BLOCK.load(Ordering::SeqCst);
-        if number.as_u64() > rpc_current_number {
+        let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
+        if importer_block_number.as_u64() > external_rpc_current_block {
             yield_now().await;
             continue;
         }
 
         // we are behind current, so we will fetch multiple blocks in parallel to catch up
-        let mut blocks_to_fetch = rpc_current_number.saturating_sub(number.as_u64()) + 1;
-        blocks_to_fetch = min(blocks_to_fetch, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+        let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1;
+        let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+        tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
 
         let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
         while blocks_to_fetch > 0 {
             blocks_to_fetch -= 1;
-            tasks.push(fetch_block_and_receipts(Arc::clone(&chain), number));
-            number = number.next();
+            tasks.push(fetch_block_and_receipts(Arc::clone(&chain), importer_block_number));
+            importer_block_number = importer_block_number.next();
         }
 
         // keep fetching in order
@@ -318,7 +326,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
     let block = fetch_block(Arc::clone(&chain), number).await;
 
     // wait some time until receipts are available
-    let _ = tokio::time::sleep(BACKOFF_RECEIPTS).await;
+    let _ = sleep(INTERVAL_FETCH_RECEIPTS).await;
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
