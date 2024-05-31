@@ -1,6 +1,6 @@
 import axios from "axios";
 import { expect } from "chai";
-import { providers, JsonRpcProvider, keccak256 } from "ethers";
+import { JsonRpcApiProviderOptions, JsonRpcProvider, keccak256, } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 import { Numbers } from "web3-types";
@@ -41,7 +41,16 @@ if (!providerUrl) {
     providerUrl = "http://localhost:8545";
 }
 
-export let ETHERJS = new JsonRpcProvider(providerUrl);
+const providerOptions: JsonRpcApiProviderOptions = {
+    cacheTimeout: -1, // Do not use cash request results
+    batchMaxCount: 1 // Do not unite the request in batches
+};
+
+export let ETHERJS = new JsonRpcProvider(
+    providerUrl,
+    undefined,
+    providerOptions
+);
 
 export function updateProviderUrl(newUrl: string) {
     providerUrl = newUrl;
@@ -54,8 +63,8 @@ export function getProvider() {
 
 // Configure RPC logger if RPC_LOG env-var is configured.
 function log(event: any) {
-    var payloads = null;
-    var kind = "";
+    let payloads = null;
+    let kind = "";
     if (event.action == "sendRpcPayload") {
         [kind, payloads] = ["REQ  -> ", event.payload];
     }
@@ -69,18 +78,23 @@ function log(event: any) {
         console.log(kind, JSON.stringify(payload));
     }
 }
+
 if (process.env.RPC_LOG) {
-    ETHERJS.on("debug", log);
+    ETHERJS.on("debug", log).catch(error => {
+        console.error("Registering listener for a debug event of the RPC failed:", error);
+        process.exit(1);
+    });
 }
 
 // -----------------------------------------------------------------------------
 // Helper functions
 // -----------------------------------------------------------------------------
 
-// Sends a RPC request to the blockchain, returning full response.
-var requestId = 0;
+// Sends an RPC request to the blockchain, returning full response.
+let requestId = 0;
+
 export async function sendAndGetFullResponse(method: string, params: any[] = []): Promise<any> {
-    for (const i in params) {
+    for (let i = 0; i < params.length; ++i) {
         const param = params[i];
         if (param instanceof Account) {
             params[i] = param.address;
@@ -107,20 +121,20 @@ export async function sendAndGetFullResponse(method: string, params: any[] = [])
     return response;
 }
 
-// Sends a RPC request to the blockchain, returning its result field.
+// Sends an RPC request to the blockchain, returning its result field.
 export async function send(method: string, params: any[] = []): Promise<any> {
     const response = await sendAndGetFullResponse(method, params);
     return response.data.result;
 }
 
-// Sends a RPC request to the blockchain, returning its error field.
+// Sends an RPC request to the blockchain, returning its error field.
 // Use it when you expect the RPC call to fail.
 export async function sendAndGetError(method: string, params: any[] = []): Promise<any> {
     const response = await sendAndGetFullResponse(method, params);
     return response.data.error;
 }
 
-// Sends a RPC request to the blockchain and applies the expect function to the result.
+// Sends an RPC request to the blockchain and applies the expect function to the result.
 export async function sendExpect(method: string, params: any[] = []): Promise<Chai.Assertion> {
     return expect(await send(method, params));
 }
@@ -236,11 +250,15 @@ function addOpenListener(socket: WebSocket, subscription: string, params: any) {
 }
 
 /// Generalized function to add a "message" event listener to a WebSocket
-function addMessageListener(socket: WebSocket, messageToReturn: number, callback: (messageEvent: { data: string }) => Promise<void>): Promise<any> {
+function addMessageListener(
+    socket: WebSocket,
+    messageToReturn: number,
+    callback: (messageEvent: { data: string }) => Promise<void>
+): Promise<any> {
     return new Promise((resolve) => {
         let messageCount = 0;
         socket.addEventListener("message", async function (messageEvent: { data: string }) {
-            //console.log("Received message: " + messageEvent.data);
+            // console.log("Received message: " + messageEvent.data);
             messageCount++;
             if (messageCount === messageToReturn) {
                 const event = JSON.parse(messageEvent.data);
@@ -248,7 +266,7 @@ function addMessageListener(socket: WebSocket, messageToReturn: number, callback
                 resolve(event);
             } else {
                 await callback(messageEvent);
-                send("evm_mine", []);
+                await send("evm_mine", []);
             }
         });
     });
@@ -271,7 +289,8 @@ export async function subscribeAndGetEvent(
 ): Promise<any> {
     const socket = openWebSocketConnection();
     addOpenListener(socket, subscription, {});
-    const event = await addMessageListener(socket, messageToReturn, async (messageEvent) => {});
+    const event = await addMessageListener(socket, messageToReturn, async (_messageEvent) => {
+    });
 
     // Wait for the specified time, if necessary
     if (waitTimeInMilliseconds > 0)
@@ -290,7 +309,7 @@ export async function subscribeAndGetEventWithContract(
     const contractAddress = await contract.getAddress();
     const socket = openWebSocketConnection();
     addOpenListener(socket, subscription, { "address": contractAddress });
-    const event = await addMessageListener(socket, messageToReturn, async (messageEvent) => {
+    const event = await addMessageListener(socket, messageToReturn, async (_messageEvent) => {
         await asyncContractOperation(contract);
     });
 
@@ -300,4 +319,3 @@ export async function subscribeAndGetEventWithContract(
 
     return event;
 }
-
