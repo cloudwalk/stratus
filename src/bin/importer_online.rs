@@ -40,7 +40,7 @@ use tokio::time::timeout;
 /// Current block number of the external RPC blockchain.
 static EXTERNAL_RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
 
-/// Only sets the external rpcl current block number if it is equals or greater than the current one.
+/// Only sets the external RPC current block number if it is equals or greater than the current one.
 fn set_external_rpc_current_block(new_number: BlockNumber) {
     let new_number_u64 = new_number.as_u64();
     let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
