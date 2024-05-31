@@ -34,6 +34,11 @@ describe("Integration Test", function () {
 
         let alice = ethers.Wallet.createRandom().connect(ethers.provider);
 
+        it("Deployer is the one and only minter", async function () {
+            expect(deployer.address).to.equal(await brlcToken.mainMinter());
+            expect(await brlcToken.isMinter(deployer.address)).to.be.true;
+        });
+
         it("Mint BRLC to Alice", async function () {
             const aliceNonce = await ethers.provider.getTransactionCount(alice.address);
             console.log("Alice nonce: ", aliceNonce);
@@ -43,11 +48,7 @@ describe("Integration Test", function () {
             console.log("Deployer nonce: ", deployerNonce);
             console.log("Deployer address: ", deployer.address);
 
-            const mintaTx = waitReceipt(brlcToken.mint(alice.address, 900, { gasLimit: 5000000, nonce: deployerNonce}));
-            console.log("Mint Tx: ", mintaTx);
-
-            const aliceBalance = await brlcToken.balanceOf(alice.address)
-            console.log("Alice balance: ", aliceBalance);
+            expect(await brlcToken.mint(alice.address, 900, { gasLimit: 5000000})).to.have.changeTokenBalance(brlcToken, alice, 900);
         });
     });
 });

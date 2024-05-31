@@ -44,8 +44,8 @@ export async function deployBRLC() {
 }
 
 export async function configureBRLC() {
-    waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress()));
-    waitReceipt(brlcToken.configureMinter(await deployer.getAddress(), 1000000000));
+    await waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress(), { gasLimit: 100000}));
+    await waitReceipt(brlcToken.configureMinter(await deployer.getAddress(), 1000000000, { gasLimit: 100000}));
 }
 
 export async function deployPixCashier() {
