@@ -174,10 +174,14 @@ pub mod consensus_kube {
             !self.is_leader()
         }
 
+        pub fn is_stand_alone() -> bool {
+            Self::current_node().is_none()
+        }
+
         //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
         pub async fn should_serve(&self) -> bool {
-            if Self::current_node().is_none() {
-                return false;
+            if Self::is_stand_alone() {
+                return true;
             }
             let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
             let storage_block_number: u64 = self.storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into();
