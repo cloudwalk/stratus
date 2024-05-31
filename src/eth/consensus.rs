@@ -395,13 +395,14 @@ pub mod consensus_mock {
 
     use crate::config::RunWithImporterConfig;
     use crate::eth::primitives::Block;
+    use crate::eth::storage::StratusStorage;
 
     pub struct Consensus {
         pub sender: Sender<Block>,
     }
 
     impl Consensus {
-        pub fn new(_leader_name: Option<String>) -> Arc<Self> {
+        pub async fn new(storage: Arc<StratusStorage>, leader_name: Option<String>) -> Arc<Self> {
             todo!()
         }
 
