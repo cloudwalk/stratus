@@ -61,10 +61,10 @@ const PARALLEL_RECEIPTS: usize = 100;
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 
 /// Interval before we check again if we are behind the external rpc current block number.
-const BACKOFF_CATCH_UP: Duration = Duration::from_millis(20);
+const INTERVAL_CATCH_UP: Duration = Duration::from_millis(20);
 
 /// Interval before we starting retrieving receipts because they are not immediately available after the block is retrieved.
-const BACKOFF_RECEIPTS: Duration = Duration::from_millis(50);
+const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 
 // -----------------------------------------------------------------------------
 // Execution
@@ -295,7 +295,7 @@ async fn start_block_fetcher(
         // if we are ahead of current block number, await until we are behind again
         let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
         if importer_block_number.as_u64() > external_rpc_current_block {
-            sleep(BACKOFF_CATCH_UP).await;
+            sleep(INTERVAL_CATCH_UP).await;
             continue;
         }
 
@@ -328,7 +328,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
     let block = fetch_block(Arc::clone(&chain), number).await;
 
     // wait some time until receipts are available
-    let _ = sleep(BACKOFF_RECEIPTS).await;
+    let _ = sleep(INTERVAL_FETCH_RECEIPTS).await;
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
