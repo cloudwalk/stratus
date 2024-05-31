@@ -52,18 +52,24 @@ const RETRY_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug, PartialEq)]
 enum Role {
-    Leader,
+    _Leader, //TODO implement leader election
     Follower,
-    Candidate,
+    _Candidate,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
-struct PeerAddress(pub String);
+struct PeerAddress(String);
+
+impl PeerAddress {
+    pub fn inner(&self) -> &str {
+        &self.0
+    }
+}
 
 #[derive(Clone)]
 struct Peer {
     client: AppendEntryServiceClient<Channel>,
-    last_heartbeat: std::time::Instant,
+    last_heartbeat: std::time::Instant, //TODO implement metrics for this
     match_index: u64,
     next_index: u64,
     role: Role,
@@ -104,7 +110,7 @@ impl Consensus {
         };
         let consensus = Arc::new(consensus);
 
-        Self::discover_peers(Arc::clone(&consensus)).await;
+        let _ = Self::discover_peers(Arc::clone(&consensus)).await; //TODO refactor this method to also receive addresses from the environment
         Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
         Self::initialize_server(Arc::clone(&consensus));
 
@@ -134,7 +140,7 @@ impl Consensus {
 
     fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
         tokio::spawn(async move {
-            let followers = consensus.peers.lock().await;
+            let peers = consensus.peers.lock().await;
 
             loop {
                 let mut receiver_lock = receiver.lock().await;
@@ -146,7 +152,7 @@ impl Consensus {
 
                         //TODO use gRPC instead of jsonrpc
                         //FIXME for now, this has no colateral efects, but it will have in the future
-                        match Self::append_block_commit_to_followers(data.clone(), followers.clone()).await {
+                        match Self::append_block_commit_to_followers(data.clone(), peers.clone()).await {
                             Ok(_) => {
                                 tracing::info!(number = data.header.number.as_u64(), "Data sent to followers");
                             }
@@ -268,11 +274,7 @@ impl Consensus {
         for peer in &peers {
             peers_lock.insert(PeerAddress(peer.0.clone()), peer.1.clone());
         }
-        tracing::info!(
-            peers = peers.iter().map(|p| p.0.clone()).collect::<Vec<String>>().join(","),
-            "Discovered peers",
-        );
-
+        tracing::info!(peers = peers.iter().map(|p| p.0.clone()).collect::<Vec<String>>().join(","), "Discovered peers",);
 
         Ok(())
     }
@@ -303,6 +305,9 @@ impl Consensus {
             match response {
                 Ok(resp) => {
                     let resp = resp.into_inner();
+
+                    tracing::debug!(follower = peer_id, last_heartbeat = ?follower.last_heartbeat, match_index = follower.match_index, next_index = follower.next_index, role = ?follower.role, term = follower.term,  "current follower state"); //TODO also move this to metrics
+
                     match StatusCode::try_from(resp.status) {
                         Ok(StatusCode::AppendSuccess) => {
                             #[cfg(not(feature = "metrics"))]
@@ -317,7 +322,7 @@ impl Consensus {
                             return Ok(());
                         }
                         _ => {
-                            tracing::error!(follower = peer_id, "Unexpected status from follower: {:?}",  resp.status);
+                            tracing::error!(follower = peer_id, "Unexpected status from follower: {:?}", resp.status);
                         }
                     }
                 }
@@ -329,11 +334,7 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        Err(anyhow!(
-            "Failed to append block commit to {} after {} attempts",
-            peer_id,
-            RETRY_ATTEMPTS
-        ))
+        Err(anyhow!("Failed to append block commit to {} after {} attempts", peer_id, RETRY_ATTEMPTS))
     }
 
     #[tracing::instrument(skip_all)]
@@ -355,11 +356,11 @@ impl Consensus {
                 term,
                 prev_log_index,
                 prev_log_term,
-                follower.0.0.clone(),
+                follower.0.inner().to_string(),
             )
             .await
             {
-                tracing::warn!(follower = follower.0.0, "Error appending block commit to follower: {:?}", e);
+                tracing::warn!(follower = follower.0.inner().to_string(), "Error appending block commit to follower: {:?}", e);
             }
         }
 
