@@ -231,8 +231,10 @@ async fn stratus_startup(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<Js
     Ok(json!(true))
 }
 
-async fn stratus_readiness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
-    Ok(json!(true))
+async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
+    let should_serve = context.consensus.should_serve().await;
+    tracing::info!("stratus_readiness: {}", should_serve);
+    Ok(json!(should_serve))
 }
 
 async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
