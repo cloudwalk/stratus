@@ -61,9 +61,6 @@ const PARALLEL_RECEIPTS: usize = 100;
 /// Timeout awaiting for newHeads event before fallback to polling.
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 
-/// Interval before we check again if we are behind the external rpc current block number.
-const INTERVAL_CATCH_UP: Duration = Duration::from_millis(20);
-
 /// Interval before we starting retrieving receipts because they are not immediately available after the block is retrieved.
 const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 
