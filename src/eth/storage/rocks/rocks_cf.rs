@@ -18,7 +18,7 @@ use serde::Serialize;
 /// Exposes an API for key-value pair storage.
 #[derive(Clone)]
 pub struct RocksCf<K, V> {
-    pub db: Arc<DB>,
+    db: Arc<DB>,
     // TODO: check if we can gather metrics from a Column Family, if not, remove this field
     _opts: Options,
     column_family: String,

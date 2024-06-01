@@ -512,7 +512,7 @@ impl RocksStorageState {
 
         let mut batch = WriteBatch::default();
         self.accounts.prepare_batch_insertion(accounts, &mut batch);
-        self.accounts.db.write(batch).unwrap();
+        self.db.write(batch).unwrap();
     }
 
     /// Writes slots to state (does not write to slot history)
@@ -524,7 +524,7 @@ impl RocksStorageState {
 
         let mut batch = WriteBatch::default();
         self.account_slots.prepare_batch_insertion(slots, &mut batch);
-        self.account_slots.db.write(batch).unwrap();
+        self.db.write(batch).unwrap();
     }
 
     /// Write to all DBs in a batch
