@@ -380,6 +380,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let transaction = parse_rpc_rlp::<TransactionInput>(&data)?;
 
+    //TODO if the forward_to is up, dont call executor, just forward it
     let hash = transaction.hash;
     match ctx.executor.transact(transaction).await {
         // result is success
