@@ -94,12 +94,12 @@ pub struct RocksStorageState {
     pub blocks_by_number: RocksCf<BlockNumberRocksdb, BlockRocksdb>,
     pub blocks_by_hash: RocksCf<HashRocksdb, BlockNumberRocksdb>,
     pub logs: RocksCf<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
-    pub backup_trigger: Arc<mpsc::Sender<()>>,
+    pub backup_trigger: mpsc::Sender<()>,
     /// Used to trigger backup after threshold is hit
     pub transactions_processed: AtomicUsize,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
-    pub prev_stats: Arc<Mutex<HashMap<HistogramInt, (Sum, Count)>>>,
+    pub prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
     /// Options passed at DB creation, stored for metrics
     ///
     /// a newly created `rocksdb::Options` object is unique, with an underlying pointer identifier inside of it, and is used to access
@@ -132,7 +132,7 @@ impl RocksStorageState {
             blocks_by_number: new_cf(&db, "blocks_by_number"),
             blocks_by_hash: new_cf(&db, "blocks_by_hash"), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: new_cf(&db, "logs"),
-            backup_trigger: Arc::new(backup_trigger_tx),
+            backup_trigger: backup_trigger_tx,
             transactions_processed: AtomicUsize::new(0),
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
