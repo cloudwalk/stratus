@@ -1,5 +1,6 @@
 //! RocksDB handling of column families.
 
+use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -79,10 +80,19 @@ where
     where
         I: IntoIterator<Item = K> + Clone,
     {
-        let serialized_keys = keys.clone().into_iter().map(|k| bincode::serialize(&k)).collect::<Result<Vec<_>, _>>()?;
+        let cf = self.handle();
+        let cf_repeated = iter::repeat(&cf);
+
+        let serialized_keys_with_cfs = keys
+            .clone()
+            .into_iter()
+            .zip(cf_repeated)
+            .map(|(k, cf)| bincode::serialize(&k).map(|k| (cf, k)))
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(self
             .db
-            .multi_get(serialized_keys)
+            .multi_get_cf(serialized_keys_with_cfs)
             .into_iter()
             .zip(keys)
             .filter_map(|(value, key)| {
