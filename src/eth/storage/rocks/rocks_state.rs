@@ -2,6 +2,8 @@ use core::fmt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -403,6 +405,70 @@ impl RocksStorageState {
             }
             None => None,
         }
+    }
+
+    pub fn save_accounts(&self, accounts: Vec<Account>) {
+        for account in accounts {
+            let (key, value) = account.into();
+            self.accounts.insert(key, value.clone());
+            self.accounts_history.insert((key, 0.into()), value);
+        }
+    }
+
+    pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+        let account_changes = block.compact_account_changes();
+
+        //TODO move those loops inside the spawn and check if speed improves
+        let mut txs_batch = vec![];
+        let mut logs_batch = vec![];
+        for transaction in block.transactions.clone() {
+            txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
+            for log in transaction.logs {
+                logs_batch.push(((transaction.input.hash.into(), log.log_index.into()), transaction.block_number.into()));
+            }
+        }
+        let mut batch = WriteBatch::default();
+
+        self.transactions.prepare_batch_insertion(txs_batch, &mut batch);
+        self.logs.prepare_batch_insertion(logs_batch, &mut batch);
+
+        let number = block.number();
+        let block_hash = block.hash();
+        let txs_len = block.transactions.len();
+
+        let block_without_changes = {
+            let mut block_mut = block;
+            // mutate it
+            block_mut.transactions.iter_mut().for_each(|transaction| {
+                // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
+                transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
+            });
+            block_mut
+        };
+
+        let block_by_number = (number.into(), block_without_changes.into());
+        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch);
+
+        let block_by_hash = (block_hash.into(), number.into());
+        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch);
+
+        self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
+
+        static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
+        /// used for multiple purposes, such as TPS counting and backup management
+        const TRANSACTION_LOOP_THRESHOLD: usize = 120_000;
+
+        let previous_count = TRANSACTIONS_COUNT.fetch_add(txs_len, Ordering::Relaxed);
+        let current_count = previous_count + txs_len;
+
+        // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
+        if current_count >= TRANSACTION_LOOP_THRESHOLD {
+            self.backup_trigger.send(()).await.unwrap();
+            TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
+        }
+
+        self.write_batch(batch).unwrap();
+        Ok(())
     }
 
     /// Writes accounts to state (does not write to account history)
