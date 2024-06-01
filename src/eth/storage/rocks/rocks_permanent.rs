@@ -151,33 +151,34 @@ impl PermanentStorage for RocksPermanentStorage {
         }
         let mut batch = WriteBatch::default();
 
-        // save block
+        self.state.transactions.prepare_batch_insertion(txs_batch, &mut batch);
+        self.state.logs.prepare_batch_insertion(logs_batch, &mut batch);
+
         let number = block.number();
-        let txs_rocks = self.state.transactions.clone();
-        let logs_rocks = self.state.logs.clone();
-
-        txs_rocks.prepare_batch_insertion(txs_batch, &mut batch);
-        logs_rocks.prepare_batch_insertion(logs_batch, &mut batch);
-
+        let txs_len = block.transactions.len();
         let block_hash = block.hash();
 
-        let mut block_without_changes = block.clone();
-        for transaction in &mut block_without_changes.transactions {
-            // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
-            transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
-        }
+        let block_without_changes = {
+            let mut block_mut = block;
+            // mutate it
+            block_mut.transactions.iter_mut().for_each(|transaction| {
+                // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
+                transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
+            });
+            block_mut
+        };
 
-        self.state
-            .blocks_by_number
-            .prepare_batch_insertion([(number.into(), block_without_changes.into())], &mut batch);
+        let block_by_number = (number.into(), block_without_changes.into());
+        self.state.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch);
 
-        self.state.blocks_by_hash.prepare_batch_insertion([(hash.into(), number.into())], &mut batch);
+        let block_by_hash = (block_hash.into(), number.into());
+        self.state.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch);
 
         self.state
             .prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
 
-        let previous_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
-        let current_count = previous_count + block.transactions.len();
+        let previous_count = TRANSACTIONS_COUNT.fetch_add(txs_len, Ordering::Relaxed);
+        let current_count = previous_count + txs_len;
 
         // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
         if current_count >= TRANSACTION_LOOP_THRESHOLD {
