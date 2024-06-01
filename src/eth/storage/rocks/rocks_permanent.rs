@@ -161,26 +161,27 @@ impl PermanentStorage for RocksPermanentStorage {
 
         let block_hash = block.hash();
 
-        let blocks_by_number = self.state.blocks_by_number.clone();
-        let blocks_by_hash = self.state.blocks_by_hash.clone();
         let mut block_without_changes = block.clone();
         for transaction in &mut block_without_changes.transactions {
             // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
-            transaction.execution.changes.retain(|_, change| change.bytecode.clone().is_modified());
+            transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
         }
 
-        blocks_by_number.prepare_batch_insertion(vec![(number.into(), block_without_changes.into())], &mut batch);
+        self.state
+            .blocks_by_number
+            .prepare_batch_insertion(vec![(number.into(), block_without_changes.into())], &mut batch);
 
-        blocks_by_hash.prepare_batch_insertion(vec![(block_hash.into(), number.into())], &mut batch);
+        self.state
+            .blocks_by_hash
+            .prepare_batch_insertion(vec![(hash.into(), number.into())], &mut batch);
 
         self.state.update_state_with_execution_changes(&account_changes, number, &mut batch);
 
-        let previous_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
-        let _ = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
-        let current_count = TRANSACTIONS_COUNT.load(Ordering::Relaxed);
+        let previous_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
+        let current_count = previous_count + block.transactions.len();
 
         // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
-        if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
+        if current_count >= TRANSACTION_LOOP_THRESHOLD {
             self.state.backup_trigger.send(()).await.unwrap();
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
