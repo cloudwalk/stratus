@@ -270,7 +270,7 @@ impl Executor {
 
         // executes transaction until no more conflicts
         // TODO: must have a stop condition like timeout or max number of retries
-        loop {
+        let tx_execution = loop {
             // execute transaction
             let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
             let evm_result = self.execute_in_evm(evm_input).await?;
@@ -289,7 +289,7 @@ impl Executor {
             }
 
             break tx_execution;
-        }
+        };
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_transact(start.elapsed(), true, function.clone());
