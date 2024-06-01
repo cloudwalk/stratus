@@ -157,40 +157,38 @@ impl RocksStorageState {
         Ok((u64::from(block_number)).into())
     }
 
-    pub async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        let block_number: BlockNumberRocksdb = block_number.into();
-        self.account_slots.clear();
-        self.accounts.clear();
+    pub async fn reset_at(&self, block_number: BlockNumberRocksdb) -> anyhow::Result<()> {
+        // Clear current state
+        self.account_slots.clear().unwrap();
+        self.accounts.clear().unwrap();
 
+        // Get current state back from historical
         let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = HashMap::new();
+        let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = HashMap::new();
         for ((address, idx, block), value) in self.account_slots_history.iter_start() {
             if block > block_number {
-                self.account_slots_history.delete(&(address, idx, block));
-            } else {
-                if let Some((bnum, _)) = latest_slots.get(&(address, idx)) {
-                    if bnum < &block {
-                        latest_slots.insert((address, idx), (block.clone(), value.clone()));
-                    }
-                } else {
+                self.account_slots_history.delete(&(address, idx, block)).unwrap();
+            } else if let Some((bnum, _)) = latest_slots.get(&(address, idx)) {
+                if bnum < &block {
                     latest_slots.insert((address, idx), (block.clone(), value.clone()));
                 }
+            } else {
+                latest_slots.insert((address, idx), (block.clone(), value.clone()));
+            }
+        }
+        for ((address, block), account) in self.accounts_history.iter_start() {
+            if block > block_number {
+                self.accounts_history.delete(&(address, block)).unwrap();
+            } else if let Some((bnum, _)) = latest_accounts.get(&address) {
+                if bnum < &block {
+                    latest_accounts.insert(address, (block.clone(), account)).unwrap();
+                }
+            } else {
+                latest_accounts.insert(address, (block.clone(), account));
             }
         }
 
-        let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = HashMap::new();
-        for ((address, block), account) in self.accounts_history.iter_start() {
-            if block > block_number {
-                self.accounts_history.delete(&(address, block));
-            } else {
-                if let Some((bnum, _)) = latest_accounts.get(&address) {
-                    if bnum < &block {
-                        latest_accounts.insert(address, (block.clone(), account));
-                    }
-                } else {
-                    latest_accounts.insert(address, (block.clone(), account));
-                }
-            }
-        }
+        // write new current state
         let mut batch = WriteBatch::default();
         self.accounts.prepare_batch_insertion(
             latest_accounts.into_iter().map(|(address, (_, account))| (address, account)).collect(),
@@ -200,30 +198,30 @@ impl RocksStorageState {
             latest_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value)).collect(),
             &mut batch,
         );
+        self.write_batch(batch).unwrap();
 
-        self.write_batch(batch);
-
+        // Truncate rest of
         for (hash, block) in self.transactions.iter_start() {
             if block > block_number {
-                self.transactions.delete(&hash);
+                self.transactions.delete(&hash).unwrap();
             }
         }
 
         for (key, block) in self.logs.iter_start() {
             if block > block_number {
-                self.logs.delete(&key);
+                self.logs.delete(&key).unwrap();
             }
         }
 
         for (hash, block) in self.blocks_by_hash.iter_start() {
             if block > block_number {
-                self.blocks_by_hash.delete(&hash);
+                self.blocks_by_hash.delete(&hash).unwrap();
             }
         }
 
         for (block, _) in self.blocks_by_number.iter_end() {
             if block > block_number {
-                self.blocks_by_number.delete(&block);
+                self.blocks_by_number.delete(&block).unwrap();
             } else {
                 break;
             }
@@ -315,13 +313,12 @@ impl RocksStorageState {
             })
             .flatten_ok()
             .filter_map(|log_res| match log_res {
-                Ok(log) => {
+                Ok(log) =>
                     if filter.matches(&log) {
                         Some(Ok(log))
                     } else {
                         None
-                    }
-                }
+                    },
                 err => Some(err),
             })
             .collect()
