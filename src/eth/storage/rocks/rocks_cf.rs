@@ -105,7 +105,10 @@ where
         self.db.put_cf(&cf, serialized_key, serialized_value).unwrap();
     }
 
-    pub fn prepare_batch_insertion(&self, changes: Vec<(K, V)>, batch: &mut WriteBatch) {
+    pub fn prepare_batch_insertion<I>(&self, changes: I, batch: &mut WriteBatch)
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
         let cf = self.handle();
 
         for (key, value) in changes {

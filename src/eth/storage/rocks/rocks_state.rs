@@ -190,14 +190,10 @@ impl RocksStorageState {
 
         // write new current state
         let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(
-            latest_accounts.into_iter().map(|(address, (_, account))| (address, account)).collect(),
-            &mut batch,
-        );
-        self.account_slots.prepare_batch_insertion(
-            latest_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value)).collect(),
-            &mut batch,
-        );
+        let accounts_iter = latest_accounts.into_iter().map(|(address, (_, account))| (address, account));
+        self.accounts.prepare_batch_insertion(accounts_iter, &mut batch);
+        let slots_iter = latest_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
+        self.account_slots.prepare_batch_insertion(slots_iter, &mut batch);
         self.write_batch(batch).unwrap();
 
         // Truncate rest of
@@ -231,7 +227,7 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    pub fn update_state_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber, batch: &mut WriteBatch) {
+    pub fn prepare_batch_state_update_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber, batch: &mut WriteBatch) {
         let accounts = self.accounts.clone();
         let accounts_history = self.accounts_history.clone();
         let account_slots = self.account_slots.clone();
@@ -412,7 +408,7 @@ impl RocksStorageState {
     /// Writes accounts to state (does not write to account history)
     #[allow(dead_code)]
     fn write_accounts(&self, accounts: Vec<Account>) {
-        let accounts = accounts.into_iter().map(Into::into).collect_vec();
+        let accounts = accounts.into_iter().map(Into::into);
 
         let mut batch = WriteBatch::default();
         self.accounts.prepare_batch_insertion(accounts, &mut batch);
@@ -424,8 +420,7 @@ impl RocksStorageState {
     fn write_slots(&self, slots: Vec<(Address, Slot)>) {
         let slots = slots
             .into_iter()
-            .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()))
-            .collect_vec();
+            .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()));
 
         let mut batch = WriteBatch::default();
         self.account_slots.prepare_batch_insertion(slots, &mut batch);

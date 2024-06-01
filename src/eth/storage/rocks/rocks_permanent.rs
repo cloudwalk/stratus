@@ -169,13 +169,12 @@ impl PermanentStorage for RocksPermanentStorage {
 
         self.state
             .blocks_by_number
-            .prepare_batch_insertion(vec![(number.into(), block_without_changes.into())], &mut batch);
+            .prepare_batch_insertion([(number.into(), block_without_changes.into())], &mut batch);
+
+        self.state.blocks_by_hash.prepare_batch_insertion([(hash.into(), number.into())], &mut batch);
 
         self.state
-            .blocks_by_hash
-            .prepare_batch_insertion(vec![(hash.into(), number.into())], &mut batch);
-
-        self.state.update_state_with_execution_changes(&account_changes, number, &mut batch);
+            .prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
 
         let previous_count = TRANSACTIONS_COUNT.fetch_add(block.transactions.len(), Ordering::Relaxed);
         let current_count = previous_count + block.transactions.len();
