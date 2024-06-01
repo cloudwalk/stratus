@@ -109,7 +109,7 @@ impl RocksStorageState {
         // settings for each Column Family to be created
         let cf_options_iter = CF_OPTIONS_MAP.iter().map(|(name, opts)| (*name, opts.clone()));
 
-        // options for the "default" column family (unused)
+        // options for the "default" column family (unused but required)
         let db_options = DbConfig::Default.to_options(CacheSetting::Disabled);
 
         let db = create_or_open_db(&db_path, &db_options, cf_options_iter).unwrap();
