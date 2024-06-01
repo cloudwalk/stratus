@@ -87,29 +87,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
     async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
         tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
-
-        match point_in_time {
-            StoragePointInTime::Present => {
-                let keys = indexes.iter().cloned().map(|idx| ((*address).into(), idx.into()));
-                Ok(self
-                    .state
-                    .account_slots
-                    .multi_get(keys)?
-                    .into_iter()
-                    .map(|((_, idx), value)| (idx.into(), value.into()))
-                    .collect())
-            }
-            StoragePointInTime::Past(number) => {
-                let keys = indexes.iter().cloned().map(|idx| ((*address).into(), idx.into(), (*number).into()));
-                Ok(self
-                    .state
-                    .account_slots_history
-                    .multi_get(keys)?
-                    .into_iter()
-                    .map(|((_, idx, _), value)| (idx.into(), value.into()))
-                    .collect())
-            }
-        }
+        self.state.read_slots(address, indexes, point_in_time)
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
