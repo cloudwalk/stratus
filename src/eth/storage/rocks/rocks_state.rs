@@ -61,6 +61,8 @@ cfg_if::cfg_if! {
     }
 }
 
+const BACKUP_TRANSACTION_COUNT_THRESHOLD: usize = 120_000;
+
 lazy_static! {
     /// Map setting presets for each Column Family
     static ref CF_OPTIONS_MAP: HashMap<&'static str, Options> = hmap! {
@@ -79,7 +81,6 @@ lazy_static! {
 ///
 /// With data separated by column families, writing and reading should be done via the `RocksCf` fields,
 /// while operations that include the whole database (e.g. backup) should refer to the inner `DB` directly.
-#[derive(Clone)]
 pub struct RocksStorageState {
     pub db: Arc<DB>,
     pub db_path: PathBuf,
@@ -92,6 +93,8 @@ pub struct RocksStorageState {
     pub blocks_by_hash: RocksCf<HashRocksdb, BlockNumberRocksdb>,
     pub logs: RocksCf<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
     pub backup_trigger: Arc<mpsc::Sender<()>>,
+    /// Used to trigger backup after threshold is hit
+    pub transactions_processed: AtomicUsize,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     pub prev_stats: Arc<Mutex<HashMap<HistogramInt, (Sum, Count)>>>,
@@ -128,6 +131,7 @@ impl RocksStorageState {
             blocks_by_hash: new_cf(&db, "blocks_by_hash"), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: new_cf(&db, "logs"),
             backup_trigger: Arc::new(backup_trigger_tx),
+            transactions_processed: AtomicUsize::new(0),
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
             #[cfg(feature = "metrics")]
@@ -454,21 +458,26 @@ impl RocksStorageState {
 
         self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
 
-        static TRANSACTIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
-        /// used for multiple purposes, such as TPS counting and backup management
-        const TRANSACTION_LOOP_THRESHOLD: usize = 120_000;
-
-        let previous_count = TRANSACTIONS_COUNT.fetch_add(txs_len, Ordering::Relaxed);
-        let current_count = previous_count + txs_len;
-
-        // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
-        if current_count >= TRANSACTION_LOOP_THRESHOLD {
-            self.backup_trigger.send(()).await.unwrap();
-            TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
-        }
+        self.check_backup_threshold_trigger(txs_len);
 
         self.write_batch(batch).unwrap();
         Ok(())
+    }
+
+    fn check_backup_threshold_trigger(&self, transactions_just_processed: usize) {
+        let previous = self.transactions_processed.fetch_add(transactions_just_processed, Ordering::Relaxed);
+        let current = previous + transactions_just_processed;
+
+        // threshold hit, trigger backup and reset value
+        if current > BACKUP_TRANSACTION_COUNT_THRESHOLD {
+            if let Err(err) = self.backup_trigger.try_send(()) {
+                tracing::error!(
+                    reason = ?err,
+                    "Failed to trigger backup signal, either listener panicked or signal was triggered while another backup was in progress"
+                );
+            }
+            self.transactions_processed.store(0, Ordering::Relaxed);
+        }
     }
 
     /// Writes accounts to state (does not write to account history)
