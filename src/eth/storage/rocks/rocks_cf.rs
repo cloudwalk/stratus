@@ -139,7 +139,7 @@ where
     }
 
     // Custom method that combines entry and or_insert_with from a HashMap
-    pub fn entry_or_insert_with<F>(&self, key: K, default: F) -> V
+    pub fn get_or_insert_with<F>(&self, key: K, default: F) -> V
     where
         F: FnOnce() -> V,
     {

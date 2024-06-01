@@ -247,7 +247,7 @@ impl RocksStorageState {
         for change in changes {
             if change.is_changed() {
                 let address: AddressRocksdb = change.address.into();
-                let mut account_info_entry = accounts.entry_or_insert_with(address, AccountRocksdb::default);
+                let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default);
 
                 if let Some(nonce) = change.nonce.clone().take_modified() {
                     account_info_entry.nonce = nonce.into();
@@ -465,6 +465,8 @@ impl RocksStorageState {
         let block_hash = block.hash();
         let txs_len = block.transactions.len();
 
+        // this is an optimization, instead of saving the entire block into the database,
+        // remove all discardable account changes
         let block_without_changes = {
             let mut block_mut = block;
             // mutate it
