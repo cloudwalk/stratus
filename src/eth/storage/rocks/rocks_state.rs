@@ -113,13 +113,7 @@ impl RocksStorageState {
         let db_path = path.as_ref().to_path_buf();
         let (backup_trigger_tx, backup_trigger_rx) = mpsc::channel::<()>(1);
 
-        // settings for each Column Family to be created
-        let cf_options_iter = CF_OPTIONS_MAP.iter().map(|(name, opts)| (*name, opts.clone()));
-
-        // options for the "default" column family (unused but required)
-        let db_options = DbConfig::Default.to_options(CacheSetting::Disabled);
-
-        let db = create_or_open_db(&db_path, &db_options, cf_options_iter).unwrap();
+        let (db, db_options) = create_or_open_db(&db_path, &*CF_OPTIONS_MAP).unwrap();
 
         //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
         let state = Self {

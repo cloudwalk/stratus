@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -8,24 +9,31 @@ use rocksdb::Env;
 use rocksdb::Options;
 use rocksdb::DB;
 
+use crate::eth::storage::rocks::rocks_config::CacheSetting;
+use crate::eth::storage::rocks::rocks_config::DbConfig;
+
 /// Create or open the Database with the configs applied to all column families
-pub fn create_or_open_db<CfDescriptorIter, CfName>(path: &Path, db_opts: &Options, cf_descriptor_iter: CfDescriptorIter) -> anyhow::Result<Arc<DB>>
-where
-    CfDescriptorIter: Iterator<Item = (CfName, Options)> + Clone,
-    CfName: AsRef<str>,
-{
-    let open_db = || DB::open_cf_with_opts(db_opts, path, cf_descriptor_iter.clone());
+///
+/// The returned `Options` need to be stored to refer to the DB metrics
+pub fn create_or_open_db(path: &Path, cf_configs: &HashMap<&'static str, Options>) -> anyhow::Result<(Arc<DB>, Options)> {
+    // settings for each Column Family to be created
+    let cf_config_iter = cf_configs.iter().map(|(name, opts)| (*name, opts.clone()));
+
+    // options for the "default" column family (used only to refer to the DB metrics)
+    let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled);
+
+    let open_db = || DB::open_cf_with_opts(&db_opts, path, cf_config_iter.clone());
 
     let db = match open_db() {
         Ok(db) => db,
         Err(e) => {
             tracing::error!("Failed to open RocksDB: {}", e);
-            DB::repair(db_opts, path)?;
+            DB::repair(&db_opts, path)?;
             open_db()?
         }
     }; // XXX in case of corruption, use DB
 
-    Ok(Arc::new(db))
+    Ok((Arc::new(db), db_opts))
 }
 
 pub fn create_new_backup(db: &DB) -> anyhow::Result<()> {
