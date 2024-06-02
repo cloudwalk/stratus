@@ -11,13 +11,15 @@ use crate::eth::primitives::BlockNumber;
 use crate::infra::metrics::MetricLabelValue;
 
 /// EVM storage point-in-time indicator.
-#[derive(Clone, Copy, Debug, Default, strum::EnumIs)]
+#[derive(Debug, strum::Display, Clone, Copy, Default, strum::EnumIs)]
 pub enum StoragePointInTime {
     /// The current state of the EVM storage.
     #[default]
+    #[strum(serialize = "present")]
     Present,
 
     /// The state of the EVM storage at the given block number.
+    #[strum(serialize = "past")]
     Past(BlockNumber),
 }
 
