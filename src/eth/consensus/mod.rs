@@ -211,7 +211,11 @@ impl Consensus {
     }
 
     pub fn should_forward(&self) -> bool {
-        tracing::info!(is_leader = self.is_leader(), sync_online_enabled = self.importer_config.is_some(), "handling request forward");
+        tracing::info!(
+            is_leader = self.is_leader(),
+            sync_online_enabled = self.importer_config.is_some(),
+            "handling request forward"
+        );
         if self.is_leader() && self.importer_config.is_none() {
             return false; // the leader is on miner mode and should deal with the requests
         }
@@ -262,7 +266,8 @@ impl Consensus {
     pub fn get_chain_url(&self) -> Option<(String, Option<String>)> {
         if self.is_follower() {
             if let Some(namespace) = Self::current_namespace() {
-                return Some((format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None)); //TODO use peer discovery to discover the leader
+                return Some((format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None));
+                //TODO use peer discovery to discover the leader
             }
         }
 
