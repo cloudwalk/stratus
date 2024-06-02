@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
+use tracing::Span;
 
 use crate::infra::tracing::info_task_spawn;
 use crate::GlobalState;
@@ -174,6 +175,40 @@ macro_rules! channel_read_impl {
 // -----------------------------------------------------------------------------
 // Tracing
 // -----------------------------------------------------------------------------
+
+/// Extensions for `tracing::Span`.
+pub trait SpanExt {
+    /// Records a value using `ToString` implementation.
+    ///
+    /// This helper exists because `tracing` crate does not allow us to implement `tracing::Value` for our own types.
+    ///
+    /// See: https://github.com/tokio-rs/tracing/discussions/1455
+    fn rec<T>(&self, field: &'static str, value: &T)
+    where
+        T: ToString;
+
+    fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
+    where
+        T: ToString;
+}
+
+impl SpanExt for Span {
+    fn rec<T>(&self, field: &'static str, value: &T)
+    where
+        T: ToString,
+    {
+        self.record(field, value.to_string().as_str());
+    }
+
+    fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
+    where
+        T: ToString,
+    {
+        if let Some(ref value) = value {
+            self.record(field, value.to_string().as_str());
+        }
+    }
+}
 
 /// Logs an error and also wrap the existing error with the provided message.
 #[macro_export]
