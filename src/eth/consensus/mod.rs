@@ -96,12 +96,12 @@ impl Consensus {
     pub async fn new(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         if Self::is_stand_alone() {
             tracing::info!("No consensus module available, running in standalone mode");
-            return Self::new_stand_alone(storage);
+            return Self::new_stand_alone(storage, importer_config);
         };
 
         let leader_name = match importer_config.clone() {
             Some(config) => config.leader_node.unwrap_or_default(),
-            None => "standalone".to_string(),
+            None => "unknown".to_string(),
         };
 
         tracing::info!(leader_name = leader_name, "Starting consensus module with leader");
@@ -129,7 +129,7 @@ impl Consensus {
         consensus
     }
 
-    fn new_stand_alone(storage: Arc<StratusStorage>) -> Arc<Self> {
+    fn new_stand_alone(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         let (sender, mut receiver) = mpsc::channel::<Block>(32);
 
         tokio::spawn(async move {
@@ -147,7 +147,7 @@ impl Consensus {
             sender,
             peers,
             last_arrived_block_number,
-            importer_config: None,
+            importer_config,
         })
     }
 
@@ -261,7 +261,7 @@ impl Consensus {
     pub fn get_chain_url(&self) -> Option<(String, Option<String>)> {
         if self.is_follower() {
             if let Some(namespace) = Self::current_namespace() {
-                return Some((format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None));
+                return Some((format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None)); //TODO use peer discovery to discover the leader
             }
         }
 
