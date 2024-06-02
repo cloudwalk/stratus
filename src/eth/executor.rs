@@ -286,39 +286,27 @@ impl Executor {
             return Err(anyhow!("transaction sent from zero address is not allowed."));
         }
 
-        let tx_execution = match &self.relayer {
-            // relayer not present
-            None => {
-                // executes transaction until no more conflicts
-                // TODO: must have a stop condition like timeout or max number of retries
-                loop {
-                    // execute transaction
-                    let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
-                    let evm_result = self.execute_in_evm(evm_input).await?;
+        // executes transaction until no more conflicts
+        // TODO: must have a stop condition like timeout or max number of retries
+        let tx_execution = loop {
+            // execute transaction
+            let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
+            let evm_result = self.execute_in_evm(evm_input).await?;
 
-                    // save execution to temporary storage
-                    let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-                    if let Err(e) = self.miner.save_execution(tx_execution.clone()).await {
-                        if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
-                            tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
-                            continue;
-                        } else {
-                            #[cfg(feature = "metrics")]
-                            metrics::inc_executor_transact(start.elapsed(), false, function);
-                            return Err(e);
-                        }
-                    }
-
-                    break tx_execution;
+            // save execution to temporary storage (not working yet)
+            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
+            if let Err(e) = self.miner.save_execution(tx_execution.clone()).await {
+                if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                    tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
+                    continue;
+                } else {
+                    #[cfg(feature = "metrics")]
+                    metrics::inc_executor_transact(start.elapsed(), false, function);
+                    return Err(e);
                 }
             }
-            // relayer present
-            Some(relayer) => {
-                let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
-                let evm_result = self.execute_in_evm(evm_input).await?;
-                relayer.forward(tx_input.clone(), evm_result.clone()).await?; // TODO: Check if we should run this in paralel by spawning a task when running the online importer.
-                TransactionExecution::new_local(tx_input, evm_result)
-            }
+
+            break tx_execution;
         };
 
         #[cfg(feature = "metrics")]
