@@ -1,7 +1,5 @@
 pub mod forward_to;
 
-use crate::eth::primitives::Hash;
-use crate::infra::BlockchainClient;
 use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::AtomicU64;
@@ -30,7 +28,9 @@ use tonic::Status;
 
 use crate::channel_read;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
+use crate::infra::BlockchainClient;
 
 pub mod append_entry {
     tonic::include_proto!("append_entry");
@@ -46,12 +46,11 @@ use append_entry::AppendTransactionExecutionsResponse;
 use append_entry::BlockHeader;
 use append_entry::StatusCode;
 
+use super::primitives::TransactionInput;
 use crate::config::RunWithImporterConfig;
 use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-
-use super::primitives::TransactionInput;
 
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
@@ -220,10 +219,7 @@ impl Consensus {
 
     pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
         //TODO rename to TransactionForward
-        let (http_url, _) = match self.get_chain_url() {
-            Some(url) => url,
-            None => return Err(anyhow!("No chain url found")),
-        };
+        let Some((http_url, _)) = self.get_chain_url() else { return Err(anyhow!("No chain url found")) };
         let chain = BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await?;
         let forward_to = forward_to::TransactionRelayer::new(chain);
         let result = forward_to.forward(transaction).await?;
@@ -271,7 +267,6 @@ impl Consensus {
             Some(importer_config) => Some((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
             None => None,
         }
-
     }
 
     #[tracing::instrument(skip_all)]

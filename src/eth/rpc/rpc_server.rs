@@ -399,7 +399,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     // HACK: if importer-online is enabled, we forward the transction to substrate
     if ctx.consensus.should_forward() {
         tracing::info!("forwarding transaction");
-        return match ctx.consensus.forward(transaction).await {
+        return match ctx.consensus.forward(tx).await {
             Ok(hash) => Ok(hex_data(hash)),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to forward transaction");
