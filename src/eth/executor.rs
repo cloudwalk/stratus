@@ -36,7 +36,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-use crate::eth::TransactionRelayer;
+use crate::eth::consensus::forward_to::TransactionRelayer;
 use crate::ext::ResultExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;

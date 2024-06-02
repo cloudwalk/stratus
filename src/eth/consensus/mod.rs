@@ -1,3 +1,7 @@
+pub mod forward_to;
+
+use crate::eth::primitives::Hash;
+use crate::infra::BlockchainClient;
 use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::AtomicU64;
@@ -47,6 +51,8 @@ use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
+use super::primitives::TransactionInput;
+
 const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 
@@ -78,6 +84,7 @@ struct Peer {
 
 pub struct Consensus {
     pub sender: Sender<Block>,
+    importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<Mutex<HashMap<PeerAddress, Peer>>>,
     leader_name: String,                  //XXX check the peers instead of using it
@@ -87,10 +94,15 @@ pub struct Consensus {
 impl Consensus {
     //XXX for now we pick the leader name from the environment
     // the correct is to have a leader election algorithm
-    pub async fn new(storage: Arc<StratusStorage>, leader_name: Option<String>) -> Arc<Self> {
+    pub async fn new(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         if Self::is_stand_alone() {
             tracing::info!("No consensus module available, running in standalone mode");
             return Self::new_stand_alone(storage);
+        };
+
+        let leader_name = match importer_config.clone() {
+            Some(config) => config.leader_node.unwrap_or_default(),
+            None => "standalone".to_string(),
         };
 
         tracing::info!(leader_name = leader_name, "Starting consensus module with leader");
@@ -105,7 +117,8 @@ impl Consensus {
             sender,
             storage,
             peers,
-            leader_name: leader_name.clone().unwrap_or_default(),
+            leader_name,
+            importer_config,
             last_arrived_block_number,
         };
         let consensus = Arc::new(consensus);
@@ -135,6 +148,7 @@ impl Consensus {
             sender,
             peers,
             last_arrived_block_number,
+            importer_config: None,
         })
     }
 
@@ -197,6 +211,25 @@ impl Consensus {
         Self::current_node().is_none()
     }
 
+    pub fn should_forward(&self) -> bool {
+        if self.is_leader() && self.importer_config.is_none() {
+            return false; // the leader is on miner mode and should deal with the requests
+        }
+        true
+    }
+
+    pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
+        //TODO rename to TransactionForward
+        let (http_url, _) = match self.get_chain_url() {
+            Some(url) => url,
+            None => return Err(anyhow!("No chain url found")),
+        };
+        let chain = BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await?;
+        let forward_to = forward_to::TransactionRelayer::new(chain);
+        let result = forward_to.forward(transaction).await?;
+        Ok(result.tx_hash) //XXX HEX
+    }
+
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
         if Self::is_stand_alone() {
@@ -227,13 +260,18 @@ impl Consensus {
     // XXX this is a temporary solution to get the leader node
     // later we want the leader to GENERATE blocks
     // and even later we want this sync to be replaced by a gossip protocol or raft
-    pub fn get_chain_url(&self, config: RunWithImporterConfig) -> (String, Option<String>) {
+    pub fn get_chain_url(&self) -> Option<(String, Option<String>)> {
         if self.is_follower() {
             if let Some(namespace) = Self::current_namespace() {
-                return (format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None);
+                return Some((format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None));
             }
         }
-        (config.online.external_rpc, config.online.external_rpc_ws)
+
+        match self.importer_config.clone() {
+            Some(importer_config) => Some((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
+            None => None,
+        }
+
     }
 
     #[tracing::instrument(skip_all)]
