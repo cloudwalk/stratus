@@ -68,7 +68,7 @@ impl Drop for PostgresPermanentStorage {
 impl PostgresPermanentStorage {
     /// Creates a new [`PostgresPermanentStorage`].
     pub async fn new(config: PostgresPermanentStorageConfig) -> anyhow::Result<Self> {
-        tracing::info!(?config, "starting postgres permanent storage");
+        tracing::info!(?config, "creating postgres permanent storage");
 
         let result = PgPoolOptions::new()
             .min_connections(config.connections)
@@ -79,7 +79,7 @@ impl PostgresPermanentStorage {
 
         let pool = match result {
             Ok(pool) => pool.clone(),
-            Err(e) => return log_and_err!(reason = e, "failed to start postgres permanent storage"),
+            Err(e) => return log_and_err!(reason = e, "failed to create postgres permanent storage"),
         };
 
         let storage = Self {
@@ -95,6 +95,10 @@ impl PostgresPermanentStorage {
 impl PermanentStorage for PostgresPermanentStorage {
     fn kind(&self) -> PermanentStorageKind {
         PermanentStorageKind::Postgres { url: self.url.clone() }
+    }
+
+    async fn read_all_slots(&self, _address: &Address) -> anyhow::Result<Vec<Slot>> {
+        todo!();
     }
 
     async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {

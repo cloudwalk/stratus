@@ -18,13 +18,13 @@ use crate::ext::not;
 use crate::ext::spawn_named;
 
 /// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>) {
-    println!("starting tracing");
+pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
+    println!("creating tracing registry");
 
     // configure stdout layer
     let format_as_json = env::var_os("JSON_LOGS").is_some_and(|var| not(var.is_empty()));
     let stdout_layer = if format_as_json {
-        println!("tracing enabling json logs");
+        println!("tracing registry enabling json logs");
         fmt::Layer::default()
             .json()
             .with_target(true)
@@ -33,50 +33,70 @@ pub async fn init_tracing(url: Option<&String>) {
             .with_filter(EnvFilter::from_default_env())
             .boxed()
     } else {
-        println!("tracing enabling text logs");
+        println!("tracing registry enabling text logs");
         fmt::Layer::default()
             .with_target(false)
-            .with_thread_ids(true)
-            .with_thread_names(true)
+            .with_thread_ids(false)
+            .with_thread_names(false)
             .with_filter(EnvFilter::from_default_env())
             .boxed()
     };
 
-    // configure tokio console layer
-    println!("tracing enabling tokio console");
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
-
     // configure opentelemetry layer
     let opentelemetry_layer = match url {
         Some(url) => {
-            println!("tracing enabling opentelemetry");
+            println!("tracing registry enabling opentelemetry exporter | url={}", url);
+            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")]));
+            let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
+
             let tracer = opentelemetry_otlp::new_pipeline()
                 .tracing()
-                .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint(url))
-                .with_trace_config(trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")])))
+                .with_exporter(tracer_exporter)
+                .with_trace_config(tracer_config)
                 .install_batch(runtime::Tokio)
                 .unwrap();
 
-            Some(tracing_opentelemetry::layer().with_tracked_inactivity(false).with_tracer(tracer))
+            let layer = tracing_opentelemetry::layer()
+                .with_tracked_inactivity(false)
+                .with_tracer(tracer)
+                .with_filter(EnvFilter::from_default_env());
+            Some(layer)
         }
-        None => None,
+        None => {
+            println!("tracing registry NOT enabling opentelemetry exporter");
+            None
+        }
+    };
+
+    // init tokio console registry
+    let tokio_console_layer = if enable_console {
+        // configure tokio console layer
+        println!("tracing registry enabling tokio console");
+        let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+
+        // init tokio console server
+        spawn_named("console::grpc-server", async move {
+            if let Err(e) = console_server.serve().await {
+                tracing::error!(reason = ?e, "failed to create tokio-console server");
+            };
+        });
+        Some(console_layer)
+    } else {
+        None
     };
 
     // init registry
     tracing_subscriber::registry()
         .with(stdout_layer)
-        .with(console_layer)
         .with(opentelemetry_layer)
+        .with(tokio_console_layer)
         .init();
+}
 
-    // init tokio console server
-    spawn_named("console::grpc-server", async move {
-        if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, "failed to start tokio-console server");
-        };
-    });
-
-    tracing::info!("started tracing");
+/// Emits an info message that a task was spawned to backgroud.
+#[track_caller]
+pub fn info_task_spawn(name: &str) {
+    tracing::info!(%name, "spawning task");
 }
 
 /// Emits an warning that a task is exiting because it received a cancenllation signal.

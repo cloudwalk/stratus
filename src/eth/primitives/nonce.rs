@@ -6,8 +6,6 @@
 //! offers functionalities to create, manage, and convert nonces, maintaining
 //! the integrity and uniqueness of transactions in the network.
 
-use std::fmt::Display;
-
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
@@ -24,7 +22,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U64);
 
 impl Nonce {
@@ -38,12 +36,6 @@ impl Nonce {
     /// Returns the next nonce.
     pub fn next(&self) -> Self {
         Self(self.0 + 1)
-    }
-}
-
-impl Display for Nonce {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

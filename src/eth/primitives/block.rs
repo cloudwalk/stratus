@@ -14,6 +14,7 @@ use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
+use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
 use super::LogMined;
@@ -26,6 +27,8 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
+use crate::ext::ResultExt;
+use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -112,13 +115,13 @@ impl Block {
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
         let json_rpc_format: EthersBlock<EthersTransaction> = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
         let json_rpc_format: EthersBlock<H256> = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 
     /// Returns the block number.
@@ -186,6 +189,17 @@ impl From<Block> for EthersBlock<H256> {
         Self {
             transactions: ethers_block_transactions,
             ..ethers_block
+        }
+    }
+}
+
+impl TryFrom<serde_json::Value> for Block {
+    type Error = anyhow::Error;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        match Block::deserialize(&value) {
+            Ok(v) => Ok(v),
+            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to Block"),
         }
     }
 }

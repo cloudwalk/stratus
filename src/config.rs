@@ -23,6 +23,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::BlockSelection;
+use crate::eth::relayer::ExternalRelayer;
+use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
@@ -42,6 +44,7 @@ use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
+use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
@@ -91,6 +94,10 @@ pub struct CommonConfig {
     /// Url to the tracing collector (Opentelemetry over gRPC)
     #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
     pub tracing_url: Option<String>,
+
+    /// Enables tokio-console.
+    #[arg(long = "enable-tokio-console", env = "ENABLE_TOKIO_CONSOLE", default_value = "true")]
+    pub enable_tokio_console: bool,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -103,7 +110,7 @@ impl CommonConfig {
     /// Initializes Tokio runtime.
     pub fn init_runtime(&self) -> Runtime {
         print!(
-            "starting tokio runtime; async_threads={}; blocking_threads={}",
+            "creating tokio runtime; async_threads={}; blocking_threads={}",
             self.num_async_threads, self.num_blocking_threads
         );
 
@@ -114,7 +121,7 @@ impl CommonConfig {
             .max_blocking_threads(self.num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
             .build()
-            .expect("failed to start tokio runtime");
+            .expect("failed to create tokio runtime");
 
         runtime
     }
@@ -174,7 +181,7 @@ impl ExecutorConfig {
         const TASK_NAME: &str = "evm-thread";
 
         let num_evms = max(self.num_evms, 1);
-        tracing::info!(config = ?self, "starting executor");
+        tracing::info!(config = ?self, "creating executor");
 
         // spawn evm in background using native threads
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
@@ -191,6 +198,8 @@ impl ExecutorConfig {
             // spawn thread that will run evm
             // todo: needs a way to signal error like a cancellation token in case it fails to initialize
             let t = thread::Builder::new().name("evm".into());
+
+            info_task_spawn(TASK_NAME);
             t.spawn(move || {
                 // init tokio
                 let _tokio_guard = evm_tokio.enter();
@@ -247,21 +256,36 @@ pub struct MinerConfig {
 
 impl MinerConfig {
     /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(BlockMinerMode::External, storage, consensus).await
+    pub async fn init_external_mode(
+        &self,
+        storage: Arc<StratusStorage>,
+        consensus: Option<Arc<Consensus>>,
+        relayer: Option<ExternalRelayerClient>,
+    ) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(BlockMinerMode::External, storage, consensus, relayer).await
     }
 
     /// Inits [`BlockMiner`] with the configured mining mode.
-    pub async fn init(&self, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(self.block_mode, storage, consensus).await
+    pub async fn init(
+        &self,
+        storage: Arc<StratusStorage>,
+        consensus: Option<Arc<Consensus>>,
+        relayer: Option<ExternalRelayerClient>,
+    ) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(self.block_mode, storage, consensus, relayer).await
     }
 
-    async fn init_with_mode(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, consensus: Option<Arc<Consensus>>) -> anyhow::Result<Arc<BlockMiner>> {
-        tracing::info!(config = ?self, "starting block miner");
+    async fn init_with_mode(
+        &self,
+        mode: BlockMinerMode,
+        storage: Arc<StratusStorage>,
+        consensus: Option<Arc<Consensus>>,
+        relayer: Option<ExternalRelayerClient>,
+    ) -> anyhow::Result<Arc<BlockMiner>> {
+        tracing::info!(config = ?self, "creating block miner");
 
         // create miner
-
-        let miner = BlockMiner::new(Arc::clone(&storage), mode, consensus);
+        let miner = BlockMiner::new(Arc::clone(&storage), mode, consensus, relayer);
         let miner = Arc::new(miner);
 
         // enable genesis block
@@ -297,7 +321,7 @@ impl MinerConfig {
 // Config: Relayer
 // -----------------------------------------------------------------------------
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct RelayerConfig {
+pub struct IntegratedRelayerConfig {
     /// RPC address to forward transactions to.
     #[arg(long = "forward-to", env = "FORWARD_TO")]
     pub forward_to: Option<String>,
@@ -307,18 +331,68 @@ pub struct RelayerConfig {
     pub relayer_timeout: Duration,
 }
 
-impl RelayerConfig {
-    pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
-        tracing::info!(config = ?self, "starting transaction relayer");
+impl IntegratedRelayerConfig {
+    pub async fn init(&self) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
+        tracing::info!(config = ?self, "creating transaction relayer");
 
         match self.forward_to {
             Some(ref forward_to) => {
                 let chain = BlockchainClient::new_http(forward_to, self.relayer_timeout).await?;
-                let relayer = TransactionRelayer::new(storage, chain);
+                let relayer = TransactionRelayer::new(chain);
                 Ok(Some(Arc::new(relayer)))
             }
             None => Ok(None),
         }
+    }
+}
+
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[group(requires_all = ["url", "connections", "acquire_timeout"])]
+pub struct ExternalRelayerClientConfig {
+    #[arg(long = "relayer-db-url", env = "RELAYER_DB_URL", required = false)]
+    pub url: String,
+    #[arg(long = "relayer-db-connections", env = "RELAYER_DB_CONNECTIONS", required = false)]
+    pub connections: u32,
+    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", required = false)]
+    pub acquire_timeout: Duration,
+}
+
+impl ExternalRelayerClientConfig {
+    pub async fn init(self) -> ExternalRelayerClient {
+        ExternalRelayerClient::new(self).await
+    }
+}
+
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct ExternalRelayerServerConfig {
+    /// Postgresql url.
+    #[arg(long = "db-url", env = "DB_URL")]
+    pub url: String,
+
+    /// Connections to database.
+    #[arg(long = "db-connections", env = "DB_CONNECTIONS", default_value = "5")]
+    pub connections: u32,
+
+    /// Timeout to acquire connections to the database.
+    #[arg(long = "db-timeout", value_parser=parse_duration, env = "DB_TIMEOUT", default_value = "1s")]
+    pub acquire_timeout: Duration,
+
+    /// RPC to forward to.
+    #[arg(long = "forward-to", env = "RELAYER_FORWARD_TO")]
+    pub forward_to: String,
+
+    /// Backoff.
+    #[arg(long = "backoff", value_parser=parse_duration, env = "BACKOFF", default_value = "10ms")]
+    pub backoff: Duration,
+
+    /// RPC response timeout.
+    #[arg(long = "rpc-timeout", value_parser=parse_duration, env = "RPC_TIMEOUT", default_value = "2s")]
+    pub rpc_timeout: Duration,
+}
+
+impl ExternalRelayerServerConfig {
+    pub async fn init(self) -> anyhow::Result<ExternalRelayer> {
+        ExternalRelayer::new(self).await
     }
 }
 
@@ -340,7 +414,10 @@ pub struct StratusConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub external_relayer: Option<ExternalRelayerClientConfig>,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -461,7 +538,7 @@ pub struct ImporterOnlineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -517,7 +594,10 @@ pub struct RunWithImporterConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub external_relayer: Option<ExternalRelayerClientConfig>,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -589,7 +669,7 @@ pub struct IntegrationTestConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: RelayerConfig,
+    pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -635,7 +715,7 @@ pub enum ExternalRpcStorageKind {
 impl ExternalRpcStorageConfig {
     /// Initializes external rpc storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
-        tracing::info!(config = ?self, "starting external rpc storage");
+        tracing::info!(config = ?self, "creating external rpc storage");
 
         match self.external_rpc_storage_kind {
             ExternalRpcStorageKind::Postgres { ref url } => {
@@ -662,6 +742,26 @@ impl FromStr for ExternalRpcStorageKind {
 }
 
 // -----------------------------------------------------------------------------
+// Config: ExternalRelayer
+// -----------------------------------------------------------------------------
+
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct ExternalRelayerConfig {
+    #[clap(flatten)]
+    pub relayer: ExternalRelayerServerConfig,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+impl WithCommonConfig for ExternalRelayerConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Enum: TemporaryStorageConfig
 // -----------------------------------------------------------------------------
 
@@ -681,7 +781,7 @@ pub enum TemporaryStorageKind {
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
-        tracing::info!(config = ?self, "starting temporary storage");
+        tracing::info!(config = ?self, "creating temporary storage");
 
         match self.temp_storage_kind {
             TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
@@ -733,7 +833,7 @@ pub enum PermanentStorageKind {
 impl PermanentStorageConfig {
     /// Initializes permanent storage implementation.
     pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
-        tracing::info!(config = ?self, "starting permanent storage");
+        tracing::info!(config = ?self, "creating permanent storage");
 
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),

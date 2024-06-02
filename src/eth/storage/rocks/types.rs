@@ -207,7 +207,7 @@ impl From<AddressRocksdb> for Address {
     }
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct BlockNumberRocksdb(U64);
 
 gen_newtype_from!(self = BlockNumberRocksdb, other = u8, u16, u32, u64, U64, usize, i32, i64);
@@ -237,6 +237,8 @@ impl From<BlockNumberRocksdb> for u64 {
 
 #[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndexRocksdb(U256);
+
+gen_newtype_from!(self = SlotIndexRocksdb, other = u64);
 
 impl SlotIndexRocksdb {
     pub fn inner_value(&self) -> U256 {

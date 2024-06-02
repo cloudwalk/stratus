@@ -16,6 +16,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
+use crate::ext::ResultExt;
 use crate::log_and_err;
 
 const MAX_RETRIES: u64 = 50;
@@ -34,7 +35,7 @@ pub struct PostgresExternalRpcStorageConfig {
 impl PostgresExternalRpcStorage {
     /// Creates a new [`PostgresExternalRpcStorage`].
     pub async fn new(config: PostgresExternalRpcStorageConfig) -> anyhow::Result<Self> {
-        tracing::info!(?config, "starting postgres external rpc storage");
+        tracing::info!(?config, "creating postgres external rpc storage");
 
         let result = PgPoolOptions::new()
             .min_connections(config.connections)
@@ -45,7 +46,7 @@ impl PostgresExternalRpcStorage {
 
         let pool = match result {
             Ok(pool) => pool,
-            Err(e) => return log_and_err!(reason = e, "failed to start postgres external rpc storage"),
+            Err(e) => return log_and_err!(reason = e, "failed to create postgres external rpc storage"),
         };
 
         Ok(Self { pool })
@@ -201,7 +202,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
         // insert receipts
         for (hash, receipt) in receipts {
-            let receipt_json = serde_json::to_value(&receipt)?;
+            let receipt_json = serde_json::to_value(&receipt).expect_infallible();
             let result = sqlx::query_file!(
                 "src/eth/storage/postgres_external_rpc/sql/insert_external_receipt.sql",
                 hash.as_ref(),

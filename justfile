@@ -3,7 +3,6 @@ import '.justfile_helpers' # _lint, _outdated
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := "0"
-export RUST_LOG := env("RUST_LOG", "stratus=info,rpc_downloader=info,importer_offline=info,importer_online=info,state_validator=info")
 
 # Global arguments that can be passed to receipts.
 feature_flags := "dev," + env("FEATURES", "")
@@ -49,6 +48,11 @@ build:
 # Stratus: Check, or compile without generating code
 check:
     cargo check
+
+# Stratus: Check all features individually using cargo hack
+check-features *args="":
+    command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack; }
+    cargo hack check --each-feature --keep-going {{args}}
 
 # Stratus: Clean build artifacts
 clean:
@@ -349,6 +353,75 @@ e2e-flamegraph:
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
+
+e2e-relayer:
+    #!/bin/bash
+
+    just e2e-relayer-external-up
+
+    just e2e-relayer-external-down
+
+# E2E: External Relayer job
+e2e-relayer-external-up:
+    #!/bin/bash
+
+    # Start Postgres
+    docker-compose up -V -d
+
+    # Wait for Postgres to start
+    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
+
+    # Start Stratus binary
+    cargo run --release --bin stratus --no-default-features --features "dev,rocks,kubernetes" -- --enable-test-accounts --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@localhost:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+
+    # Wait for Stratus to start
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    # Install npm and start hardhat node in the e2e directory
+    if [ -d e2e ]; then
+        (
+            cd e2e
+            npm install
+            BLOCK_MODE=1s npx hardhat node > ../e2e_logs/hardhat.log &
+        )
+    fi
+
+    # Wait for hardhat node to start
+    wait-service --tcp 0.0.0.0:8545 {{ wait_service_timeout }} -- echo
+    sleep 5
+
+    # Start Relayer External binary
+    cargo run --release --bin relayer --no-default-features --features "rocks,kubernetes" -- --db-url postgres://postgres:123@localhost:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://localhost:8545 --backoff 10ms --disable-tokio-console > e2e_logs/relayer.log &
+
+    if [ -d e2e ]; then
+        (
+            cd e2e
+            npx hardhat test test/relayer/*.test.ts --network stratus > ../e2e_logs/test.log
+        )
+    fi
+
+# E2E: External Relayer job
+e2e-relayer-external-down:
+    #!/bin/bash
+
+    # Kill relayer
+    relayer_pid=$(pgrep -f 'relayer')
+    kill $relayer_pid
+
+    # Kill hardhat
+    killport 8545
+
+    # Kill Stratus
+    killport 3000
+    stratus_pid=$(pgrep -f 'stratus')
+    kill $stratus_pid
+
+    # Stop Postgres
+    docker-compose down -v
+    docker volume prune -f
+
+    # Delete the data directory
+    rm -rf ./data
 
 # ------------------------------------------------------------------------------
 # Contracts tasks

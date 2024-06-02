@@ -11,15 +11,12 @@ use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
-use ethers_core::types::OtherFields;
 use ethers_core::types::Transaction as EthersTransaction;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
 
-use super::signature::SoliditySignature;
-use super::Signature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -27,6 +24,8 @@ use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Signature;
+use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -176,7 +175,7 @@ impl From<TransactionInput> for EthersTransaction {
             chain_id: value.chain_id.map_into(),
             hash: value.hash.into(),
             nonce: value.nonce.into(),
-            from: value.from.into(),
+            from: value.signer.into(),
             to: value.to.map_into(),
             value: value.value.into(),
             input: value.input.clone().into(),
@@ -186,13 +185,7 @@ impl From<TransactionInput> for EthersTransaction {
             r: value.r,
             s: value.s,
             transaction_type: value.tx_type,
-            block_hash: None,
-            block_number: None,
-            transaction_index: None,
-            access_list: None,
-            max_priority_fee_per_gas: None,
-            max_fee_per_gas: None,
-            other: OtherFields::default(),
+            ..Default::default()
         }
     }
 }

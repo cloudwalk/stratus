@@ -6,6 +6,8 @@
 //! tracking transaction history and understanding the state of transactions in
 //! the blockchain.
 
+use std::hash::Hash as HashTrait;
+
 use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;
@@ -20,6 +22,7 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
 use crate::ext::OptionExt;
+use crate::ext::ResultExt;
 use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
@@ -42,6 +45,12 @@ pub struct TransactionMined {
 
     /// Block hash where the transaction was mined.
     pub block_hash: Hash,
+}
+
+impl HashTrait for TransactionMined {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.input.hash.hash(state);
+    }
 }
 
 impl TransactionMined {
@@ -67,13 +76,13 @@ impl TransactionMined {
     /// Serializes itself to JSON-RPC transaction format.
     pub fn to_json_rpc_transaction(self) -> JsonValue {
         let json_rpc_format: EthersTransaction = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 
     /// Serializes itself to JSON-RPC receipt format.
     pub fn to_json_rpc_receipt(self) -> JsonValue {
         let json_rpc_format: EthersReceipt = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        serde_json::to_value(json_rpc_format).expect_infallible()
     }
 }
 

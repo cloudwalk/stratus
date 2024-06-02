@@ -22,6 +22,7 @@ use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
@@ -44,20 +45,24 @@ pub struct BlockMiner {
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
 
+    /// External relayer client
+    relayer_client: Option<ExternalRelayerClient>,
+
     /// Consensus logic.
     consensus: Option<Arc<Consensus>>,
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>) -> Self {
-        tracing::info!(?mode, "starting block miner");
+    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>, relayer_client: Option<ExternalRelayerClient>) -> Self {
+        tracing::info!(?mode, "creating block miner");
         Self {
             storage,
             mode,
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
+            relayer_client,
             consensus,
         }
     }
@@ -89,10 +94,10 @@ impl BlockMiner {
         let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone()).await?;
 
-        if let Some(consensus) = &self.consensus {
-            let execution = format!("{:?}", tx_execution.clone());
-            consensus.sender.send(execution).await.unwrap();
-        }
+        //TODO implement full gRPC for tx execution: if let Some(consensus) = &self.consensus {
+        //TODO implement full gRPC for tx execution:     let execution = format!("{:?}", tx_execution.clone());
+        //TODO implement full gRPC for tx execution:     consensus.sender.send(execution).await.unwrap();
+        //TODO implement full gRPC for tx execution: }
 
         // decide what to do based on mining mode
         match self.mode {
@@ -126,7 +131,7 @@ impl BlockMiner {
 
         // validate
         let Some(external_block) = block.external_block else {
-            return log_and_err!("failed to mine external block because there is no external block being re-executed");
+            return log_and_err!("failed to mine external block because there is no external block being reexecuted");
         };
         if not(local_txs.is_empty()) {
             return log_and_err!("failed to mine external block because one of the transactions is a local transaction");
@@ -154,7 +159,7 @@ impl BlockMiner {
 
         // validate
         let Some(external_block) = block.external_block else {
-            return log_and_err!("failed to mine mixed block because there is no external block being re-executed");
+            return log_and_err!("failed to mine mixed block because there is no external block being reexecuted");
         };
 
         // mine external transactions
@@ -213,6 +218,14 @@ impl BlockMiner {
         let block_number = *block.number();
         let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
+
+        if let Some(relayer) = &self.relayer_client {
+            relayer.send_to_relayer(block.clone()).await?;
+        }
+
+        if let Some(consensus) = &self.consensus {
+            consensus.sender.send(block.clone()).await?;
+        }
 
         // persist block
         self.storage.save_block(block).await?;
@@ -332,6 +345,7 @@ mod interval_miner {
     use tokio::sync::mpsc;
     use tokio::time::Instant;
 
+    use crate::channel_read;
     use crate::eth::BlockMiner;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
@@ -339,7 +353,7 @@ mod interval_miner {
     pub async fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
-        while let Some(tick) = ticks_rx.recv().await {
+        while let Some(tick) = channel_read!(ticks_rx) {
             if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }

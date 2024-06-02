@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
+use crate::channel_read;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -61,10 +62,8 @@ impl RpcSubscriptions {
 
     /// Spawns a new task to clean up closed subscriptions from time to time.
     fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>) -> JoinHandle<anyhow::Result<()>> {
-        const TASK_NAME: &str = "rpc-subscription-cleaner";
-        tracing::info!("spawning {}", TASK_NAME);
-
-        spawn_named("rpc::sub::cleaner", async move {
+        const TASK_NAME: &str = "rpc::sub::cleaner";
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -90,17 +89,15 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new executed transactions.
-    fn spawn_new_pending_txs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<Hash>) -> JoinHandle<anyhow::Result<()>> {
-        const TASK_NAME: &str = "rpc-newPendingTransactions-notifier";
-        tracing::info!("spawning {}", TASK_NAME);
-
-        spawn_named("rpc::sub::newPendingTransactions", async move {
+    fn spawn_new_pending_txs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_tx_hash: broadcast::Receiver<Hash>) -> JoinHandle<anyhow::Result<()>> {
+        const TASK_NAME: &str = "rpc::sub::newPendingTransactions";
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
-                let Ok(hash) = rx.recv().await else {
+                let Ok(hash) = channel_read!(rx_tx_hash) else {
                     warn_task_tx_closed(TASK_NAME);
                     break;
                 };
@@ -113,17 +110,15 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new created blocks.
-    fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<BlockHeader>) -> JoinHandle<anyhow::Result<()>> {
-        const TASK_NAME: &str = "rpc-newHeads-notifier";
-        tracing::info!("spawning {}", TASK_NAME);
-
-        spawn_named("rpc::sub::newHeads", async move {
+    fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_block_header: broadcast::Receiver<BlockHeader>) -> JoinHandle<anyhow::Result<()>> {
+        const TASK_NAME: &str = "rpc::sub::newHeads";
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
-                let Ok(header) = rx.recv().await else {
+                let Ok(header) = channel_read!(rx_block_header) else {
                     warn_task_tx_closed(TASK_NAME);
                     break;
                 };
@@ -136,17 +131,15 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new transactions logs.
-    fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
-        const TASK_NAME: &str = "rpc-logs-notifier";
-        tracing::info!("spawning {}", TASK_NAME);
-
-        spawn_named("rpc::sub::logs", async move {
+    fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_log_mined: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
+        const TASK_NAME: &str = "rpc::sub::logs";
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
-                let Ok(log) = rx.recv().await else {
+                let Ok(log) = channel_read!(rx_log_mined) else {
                     warn_task_tx_closed(TASK_NAME);
                     break;
                 };

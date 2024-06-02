@@ -14,7 +14,7 @@ use crate::eth::primitives::Wei;
 /// Changes that happened to an account during a transaction.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
-    new_account: bool,
+    pub new_account: bool,
     pub address: Address,
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
