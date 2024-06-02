@@ -219,7 +219,9 @@ impl Consensus {
 
     pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
         //TODO rename to TransactionForward
-        let Some((http_url, _)) = self.get_chain_url() else { return Err(anyhow!("No chain url found")) };
+        let Some((http_url, _)) = self.get_chain_url() else {
+            return Err(anyhow!("No chain url found"));
+        };
         let chain = BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await?;
         let forward_to = forward_to::TransactionRelayer::new(chain);
         let result = forward_to.forward(transaction).await?;
