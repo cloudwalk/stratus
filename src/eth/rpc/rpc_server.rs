@@ -395,6 +395,19 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
 
+    // forward transaction to the leader
+    // HACK: if importer-online is enabled, we forward the transction to substrate
+    if ctx.consensus.should_forward() {
+        tracing::info!("forwarding transaction");
+        return match ctx.consensus.forward(tx).await {
+            Ok(hash) => Ok(hex_data(hash)),
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to forward transaction");
+                Err(RpcError::Response(rpc_internal_error(hex_data(e.to_string()))))
+            }
+        };
+    }
+
     // fill span
     let span = Span::current();
     span.rec("hash", &tx.hash);

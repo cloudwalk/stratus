@@ -63,9 +63,9 @@ impl<'a> Debug for PendingTxState<'a> {
 
 #[pin_project]
 pub struct PendingTransaction<'a> {
+    pub tx_hash: Hash,
     state: PendingTxState<'a>,
     provider: &'a BlockchainClient,
-    tx_hash: Hash,
     interval: Box<dyn Stream<Item = ()> + Send + Unpin>,
     retries_remaining: i32,
 }

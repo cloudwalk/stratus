@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 use tracing::Span;
 
 use super::Consensus;
+use crate::eth::consensus::forward_to::TransactionRelayer;
 use crate::eth::evm;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
@@ -37,7 +38,6 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-use crate::eth::TransactionRelayer;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
 #[cfg(feature = "metrics")]
