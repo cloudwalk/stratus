@@ -199,7 +199,7 @@ impl Consensus {
 
     //FIXME TODO automate the way we gather the leader, instead of using a env var
     pub fn is_leader(&self) -> bool {
-        Self::current_node().unwrap_or("".to_string()) == self.leader_name
+        Self::current_node().unwrap_or("standalone".to_string()) == self.leader_name
     }
 
     pub fn is_follower(&self) -> bool {
@@ -211,6 +211,7 @@ impl Consensus {
     }
 
     pub fn should_forward(&self) -> bool {
+        tracing::info!(is_leader = self.is_leader(), sync_online_enabled = self.importer_config.is_some(), "handling request forward");
         if self.is_leader() && self.importer_config.is_none() {
             return false; // the leader is on miner mode and should deal with the requests
         }
