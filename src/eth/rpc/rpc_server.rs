@@ -299,13 +299,12 @@ async fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>) -> 
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
     // fill span
-    let span = Span::current();
-    match block_selection {
-        BlockSelection::Hash(hash) => span.rec("hash", &hash),
-        BlockSelection::Latest => span.rec("number", &"latest"),
-        BlockSelection::Earliest => span.rec("number", &"earliest"),
-        BlockSelection::Number(number) => span.rec("number", &number),
-    }
+    Span::with(|s| match block_selection {
+        BlockSelection::Hash(hash) => s.rec("hash", &hash),
+        BlockSelection::Latest => s.rec("number", &"latest"),
+        BlockSelection::Earliest => s.rec("number", &"earliest"),
+        BlockSelection::Number(number) => s.rec("number", &number),
+    });
 
     // execute
     let block = ctx.storage.read_block(&block_selection).await?;
@@ -371,9 +370,10 @@ async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<St
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     // fill span
-    let span = Span::current();
-    span.rec_opt("from", &call.from);
-    span.rec_opt("to", &call.to);
+    Span::with(|s| {
+        s.rec_opt("from", &call.from);
+        s.rec_opt("to", &call.to);
+    });
 
     // execute
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
@@ -395,6 +395,13 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
 
+    // fill span
+    Span::with(|s| {
+        s.rec("hash", &tx.hash);
+        s.rec("from", &tx.signer);
+        s.rec_opt("to", &tx.to);
+    });
+
     // forward transaction to the leader
     // HACK: if importer-online is enabled, we forward the transction to substrate
     if ctx.consensus.should_forward() {
@@ -407,12 +414,6 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
             }
         };
     }
-
-    // fill span
-    let span = Span::current();
-    span.rec("hash", &tx.hash);
-    span.rec("from", &tx.signer);
-    span.rec_opt("to", &tx.to);
 
     // execute
     let tx_hash = tx.hash;

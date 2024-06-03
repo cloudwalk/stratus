@@ -232,9 +232,10 @@ impl StratusStorage {
         let start = metrics::now();
 
         // fill span
-        let span = Span::current();
-        span.rec("address", address);
-        span.rec("point_in_time", point_in_time);
+        Span::with(|s| {
+            s.rec("address", address);
+            s.rec("point_in_time", point_in_time);
+        });
 
         // read from temp only if present
         if point_in_time.is_present() {
