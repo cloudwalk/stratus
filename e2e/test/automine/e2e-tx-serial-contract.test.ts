@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import { TestContractBalances } from "../typechain-types";
+import { TestContractBalances } from "../../typechain-types";
 import { CHARLIE } from "../helpers/account";
 import {
     calculateSlotPosition,
@@ -23,8 +23,8 @@ const CONTRACT_TOPIC_ADD = "0x2728c9d3205d667bbc0eefdfeda366261b4d021949630c047f
 const CONTRACT_TOPIC_SUB = "0xf9c652bcdb0eed6299c6a878897eb3af110dbb265833e7af75ad3d2c2f4a980c";
 
 describe("Transaction: serial TestContractBalances", () => {
-    var _contract: TestContractBalances;
-    var _block: number;
+    let _contract: TestContractBalances;
+    let _block: number;
 
     it("Resets blockchain", async () => {
         await sendReset();
@@ -91,7 +91,7 @@ describe("Transaction: serial TestContractBalances", () => {
         const transaction: Transaction = await send("eth_getTransactionByHash", [deploymentTransactionHash]);
         
         expect(transaction.from).eq(CHARLIE.address, "tx.from");
-        expect(transaction.to).eq(null), "tx.to";
+        expect(transaction.to).eq(null, "tx.to");
         expect(transaction.value).eq('0x0', "tx.value");
         expect(transaction.gas).match(HEX_PATTERN, "tx.gas format");
         expect(transaction.gasPrice).match(HEX_PATTERN, "tx.gasPrice format");
