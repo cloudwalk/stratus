@@ -17,6 +17,14 @@ on:
       - 'utils/slack-notifiers/**'
   issue_comment:
   workflow_dispatch:
+
+env:
+  EXTRA_INSTRUCTIONS: |
+    Check if background operations are properly logged and monitored.
+    Check if the code uses spawn_named instead of tokio::spawn.
+    Check if only async tasks are running inside tokio, we decided that blocking tasks
+    should be run in a separate thread.
+
 jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' }}
@@ -40,3 +48,4 @@ jobs:
           github_action_config.enable_output: "false"
           pr_reviewer.enable_review_labels_effort: "false"
           pr_reviewer.enable_review_labels_security: "false"
+          pr_reviewer.extra_instructions: "${{ env.EXTRA_INSTRUCTIONS }}"
