@@ -8,6 +8,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::time::Instant;
 use tracing::Span;
 
 use super::transaction_dag::TransactionDag;
@@ -16,6 +17,7 @@ use crate::config::ExternalRelayerServerConfig;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
@@ -24,6 +26,15 @@ use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
+
+#[derive(Debug, thiserror::Error, derive_new::new)]
+pub enum RelayError {
+    #[error("Transaction Mismatch: {0}")]
+    Mismatch(anyhow::Error),
+
+    #[error("Compare Timeout: {0}")]
+    CompareTimeout(anyhow::Error),
+}
 
 pub struct ExternalRelayer {
     pool: PgPool,
@@ -84,6 +95,12 @@ impl ExternalRelayer {
         let start = metrics::now();
 
         if let Err(err) = self.relay_dag(dag).await {
+            if let RelayError::CompareTimeout(_) = err {
+                // This retries the entire block, but we could be retrying only each specific transaction that failed.
+                // This is mostly a non-issue (except performance-wise)
+                return Err(anyhow!("some receipt comparisons timeout, will retry next"))
+            }
+
             tracing::warn!(?block_number, ?err, "some transactions mismatched");
             sqlx::query!(
                 r#"UPDATE relayer_blocks
@@ -111,42 +128,54 @@ impl ExternalRelayer {
         Ok(Some(block_number))
     }
 
+    /// Compares the given receipt to the receipt returned by the pending transaction, retries until a receipt is returned
+    /// to ensure the nonce was incremented. In case of a mismatch it returns an error describing what mismatched.
     #[tracing::instrument(name = "external_relayer::compare_receipt", skip_all, fields(hash))]
-    async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_receipt: PendingTransaction<'_>) -> anyhow::Result<()> {
-        let tx_hash = stratus_receipt.0.transaction_hash;
+    async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_pending_transaction: PendingTransaction<'_>) -> anyhow::Result<(), RelayError> {
+        let tx_hash: Hash = stratus_receipt.0.transaction_hash.into();
         tracing::info!(?tx_hash, "comparing receipts");
 
         // fill span
         let span = Span::current();
         span.rec("hash", &tx_hash);
 
-        match substrate_receipt.await {
-            Ok(Some(substrate_receipt)) =>
-                if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
-                    let err_string = compare_error.to_string();
-                    let error = log_and_err!("transaction mismatch!").context(err_string.clone());
-                    self.save_mismatch(stratus_receipt, Some(substrate_receipt), &err_string).await;
-                    error
-                } else {
-                    Ok(())
-                },
-            Ok(None) => {
-                self.save_mismatch(stratus_receipt, None, "no receipt returned by substrate").await;
-                Err(anyhow!("no receipt returned by substrate"))
+        let start = Instant::now();
+        let mut substrate_receipt = substrate_pending_transaction;
+        loop {
+            match substrate_receipt.await {
+                Ok(Some(substrate_receipt)) => {
+                    if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
+                        let err_string = compare_error.to_string();
+                        let error = log_and_err!("transaction mismatch!").context(err_string.clone());
+                        self.save_mismatch(stratus_receipt, Some(substrate_receipt), &err_string).await;
+                        return error.map_err(|err| RelayError::Mismatch(err));
+                    } else {
+                        return Ok(());
+                    }
+                }
+                Ok(None) => {
+                    if start.elapsed().as_secs() <= 30 {
+                        tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
+                    } else {
+                        tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
+                        return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+                    }
+                }
+                Err(error) => {
+                    tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
+                }
             }
-            Err(error) => {
-                // maybe retry?
-                let error = error.context("failed to fetch substrate receipt");
-                let err_str = error.to_string();
-                self.save_mismatch(stratus_receipt, None, &err_str.to_string()).await;
-                Err(error)
-            }
+            substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
+            tokio::time::sleep(Duration::from_millis(50)).await
         }
     }
 
     /// Save a transaction mismatch to postgres, if it fails, save it to a file.
     #[tracing::instrument(name = "external_relayer::save_mismatch", skip_all)]
     async fn save_mismatch(&self, stratus_receipt: ExternalReceipt, substrate_receipt: Option<ExternalReceipt>, err_string: &str) {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let hash = stratus_receipt.hash().to_string();
         tracing::info!(?hash, "saving transaction mismatch");
 
@@ -180,6 +209,9 @@ impl ExternalRelayer {
                 .expect("writing the mismatch to a file should not fail");
             tracing::error!(?err, "failed to save mismatch, saving to file");
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_save_mismatch(start.elapsed());
     }
 
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
@@ -228,7 +260,7 @@ impl ExternalRelayer {
     /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
     /// on the `mismatches` table in pgsql, or in data/mismatched_transactions as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
-    async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<()> {
+    async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
         tracing::debug!("relaying transactions");
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
@@ -240,11 +272,12 @@ impl ExternalRelayer {
             .into_iter()
             .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
 
-        join_all(futures)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()
-            .context("some transactions failed")?;
+        if join_all(futures).await.into_iter().filter_map(Result::err).any(|err| match err {
+            RelayError::CompareTimeout(_) => true,
+            _ => false,
+        }) {
+            return Err(RelayError::CompareTimeout(anyhow!("some comparisons timed out, should retry them.")));
+        }
 
         Ok(())
     }
@@ -280,9 +313,13 @@ impl ExternalRelayerClient {
         let span = Span::current();
         span.rec("block_number", &block_number);
 
-        sqlx::query!("INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)", block_number as _, serde_json::to_value(block)?)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query!(
+            "INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)",
+            block_number as _,
+            serde_json::to_value(block)?
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }
