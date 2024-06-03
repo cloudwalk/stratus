@@ -375,6 +375,19 @@ impl RocksStorageState {
         }
     }
 
+    pub fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        let address: AddressRocksdb = (*address).into();
+        Ok(self
+            .account_slots
+            .iter_from((address, SlotIndexRocksdb::from(0)), rocksdb::Direction::Forward)
+            .take_while(|((addr, _), _)| &address == addr)
+            .map(|((_, idx), value)| Slot {
+                index: idx.into(),
+                value: value.into(),
+            })
+            .collect())
+    }
+
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
         if address.is_coinbase() || address.is_zero() {
             //XXX temporary, we will reload the database later without it

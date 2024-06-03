@@ -5,8 +5,6 @@ use std::sync::atomic::Ordering;
 use async_trait::async_trait;
 
 use super::rocks_state::RocksStorageState;
-use super::types::AddressRocksdb;
-use super::types::SlotIndexRocksdb;
 use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -137,16 +135,7 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        let address: AddressRocksdb = (*address).into();
-        Ok(self
-            .state
-            .account_slots
-            .iter_from((address, SlotIndexRocksdb::from(0)), rocksdb::Direction::Forward)
-            .take_while(|((addr, _), _)| &address == addr)
-            .map(|((_, idx), value)| Slot {
-                index: idx.into(),
-                value: value.into(),
-            })
-            .collect())
+        tracing::info!(?address, "reading all slots");
+        self.state.read_all_slots(address)
     }
 }
