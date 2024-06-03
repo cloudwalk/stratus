@@ -82,11 +82,9 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        // fill span
         Span::with(|s| {
             s.rec("number", &block.number());
         });
-
         tracing::info!(number = %block.number(), "reexecuting external block");
 
         // track active block number
@@ -168,12 +166,10 @@ impl Executor {
         receipt: &'b ExternalReceipt,
         block: &ExternalBlock,
     ) -> Result<ExternalTransactionExecution, (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Error)> {
-        // fill span
         Span::with(|s| {
             s.rec("hash", &tx.hash);
         });
 
-        // execute
         self.reexecute_external_tx_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
     }
 
@@ -250,13 +246,11 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
-        // fill span
         Span::with(|s| {
             s.rec("hash", &tx_input.hash);
             s.rec("from", &tx_input.signer);
             s.rec_opt("to", &tx_input.to);
         });
-
         tracing::info!(
             hash = %tx_input.hash,
             nonce = %tx_input.nonce,
@@ -311,12 +305,10 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), input.extract_function());
 
-        // fill span
         Span::with(|s| {
             s.rec_opt("from", &input.from);
             s.rec_opt("to", &input.to);
         });
-
         tracing::info!(
             from = ?input.from,
             to = ?input.to,

@@ -231,7 +231,6 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        // fill span
         Span::with(|s| {
             s.rec("address", address);
             s.rec("point_in_time", point_in_time);
