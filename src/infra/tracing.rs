@@ -1,6 +1,7 @@
 //! Tracing services.
 
 use std::env;
+use std::env::VarError;
 use std::net::SocketAddr;
 
 use console_subscriber::ConsoleLayer;
@@ -26,25 +27,36 @@ use crate::ext::not;
 pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAddr) {
     println!("creating tracing registry");
 
-    // configure stdout layer
-    let format_as_json = env::var_os("JSON_LOGS").is_some_and(|var| not(var.is_empty()));
-    let stdout_layer = if format_as_json {
-        println!("tracing registry enabling json logs");
-        fmt::Layer::default()
-            .json()
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_thread_names(true)
-            .with_filter(EnvFilter::from_default_env())
-            .boxed()
-    } else {
-        println!("tracing registry enabling text logs");
-        fmt::Layer::default()
-            .with_target(false)
-            .with_thread_ids(false)
-            .with_thread_names(false)
-            .with_filter(EnvFilter::from_default_env())
-            .boxed()
+    // configure stdout log layer
+    let stdout_log_format = env::var("LOG_FORMAT");
+    let stdout_log_format = stdout_log_format.as_ref().map(String::as_str);
+
+    let stdout_layer = match stdout_log_format {
+        Ok("json") => {
+            println!("tracing registry enabling JSON logs");
+            fmt::Layer::default()
+                .json()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .with_filter(EnvFilter::from_default_env())
+                .boxed()
+        }
+        Ok("verbose") => {
+            println!("tracing registry enabling VERBOSE text logs");
+            fmt::Layer::default()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .with_filter(EnvFilter::from_default_env())
+                .boxed()
+        }
+        Ok("normal") | Err(VarError::NotPresent) => {
+            println!("tracing registry enabling text logs");
+            fmt::Layer::default().with_filter(EnvFilter::from_default_env()).boxed()
+        }
+        Err(e) => panic!("{e}"),
+        Ok(unexpected) => panic!("unexpected LOG_FORMAT={unexpected}"),
     };
 
     // configure opentelemetry layer

@@ -36,7 +36,7 @@ COPY .cargo .cargo
 COPY config /app/config
 
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
-ENV JSON_LOGS=1
+ENV LOG_FORMAT=json
 ENV NO_COLOR=1
 ENV ENABLE_TEST_ACCOUNTS=1
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
