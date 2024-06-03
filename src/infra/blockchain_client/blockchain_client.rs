@@ -73,7 +73,10 @@ impl BlockchainClient {
     fn build_http_client(url: &str, timeout: Duration) -> anyhow::Result<HttpClient> {
         tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain http client");
         match HttpClientBuilder::default().request_timeout(timeout).build(url) {
-            Ok(http) => Ok(http),
+            Ok(http) => {
+                tracing::info!(%url, timeout = %timeout.to_string_ext(), "created blockchain http client");
+                Ok(http)
+            }
             Err(e) => {
                 tracing::error!(reason = ?e, %url, timeout = %timeout.to_string_ext(), "failed to create blockchain http client");
                 Err(e).context("failed to create blockchain http client")
@@ -84,7 +87,10 @@ impl BlockchainClient {
     async fn build_ws_client(url: &str, timeout: Duration) -> anyhow::Result<WsClient> {
         tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain websocket client");
         match WsClientBuilder::new().connection_timeout(timeout).build(url).await {
-            Ok(ws) => Ok(ws),
+            Ok(ws) => {
+                tracing::info!(%url, timeout = %timeout.to_string_ext(), "created blockchain websocket client");
+                Ok(ws)
+            }
             Err(e) => {
                 tracing::error!(reason = ?e, %url, timeout = %timeout.to_string_ext(), "failed to create blockchain websocket client");
                 Err(e).context("failed to create blockchain websocket client")
