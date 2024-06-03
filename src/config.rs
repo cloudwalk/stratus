@@ -175,13 +175,7 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    pub async fn init(
-        &self,
-        storage: Arc<StratusStorage>,
-        miner: Arc<BlockMiner>,
-        relayer: Option<Arc<TransactionRelayer>>,
-        consensus: Option<Arc<Consensus>>,
-    ) -> Arc<Executor> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
         const TASK_NAME: &str = "evm-thread";
 
         let num_evms = max(self.num_evms, 1);
@@ -234,7 +228,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms, consensus);
+        let executor = Executor::new(storage, miner, evm_tx, self.num_evms);
         Arc::new(executor)
     }
 }
