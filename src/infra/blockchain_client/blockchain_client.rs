@@ -249,11 +249,11 @@ impl BlockchainClient {
 
     pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<ExternalBlock>> {
         tracing::debug!("subscribing to newHeads event");
-        let ws = self.require_ws().await?;
 
         let mut first_attempt = true;
         loop {
-            let result = ws
+            let ws_read = self.require_ws().await?;
+            let result = ws_read
                 .subscribe::<ExternalBlock, Vec<JsonValue>>("eth_subscribe", vec![JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
                 .await;
 
@@ -274,8 +274,9 @@ impl BlockchainClient {
 
                     // reconnect websocket client
                     let new_ws_client = Self::build_ws_client(self.ws_url.as_ref().unwrap(), self.timeout).await?;
-                    let mut current_ws_client = self.ws.as_ref().unwrap().write().await;
-                    let _ = std::mem::replace(&mut *current_ws_client, new_ws_client);
+                    drop(ws_read);
+                    let mut ws_write = self.ws.as_ref().unwrap().write().await;
+                    let _ = std::mem::replace(&mut *ws_write, new_ws_client);
                 }
 
                 // failed and cannot do anything
