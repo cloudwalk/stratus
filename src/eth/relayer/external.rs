@@ -98,6 +98,7 @@ impl ExternalRelayer {
             if let RelayError::CompareTimeout(_) = err {
                 // This retries the entire block, but we could be retrying only each specific transaction that failed.
                 // This is mostly a non-issue (except performance-wise)
+                // XXX: Actually this would insert every mismatch found in this block again
                 return Err(anyhow!("some receipt comparisons timeout, will retry next"))
             }
 
