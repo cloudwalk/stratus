@@ -1,6 +1,7 @@
 //! Tracing services.
 
 use std::env;
+use std::net::SocketAddr;
 
 use console_subscriber::ConsoleLayer;
 use opentelemetry::KeyValue;
@@ -22,7 +23,7 @@ use crate::ext::named_spawn;
 use crate::ext::not;
 
 /// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>) {
+pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAddr) {
     println!("creating tracing registry");
 
     // configure stdout layer
@@ -74,7 +75,7 @@ pub async fn init_tracing(url: Option<&String>) {
 
     // init tokio console registry
     println!("tracing registry enabling tokio console");
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
     let console_layer = console_layer.with_filter(TokioConsoleFilter);
 
     // init tokio console server
