@@ -15,6 +15,7 @@ use crate::eth::storage::rocks::rocks_config::DbConfig;
 /// Create or open the Database with the configs applied to all column families
 ///
 /// The returned `Options` need to be stored to refer to the DB metrics
+#[tracing::instrument(skip_all)]
 pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static str, Options>) -> anyhow::Result<(Arc<DB>, Options)> {
     let path = path.as_ref();
 
@@ -38,7 +39,9 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static s
     Ok((Arc::new(db), db_opts))
 }
 
+#[tracing::instrument(skip_all)]
 pub fn create_new_backup(db: &DB) -> anyhow::Result<()> {
+    tracing::info!("Creating new DB backup");
     let mut backup_engine = backup_engine(db)?;
     backup_engine.create_new_backup(db)?;
     backup_engine.purge_old_backups(2)?;

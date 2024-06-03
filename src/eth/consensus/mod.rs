@@ -149,6 +149,7 @@ pub struct Consensus {
     reset_heartbeat_signal: tokio::sync::Notify,
 }
 
+#[allow(dead_code)]
 impl Consensus {
     pub async fn new(storage: Arc<StratusStorage>, direct_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         let (sender, receiver) = mpsc::channel::<Block>(32);
@@ -453,6 +454,7 @@ impl Consensus {
 
     #[tracing::instrument(skip_all)]
     pub async fn discover_peers(consensus: Arc<Consensus>) {
+        #[cfg_attr(not(feature = "kubernetes"), allow(unused_mut))]
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]

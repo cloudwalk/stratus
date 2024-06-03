@@ -1,4 +1,5 @@
 use core::fmt;
+use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -53,7 +54,6 @@ use crate::utils::GIGABYTE;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "metrics")] {
-        use std::collections::HashMap;
         use std::sync::Mutex;
 
         use rocksdb::statistics::Histogram;
@@ -113,6 +113,7 @@ impl RocksStorageState {
         let db_path = path.as_ref().to_path_buf();
         let (backup_trigger_tx, backup_trigger_rx) = mpsc::channel::<()>(1);
 
+        #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
 
         //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
