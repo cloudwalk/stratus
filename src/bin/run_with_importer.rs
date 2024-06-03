@@ -28,8 +28,6 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     };
     let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref(), config.online.external_rpc_timeout).await?);
 
-    let relayer = config.relayer.init().await?;
-
     let miner = config
         .miner
         .init_external_mode(Arc::clone(&storage), Some(Arc::clone(&consensus)), None)

@@ -99,7 +99,7 @@ impl ExternalRelayer {
                 // This retries the entire block, but we could be retrying only each specific transaction that failed.
                 // This is mostly a non-issue (except performance-wise)
                 // XXX: Actually this would insert every mismatch found in this block again
-                return Err(anyhow!("some receipt comparisons timeout, will retry next"))
+                return Err(anyhow!("some receipt comparisons timeout, will retry next"));
             }
 
             tracing::warn!(?block_number, ?err, "some transactions mismatched");
@@ -144,30 +144,28 @@ impl ExternalRelayer {
         let mut substrate_receipt = substrate_pending_transaction;
         loop {
             match substrate_receipt.await {
-                Ok(Some(substrate_receipt)) => {
+                Ok(Some(substrate_receipt)) =>
                     if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                         let err_string = compare_error.to_string();
                         let error = log_and_err!("transaction mismatch!").context(err_string.clone());
                         self.save_mismatch(stratus_receipt, Some(substrate_receipt), &err_string).await;
-                        return error.map_err(|err| RelayError::Mismatch(err));
+                        return error.map_err(RelayError::Mismatch);
                     } else {
                         return Ok(());
-                    }
-                }
-                Ok(None) => {
+                    },
+                Ok(None) =>
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
                         tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
                         return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
-                    }
-                }
+                    },
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
             }
             substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
-            tokio::time::sleep(Duration::from_millis(50)).await
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 
@@ -273,10 +271,12 @@ impl ExternalRelayer {
             .into_iter()
             .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
 
-        if join_all(futures).await.into_iter().filter_map(Result::err).any(|err| match err {
-            RelayError::CompareTimeout(_) => true,
-            _ => false,
-        }) {
+        if join_all(futures)
+            .await
+            .into_iter()
+            .filter_map(Result::err)
+            .any(|err| matches!(err, RelayError::CompareTimeout(_)))
+        {
             return Err(RelayError::CompareTimeout(anyhow!("some comparisons timed out, should retry them.")));
         }
 
