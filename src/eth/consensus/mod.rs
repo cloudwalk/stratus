@@ -279,46 +279,68 @@ impl Consensus {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn discover_peers(consensus: Arc<Consensus>) -> Result<(), anyhow::Error> {
-        let mut peers: Vec<(String, Peer)> = Vec::new();
-
+    pub async fn discover_peers(consensus: Arc<Consensus>) {
         #[cfg(feature = "kubernetes")]
-        {
-            let client = Client::try_default().await?;
-            let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
+        if let Ok(new_peers) = Self::discover_peers_kubernetes().await {
+            let mut peers_lock = consensus.peers.write().await;
+            for (address, new_peer) in new_peers {
+                tracing::info!("Processing peer: {}", address.0);
+                peers_lock
+                    .entry(address.clone())
+                    .and_modify(|existing_peer| {
+                        tracing::info!("Updating existing peer: {}", address.0);
+                        existing_peer.client = new_peer.client.clone();
+                        existing_peer.last_heartbeat = new_peer.last_heartbeat;
+                        existing_peer.role = new_peer.role.clone();
+                        existing_peer.term = new_peer.term;
+                        // Preserve match_index and next_index of existing peers
+                    })
+                    .or_insert_with(|| {
+                        tracing::info!("Adding new peer: {}", address.0);
+                        new_peer
+                    });
+            }
+            tracing::info!(
+                peers = ?peers_lock.keys().collect::<Vec<&PeerAddress>>(),
+                "Discovered peers",
+            );
+        } else {
+            tracing::error!("Failed to discover peers");
+        }
+    }
 
-            let lp = ListParams::default().labels("app=stratus-api");
-            let pod_list = pods.list(&lp).await?;
+    #[cfg(feature = "kubernetes")]
+    async fn discover_peers_kubernetes() -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
+        let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
-            for p in pod_list.items {
-                if let Some(pod_name) = p.metadata.name {
-                    if pod_name != Self::current_node().unwrap() {
-                        if let Some(namespace) = Self::current_namespace() {
-                            let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
-                            let client = AppendEntryServiceClient::connect(address.clone()).await?;
+        let client = Client::try_default().await?;
+        let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
 
-                            let peer = Peer {
-                                client,
-                                last_heartbeat: std::time::Instant::now(),
-                                match_index: 0,
-                                next_index: 0,
-                                role: Role::Follower,
-                                term: 0, // Replace with actual term
-                            };
-                            peers.push((address, peer));
-                        }
+        let lp = ListParams::default().labels("app=stratus-api");
+        let pod_list = pods.list(&lp).await?;
+
+        for p in pod_list.items {
+            if let Some(pod_name) = p.metadata.name {
+                if pod_name != Self::current_node().unwrap() {
+                    if let Some(namespace) = Self::current_namespace() {
+                        let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
+                        let client = AppendEntryServiceClient::connect(address.clone()).await?;
+
+                        let peer = Peer {
+                            client,
+                            last_heartbeat: std::time::Instant::now(),
+                            match_index: 0,
+                            next_index: 0,
+                            role: Role::Follower,
+                            term: 0, // Replace with actual term
+                        };
+                        peers.push((PeerAddress(address), peer));
                     }
                 }
             }
         }
 
-        let mut peers_lock = consensus.peers.write().await;
-        for peer in &peers {
-            peers_lock.insert(PeerAddress(peer.0.clone()), peer.1.clone());
-        }
-        tracing::info!(peers = peers.iter().map(|p| p.0.clone()).collect::<Vec<String>>().join(","), "Discovered peers",);
-
-        Ok(())
+        Ok(peers)
     }
 
     async fn append_block_commit(
