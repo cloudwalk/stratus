@@ -94,6 +94,14 @@ pub struct CommonConfig {
     /// Url to the tracing collector (Opentelemetry over gRPC)
     #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
     pub tracing_url: Option<String>,
+
+    // Address for the Tokio Console
+    #[arg(long = "tokio-console-address", env = "TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
+    pub tokio_console_address: SocketAddr,
+
+    // Address for the Prometheus Metrics Exporter
+    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    pub metrics_exporter_address: SocketAddr,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -167,13 +175,7 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    pub async fn init(
-        &self,
-        storage: Arc<StratusStorage>,
-        miner: Arc<BlockMiner>,
-        relayer: Option<Arc<TransactionRelayer>>,
-        consensus: Option<Arc<Consensus>>,
-    ) -> Arc<Executor> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
         const TASK_NAME: &str = "evm-thread";
 
         let num_evms = max(self.num_evms, 1);
@@ -226,7 +228,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms, consensus);
+        let executor = Executor::new(storage, miner, evm_tx, self.num_evms);
         Arc::new(executor)
     }
 }

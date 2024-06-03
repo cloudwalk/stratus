@@ -13,7 +13,6 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
-use crate::channel_read;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -37,6 +36,8 @@ use crate::eth::storage::rocks::types::HashRocksdb;
 use crate::eth::storage::rocks::types::IndexRocksdb;
 use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
+use crate::ext::named_spawn;
+use crate::ext::named_spawn_blocking;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
@@ -80,7 +81,7 @@ impl RocksStorageState {
         Self::default()
     }
 
-    pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
+    pub fn listen_for_backup_trigger(&self, mut rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
         tracing::info!("creating backup trigger listener");
         let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
         let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>::clone(&self.accounts_history);
@@ -92,17 +93,42 @@ impl RocksStorageState {
         let transactions = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.transactions);
         let logs = Arc::<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>::clone(&self.logs);
 
-        tokio::spawn(async move {
-            let mut rx = rx;
-            while channel_read!(rx).is_some() {
-                accounts.backup().unwrap();
-                accounts_history.backup().unwrap();
-                account_slots.backup().unwrap();
-                account_slots_history.backup().unwrap();
-                transactions.backup().unwrap();
-                blocks_by_number.backup().unwrap();
-                blocks_by_hash.backup().unwrap();
-                logs.backup().unwrap();
+        named_spawn("storage::backup_trigger", async move {
+            while rx.recv().await.is_some() {
+                let accounts_clone = Arc::clone(&accounts);
+                let accounts_history_clone = Arc::clone(&accounts_history);
+                let account_slots_clone = Arc::clone(&account_slots);
+                let account_slots_history_clone = Arc::clone(&account_slots_history);
+                let transactions_clone = Arc::clone(&transactions);
+                let blocks_by_number_clone = Arc::clone(&blocks_by_number);
+                let blocks_by_hash_clone = Arc::clone(&blocks_by_hash);
+                let logs_clone = Arc::clone(&logs);
+
+                named_spawn_blocking("storage::backup_execution", move || {
+                    tracing::info!("rocksdb backuping accounts");
+                    accounts_clone.backup().unwrap();
+
+                    tracing::info!("rocksdb backuping accounts history");
+                    accounts_history_clone.backup().unwrap();
+
+                    tracing::info!("rocksdb backuping account slots");
+                    account_slots_clone.backup().unwrap();
+
+                    tracing::info!("rocksdb backuping account slots history");
+                    account_slots_history_clone.backup().unwrap();
+
+                    tracing::info!("rocksdb backuping transactions");
+                    transactions_clone.backup().unwrap();
+
+                    tracing::info!("rocksdb backuping blocks by number");
+                    blocks_by_number_clone.backup().unwrap();
+
+                    tracing::info!("rocksdb backuping blocks by hash");
+                    blocks_by_hash_clone.backup().unwrap();
+
+                    tracing::info!("rocksdb backuping logs");
+                    logs_clone.backup().unwrap();
+                });
             }
         });
 
