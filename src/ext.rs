@@ -178,6 +178,7 @@ macro_rules! channel_read_impl {
 
 /// Extensions for `tracing::Span`.
 pub trait SpanExt {
+    /// Applies the provided function to the current span.
     fn with<F>(fill: F)
     where
         F: Fn(Span),
