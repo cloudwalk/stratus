@@ -8,6 +8,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tracing::Span;
 
 use super::transaction_dag::TransactionDag;
 use crate::config::ExternalRelayerClientConfig;
@@ -49,7 +50,7 @@ impl ExternalRelayer {
     }
 
     /// Polls the next block to be relayed and relays it to Substrate.
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all, fields(block_number))]
     pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
         let Some(row) = sqlx::query!(
             r#"UPDATE relayer_blocks
@@ -70,6 +71,9 @@ impl ExternalRelayer {
         let block_number = block.header.number;
 
         tracing::debug!(?block_number, "relaying block");
+        // fill span
+        let span = Span::current();
+        //span.rec("block_number", &block_number);
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(block.transactions);
@@ -77,7 +81,7 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        self.relay_dag(dag).await?; // todo: if Ok mark block as sucess if Err mark it as failed or smth like that
+        if let Err(err) = self.relay_dag(dag).await {}
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_dag(start.elapsed());
@@ -87,7 +91,7 @@ impl ExternalRelayer {
 
     async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_receipt: PendingTransaction<'_>) -> anyhow::Result<()> {
         match substrate_receipt.await {
-            Ok(Some(substrate_receipt)) =>
+            Ok(Some(substrate_receipt)) => {
                 if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -95,7 +99,8 @@ impl ExternalRelayer {
                     error
                 } else {
                     Ok(())
-                },
+                }
+            }
             Ok(None) => {
                 self.save_mismatch(stratus_receipt, None, "no receipt returned by substrate").await;
                 Err(anyhow!("no receipt returned by substrate"))
@@ -141,57 +146,51 @@ impl ExternalRelayer {
     }
 
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
-    /// calling eth_getTransactionByHash.
+    /// calling eth_getTransactionByHash. (infallible)
     #[tracing::instrument(skip_all)]
-    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
+    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> (PendingTransaction, ExternalReceipt) {
         tracing::debug!(?tx_mined.input.hash, "relaying transaction");
 
         let ethers_tx = Transaction::from(tx_mined.input.clone());
-        let tx = self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await?;
-
-        tracing::debug!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
-        let mut tries = 0;
-        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await?.is_none() {
-            if tries > 50 {
-                return Err(anyhow!("transaction was not found in mempool after 500ms"));
+        let tx = loop {
+            match self.substrate_chain.send_raw_transaction(tx_mined.input.hash, ethers_tx.rlp()).await {
+                Ok(tx) => break tx,
+                Err(err) => {
+                    tracing::debug!(?tx_mined.input.hash, "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway");
+                    if self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_some() {
+                        tracing::debug!(?tx_mined.input.hash, "transaction found on substrate");
+                        return (
+                            PendingTransaction::new(tx_mined.input.hash, &self.substrate_chain),
+                            ExternalReceipt(tx_mined.into()),
+                        );
+                    }
+                    tracing::warn!(?tx_mined.input.hash, ?err, "failed to send raw transaction, retrying...");
+                    continue;
+                }
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        };
+
+        tracing::info!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
+        let mut tries = 0;
+        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
+            tracing::warn!(?tx_mined.input.hash, ?tries, "transaction not found, retrying...");
+            tokio::time::sleep(Duration::from_millis(100)).await;
             tries += 1;
         }
 
-        Ok((tx, ExternalReceipt(tx_mined.into())))
-    }
-
-    pub async fn relay(&self, tx_mined: TransactionMined) -> anyhow::Result<(PendingTransaction, ExternalReceipt)> {
-        //metrics::inc_relay_and_check_mempool(start.elapsed());
-        match self.relay_and_check_mempool(tx_mined.clone()).await {
-            Err(err) => {
-                let err = err.context("relay and check mempool failed");
-                let err_string = err.to_string();
-                self.save_mismatch(ExternalReceipt(tx_mined.into()), None, &err_string).await;
-                Err(err)
-            }
-            ok => ok,
-        }
+        (tx, ExternalReceipt(tx_mined.into()))
     }
 
     #[tracing::instrument(skip_all)]
+    /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
+    /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
+    /// on the `mismatches` table in pgsql, or in data/mismatches as a fallback.
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<()> {
         tracing::debug!("relaying transactions");
-        let mut tx_failed = false;
-
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
-            let futures = roots.into_iter().map(|root_tx| self.relay(root_tx));
-            for result in join_all(futures).await {
-                match result {
-                    Ok(res) => results.push(res),
-                    Err(err) => {
-                        tracing::error!(?err);
-                        tx_failed = true;
-                    }
-                }
-            }
+            let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
+            results.extend(join_all(futures).await);
         }
 
         let futures = results
@@ -203,10 +202,6 @@ impl ExternalRelayer {
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
             .context("some transactions failed")?;
-
-        if tx_failed {
-            return Err(anyhow!("some transactions failed"));
-        }
 
         Ok(())
     }
