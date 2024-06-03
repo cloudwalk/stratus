@@ -251,14 +251,30 @@ macro_rules! log_and_err {
 // Tokio
 // -----------------------------------------------------------------------------
 
-/// Spawns a Tokio task with a name to be displayed in tokio-console.
+/// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
-pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn named_spawn<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
     info_task_spawn(name);
-    tokio::task::Builder::new().name(name).spawn(task).expect("spawning named task should not fail")
+    tokio::task::Builder::new()
+        .name(name)
+        .spawn(task)
+        .expect("spawning named async task should not fail")
+}
+
+/// Spawns a blocking Tokio task with a name to be displayed in tokio-console.
+#[track_caller]
+pub fn named_spawn_blocking<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
+where
+    T: Send + 'static,
+{
+    info_task_spawn(name);
+    tokio::task::Builder::new()
+        .name(name)
+        .spawn_blocking(task)
+        .expect("spawning named blocking task should not fail")
 }
 
 /// Spawns a handler that listens to system signals.
@@ -274,7 +290,7 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
         Err(e) => return log_and_err!(reason = e, "failed to init SIGINT watcher"),
     };
 
-    spawn_named("sys::signal_handler", async move {
+    named_spawn("sys::signal_handler", async move {
         select! {
             _ = sigterm.recv() => {
                 GlobalState::shutdown_from(TASK_NAME, "received SIGTERM");

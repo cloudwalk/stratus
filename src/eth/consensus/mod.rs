@@ -30,6 +30,7 @@ use crate::channel_read;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
+use crate::ext::named_spawn;
 use crate::infra::BlockchainClient;
 
 pub mod append_entry {
@@ -132,7 +133,7 @@ impl Consensus {
     fn new_stand_alone(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         let (sender, mut receiver) = mpsc::channel::<Block>(32);
 
-        tokio::spawn(async move {
+        named_spawn("consensus::receiver", async move {
             while let Some(data) = channel_read!(receiver) {
                 tracing::info!(number = data.header.number.as_u64(), "Received block");
             }
@@ -152,7 +153,7 @@ impl Consensus {
     }
 
     fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
-        tokio::spawn(async move {
+        named_spawn("consensus::sender", async move {
             let peers = consensus.peers.lock().await;
 
             loop {
@@ -181,7 +182,7 @@ impl Consensus {
     }
 
     fn initialize_server(consensus: Arc<Consensus>) {
-        tokio::spawn(async move {
+        named_spawn("consensus::server", async move {
             tracing::info!("Starting append entry service at port 3777");
             let addr = "0.0.0.0:3777".parse().unwrap();
 
