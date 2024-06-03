@@ -98,6 +98,10 @@ pub struct CommonConfig {
     // Address for the Tokio Console
     #[arg(long = "tokio-console-address", env = "TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
     pub tokio_console_address: SocketAddr,
+
+    // Address for the Prometheus Metrics Exporter
+    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    pub metrics_exporter_address: SocketAddr,
 }
 
 impl WithCommonConfig for CommonConfig {

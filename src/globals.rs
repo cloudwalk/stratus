@@ -47,7 +47,7 @@ where
 
         // init metrics
         #[cfg(feature = "metrics")]
-        infra::init_metrics(config.common().metrics_histogram_kind);
+        infra::init_metrics(config.common().metrics_exporter_address, config.common().metrics_histogram_kind);
 
         // init sentry
         let _sentry_guard = config.common().sentry_url.as_ref().map(|sentry_url| infra::init_sentry(sentry_url));
