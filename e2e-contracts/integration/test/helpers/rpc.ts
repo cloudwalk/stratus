@@ -18,6 +18,8 @@ export let cardPaymentProcessor: CardPaymentProcessor;
 export let balanceTracker: BalanceTracker;
 export let yieldStreamer: YieldStreamer;
 
+export const GAS_LIMIT_OVERRIDE = 6000000;
+
 /* Signers and Wallets */
 export let deployer: SignerWithAddress;
 
@@ -37,15 +39,15 @@ export async function waitReceipt(txResponsePromise: Promise<ContractTransaction
 export async function deployBRLC() {
     let brlcFactory: ContractFactory = await ethers.getContractFactory("BRLCToken");
     let deployedProxy = await upgrades.deployProxy(brlcFactory.connect(deployer), ["BRL Coin", "BRLC"], {
-        txOverrides: { gasLimit: 5000000 },
+        txOverrides: { gasLimit: GAS_LIMIT_OVERRIDE },
     });
     await deployedProxy.waitForDeployment();
     brlcToken = deployedProxy.connect(deployer) as BRLCToken;
 }
 
 export async function configureBRLC() {
-    await waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress(), { gasLimit: 100000}));
-    await waitReceipt(brlcToken.configureMinter(await deployer.getAddress(), 1000000000, { gasLimit: 100000}));
+    await waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress(), { gasLimit: GAS_LIMIT_OVERRIDE}));
+    await waitReceipt(brlcToken.configureMinter(await deployer.getAddress(), 1000000000, { gasLimit: GAS_LIMIT_OVERRIDE}));
 }
 
 export async function deployPixCashier() {
