@@ -280,7 +280,7 @@ impl ExternalRelayerClient {
         let span = Span::current();
         span.rec("block_number", &block_number);
 
-        sqlx::query!("INSERT INTO relayer_blocks VALUES ($1, $2)", block_number as _, serde_json::to_value(block)?)
+        sqlx::query!("INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)", block_number as _, serde_json::to_value(block)?)
             .execute(&self.pool)
             .await?;
         Ok(())
