@@ -78,19 +78,19 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
     let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
     let console_layer = console_layer.with_filter(TokioConsoleFilter);
 
-    // init tokio console server
-    named_spawn("console::grpc-server", async move {
-        if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, "failed to create tokio-console server");
-        };
-    });
-
     // init registry
     tracing_subscriber::registry()
         .with(stdout_layer)
         .with(opentelemetry_layer)
         .with(console_layer)
         .init();
+
+    // init tokio console server
+    named_spawn("console::grpc-server", async move {
+        if let Err(e) = console_server.serve().await {
+            tracing::error!(reason = ?e, "failed to create tokio-console server");
+        };
+    });
 }
 
 /// Workaround filter for `tokio-console` panicking in debug mode when an event is not an event or span.
