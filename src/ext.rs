@@ -3,11 +3,38 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
+use tokio::select;
+use tokio::signal::unix::signal;
+use tokio::signal::unix::SignalKind;
+use tracing::Span;
 
 use crate::infra::tracing::info_task_spawn;
+use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
-// Macros
+// Language constructs
+// -----------------------------------------------------------------------------
+
+/// Ternary operator from [ternop](https://docs.rs/ternop/1.0.1/ternop/), but renamed.
+#[macro_export]
+macro_rules! if_else {
+    ($condition: expr, $_true: expr, $_false: expr) => {
+        if $condition {
+            $_true
+        } else {
+            $_false
+        }
+    };
+}
+
+/// `not(something)` instead of `!something`.
+#[inline(always)]
+pub fn not(value: bool) -> bool {
+    !value
+}
+
+// -----------------------------------------------------------------------------
+// From / TryFrom
 // -----------------------------------------------------------------------------
 
 /// Generates [`From`] implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) that delegates to the inner type [`From`].
@@ -39,33 +66,148 @@ macro_rules! gen_newtype_try_from {
     };
 }
 
-/// Generates unit test that checks implementation of [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize) are compatible.
-#[macro_export]
-macro_rules! gen_test_serde {
-    ($type:ty) => {
-        paste::paste! {
-            #[test]
-            pub fn [<serde_ $type:snake>]() {
-                use $crate::ext::ResultExt;
+// -----------------------------------------------------------------------------
+// Display
+// -----------------------------------------------------------------------------
 
-                let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let json = serde_json::to_string(&value).expect_infallible();
-                assert_eq!(serde_json::from_str::<$type>(&json).unwrap(), value);
-            }
-        }
+/// Allows to implement `to_string` for types that does not have it.
+pub trait DisplayExt {
+    /// `to_string` for types that does not have it implemented.
+    fn to_string_ext(&self) -> String;
+}
+
+impl DisplayExt for std::time::Duration {
+    fn to_string_ext(&self) -> String {
+        humantime::Duration::from(*self).to_string()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Option
+// -----------------------------------------------------------------------------
+
+/// Extensions for `Option<T>`.
+pub trait OptionExt<T> {
+    /// Converts the Option inner type to the inferred type.
+    fn map_into<U: From<T>>(self) -> Option<U>;
+}
+
+impl<T> OptionExt<T> for Option<T> {
+    fn map_into<U: From<T>>(self) -> Option<U> {
+        self.map(Into::into)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Result
+// -----------------------------------------------------------------------------
+
+/// Extensions for `Result<T, E>`.
+pub trait ResultExt<T, E> {
+    /// Unwraps a result informing that this operation is expected to be infallible.
+    fn expect_infallible(self) -> T;
+}
+
+impl<T> ResultExt<T, serde_json::Error> for Result<T, serde_json::Error>
+where
+    T: Sized,
+{
+    fn expect_infallible(self) -> T {
+        self.expect("serialization should be infallible")
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Duration
+// -----------------------------------------------------------------------------
+
+/// Parses a duration specified using human-time notation or fallback to milliseconds.
+pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
+    // try millis
+    let millis: Result<u64, _> = s.parse();
+    if let Ok(millis) = millis {
+        return Ok(Duration::from_millis(millis));
+    }
+
+    // try humantime
+    if let Ok(parsed) = humantime::parse_duration(s) {
+        return Ok(parsed);
+    }
+
+    // error
+    Err(anyhow!("invalid duration format: {}", s))
+}
+
+// -----------------------------------------------------------------------------
+// Channels
+// -----------------------------------------------------------------------------
+
+/// Reads a value from a channel logging timeout at some predefined interval.
+#[macro_export]
+macro_rules! channel_read {
+    ($rx: ident) => {
+        $crate::channel_read_impl!($rx, timeout_ms: 2000)
+    };
+    ($rx: ident, $timeout_ms:expr) => {
+        $crate::channel_read_impl!($rx, timeout_ms: $timeout_ms),
     };
 }
 
-/// Ternary operator from [ternop](https://docs.rs/ternop/1.0.1/ternop/), but renamed.
 #[macro_export]
-macro_rules! if_else {
-    ($condition: expr, $_true: expr, $_false: expr) => {
-        if $condition {
-            $_true
-        } else {
-            $_false
+#[doc(hidden)]
+macro_rules! channel_read_impl {
+    ($rx: ident, timeout_ms: $timeout: expr) => {{
+        const TARGET: &str = const_format::formatcp!("{}::{}", module_path!(), "rx");
+        const TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_millis($timeout);
+
+        loop {
+            match tokio::time::timeout(TIMEOUT, $rx.recv()).await {
+                Ok(value) => break value,
+                Err(_) => {
+                    tracing::warn!(target: TARGET, channel = %stringify!($rx), timeout_ms = %TIMEOUT.as_millis(), "timeout reading channel");
+                    continue;
+                }
+            }
         }
-    };
+    }};
+}
+
+// -----------------------------------------------------------------------------
+// Tracing
+// -----------------------------------------------------------------------------
+
+/// Extensions for `tracing::Span`.
+pub trait SpanExt {
+    /// Records a value using `ToString` implementation.
+    ///
+    /// This helper exists because `tracing` crate does not allow us to implement `tracing::Value` for our own types.
+    ///
+    /// See: https://github.com/tokio-rs/tracing/discussions/1455
+    fn rec<T>(&self, field: &'static str, value: &T)
+    where
+        T: ToString;
+
+    fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
+    where
+        T: ToString;
+}
+
+impl SpanExt for Span {
+    fn rec<T>(&self, field: &'static str, value: &T)
+    where
+        T: ToString,
+    {
+        self.record(field, value.to_string().as_str());
+    }
+
+    fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
+    where
+        T: ToString,
+    {
+        if let Some(ref value) = value {
+            self.record(field, value.to_string().as_str());
+        }
+    }
 }
 
 /// Logs an error and also wrap the existing error with the provided message.
@@ -106,78 +248,6 @@ macro_rules! log_and_err {
 }
 
 // -----------------------------------------------------------------------------
-// Duration
-// -----------------------------------------------------------------------------
-
-/// Parses a duration specified using human-time notation or fallback to milliseconds.
-pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
-    // try millis
-    let millis: Result<u64, _> = s.parse();
-    if let Ok(millis) = millis {
-        return Ok(Duration::from_millis(millis));
-    }
-
-    // try humantime
-    if let Ok(parsed) = humantime::parse_duration(s) {
-        return Ok(parsed);
-    }
-
-    // error
-    Err(anyhow!("invalid duration format: {}", s))
-}
-
-// -----------------------------------------------------------------------------
-// Result
-// -----------------------------------------------------------------------------
-
-/// Extensions for `Result<T, E>`.
-pub trait ResultExt<T, E> {
-    /// Unwraps a result informing that this operation is expected to be infallible.
-    fn expect_infallible(self) -> T;
-}
-
-impl<T> ResultExt<T, serde_json::Error> for Result<T, serde_json::Error>
-where
-    T: Sized,
-{
-    fn expect_infallible(self) -> T {
-        self.expect("serialization should be infallible")
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Option
-// -----------------------------------------------------------------------------
-
-/// Extensions for `Option<T>`.
-pub trait OptionExt<T> {
-    /// Converts the Option inner type to the inferred type.
-    fn map_into<U: From<T>>(self) -> Option<U>;
-}
-
-impl<T> OptionExt<T> for Option<T> {
-    fn map_into<U: From<T>>(self) -> Option<U> {
-        self.map(Into::into)
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Display
-// -----------------------------------------------------------------------------
-
-/// Allows to implement `to_string` for types that does not have it.
-pub trait DisplayExt {
-    /// `to_string` for types that does not have it implemented.
-    fn to_string_ext(&self) -> String;
-}
-
-impl DisplayExt for std::time::Duration {
-    fn to_string_ext(&self) -> String {
-        humantime::Duration::from(*self).to_string()
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Tokio
 // -----------------------------------------------------------------------------
 
@@ -191,12 +261,50 @@ where
     tokio::task::Builder::new().name(name).spawn(task).expect("spawning named task should not fail")
 }
 
+/// Spawns a handler that listens to system signals.
+pub async fn spawn_signal_handler() -> anyhow::Result<()> {
+    const TASK_NAME: &str = "signal-handler";
+
+    let mut sigterm = match signal(SignalKind::terminate()) {
+        Ok(signal) => signal,
+        Err(e) => return log_and_err!(reason = e, "failed to init SIGTERM watcher"),
+    };
+    let mut sigint = match signal(SignalKind::interrupt()) {
+        Ok(signal) => signal,
+        Err(e) => return log_and_err!(reason = e, "failed to init SIGINT watcher"),
+    };
+
+    spawn_named("sys::signal_handler", async move {
+        select! {
+            _ = sigterm.recv() => {
+                GlobalState::shutdown_from(TASK_NAME, "received SIGTERM");
+            }
+            _ = sigint.recv() => {
+                GlobalState::shutdown_from(TASK_NAME, "received SIGINT");
+            }
+        }
+    });
+
+    Ok(())
+}
+
 // -----------------------------------------------------------------------------
-// Standalone functions
+// Tests
 // -----------------------------------------------------------------------------
 
-/// `not(something)` instead of `!something`.
-#[inline(always)]
-pub fn not(value: bool) -> bool {
-    !value
+/// Generates unit test that checks implementation of [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize) are compatible.
+#[macro_export]
+macro_rules! gen_test_serde {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            pub fn [<serde_ $type:snake>]() {
+                use $crate::ext::ResultExt;
+
+                let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
+                let json = serde_json::to_string(&value).expect_infallible();
+                assert_eq!(serde_json::from_str::<$type>(&json).unwrap(), value);
+            }
+        }
+    };
 }

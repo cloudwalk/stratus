@@ -3,7 +3,6 @@ import '.justfile_helpers' # _lint, _outdated
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := "0"
-export RUST_LOG := env("RUST_LOG", "stratus=debug,rpc_downloader=info,importer_offline=info,importer_online=info,state_validator=info,relayer=debug")
 
 # Global arguments that can be passed to receipts.
 feature_flags := "dev," + env("FEATURES", "")
@@ -52,7 +51,7 @@ check:
 
 # Stratus: Check all features individually using cargo hack
 check-features *args="":
-    command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack; } 
+    command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack; }
     cargo hack check --each-feature --keep-going {{args}}
 
 # Stratus: Clean build artifacts
@@ -378,7 +377,7 @@ e2e-relayer-external-up:
     cargo run --release --bin stratus --no-default-features --features "dev,rocks,kubernetes" -- --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@localhost:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo   
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     # Install npm and start hardhat node in the e2e directory
     if [ -d e2e-contracts ]; then
@@ -398,8 +397,8 @@ e2e-relayer-external-up:
 
     if [ -d e2e-contracts ]; then
         (
-            cd e2e-contracts/integration
-            npx hardhat test test/*.test.ts --network stratus > ../../e2e_logs/test.log 
+          cd e2e-contracts/integration
+          npx hardhat test test/*.test.ts --network stratus > ../../e2e_logs/test.log 
         )
     fi
 

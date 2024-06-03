@@ -17,8 +17,6 @@ use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
 
-use super::signature::SoliditySignature;
-use super::Signature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -26,6 +24,8 @@ use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Signature;
+use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;

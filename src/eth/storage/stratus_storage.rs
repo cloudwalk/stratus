@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use tracing::Span;
 
 use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
@@ -25,6 +26,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::ext::not;
+use crate::ext::SpanExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
@@ -224,10 +226,15 @@ impl StratusStorage {
         self.temp.check_conflicts(execution).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_account", skip_all, fields(address, point_in_time))]
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+
+        // fill span
+        let span = Span::current();
+        span.rec("address", address);
+        span.rec("point_in_time", point_in_time);
 
         // read from temp only if present
         if point_in_time.is_present() {
