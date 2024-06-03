@@ -125,6 +125,7 @@ impl Consensus {
         let consensus = Arc::new(consensus);
 
         let _ = Self::discover_peers(Arc::clone(&consensus)).await; //TODO refactor this method to also receive addresses from the environment
+        Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
         Self::initialize_server(Arc::clone(&consensus));
 
@@ -151,6 +152,17 @@ impl Consensus {
             last_arrived_block_number,
             importer_config,
         })
+    }
+
+    fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
+        named_spawn("consensus::peer_discovery", async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                tracing::info!("Starting periodic peer discovery...");
+                Self::discover_peers(Arc::clone(&consensus)).await;
+            }
+        });
     }
 
     fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
