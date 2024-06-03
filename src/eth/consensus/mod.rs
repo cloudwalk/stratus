@@ -19,6 +19,7 @@ use kube::Client;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
@@ -85,7 +86,7 @@ pub struct Consensus {
     pub sender: Sender<Block>,
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
-    peers: Arc<Mutex<HashMap<PeerAddress, Peer>>>,
+    peers: Arc<RwLock<HashMap<PeerAddress, Peer>>>,
     leader_name: String,                  //XXX check the peers instead of using it
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
 }
@@ -110,7 +111,7 @@ impl Consensus {
         let receiver = Arc::new(Mutex::new(receiver));
 
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
-        let peers = Arc::new(Mutex::new(HashMap::new()));
+        let peers = Arc::new(RwLock::new(HashMap::new()));
 
         let consensus = Self {
             sender,
@@ -139,7 +140,7 @@ impl Consensus {
         });
 
         let last_arrived_block_number = AtomicU64::new(0);
-        let peers = Arc::new(Mutex::new(HashMap::new()));
+        let peers = Arc::new(RwLock::new(HashMap::new()));
 
         Arc::new(Self {
             leader_name: "standalone".to_string(),
@@ -153,7 +154,7 @@ impl Consensus {
 
     fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
         tokio::spawn(async move {
-            let peers = consensus.peers.lock().await;
+            let peers = consensus.peers.read().await;
 
             loop {
                 let mut receiver_lock = receiver.lock().await;
@@ -311,7 +312,7 @@ impl Consensus {
             }
         }
 
-        let mut peers_lock = consensus.peers.lock().await;
+        let mut peers_lock = consensus.peers.write().await;
         for peer in &peers {
             peers_lock.insert(PeerAddress(peer.0.clone()), peer.1.clone());
         }
