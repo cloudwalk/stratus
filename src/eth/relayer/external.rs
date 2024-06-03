@@ -55,11 +55,11 @@ impl ExternalRelayer {
     pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
         let Some(row) = sqlx::query!(
             r#"UPDATE relayer_blocks
-                SET relayed = true
+                SET started = true
                 WHERE number = (
                     SELECT MIN(number)
                     FROM relayer_blocks
-                    WHERE relayed = false
+                    WHERE finished = false
                 )
                 RETURNING payload"#
         )
@@ -83,7 +83,27 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        if let Err(err) = self.relay_dag(dag).await {}
+        if let Err(err) = self.relay_dag(dag).await {
+            tracing::error!(?block_number, ?err, "some transactions mismatched");
+            sqlx::query!(
+                r#"UPDATE relayer_blocks
+                    SET finished = true, mismatched = true
+                    WHERE number = $1"#,
+                block_number as _
+            )
+            .execute(&self.pool)
+            .await?;
+        } else {
+            tracing::info!(?block_number, "block relayed with no mismatches");
+            sqlx::query!(
+                r#"UPDATE relayer_blocks
+                    SET finished = true
+                    WHERE number = $1"#,
+                block_number as _
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_dag(start.elapsed());
@@ -101,7 +121,7 @@ impl ExternalRelayer {
         span.rec("hash", &tx_hash);
 
         match substrate_receipt.await {
-            Ok(Some(substrate_receipt)) =>
+            Ok(Some(substrate_receipt)) => {
                 if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -109,7 +129,8 @@ impl ExternalRelayer {
                     error
                 } else {
                     Ok(())
-                },
+                }
+            }
             Ok(None) => {
                 self.save_mismatch(stratus_receipt, None, "no receipt returned by substrate").await;
                 Err(anyhow!("no receipt returned by substrate"))
@@ -127,11 +148,13 @@ impl ExternalRelayer {
     #[tracing::instrument(name = "external_relayer::save_mismatch", skip_all)]
     async fn save_mismatch(&self, stratus_receipt: ExternalReceipt, substrate_receipt: Option<ExternalReceipt>, err_string: &str) {
         let hash = stratus_receipt.hash().to_string();
+        let block_number = stratus_receipt.block_number.map(|inner| inner.as_u64() as i64); // could panic if block number as huge for some reason
         let stratus_json = serde_json::to_value(stratus_receipt).expect_infallible();
         let substrate_json = serde_json::to_value(substrate_receipt).expect_infallible();
         let res = sqlx::query!(
-            "INSERT INTO mismatches (hash, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO mismatches (hash, block_number, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4, $5)",
             &hash,
+            block_number as _,
             &stratus_json,
             &substrate_json,
             err_string
@@ -241,9 +264,15 @@ impl ExternalRelayerClient {
         Self { pool: storage }
     }
 
+    #[tracing::instrument(name = "external_relayer_client::send_to_relayer", skip_all, fields(block_number))]
     pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
-        tracing::debug!(?block.header.number, "sending block to relayer");
         let block_number = block.header.number;
+        tracing::debug!(?block_number, "sending block to relayer");
+
+        // fill span
+        let span = Span::current();
+        span.rec("block_number", &block_number);
+
         sqlx::query!("INSERT INTO relayer_blocks VALUES ($1, $2)", block_number as _, serde_json::to_value(block)?)
             .execute(&self.pool)
             .await?;
