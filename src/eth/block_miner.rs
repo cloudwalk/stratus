@@ -24,9 +24,9 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
+use crate::ext::named_spawn;
 use crate::ext::not;
 use crate::ext::parse_duration;
-use crate::ext::spawn_named;
 use crate::ext::DisplayExt;
 use crate::log_and_err;
 
@@ -77,8 +77,8 @@ impl BlockMiner {
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::unbounded_channel::<Instant>();
-        spawn_named("miner::miner", interval_miner::run(Arc::clone(&self), ticks_rx));
-        spawn_named("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx));
+        named_spawn("miner::miner", interval_miner::run(Arc::clone(&self), ticks_rx));
+        named_spawn("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx));
 
         Ok(())
     }
