@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use daggy::stable_dag::StableDag;
-use daggy::Walker;
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
+use petgraph::stable_graph::StableGraph;
 use petgraph::visit::IntoNodeIdentifiers;
 
 use crate::eth::primitives::Address;
@@ -15,7 +14,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::infra::metrics;
 
 pub struct TransactionDag {
-    dag: StableDag<TransactionMined, i32>,
+    dag: StableGraph<TransactionMined, i32>,
 }
 
 impl TransactionDag {
@@ -24,11 +23,19 @@ impl TransactionDag {
     /// on either a slot or balance.
     /// The direction of an edge connecting the transactions A and B is always from
     /// `min(A.transaction_index, B.transaction_index)` to `max(A.transaction_index, B.transaction_index)`.
+    /// This combined with the fact transactions indexes are unique makes it impossible for a cycle to be inserted.
+    ///
+    /// Proof:
+    /// Assume that it was the case that a cycle $C = (v_1, v_2, ..., v_n, v_1)$ was inserted, since we only insert edges from
+    /// $min(TransactionIndex(A), TransactionIndex(B))$ to $max(TransactionIndex(A), TransactionIndex(B))$ and
+    /// $A != B \iff TransactionIndex(A) != TransactionIndex(B)$ then $TransactionIndex(v_i) < TransactionIndex(v_{i+1})$ it
+    /// follows that $TransactionIndex(v_1) < TransactionIndex(v_2)$. Thus by induction and the transitive property of inequality
+    /// $TransactionIndex(v_1) < TransactionIndex(v_n)$, and therefore there cannot be an edge going from $v_n$ to $v_1$. □
+    ///
     /// Possible issues: this accounts for writes but not for reads, a transaction that reads a certain
     ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
     ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
     ///     and contract calls that is not taken into consideration yet.
-    /// If this algorithm is correct we could do away with StableDag and use StableGraph instead, for better performance
     #[tracing::instrument(skip_all)]
     pub fn new(block_transactions: Vec<TransactionMined>) -> Self {
         #[cfg(feature = "metrics")]
@@ -37,7 +44,7 @@ impl TransactionDag {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
         let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
-        let mut dag = StableDag::new();
+        let mut dag = StableGraph::new();
 
         for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
             let tx_idx = tx.transaction_index;
@@ -59,8 +66,7 @@ impl TransactionDag {
         for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1)
-                        .expect("adding an edge between two known vertices should not fail");
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
                 }
             }
         }
@@ -68,8 +74,7 @@ impl TransactionDag {
         for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1)
-                        .expect("adding an edge between two known vertices should not fail");
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
                 }
             }
         }
@@ -91,7 +96,7 @@ impl TransactionDag {
 
         let mut root_indexes = vec![];
         for index in dag.node_identifiers() {
-            if dag.parents(index).walk_next(dag).is_none() {
+            if dag.neighbors_directed(index, petgraph::Direction::Incoming).next().is_none() {
                 root_indexes.push(index);
             }
         }

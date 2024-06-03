@@ -84,7 +84,7 @@ impl ExternalRelayer {
         let start = metrics::now();
 
         if let Err(err) = self.relay_dag(dag).await {
-            tracing::error!(?block_number, ?err, "some transactions mismatched");
+            tracing::warn!(?block_number, ?err, "some transactions mismatched");
             sqlx::query!(
                 r#"UPDATE relayer_blocks
                     SET finished = true, mismatched = true
@@ -136,6 +136,7 @@ impl ExternalRelayer {
                 Err(anyhow!("no receipt returned by substrate"))
             }
             Err(error) => {
+                // maybe retry?
                 let error = error.context("failed to fetch substrate receipt");
                 let err_str = error.to_string();
                 self.save_mismatch(stratus_receipt, None, &err_str.to_string()).await;
@@ -148,6 +149,8 @@ impl ExternalRelayer {
     #[tracing::instrument(name = "external_relayer::save_mismatch", skip_all)]
     async fn save_mismatch(&self, stratus_receipt: ExternalReceipt, substrate_receipt: Option<ExternalReceipt>, err_string: &str) {
         let hash = stratus_receipt.hash().to_string();
+        tracing::info!(?hash, "saving transaction mismatch");
+
         let block_number = stratus_receipt.block_number.map(|inner| inner.as_u64() as i64); // could panic if block number as huge for some reason
         let stratus_json = serde_json::to_value(stratus_receipt).expect_infallible();
         let substrate_json = serde_json::to_value(substrate_receipt).expect_infallible();
@@ -160,8 +163,10 @@ impl ExternalRelayer {
             err_string
         )
         .execute(&self.pool)
-        .await; // should fallback is case of error?
+        .await;
+
         if let Err(err) = res {
+            tracing::error!(?hash, "failed to insert row in pgsql, saving mismatche to json");
             let mut file = File::create(format!("data/mismatched_transactions/{}.json", hash))
                 .await
                 .expect("opening the file should not fail");
@@ -208,6 +213,7 @@ impl ExternalRelayer {
             }
         };
 
+        // this is probably redundant since send_raw_transaction probably only succeeds if the transaction was added to the mempool already.
         tracing::info!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
         let mut tries = 0;
         while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
@@ -222,7 +228,7 @@ impl ExternalRelayer {
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
     /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
-    /// on the `mismatches` table in pgsql, or in data/mismatches as a fallback.
+    /// on the `mismatches` table in pgsql, or in data/mismatched_transactions as a fallback.
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<()> {
         tracing::debug!("relaying transactions");
         let mut results = vec![];
