@@ -34,10 +34,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         .miner
         .init_external_mode(Arc::clone(&storage), Some(Arc::clone(&consensus)), None)
         .await?;
-    let executor = config
-        .executor
-        .init(Arc::clone(&storage), Arc::clone(&miner), relayer, Some(Arc::clone(&consensus)))
-        .await;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
 
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);

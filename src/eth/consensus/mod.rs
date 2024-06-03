@@ -19,6 +19,7 @@ use kube::Client;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
@@ -30,6 +31,7 @@ use crate::channel_read;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
+use crate::ext::named_spawn;
 use crate::infra::BlockchainClient;
 
 pub mod append_entry {
@@ -85,7 +87,7 @@ pub struct Consensus {
     pub sender: Sender<Block>,
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
-    peers: Arc<Mutex<HashMap<PeerAddress, Peer>>>,
+    peers: Arc<RwLock<HashMap<PeerAddress, Peer>>>,
     leader_name: String,                  //XXX check the peers instead of using it
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
 }
@@ -110,7 +112,7 @@ impl Consensus {
         let receiver = Arc::new(Mutex::new(receiver));
 
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
-        let peers = Arc::new(Mutex::new(HashMap::new()));
+        let peers = Arc::new(RwLock::new(HashMap::new()));
 
         let consensus = Self {
             sender,
@@ -123,6 +125,7 @@ impl Consensus {
         let consensus = Arc::new(consensus);
 
         let _ = Self::discover_peers(Arc::clone(&consensus)).await; //TODO refactor this method to also receive addresses from the environment
+        Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
         Self::initialize_server(Arc::clone(&consensus));
 
@@ -132,14 +135,14 @@ impl Consensus {
     fn new_stand_alone(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         let (sender, mut receiver) = mpsc::channel::<Block>(32);
 
-        tokio::spawn(async move {
+        named_spawn("consensus::receiver", async move {
             while let Some(data) = channel_read!(receiver) {
                 tracing::info!(number = data.header.number.as_u64(), "Received block");
             }
         });
 
         let last_arrived_block_number = AtomicU64::new(0);
-        let peers = Arc::new(Mutex::new(HashMap::new()));
+        let peers = Arc::new(RwLock::new(HashMap::new()));
 
         Arc::new(Self {
             leader_name: "standalone".to_string(),
@@ -151,9 +154,20 @@ impl Consensus {
         })
     }
 
+    fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
+        named_spawn("consensus::peer_discovery", async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                tracing::info!("Starting periodic peer discovery...");
+                Self::discover_peers(Arc::clone(&consensus)).await;
+            }
+        });
+    }
+
     fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
-        tokio::spawn(async move {
-            let peers = consensus.peers.lock().await;
+        named_spawn("consensus::sender", async move {
+            let peers = consensus.peers.read().await;
 
             loop {
                 let mut receiver_lock = receiver.lock().await;
@@ -181,7 +195,7 @@ impl Consensus {
     }
 
     fn initialize_server(consensus: Arc<Consensus>) {
-        tokio::spawn(async move {
+        named_spawn("consensus::server", async move {
             tracing::info!("Starting append entry service at port 3777");
             let addr = "0.0.0.0:3777".parse().unwrap();
 
@@ -278,46 +292,68 @@ impl Consensus {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn discover_peers(consensus: Arc<Consensus>) -> Result<(), anyhow::Error> {
-        let mut peers: Vec<(String, Peer)> = Vec::new();
-
+    pub async fn discover_peers(consensus: Arc<Consensus>) {
         #[cfg(feature = "kubernetes")]
-        {
-            let client = Client::try_default().await?;
-            let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
+        if let Ok(new_peers) = Self::discover_peers_kubernetes().await {
+            let mut peers_lock = consensus.peers.write().await;
+            for (address, new_peer) in new_peers {
+                tracing::info!("Processing peer: {}", address.0);
+                peers_lock
+                    .entry(address.clone())
+                    .and_modify(|existing_peer| {
+                        tracing::info!("Updating existing peer: {}", address.0);
+                        existing_peer.client = new_peer.client.clone();
+                        existing_peer.last_heartbeat = new_peer.last_heartbeat;
+                        existing_peer.role = new_peer.role.clone();
+                        existing_peer.term = new_peer.term;
+                        // Preserve match_index and next_index of existing peers
+                    })
+                    .or_insert_with(|| {
+                        tracing::info!("Adding new peer: {}", address.0);
+                        new_peer
+                    });
+            }
+            tracing::info!(
+                peers = ?peers_lock.keys().collect::<Vec<&PeerAddress>>(),
+                "Discovered peers",
+            );
+        } else {
+            tracing::error!("Failed to discover peers");
+        }
+    }
 
-            let lp = ListParams::default().labels("app=stratus-api");
-            let pod_list = pods.list(&lp).await?;
+    #[cfg(feature = "kubernetes")]
+    async fn discover_peers_kubernetes() -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
+        let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
-            for p in pod_list.items {
-                if let Some(pod_name) = p.metadata.name {
-                    if pod_name != Self::current_node().unwrap() {
-                        if let Some(namespace) = Self::current_namespace() {
-                            let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
-                            let client = AppendEntryServiceClient::connect(address.clone()).await?;
+        let client = Client::try_default().await?;
+        let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
 
-                            let peer = Peer {
-                                client,
-                                last_heartbeat: std::time::Instant::now(),
-                                match_index: 0,
-                                next_index: 0,
-                                role: Role::Follower,
-                                term: 0, // Replace with actual term
-                            };
-                            peers.push((address, peer));
-                        }
+        let lp = ListParams::default().labels("app=stratus-api");
+        let pod_list = pods.list(&lp).await?;
+
+        for p in pod_list.items {
+            if let Some(pod_name) = p.metadata.name {
+                if pod_name != Self::current_node().unwrap() {
+                    if let Some(namespace) = Self::current_namespace() {
+                        let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
+                        let client = AppendEntryServiceClient::connect(address.clone()).await?;
+
+                        let peer = Peer {
+                            client,
+                            last_heartbeat: std::time::Instant::now(),
+                            match_index: 0,
+                            next_index: 0,
+                            role: Role::Follower,
+                            term: 0, // Replace with actual term
+                        };
+                        peers.push((PeerAddress(address), peer));
                     }
                 }
             }
         }
 
-        let mut peers_lock = consensus.peers.lock().await;
-        for peer in &peers {
-            peers_lock.insert(PeerAddress(peer.0.clone()), peer.1.clone());
-        }
-        tracing::info!(peers = peers.iter().map(|p| p.0.clone()).collect::<Vec<String>>().join(","), "Discovered peers",);
-
-        Ok(())
+        Ok(peers)
     }
 
     async fn append_block_commit(

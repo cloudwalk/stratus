@@ -63,26 +63,32 @@ impl TransactionDag {
             node_indexes.insert(tx_idx, node_idx);
         }
 
-        for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
-                if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
-                }
-            }
-        }
-
-        for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
-                if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
-                }
-            }
-        }
+        Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
+        Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
 
         #[cfg(feature = "metrics")]
         metrics::inc_compute_tx_dag(start.elapsed());
 
         Self { dag }
+    }
+
+    fn compute_edges<T: std::hash::Hash + std::cmp::Eq>(
+        dag: &mut StableGraph<TransactionMined, i32>,
+        conflicts: HashMap<Index, HashSet<T>>,
+        node_indexes: &HashMap<Index, NodeIndex>,
+    ) {
+        for (i, (tx1, set1)) in conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
+            let tx1_node_index = *node_indexes.get(tx1).unwrap();
+            let tx1_from = dag.node_weight(tx1_node_index).unwrap().input.from;
+
+            for (tx2, set2) in conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
+                let tx2_node_index = *node_indexes.get(tx2).unwrap();
+                let tx2_from = dag.node_weight(tx2_node_index).unwrap().input.from;
+                if tx1_from != tx2_from && !set1.is_disjoint(set2) {
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
+                }
+            }
+        }
     }
 
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
@@ -121,6 +127,9 @@ impl TransactionDag {
 mod tests {
     use std::collections::HashSet;
 
+    use fake::Fake;
+    use fake::Faker;
+
     use super::TransactionDag;
     use crate::eth::primitives::Address;
     use crate::eth::primitives::Bytes;
@@ -133,7 +142,6 @@ mod tests {
     use crate::eth::primitives::Hash;
     use crate::eth::primitives::Slot;
     use crate::eth::primitives::SlotIndex;
-    use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
     const ADDRESS: Address = Address::ZERO;
@@ -165,7 +173,7 @@ mod tests {
         };
 
         TransactionMined {
-            input: TransactionInput::default(),
+            input: Faker.fake(),
             execution,
             logs: vec![],
             transaction_index: tx_idx.into(),

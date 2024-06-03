@@ -17,7 +17,7 @@ use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
-use stratus::ext::spawn_named;
+use stratus::ext::named_spawn;
 use stratus::ext::DisplayExt;
 use stratus::if_else;
 #[cfg(feature = "metrics")]
@@ -77,9 +77,8 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     // init server
     let storage = config.storage.init().await?;
-    let relayer = config.relayer.init().await?;
     let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await?;
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await; //XXX TODO implement the consensus here, in case of it being a follower, it should not even enter here
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
     let chain = Arc::new(
         BlockchainClient::new_http_ws(
             &config.base.external_rpc,
@@ -109,18 +108,18 @@ pub async fn run_importer_online(
 
     // spawn block executor:
     // it executes and mines blocks and expects to receive them via channel in the correct order.
-    let task_executor = spawn_named("importer::executor", start_block_executor(executor, miner, backlog_rx));
+    let task_executor = named_spawn("importer::executor", start_block_executor(executor, miner, backlog_rx));
 
     // spawn block number:
     // it keeps track of the blockchain current block number.
     let number_fetcher_chain = Arc::clone(&chain);
-    let task_number_fetcher = spawn_named("importer::number-fetcher", start_number_fetcher(number_fetcher_chain, sync_interval));
+    let task_number_fetcher = named_spawn("importer::number-fetcher", start_number_fetcher(number_fetcher_chain, sync_interval));
 
     // spawn block fetcher:
     // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
     // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
     let block_fetcher_chain = Arc::clone(&chain);
-    let task_block_fetcher = spawn_named("importer::block-fetcher", start_block_fetcher(block_fetcher_chain, backlog_tx, number));
+    let task_block_fetcher = named_spawn("importer::block-fetcher", start_block_fetcher(block_fetcher_chain, backlog_tx, number));
 
     // await all tasks
     if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {

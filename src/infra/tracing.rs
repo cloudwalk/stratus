@@ -1,6 +1,7 @@
 //! Tracing services.
 
 use std::env;
+use std::net::SocketAddr;
 
 use console_subscriber::ConsoleLayer;
 use opentelemetry::KeyValue;
@@ -18,11 +19,11 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
+use crate::ext::named_spawn;
 use crate::ext::not;
-use crate::ext::spawn_named;
 
 /// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>) {
+pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAddr) {
     println!("creating tracing registry");
 
     // configure stdout layer
@@ -74,11 +75,11 @@ pub async fn init_tracing(url: Option<&String>) {
 
     // init tokio console registry
     println!("tracing registry enabling tokio console");
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
     let console_layer = console_layer.with_filter(TokioConsoleFilter);
 
     // init tokio console server
-    spawn_named("console::grpc-server", async move {
+    named_spawn("console::grpc-server", async move {
         if let Err(e) = console_server.serve().await {
             tracing::error!(reason = ?e, "failed to create tokio-console server");
         };
