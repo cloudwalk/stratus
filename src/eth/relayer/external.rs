@@ -121,7 +121,7 @@ impl ExternalRelayer {
         span.rec("hash", &tx_hash);
 
         match substrate_receipt.await {
-            Ok(Some(substrate_receipt)) => {
+            Ok(Some(substrate_receipt)) =>
                 if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -129,8 +129,7 @@ impl ExternalRelayer {
                     error
                 } else {
                     Ok(())
-                }
-            }
+                },
             Ok(None) => {
                 self.save_mismatch(stratus_receipt, None, "no receipt returned by substrate").await;
                 Err(anyhow!("no receipt returned by substrate"))
@@ -225,10 +224,10 @@ impl ExternalRelayer {
         (tx, ExternalReceipt(tx_mined.into()))
     }
 
-    #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
     /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
     /// on the `mismatches` table in pgsql, or in data/mismatched_transactions as a fallback.
+    #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<()> {
         tracing::debug!("relaying transactions");
         let mut results = vec![];
@@ -270,6 +269,8 @@ impl ExternalRelayerClient {
         Self { pool: storage }
     }
 
+    /// Insert the block into the relayer_blocks table on pgsql to be processed by the relayer. Returns Err if
+    /// the insertion fails.
     #[tracing::instrument(name = "external_relayer_client::send_to_relayer", skip_all, fields(block_number))]
     pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
         let block_number = block.header.number;
