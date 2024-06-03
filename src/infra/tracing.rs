@@ -8,7 +8,11 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
 use opentelemetry_sdk::Resource;
+use tracing::Metadata;
+use tracing::Subscriber;
 use tracing_subscriber::fmt;
+use tracing_subscriber::layer::Context;
+use tracing_subscriber::layer::Filter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -18,7 +22,7 @@ use crate::ext::not;
 use crate::ext::spawn_named;
 
 /// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
+pub async fn init_tracing(url: Option<&String>) {
     println!("creating tracing registry");
 
     // configure stdout layer
@@ -69,29 +73,49 @@ pub async fn init_tracing(url: Option<&String>, enable_console: bool) {
     };
 
     // init tokio console registry
-    let tokio_console_layer = if enable_console {
-        // configure tokio console layer
-        println!("tracing registry enabling tokio console");
-        let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+    println!("tracing registry enabling tokio console");
+    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+    let console_layer = console_layer.with_filter(TokioConsoleFilter);
 
-        // init tokio console server
-        spawn_named("console::grpc-server", async move {
-            if let Err(e) = console_server.serve().await {
-                tracing::error!(reason = ?e, "failed to create tokio-console server");
-            };
-        });
-        Some(console_layer)
-    } else {
-        None
-    };
+    // init tokio console server
+    spawn_named("console::grpc-server", async move {
+        if let Err(e) = console_server.serve().await {
+            tracing::error!(reason = ?e, "failed to create tokio-console server");
+        };
+    });
 
     // init registry
     tracing_subscriber::registry()
         .with(stdout_layer)
         .with(opentelemetry_layer)
-        .with(tokio_console_layer)
+        .with(console_layer)
         .init();
 }
+
+/// Workaround filter for `tokio-console` panicking in debug mode when an event is not an event or span.
+///
+/// Can be removed after this PR is merged: https://github.com/tokio-rs/console/pull/554
+struct TokioConsoleFilter;
+
+impl<S> Filter<S> for TokioConsoleFilter
+where
+    S: Subscriber,
+{
+    fn enabled(&self, meta: &Metadata<'_>, _: &Context<'_, S>) -> bool {
+        meta.is_span() || meta.is_event()
+    }
+
+    fn callsite_enabled(&self, meta: &'static Metadata<'static>) -> tracing::subscriber::Interest {
+        if not(meta.is_span()) && not(meta.is_event()) {
+            return tracing::subscriber::Interest::never();
+        }
+        tracing::subscriber::Interest::always()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tracing functions
+// -----------------------------------------------------------------------------
 
 /// Emits an info message that a task was spawned to backgroud.
 #[track_caller]
