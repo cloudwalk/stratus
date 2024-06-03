@@ -55,26 +55,13 @@ pub struct Executor {
     /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Arc<BlockMiner>,
 
-    /// Provider for sending rpc calls to substrate
-    relayer: Option<Arc<TransactionRelayer>>,
-
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
-
-    /// Consensus rules for the blockchain.
-    consensus: Option<Arc<Consensus>>,
 }
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(
-        storage: Arc<StratusStorage>,
-        miner: Arc<BlockMiner>,
-        relayer: Option<Arc<TransactionRelayer>>,
-        evm_tx: crossbeam_channel::Sender<EvmTask>,
-        num_evms: usize,
-        consensus: Option<Arc<Consensus>>,
-    ) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
         tracing::info!(%num_evms, "creating executor");
 
         Self {
@@ -82,8 +69,6 @@ impl Executor {
             num_evms,
             miner,
             storage,
-            relayer,
-            consensus,
         }
     }
 
