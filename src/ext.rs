@@ -178,15 +178,21 @@ macro_rules! channel_read_impl {
 
 /// Extensions for `tracing::Span`.
 pub trait SpanExt {
+    /// Applies the provided function to the current span.
+    fn with<F>(fill: F)
+    where
+        F: Fn(Span),
+    {
+        let span = Span::current();
+        fill(span);
+    }
+
     /// Records a value using `ToString` implementation.
-    ///
-    /// This helper exists because `tracing` crate does not allow us to implement `tracing::Value` for our own types.
-    ///
-    /// See: https://github.com/tokio-rs/tracing/discussions/1455
     fn rec<T>(&self, field: &'static str, value: &T)
     where
         T: ToString;
 
+    /// Records a value using `ToString` implementation if the option value is present.
     fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
     where
         T: ToString;
