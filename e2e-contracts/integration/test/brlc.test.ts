@@ -35,11 +35,16 @@ describe("Relayer integration test", function () {
 
             expect(await brlcToken.mint(alice.address, 1500, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, alice, 1500);
             expect(await brlcToken.mint(bob.address, 2000, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, bob, 2000);
+
+            expect(await await ethers.provider.getBalance(alice.address)).to.be.equal(1500);
+            expect(await await ethers.provider.getBalance(bob.address)).to.be.equal(2000);
         });
 
         it("Validate transfers between wallets", async function () {            
             const transferTx = await brlcToken.connect(alice).transfer(bob.address, 50, { gasPrice: 0, gasLimit: GAS_LIMIT_OVERRIDE, type: 0 });
-            console.log("Transfer result: ", transferTx);    
+            console.log("Transfer result: ", transferTx);
+            const transferTx2 = await brlcToken.connect(alice).transfer(bob.address, 60, { gasPrice: 0, gasLimit: GAS_LIMIT_OVERRIDE, type: 0 });
+            console.log("Transfer 2 result: ", transferTx2);
         });
     });
 });
