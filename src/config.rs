@@ -95,7 +95,7 @@ pub struct CommonConfig {
     #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
     pub tracing_url: Option<String>,
 
-    // Override address for the Tokio Console
+    // Address for the Tokio Console
     #[arg(long = "tokio-console-address", env = "TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
     pub tokio_console_address: SocketAddr,
 }
