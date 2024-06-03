@@ -391,7 +391,7 @@ e2e-relayer-external-up:
     sleep 5
 
     # Start Relayer External binary
-    cargo run --release --bin relayer --no-default-features --features "rocks,kubernetes" -- --db-url postgres://postgres:123@localhost:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://localhost:8545 --backoff 10ms --disable-tokio-console > e2e_logs/relayer.log &
+    cargo run --release --bin relayer --no-default-features --features "rocks,kubernetes" -- --db-url postgres://postgres:123@localhost:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://localhost:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 > e2e_logs/relayer.log &
 
     if [ -d e2e ]; then
         (
