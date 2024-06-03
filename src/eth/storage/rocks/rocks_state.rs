@@ -84,28 +84,28 @@ lazy_static! {
 /// With data separated by column families, writing and reading should be done via the `RocksCf` fields,
 /// while operations that include the whole database (e.g. backup) should refer to the inner `DB` directly.
 pub struct RocksStorageState {
-    pub db: Arc<DB>,
-    pub db_path: PathBuf,
-    pub accounts: RocksCf<AddressRocksdb, AccountRocksdb>,
-    pub accounts_history: RocksCf<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
-    pub account_slots: RocksCf<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
-    pub account_slots_history: RocksCf<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
-    pub transactions: RocksCf<HashRocksdb, BlockNumberRocksdb>,
-    pub blocks_by_number: RocksCf<BlockNumberRocksdb, BlockRocksdb>,
-    pub blocks_by_hash: RocksCf<HashRocksdb, BlockNumberRocksdb>,
-    pub logs: RocksCf<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
-    pub backup_trigger: mpsc::Sender<()>,
+    db: Arc<DB>,
+    db_path: PathBuf,
+    accounts: RocksCf<AddressRocksdb, AccountRocksdb>,
+    accounts_history: RocksCf<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
+    account_slots: RocksCf<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
+    account_slots_history: RocksCf<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
+    transactions: RocksCf<HashRocksdb, BlockNumberRocksdb>,
+    blocks_by_number: RocksCf<BlockNumberRocksdb, BlockRocksdb>,
+    blocks_by_hash: RocksCf<HashRocksdb, BlockNumberRocksdb>,
+    logs: RocksCf<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
+    backup_trigger: mpsc::Sender<()>,
     /// Used to trigger backup after threshold is hit
-    pub transactions_processed: AtomicUsize,
+    transactions_processed: AtomicUsize,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
-    pub prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
+    prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
     /// Options passed at DB creation, stored for metrics
     ///
     /// a newly created `rocksdb::Options` object is unique, with an underlying pointer identifier inside of it, and is used to access
     /// the DB metrics, `Options` can be cloned, but two equal `Options` might not retrieve the same metrics
     #[cfg(feature = "metrics")]
-    pub db_options: Options,
+    db_options: Options,
 }
 
 impl RocksStorageState {
