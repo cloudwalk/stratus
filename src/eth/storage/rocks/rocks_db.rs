@@ -15,7 +15,9 @@ use crate::eth::storage::rocks::rocks_config::DbConfig;
 /// Create or open the Database with the configs applied to all column families
 ///
 /// The returned `Options` need to be stored to refer to the DB metrics
-pub fn create_or_open_db(path: &Path, cf_configs: &HashMap<&'static str, Options>) -> anyhow::Result<(Arc<DB>, Options)> {
+pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static str, Options>) -> anyhow::Result<(Arc<DB>, Options)> {
+    let path = path.as_ref();
+
     // settings for each Column Family to be created
     let cf_config_iter = cf_configs.iter().map(|(name, opts)| (*name, opts.clone()));
 

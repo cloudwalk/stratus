@@ -27,7 +27,7 @@ use crate::eth::storage::PermanentStorage;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
-    state: RocksStorageState,
+    pub state: RocksStorageState,
     block_number: AtomicU64,
 }
 

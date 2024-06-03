@@ -113,7 +113,7 @@ impl RocksStorageState {
         let db_path = path.as_ref().to_path_buf();
         let (backup_trigger_tx, backup_trigger_rx) = mpsc::channel::<()>(1);
 
-        let (db, db_options) = create_or_open_db(&db_path, &*CF_OPTIONS_MAP).unwrap();
+        let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
 
         //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
         let state = Self {
@@ -512,8 +512,7 @@ impl RocksStorageState {
     }
 
     /// Writes slots to state (does not write to slot history)
-    #[allow(dead_code)]
-    fn write_slots(&self, slots: Vec<(Address, Slot)>) {
+    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) {
         let slots = slots
             .into_iter()
             .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()));
@@ -603,8 +602,51 @@ where
     K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
-    let options = CF_OPTIONS_MAP
-        .get(&column_family)
-        .unwrap_or_else(|| panic!("column_family `{column_family}` given to `new_cf` not found in options map"));
+    let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
+        panic!("column_family `{column_family}` given to `new_cf` not found in options map");
+    };
     RocksCf::new_cf(Arc::clone(db), column_family, options.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+    use std::fs;
+
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::*;
+
+    #[test]
+    fn test_rocks_multi_get() {
+        let (db, _db_options) = create_or_open_db("./data/slots_test.rocksdb", &CF_OPTIONS_MAP).unwrap();
+        let account_slots: RocksCf<SlotIndex, SlotValue> = new_cf(&db, "account_slots");
+
+        let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
+        let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
+            .map(|_| (Faker.fake(), Faker.fake()))
+            .filter(|(key, _)| !slots.contains_key(key))
+            .collect();
+
+        let mut batch = WriteBatch::default();
+        account_slots.prepare_batch_insertion(slots.clone(), &mut batch);
+        account_slots.prepare_batch_insertion(extra_slots.clone(), &mut batch);
+        db.write(batch).unwrap();
+
+        let extra_keys: HashSet<SlotIndex> = (0..1000)
+            .map(|_| Faker.fake())
+            .filter(|key| !extra_slots.contains_key(key) && !slots.contains_key(key))
+            .collect();
+
+        let keys: Vec<SlotIndex> = slots.keys().cloned().chain(extra_keys).collect();
+        let result = account_slots.multi_get(keys).expect("this should not fail");
+
+        assert_eq!(result.len(), slots.keys().len());
+        for (idx, value) in result {
+            assert_eq!(value, *slots.get(&idx).expect("should not be None"));
+        }
+
+        fs::remove_dir_all("./data/slots_test.rocksdb").unwrap();
+    }
 }
