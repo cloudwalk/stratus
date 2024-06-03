@@ -194,68 +194,74 @@ async fn start_block_executor(
 async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Duration) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-number-fetcher";
 
-    // subscribe to newHeads event if WS is enabled
-    let mut sub_new_heads = match chain.supports_ws() {
-        true => {
-            tracing::info!("subscribing {} to newHeads event", TASK_NAME);
-            match chain.subscribe_new_heads().await {
-                Ok(sub) => Some(sub),
-                Err(e) => {
-                    let message = GlobalState::shutdown_from(TASK_NAME, "cannot subscribe to newHeads event");
-                    return log_and_err!(reason = e, message);
-                }
+    // initial newHeads subscriptions.
+    // abort application if cannot subscribe.
+    let mut sub_new_heads = if chain.supports_ws() {
+        tracing::info!("{} subscribing to newHeads event", TASK_NAME);
+
+        match chain.subscribe_new_heads().await {
+            Ok(sub) => {
+                tracing::info!("{} subscribed to newHeads events", TASK_NAME);
+                Some(sub)
+            }
+            Err(e) => {
+                let message = GlobalState::shutdown_from(TASK_NAME, "cannot subscribe to newHeads event");
+                return log_and_err!(reason = e, message);
             }
         }
-        false => {
-            tracing::warn!("{} blockchain client does not have websocket enabled", TASK_NAME);
-            None
-        }
+    } else {
+        tracing::warn!("{} blockchain client does not have websocket enabled", TASK_NAME);
+        None
     };
 
+    // keep reading websocket subscription or polling via http.
     loop {
         if GlobalState::warn_if_shutdown(TASK_NAME) {
             return Ok(());
         }
 
         // if we have a subscription, try to read from subscription.
-        // in case of failure, re-subscribe because current subscription may have been dropped in the server.
+        // in case of failure, re-subscribe because current subscription may have been closed in the server.
         if let Some(sub) = &mut sub_new_heads {
-            tracing::info!("awaiting block number from newHeads subscription");
-            let resubscribe = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
+            tracing::info!("{} awaiting block number from newHeads subscription", TASK_NAME);
+            let resubscribe_ws = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                 Ok(Some(Ok(block))) => {
-                    tracing::info!(number = %block.number(), "newHeads event received");
+                    tracing::info!(number = %block.number(), "{} received newHeads event", TASK_NAME);
                     set_external_rpc_current_block(block.number());
                     continue;
                 }
                 Ok(None) => {
-                    tracing::error!("newHeads subscription closed by the other side");
+                    tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
                     true
                 }
                 Ok(Some(Err(e))) => {
-                    tracing::error!(reason = ?e, "failed to read newHeads subscription event");
+                    tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
                     true
                 }
                 Err(_) => {
-                    tracing::error!("timeout waiting for newHeads subscription event");
+                    tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
                     true
                 }
             };
 
-            // resubscribe if necessary
-            // only update the existing subscription if succedeed, otherwise we will try again in the iteration of the loop
-            if chain.supports_ws() && resubscribe {
-                tracing::info!("resubscribing to newHeads event");
+            // resubscribe if necessary.
+            // only update the existing subscription if succedeed, otherwise we will try again in the next iteration.
+            if chain.supports_ws() && resubscribe_ws {
+                tracing::info!("{} resubscribing to newHeads event", TASK_NAME);
                 match chain.subscribe_new_heads().await {
-                    Ok(sub) => sub_new_heads = Some(sub),
+                    Ok(sub) => {
+                        tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
+                        sub_new_heads = Some(sub);
+                    }
                     Err(e) => {
-                        tracing::error!(reason = ?e, "failed to resubscribe number-fetcher to newHeads event");
+                        tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
                     }
                 }
             }
         }
 
         // fallback to polling
-        tracing::warn!("number-fetcher falling back to http polling because subscription failed or it is not enabled");
+        tracing::warn!("{} falling back to http polling because subscription failed or it is not enabled", TASK_NAME);
         match chain.fetch_block_number().await {
             Ok(number) => {
                 tracing::info!(
