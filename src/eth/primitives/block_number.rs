@@ -7,7 +7,6 @@
 //! operations like validating blockchain continuity and retrieving specific
 //! blocks.
 
-use std::fmt::Display;
 use std::num::TryFromIntError;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -29,7 +28,22 @@ use sqlx::types::BigDecimal;
 use crate::eth::primitives::Hash;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    derive_more::Display,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    derive_more::Add,
+    derive_more::Sub,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[serde(transparent)]
 pub struct BlockNumber(U64);
 
@@ -74,12 +88,6 @@ impl BlockNumber {
 
     pub fn inner_value(&self) -> U64 {
         self.0
-    }
-}
-
-impl Display for BlockNumber {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

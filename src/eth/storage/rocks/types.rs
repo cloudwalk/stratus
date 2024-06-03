@@ -207,7 +207,7 @@ impl From<AddressRocksdb> for Address {
     }
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct BlockNumberRocksdb(U64);
 
 gen_newtype_from!(self = BlockNumberRocksdb, other = u8, u16, u32, u64, U64, usize, i32, i64);

@@ -7,6 +7,7 @@ use std::time::Duration;
 use futures::try_join;
 use futures::StreamExt;
 use serde::Deserialize;
+use stratus::channel_read;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
@@ -16,7 +17,9 @@ use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
+use stratus::ext::spawn_named;
 use stratus::ext::DisplayExt;
+use stratus::if_else;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::tracing::warn_task_rx_closed;
@@ -36,10 +39,16 @@ use tokio::time::timeout;
 // Globals
 // -----------------------------------------------------------------------------
 
-/// Current block number used by the number fetcher and block fetcher.
-///
-/// It is a global to avoid unnecessary synchronization using a channel.
-static RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
+/// Current block number of the external RPC blockchain.
+static EXTERNAL_RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
+
+/// Only sets the external RPC current block number if it is equals or greater than the current one.
+fn set_external_rpc_current_block(new_number: BlockNumber) {
+    let new_number_u64 = new_number.as_u64();
+    let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
+        if_else!(new_number_u64 >= current_number, Some(new_number_u64), None)
+    });
+}
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -50,11 +59,11 @@ const PARALLEL_BLOCKS: usize = 3;
 /// Number of receipts that are downloaded in parallel.
 const PARALLEL_RECEIPTS: usize = 100;
 
-/// Timeout for new newHeads event before fallback to polling.
+/// Timeout awaiting for newHeads event before fallback to polling.
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
 
-/// Time to wait before we starting retrieving receipts because they are not immediatly available after the block is retrieved.
-const BACKOFF_RECEIPTS: Duration = Duration::from_millis(45);
+/// Interval before we starting retrieving receipts because they are not immediately available after the block is retrieved.
+const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 
 // -----------------------------------------------------------------------------
 // Execution
@@ -68,7 +77,7 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     // init server
     let storage = config.storage.init().await?;
-    let relayer = config.relayer.init(Arc::clone(&storage)).await?;
+    let relayer = config.relayer.init().await?;
     let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await; //XXX TODO implement the consensus here, in case of it being a follower, it should not even enter here
     let chain = Arc::new(
@@ -100,18 +109,18 @@ pub async fn run_importer_online(
 
     // spawn block executor:
     // it executes and mines blocks and expects to receive them via channel in the correct order.
-    let task_executor = tokio::spawn(start_block_executor(executor, miner, backlog_rx));
+    let task_executor = spawn_named("importer::executor", start_block_executor(executor, miner, backlog_rx));
 
     // spawn block number:
     // it keeps track of the blockchain current block number.
     let number_fetcher_chain = Arc::clone(&chain);
-    let task_number_fetcher = tokio::spawn(start_number_fetcher(number_fetcher_chain, sync_interval));
+    let task_number_fetcher = spawn_named("importer::number-fetcher", start_number_fetcher(number_fetcher_chain, sync_interval));
 
     // spawn block fetcher:
     // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
     // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
     let block_fetcher_chain = Arc::clone(&chain);
-    let task_block_fetcher = tokio::spawn(start_block_fetcher(block_fetcher_chain, backlog_tx, number));
+    let task_block_fetcher = spawn_named("importer::block-fetcher", start_block_fetcher(block_fetcher_chain, backlog_tx, number));
 
     // await all tasks
     if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
@@ -132,7 +141,7 @@ async fn start_block_executor(
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "block-executor";
 
-    while let Some((block, receipts)) = backlog_rx.recv().await {
+    while let Some((block, receipts)) = channel_read!(backlog_rx) {
         if GlobalState::warn_if_shutdown(TASK_NAME) {
             return Ok(());
         }
@@ -143,7 +152,7 @@ async fn start_block_executor(
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
         if let Err(e) = executor.reexecute_external(&block, &receipts).await {
-            let message = GlobalState::shutdown_from(TASK_NAME, "failed to re-execute external block");
+            let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
             return log_and_err!(reason = e, message);
         };
 
@@ -186,68 +195,74 @@ async fn start_block_executor(
 async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Duration) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-number-fetcher";
 
-    // subscribe to newHeads event if WS is enabled
-    let mut sub_new_heads = match chain.supports_ws() {
-        true => {
-            tracing::info!("subscribing {} to newHeads event", TASK_NAME);
-            match chain.subscribe_new_heads().await {
-                Ok(sub) => Some(sub),
-                Err(e) => {
-                    let message = GlobalState::shutdown_from(TASK_NAME, "cannot subscribe to newHeads event");
-                    return log_and_err!(reason = e, message);
-                }
+    // initial newHeads subscriptions.
+    // abort application if cannot subscribe.
+    let mut sub_new_heads = if chain.supports_ws() {
+        tracing::info!("{} subscribing to newHeads event", TASK_NAME);
+
+        match chain.subscribe_new_heads().await {
+            Ok(sub) => {
+                tracing::info!("{} subscribed to newHeads events", TASK_NAME);
+                Some(sub)
+            }
+            Err(e) => {
+                let message = GlobalState::shutdown_from(TASK_NAME, "cannot subscribe to newHeads event");
+                return log_and_err!(reason = e, message);
             }
         }
-        false => {
-            tracing::warn!("{} blockchain client does not have websocket enabled", TASK_NAME);
-            None
-        }
+    } else {
+        tracing::warn!("{} blockchain client does not have websocket enabled", TASK_NAME);
+        None
     };
 
+    // keep reading websocket subscription or polling via http.
     loop {
         if GlobalState::warn_if_shutdown(TASK_NAME) {
             return Ok(());
         }
 
         // if we have a subscription, try to read from subscription.
-        // in case of failure, re-subscribe because current subscription may have been dropped in the server.
+        // in case of failure, re-subscribe because current subscription may have been closed in the server.
         if let Some(sub) = &mut sub_new_heads {
-            tracing::info!("awaiting block number from newHeads subscription");
-            let resubscribe = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
+            tracing::info!("{} awaiting block number from newHeads subscription", TASK_NAME);
+            let resubscribe_ws = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                 Ok(Some(Ok(block))) => {
-                    tracing::info!(number = %block.number(), "newHeads event received");
-                    RPC_CURRENT_BLOCK.store(block.number().as_u64(), Ordering::SeqCst);
+                    tracing::info!(number = %block.number(), "{} received newHeads event", TASK_NAME);
+                    set_external_rpc_current_block(block.number());
                     continue;
                 }
                 Ok(None) => {
-                    tracing::error!("newHeads subscription closed by the other side");
+                    tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
                     true
                 }
                 Ok(Some(Err(e))) => {
-                    tracing::error!(reason = ?e, "failed to read newHeads subscription event");
+                    tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
                     true
                 }
                 Err(_) => {
-                    tracing::error!("timeout waiting for newHeads subscription event");
+                    tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
                     true
                 }
             };
 
-            // resubscribe if necessary
-            // only update the existing subscription if succedeed, otherwise we will try again in the iteration of the loop
-            if chain.supports_ws() && resubscribe {
-                tracing::info!("resubscribing to newHeads event");
+            // resubscribe if necessary.
+            // only update the existing subscription if succedeed, otherwise we will try again in the next iteration.
+            if chain.supports_ws() && resubscribe_ws {
+                tracing::info!("{} resubscribing to newHeads event", TASK_NAME);
                 match chain.subscribe_new_heads().await {
-                    Ok(sub) => sub_new_heads = Some(sub),
+                    Ok(sub) => {
+                        tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
+                        sub_new_heads = Some(sub);
+                    }
                     Err(e) => {
-                        tracing::error!(reason = ?e, "failed to resubscribe number-fetcher to newHeads event");
+                        tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
                     }
                 }
             }
         }
 
         // fallback to polling
-        tracing::warn!("number-fetcher falling back to http polling because subscription failed or it is not enabled");
+        tracing::warn!("{} falling back to http polling because subscription failed or it is not enabled", TASK_NAME);
         match chain.fetch_block_number().await {
             Ok(number) => {
                 tracing::info!(
@@ -255,7 +270,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                     sync_interval = %sync_interval.to_string_ext(),
                     "fetched current block number via http. awaiting sync interval to retrieve again."
                 );
-                RPC_CURRENT_BLOCK.store(number.as_u64(), Ordering::SeqCst);
+                set_external_rpc_current_block(number);
                 sleep(sync_interval).await;
             }
             Err(e) => {
@@ -273,7 +288,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
 async fn start_block_fetcher(
     chain: Arc<BlockchainClient>,
     backlog_tx: mpsc::UnboundedSender<(ExternalBlock, Vec<ExternalReceipt>)>,
-    mut number: BlockNumber,
+    mut importer_block_number: BlockNumber,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-fetcher";
 
@@ -283,21 +298,22 @@ async fn start_block_fetcher(
         }
 
         // if we are ahead of current block number, await until we are behind again
-        let rpc_current_number = RPC_CURRENT_BLOCK.load(Ordering::SeqCst);
-        if number.as_u64() > rpc_current_number {
+        let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
+        if importer_block_number.as_u64() > external_rpc_current_block {
             yield_now().await;
             continue;
         }
 
         // we are behind current, so we will fetch multiple blocks in parallel to catch up
-        let mut blocks_to_fetch = rpc_current_number.saturating_sub(number.as_u64()) + 1;
-        blocks_to_fetch = min(blocks_to_fetch, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+        let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1;
+        let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+        tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
 
         let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
         while blocks_to_fetch > 0 {
             blocks_to_fetch -= 1;
-            tasks.push(fetch_block_and_receipts(Arc::clone(&chain), number));
-            number = number.next();
+            tasks.push(fetch_block_and_receipts(Arc::clone(&chain), importer_block_number));
+            importer_block_number = importer_block_number.next();
         }
 
         // keep fetching in order
@@ -317,7 +333,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
     let block = fetch_block(Arc::clone(&chain), number).await;
 
     // wait some time until receipts are available
-    let _ = tokio::time::sleep(BACKOFF_RECEIPTS).await;
+    let _ = sleep(INTERVAL_FETCH_RECEIPTS).await;
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());

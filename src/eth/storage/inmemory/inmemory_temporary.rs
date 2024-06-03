@@ -163,7 +163,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     async fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
-        tracing::debug!(number = %block.number(), "setting re-executed external block");
+        tracing::debug!(number = %block.number(), "setting reexecuted external block");
 
         let mut states = self.lock_write().await;
         states.head.require_active_block_mut()?.external_block = Some(block);

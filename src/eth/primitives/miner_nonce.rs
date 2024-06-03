@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use ethereum_types::H64;
 use fake::Dummy;
 use fake::Faker;
@@ -13,7 +11,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// The nonce of an Ethereum block.
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MinerNonce(H64);
 
 impl MinerNonce {
@@ -26,12 +24,6 @@ impl MinerNonce {
 impl Dummy<Faker> for MinerNonce {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         H64::random_using(rng).into()
-    }
-}
-
-impl Display for MinerNonce {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

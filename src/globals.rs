@@ -8,9 +8,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::config::load_dotenv;
 use crate::config::WithCommonConfig;
+use crate::ext::spawn_signal_handler;
 use crate::infra;
 use crate::infra::tracing::warn_task_cancellation;
-use crate::utils::spawn_signal_handler;
 
 // -----------------------------------------------------------------------------
 // Global services
@@ -56,10 +56,7 @@ where
         runtime.block_on(spawn_signal_handler())?;
 
         // init tracing
-        runtime.block_on(infra::init_tracing(
-            config.common().tracing_url.as_ref(),
-            !config.common().disable_tokio_console,
-        ));
+        runtime.block_on(infra::init_tracing(config.common().tracing_url.as_ref()));
 
         Ok(Self {
             config,

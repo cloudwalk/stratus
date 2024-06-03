@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::str::FromStr;
 
 use ethereum_types::U256;
@@ -13,15 +12,9 @@ use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Difficulty(U256);
-
-impl Display for Difficulty {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 impl Dummy<Faker> for Difficulty {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
