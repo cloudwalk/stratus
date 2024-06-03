@@ -38,7 +38,7 @@ where
         load_dotenv();
         let config = T::parse();
 
-        if env::var_os("PERM_STORAGE_CONNECTIONS").is_some_and(|value| value == "1") {
+        if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
             println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
         }
 
