@@ -27,7 +27,7 @@ jobs:
 
             - name: Install fd-find
               run: |
-                cargo install fd-find
+                cargo install fd-find@9.0.0
                 command -v fd
 
             - name: Install ripgrep
