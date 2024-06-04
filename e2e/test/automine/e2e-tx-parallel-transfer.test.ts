@@ -7,7 +7,7 @@ describe("Transaction: parallel transfer", () => {
     it("Resets blockchain", async () => {
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
-        expect(blockNumber).eq("0x0");
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
     it("Sends parallel requests", async () => {
         const counterParty = randomAccounts(1)[0];

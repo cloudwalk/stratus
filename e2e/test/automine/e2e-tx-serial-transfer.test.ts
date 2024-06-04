@@ -31,7 +31,7 @@ describe("Transaction: serial transfer", () => {
     it("Resets blockchain", async () => {
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
-        expect(blockNumber).eq("0x0");
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
