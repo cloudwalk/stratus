@@ -6,12 +6,14 @@ Stratus is an EVM executor and JSON-RPC server with custom storage that scales h
 
 - In Memory
 - PostgreSQL
+- RocksDB (default)
 
 ## Contributing
 
-Check our `CONTRIBUTING.md` to get started.
+Check our [`CONTRIBUTING.md`](CONTRIBUTING.md) to get started.
 
 ## Getting Started with Stratus
+
 To run the optimized version of Stratus, ensure you have installed the dependencies:
 
 - [Rust](https://www.rust-lang.org/tools/install)
@@ -20,7 +22,7 @@ To run the optimized version of Stratus, ensure you have installed the dependenc
 Then simply run:
 
 ```bash
-just run-release
+RELEASE=1 just run
 ```
 
 If you want to use OpenTelemery use the flag `--tracing-collector-url <url>` and pass
@@ -47,6 +49,10 @@ Then run one of test recipes we provide. You can `just | grep test` to see them.
 To see all available tasks you can simply run `just`.
 
 We recommend using just recipes whenever applicable.
+
+## Wiki
+
+Check [our wiki](https://github.com/cloudwalk/stratus/wiki) for more info in specific subjects.
 
 ## License
 
