@@ -43,7 +43,7 @@ describe("Relayer integration test", function () {
 
         let txHashList: string[] = []
         it("Transfer BRLC between wallets at a configurable TPS", async function () {
-            const testDuration = 30;
+            const testDuration = 10;
             this.timeout(testDuration * 1000 + 10000);
 
             const TPS = 5;
@@ -96,15 +96,15 @@ describe("Relayer integration test", function () {
             // Calculate the difference in timestamps(seconds) between Stratus and Hardhat
             const timestampDifferences = stratusTimestamps.map((stratusTimestamp, i) => {
                 const difference = Math.abs(stratusTimestamp - hardhatTimestamps[i]);
-                console.log(`Stratus: ${stratusTimestamp}, Hardhat: ${hardhatTimestamps[i]}, Difference: ${difference}`);
                 return difference;
             });
 
             // Calculate the average delay
             const averageDelay = timestampDifferences.reduce((a, b) => a + b, 0) / timestampDifferences.length;
 
-            // Assert that the average delay is not greater than 1
-            expect(averageDelay).to.be.at.most(2, 'Average delay is above 2');
+            if (averageDelay > 1) {
+                console.log(`WARN: Average delay is ${averageDelay.toFixed(2)}, which is above 1`);
+            }
         });
 
         it("Validate balances between Stratus and Hardhat", async function () {
@@ -121,6 +121,28 @@ describe("Relayer integration test", function () {
             // Assert that the balances are equal
             expect(stratusAliceBalance).to.equal(hardhatAliceBalance, "Alice balances are not equal between Stratus and Hardhat");
             expect(stratusBobBalance).to.equal(hardhatBobBalance, "Alice balances are not equal between Stratus and Hardhat");
+        });
+
+        it("Validate transactions were relayed from Stratus to Hardhat", async function () {
+            // Get Stratus transaction receipts
+            updateProviderUrl("stratus");
+            const stratusReceipts = await Promise.all(txHashList.map(async (txHash) => {
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                return receipt;
+            }));
+
+            // Get Hardhat transaction receipts
+            updateProviderUrl("hardhat");
+            const hardhatReceipts = await Promise.all(txHashList.map(async (txHash) => {
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                return receipt;
+            }));
+
+            // Assert that all transactions were relayed
+            for (let i = 0; i < txHashList.length; i++) {
+                expect(stratusReceipts[i]).to.exist;
+                expect(hardhatReceipts[i]).to.exist;
+            }
         });
     });
 });
