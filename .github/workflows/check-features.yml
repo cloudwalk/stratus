@@ -56,7 +56,7 @@ jobs:
         run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
-        uses: extractions/setup-just@v1
+        uses: extractions/setup-just@v2
 
       - name: Set up Test Dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}

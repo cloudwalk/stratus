@@ -21,7 +21,7 @@ jobs:
               run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
             - name: Set up Just
-              uses: extractions/setup-just@v1
+              uses: extractions/setup-just@v2
 
             - name: Check outdated
               run: just outdated > outdated.txt
