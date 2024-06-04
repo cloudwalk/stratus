@@ -14,7 +14,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::infra::metrics;
 
 pub struct TransactionDag {
-    dag: StableGraph<TransactionMined, i32>,
+    pub dag: StableGraph<TransactionMined, i32>,
 }
 
 impl TransactionDag {
