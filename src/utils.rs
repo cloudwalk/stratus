@@ -35,6 +35,6 @@ impl DropTimer {
 
 impl Drop for DropTimer {
     fn drop(&mut self) {
-        tracing::info!("Timer: '{}' took `{:?}`", self.scope_name, self.instant.elapsed());
+        tracing::info!("Timer: '{}' ran for `{:?}`", self.scope_name, self.instant.elapsed());
     }
 }
