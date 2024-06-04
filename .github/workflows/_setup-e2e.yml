@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Cache Cargo Registry and Target Directory
         uses: actions/cache@v4.0.2
