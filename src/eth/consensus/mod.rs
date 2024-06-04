@@ -96,7 +96,7 @@ pub struct Consensus {
 impl Consensus {
     //XXX for now we pick the leader name from the environment
     // the correct is to have a leader election algorithm
-    pub async fn new(storage: Arc<StratusStorage>, candidate_peers: Vec<String>,  importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
+    pub async fn new(storage: Arc<StratusStorage>, candidate_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         if Self::is_stand_alone() {
             tracing::info!("No consensus module available, running in standalone mode");
             return Self::new_stand_alone(storage, importer_config);
