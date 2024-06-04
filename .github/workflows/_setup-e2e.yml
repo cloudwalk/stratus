@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Cache Cargo Registry and Target Directory
         uses: actions/cache@v4.0.2
@@ -46,10 +46,10 @@ jobs:
         run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
-        uses: extractions/setup-just@v1
+        uses: extractions/setup-just@v2
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version-file: .tool-versions
 

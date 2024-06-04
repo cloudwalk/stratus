@@ -158,8 +158,10 @@ impl StratusStorage {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(number))]
     pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        Span::with(|s| s.rec("number", &number));
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -228,13 +230,13 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_account", skip_all, fields(address, point_in_time))]
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         Span::with(|s| {
             s.rec("address", address);
             s.rec("point_in_time", point_in_time);
         });
+
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
 
         // read from temp only if present
         if point_in_time.is_present() {
@@ -263,8 +265,14 @@ impl StratusStorage {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_slot", skip_all, fields(address, index, point_in_time))]
     pub async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+        Span::with(|s| {
+            s.rec("address", address);
+            s.rec("index", index);
+            s.rec("point_in_time", point_in_time);
+        });
+
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -343,36 +351,48 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    #[tracing::instrument(skip_all)]
-    pub async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
+    #[tracing::instrument(name = "storage::save_execution", skip_all, fields(hash))]
+    pub async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        Span::with(|s| {
+            s.rec("hash", &tx.hash());
+        });
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.save_execution(transaction_execution).await;
+            let result = self.temp.save_execution(tx).await;
             metrics::inc_storage_save_execution(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.save_execution(transaction_execution).await
+        self.temp.save_execution(tx).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::finish_block", skip_all, fields(number))]
     pub async fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         #[cfg(feature = "metrics")]
-        {
+        let result = {
             let start = metrics::now();
             let result = self.temp.finish_block().await;
             metrics::inc_storage_finish_block(start.elapsed(), result.is_ok());
             result
-        }
+        };
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.finish_block().await
+        let result = self.temp.finish_block().await;
+
+        if let Ok(ref block) = result {
+            Span::with(|s| s.rec("number", &block.number));
+        }
+
+        result
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
     pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+        Span::with(|s| s.rec("number", block.number()));
+
         #[cfg(feature = "metrics")]
         {
             let (start, label_size_by_tx, label_size_by_gas) = (metrics::now(), block.label_size_by_transactions(), block.label_size_by_gas());
