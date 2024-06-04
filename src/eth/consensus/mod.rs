@@ -88,6 +88,7 @@ pub struct Consensus {
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, Peer>>>,
+    candidate_peers: Vec<String>,
     leader_name: String,                  //XXX check the peers instead of using it
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
 }
@@ -95,7 +96,7 @@ pub struct Consensus {
 impl Consensus {
     //XXX for now we pick the leader name from the environment
     // the correct is to have a leader election algorithm
-    pub async fn new(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
+    pub async fn new(storage: Arc<StratusStorage>, candidate_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         if Self::is_stand_alone() {
             tracing::info!("No consensus module available, running in standalone mode");
             return Self::new_stand_alone(storage, importer_config);
@@ -118,6 +119,7 @@ impl Consensus {
             sender,
             storage,
             peers,
+            candidate_peers,
             leader_name,
             importer_config,
             last_arrived_block_number,
@@ -149,6 +151,7 @@ impl Consensus {
             storage,
             sender,
             peers,
+            candidate_peers: vec![],
             last_arrived_block_number,
             importer_config,
         })
@@ -293,33 +296,65 @@ impl Consensus {
 
     #[tracing::instrument(skip_all)]
     pub async fn discover_peers(consensus: Arc<Consensus>) {
+        let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
+
         #[cfg(feature = "kubernetes")]
-        if let Ok(new_peers) = Self::discover_peers_kubernetes().await {
-            let mut peers_lock = consensus.peers.write().await;
-            for (address, new_peer) in new_peers {
-                tracing::info!("Processing peer: {}", address.0);
-                peers_lock
-                    .entry(address.clone())
-                    .and_modify(|existing_peer| {
-                        tracing::info!("Updating existing peer: {}", address.0);
-                        existing_peer.client = new_peer.client.clone();
-                        existing_peer.last_heartbeat = new_peer.last_heartbeat;
-                        existing_peer.role = new_peer.role.clone();
-                        existing_peer.term = new_peer.term;
-                        // Preserve match_index and next_index of existing peers
-                    })
-                    .or_insert_with(|| {
-                        tracing::info!("Adding new peer: {}", address.0);
-                        new_peer
-                    });
-            }
-            tracing::info!(
-                peers = ?peers_lock.keys().collect::<Vec<&PeerAddress>>(),
-                "Discovered peers",
-            );
-        } else {
-            tracing::error!("Failed to discover peers");
+        if let Ok(k8s_peers) = Self::discover_peers_kubernetes().await {
+            new_peers.extend(k8s_peers);
         }
+
+        if let Ok(env_peers) = Self::discover_peers_env(&consensus.candidate_peers).await {
+            new_peers.extend(env_peers);
+        }
+
+        let mut peers_lock = consensus.peers.write().await;
+        for (address, new_peer) in new_peers {
+            tracing::info!("Processing peer: {}", address.0);
+            peers_lock
+                .entry(address.clone())
+                .and_modify(|existing_peer| {
+                    tracing::info!("Updating existing peer: {}", address.0);
+                    existing_peer.client = new_peer.client.clone();
+                    existing_peer.last_heartbeat = new_peer.last_heartbeat;
+                    existing_peer.role = new_peer.role.clone();
+                    existing_peer.term = new_peer.term;
+                    // Preserve match_index and next_index of existing peers
+                })
+                .or_insert_with(|| {
+                    tracing::info!("Adding new peer: {}", address.0);
+                    new_peer
+                });
+        }
+        tracing::info!(
+            peers = ?peers_lock.keys().collect::<Vec<&PeerAddress>>(),
+            "Discovered peers",
+        );
+    }
+
+    async fn discover_peers_env(addresses: &[String]) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
+        let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
+
+        for address in addresses {
+            match AppendEntryServiceClient::connect(address.clone()).await {
+                Ok(client) => {
+                    let peer = Peer {
+                        client,
+                        last_heartbeat: std::time::Instant::now(),
+                        match_index: 0,
+                        next_index: 0,
+                        role: Role::Follower,
+                        term: 0, // Replace with actual term
+                    };
+                    peers.push((PeerAddress(address.clone()), peer));
+                    tracing::info!("Peer {} is available", address);
+                }
+                Err(_) => {
+                    tracing::warn!("Peer {} is not available", address);
+                }
+            }
+        }
+
+        Ok(peers)
     }
 
     #[cfg(feature = "kubernetes")]

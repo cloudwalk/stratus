@@ -68,9 +68,9 @@ kubernetes:
       httpGet:
         path: /readiness
         port: 3000
-      initialDelaySeconds: 5
-      periodSeconds: 5
-      timeoutSeconds: 5
+      initialDelaySeconds: 1
+      periodSeconds: 1
+      timeoutSeconds: 1
     startupProbe:
       httpGet:
         path: /startup
