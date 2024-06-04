@@ -93,18 +93,14 @@ describe("Relayer integration test", function () {
                 return parseInt(block.timestamp, 16);
             }));
 
-            // Calculate the difference in timestamps(seconds) between Stratus and Hardhat
-            const timestampDifferences = stratusTimestamps.map((stratusTimestamp, i) => {
-                const difference = Math.abs(stratusTimestamp - hardhatTimestamps[i]);
-                return difference;
-            });
+            // Total time it took for Stratus to process all the blocks containing transactions
+            const stratusProcessingTime = stratusTimestamps[stratusTimestamps.length - 1] - stratusTimestamps[0];
 
-            // Calculate the average delay
-            const averageDelay = timestampDifferences.reduce((a, b) => a + b, 0) / timestampDifferences.length;
+            // Total time it took for Hardhat to process all the blocks containing transactions
+            const hardhatProcessingTime = hardhatTimestamps[hardhatTimestamps.length - 1] - hardhatTimestamps[0];
 
-            if (averageDelay > 1) {
-                console.log(`WARN: Average delay is ${averageDelay.toFixed(2)}, which is above 1`);
-            }
+            console.log(`WARN: Stratus took ${stratusProcessingTime} seconds to process all the blocks`);
+            console.log(`WARN: Hardhat took ${hardhatProcessingTime} seconds to process all the blocks`);
         });
 
         it("Validate balances between Stratus and Hardhat", async function () {
