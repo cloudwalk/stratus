@@ -98,8 +98,7 @@ impl ExternalRelayer {
             if let RelayError::CompareTimeout(_) = err {
                 // This retries the entire block, but we could be retrying only each specific transaction that failed.
                 // This is mostly a non-issue (except performance-wise)
-                // XXX: Actually this would insert every mismatch found in this block again
-                return Err(anyhow!("some receipt comparisons timeout, will retry next"));
+                return Err(anyhow!("some receipt comparisons timed out, will retry next"));
             }
 
             tracing::warn!(?block_number, ?err, "some transactions mismatched");
@@ -175,15 +174,16 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let hash = stratus_receipt.hash().to_string();
-        tracing::info!(?hash, "saving transaction mismatch");
-
+        let hash = stratus_receipt.hash();
         let block_number = stratus_receipt.block_number.map(|inner| inner.as_u64() as i64); // could panic if block number as huge for some reason
+
+        tracing::info!(?block_number, ?hash, "saving transaction mismatch");
+
         let stratus_json = serde_json::to_value(stratus_receipt).expect_infallible();
         let substrate_json = serde_json::to_value(substrate_receipt).expect_infallible();
         let res = sqlx::query!(
-            "INSERT INTO mismatches (hash, block_number, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4, $5)",
-            &hash,
+            "INSERT INTO mismatches (hash, block_number, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+            &hash as _,
             block_number as _,
             &stratus_json,
             &substrate_json,
@@ -192,21 +192,28 @@ impl ExternalRelayer {
         .execute(&self.pool)
         .await;
 
-        if let Err(err) = res {
-            tracing::error!(?hash, "failed to insert row in pgsql, saving mismatche to json");
-            let mut file = File::create(format!("data/mismatched_transactions/{}.json", hash))
-                .await
-                .expect("opening the file should not fail");
-            let json = serde_json::json!(
-                {
-                    "stratus_receipt": stratus_json,
-                    "substrate_receipt": substrate_json,
-                }
-            );
-            file.write_all(json.to_string().as_bytes())
-                .await
-                .expect("writing the mismatch to a file should not fail");
-            tracing::error!(?err, "failed to save mismatch, saving to file");
+        match res {
+            Err(err) => {
+                tracing::error!(?block_number, ?hash, "failed to insert row in pgsql, saving mismatche to json");
+                let mut file = File::create(format!("data/mismatched_transactions/{}.json", hash))
+                    .await
+                    .expect("opening the file should not fail");
+                let json = serde_json::json!(
+                    {
+                        "stratus_receipt": stratus_json,
+                        "substrate_receipt": substrate_json,
+                    }
+                );
+                file.write_all(json.to_string().as_bytes())
+                    .await
+                    .expect("writing the mismatch to a file should not fail");
+                tracing::error!(?err, "failed to save mismatch, saving to file");
+            }
+            Ok(res) =>
+                if res.rows_affected() == 0 {
+                    tracing::info!(?block_number, ?hash, "transaction mismatch already in database (this should only happen if this block is being retried).");
+                    return;
+                },
         }
 
         #[cfg(feature = "metrics")]
