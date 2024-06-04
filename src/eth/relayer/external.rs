@@ -143,7 +143,7 @@ impl ExternalRelayer {
         let mut substrate_receipt = substrate_pending_transaction;
         loop {
             match substrate_receipt.await {
-                Ok(Some(substrate_receipt)) => {
+                Ok(Some(substrate_receipt)) =>
                     if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                         let err_string = compare_error.to_string();
                         let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -151,16 +151,14 @@ impl ExternalRelayer {
                         return error.map_err(RelayError::Mismatch);
                     } else {
                         return Ok(());
-                    }
-                }
-                Ok(None) => {
+                    },
+                Ok(None) =>
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
                         tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
                         return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
-                    }
-                }
+                    },
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -211,7 +209,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) => {
+            Ok(res) =>
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -219,8 +217,7 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                }
-            }
+                },
         }
 
         #[cfg(feature = "metrics")]
@@ -275,10 +272,9 @@ impl ExternalRelayer {
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
         tracing::debug!("relaying transactions");
+
         let mut results = vec![];
-        println!("{:?}", petgraph::dot::Dot::with_config(&dag.dag, &[petgraph::dot::Config::EdgeNoLabel]));
         while let Some(roots) = dag.take_roots() {
-            tracing::debug!(?roots);
             let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
             results.extend(join_all(futures).await);
         }
@@ -325,21 +321,6 @@ impl ExternalRelayerClient {
     pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
         let block_number = block.header.number;
         tracing::debug!(?block_number, "sending block to relayer");
-
-        let mut file = File::create(format!("data/mismatched_transactions/{}.json", block_number))
-            .await
-            .expect("opening the file should not fail");
-
-        let json = serde_json::to_value(block.clone()).unwrap();
-
-        file.write_all(json.to_string().as_bytes())
-            .await.unwrap();
-
-        tracing::debug!("#################################");
-        for transaction in block.transactions.iter() {
-            tracing::debug!(?transaction, "transaction")
-        }
-        tracing::debug!("#################################");
 
         // fill span
         let span = Span::current();

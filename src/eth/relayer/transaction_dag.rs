@@ -14,7 +14,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::infra::metrics;
 
 pub struct TransactionDag {
-    pub dag: StableGraph<TransactionMined, i32>,
+    dag: StableGraph<TransactionMined, i32>,
 }
 
 impl TransactionDag {
@@ -73,18 +73,18 @@ impl TransactionDag {
         Self { dag }
     }
 
-    fn compute_edges<T: std::hash::Hash + std::cmp::Eq>(
+    fn compute_edges<T: std::hash::Hash + std::cmp::Eq + serde::Serialize>(
         dag: &mut StableGraph<TransactionMined, i32>,
         conflicts: HashMap<Index, HashSet<T>>,
         node_indexes: &HashMap<Index, NodeIndex>,
     ) {
         for (i, (tx1, set1)) in conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             let tx1_node_index = *node_indexes.get(tx1).unwrap();
-            let tx1_from = dag.node_weight(tx1_node_index).unwrap().input.from;
-
+            let tx1_from = dag.node_weight(tx1_node_index).unwrap().input.signer;
             for (tx2, set2) in conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
                 let tx2_node_index = *node_indexes.get(tx2).unwrap();
-                let tx2_from = dag.node_weight(tx2_node_index).unwrap().input.from;
+                let tx2_from = dag.node_weight(tx2_node_index).unwrap().input.signer;
+
                 if tx1_from != tx2_from && !set1.is_disjoint(set2) {
                     dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
                 }
@@ -126,13 +126,16 @@ impl TransactionDag {
 
 #[cfg(test)]
 mod tests {
+
     use std::collections::HashSet;
+    use std::io::BufReader;
 
     use fake::Fake;
     use fake::Faker;
 
     use super::TransactionDag;
     use crate::eth::primitives::Address;
+    use crate::eth::primitives::Block;
     use crate::eth::primitives::Bytes;
     use crate::eth::primitives::CodeHash;
     use crate::eth::primitives::EvmExecution;
@@ -145,6 +148,7 @@ mod tests {
     use crate::eth::primitives::SlotIndex;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
+
     const ADDRESS: Address = Address::ZERO;
 
     fn create_tx(changed_slots_inidices: HashSet<SlotIndex>, tx_idx: u64) -> TransactionMined {
@@ -181,6 +185,23 @@ mod tests {
             block_number: 0.into(),
             block_hash: Hash::default(),
         }
+    }
+
+    #[test]
+    fn test_real_tx() {
+        let file = std::fs::File::open("./tests/fixtures/blocks/simple_dag_test.json").unwrap();
+        let reader = BufReader::new(file);
+        let block = serde_json::from_reader::<_, Block>(reader).unwrap();
+        let mut dag = TransactionDag::new(block.transactions);
+
+        let expected = [[0], [1], [2]];
+        let mut i = 0;
+        while let Some(roots) = dag.take_roots() {
+            assert_eq!(roots.len(), expected[i].len());
+            assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+            i += 1;
+        }
+        //println!("{:?}", petgraph::dot::Dot::with_config(&dag.dag, &[petgraph::dot::Config::EdgeNoLabel, petgraph::dot::Config::NodeIndexLabel]));
     }
 
     #[test]
