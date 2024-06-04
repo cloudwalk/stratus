@@ -84,6 +84,7 @@ opentelemetry = "=0.22.0"
 opentelemetry_sdk = { version = "=0.22.1", features = ["rt-tokio"] }
 opentelemetry-otlp = "=0.15.0"
 sentry = "=0.33.0"
+sentry-tracing = "=0.33.0"
 tracing = { version = "=0.1.40", features = ["attributes"] }
 tracing-opentelemetry = "=0.23.0"
 tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
