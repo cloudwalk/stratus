@@ -20,7 +20,8 @@ pub struct TransactionDag {
 impl TransactionDag {
     /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
     /// Each vertex of the graph is a transaction, and two vertices are connected iff they conflict
-    /// on either a slot or balance.
+    /// on either a slot or balance and they don't have the same "from" field (since those transactions will
+    /// be ordered by nonce).
     /// The direction of an edge connecting the transactions A and B is always from
     /// `min(A.transaction_index, B.transaction_index)` to `max(A.transaction_index, B.transaction_index)`.
     /// This combined with the fact transactions indexes are unique makes it impossible for a cycle to be inserted.
