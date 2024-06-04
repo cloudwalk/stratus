@@ -15,13 +15,13 @@ jobs:
         timeout-minutes: 10
         steps:
             - name: Checkout code
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
 
             - name: Set up Rust
               run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
             - name: Set up Just
-              uses: extractions/setup-just@v1
+              uses: extractions/setup-just@v2
 
             - name: Check outdated
               run: just outdated > outdated.txt
