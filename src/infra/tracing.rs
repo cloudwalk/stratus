@@ -4,6 +4,7 @@ use std::env;
 use std::env::VarError;
 use std::net::SocketAddr;
 
+use chrono::Local;
 use console_subscriber::ConsoleLayer;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
@@ -13,6 +14,7 @@ use opentelemetry_sdk::Resource;
 use tracing::Metadata;
 use tracing::Subscriber;
 use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -42,7 +44,7 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
                 .with_filter(EnvFilter::from_default_env())
                 .boxed()
         }
-        Ok("verbose") => {
+        Ok("verbose") | Ok("full") => {
             println!("tracing registry enabling VERBOSE text logs");
             fmt::Layer::default()
                 .with_target(true)
@@ -51,8 +53,18 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
                 .with_filter(EnvFilter::from_default_env())
                 .boxed()
         }
+        Ok("minimal") => {
+            println!("tracing registry enabling MINIMAL text logs");
+            fmt::Layer::default()
+                .with_target(false)
+                .with_thread_ids(false)
+                .with_thread_names(false)
+                .with_timer(MinimalTimer)
+                .with_filter(EnvFilter::from_default_env())
+                .boxed()
+        }
         Ok("normal") | Err(VarError::NotPresent) => {
-            println!("tracing registry enabling text logs");
+            println!("tracing registry enabling NORMAL text logs");
             fmt::Layer::default().with_filter(EnvFilter::from_default_env()).boxed()
         }
         Err(e) => panic!("{e}"),
@@ -103,6 +115,14 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
             tracing::error!(reason = ?e, "failed to create tokio-console server");
         };
     });
+}
+
+struct MinimalTimer;
+
+impl FormatTime for MinimalTimer {
+    fn format_time(&self, w: &mut fmt::format::Writer<'_>) -> std::fmt::Result {
+        write!(w, "{}", Local::now().time().format("%H:%M:%S%.3f"))
+    }
 }
 
 /// Workaround filter for `tokio-console` panicking in debug mode when an event is not an event or span.
