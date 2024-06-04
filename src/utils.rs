@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use tokio::time::Instant;
 use uuid::Uuid;
 
 pub fn new_context_id() -> String {
@@ -16,4 +17,24 @@ pub fn calculate_tps_and_bpm(duration: Duration, transaction_count: usize, block
 pub fn calculate_tps(duration: Duration, transaction_count: usize) -> f64 {
     let seconds_elapsed = duration.as_secs_f64() + f64::EPSILON;
     transaction_count as f64 / seconds_elapsed
+}
+
+pub struct DropTimer {
+    instant: Instant,
+    scope_name: &'static str,
+}
+
+impl DropTimer {
+    pub fn start(scope_name: &'static str) -> Self {
+        Self {
+            instant: Instant::now(),
+            scope_name,
+        }
+    }
+}
+
+impl Drop for DropTimer {
+    fn drop(&mut self) {
+        tracing::info!("Timer: '{}' took `{:?}`", self.scope_name, self.instant.elapsed());
+    }
 }

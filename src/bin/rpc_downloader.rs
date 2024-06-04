@@ -15,6 +15,7 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::ext::not;
 use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
+use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 
 /// Number of blocks each parallel download will process.
@@ -26,6 +27,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("rpc-downloader");
+
     let rpc_storage = config.rpc_storage.init().await?;
     let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout).await?);
 
@@ -36,6 +39,8 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
 }
 
 async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("rpc-downloader::download_balances");
+
     if accounts.is_empty() {
         tracing::warn!("no initial accounts to retrieve balance");
         return Ok(());
@@ -63,6 +68,8 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &Blo
 }
 
 async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<BlockchainClient>, paralellism: usize) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("rpc-downloader::download_blocks");
+
     // prepare download block tasks
     let mut start = BlockNumber::ZERO;
     let end = chain.fetch_block_number().await?;
