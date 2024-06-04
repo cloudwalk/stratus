@@ -38,7 +38,7 @@ where
         load_dotenv();
         let config = T::parse();
 
-        if env::var_os("PERM_STORAGE_CONNECTIONS").is_some_and(|value| value == "1") {
+        if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
             println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
         }
 
@@ -47,7 +47,7 @@ where
 
         // init metrics
         #[cfg(feature = "metrics")]
-        infra::init_metrics(config.common().metrics_histogram_kind);
+        infra::init_metrics(config.common().metrics_exporter_address, config.common().metrics_histogram_kind);
 
         // init sentry
         let _sentry_guard = config.common().sentry_url.as_ref().map(|sentry_url| infra::init_sentry(sentry_url));
@@ -56,7 +56,7 @@ where
         runtime.block_on(spawn_signal_handler())?;
 
         // init tracing
-        runtime.block_on(infra::init_tracing(config.common().tracing_url.as_ref()));
+        runtime.block_on(infra::init_tracing(config.common().tracing_url.as_ref(), config.common().tokio_console_address));
 
         Ok(Self {
             config,

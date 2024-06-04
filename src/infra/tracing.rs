@@ -1,7 +1,10 @@
 //! Tracing services.
 
 use std::env;
+use std::env::VarError;
+use std::net::SocketAddr;
 
+use chrono::Local;
 use console_subscriber::ConsoleLayer;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
@@ -11,6 +14,7 @@ use opentelemetry_sdk::Resource;
 use tracing::Metadata;
 use tracing::Subscriber;
 use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -22,28 +26,49 @@ use crate::ext::named_spawn;
 use crate::ext::not;
 
 /// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>) {
+pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAddr) {
     println!("creating tracing registry");
 
-    // configure stdout layer
-    let format_as_json = env::var_os("JSON_LOGS").is_some_and(|var| not(var.is_empty()));
-    let stdout_layer = if format_as_json {
-        println!("tracing registry enabling json logs");
-        fmt::Layer::default()
-            .json()
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_thread_names(true)
-            .with_filter(EnvFilter::from_default_env())
-            .boxed()
-    } else {
-        println!("tracing registry enabling text logs");
-        fmt::Layer::default()
-            .with_target(false)
-            .with_thread_ids(false)
-            .with_thread_names(false)
-            .with_filter(EnvFilter::from_default_env())
-            .boxed()
+    // configure stdout log layer
+    let stdout_log_format = env::var("LOG_FORMAT");
+    let stdout_log_format = stdout_log_format.as_ref().map(String::as_str);
+
+    let stdout_layer = match stdout_log_format {
+        Ok("json") => {
+            println!("tracing registry enabling JSON logs");
+            fmt::Layer::default()
+                .json()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .with_filter(EnvFilter::from_default_env())
+                .boxed()
+        }
+        Ok("verbose") | Ok("full") => {
+            println!("tracing registry enabling VERBOSE text logs");
+            fmt::Layer::default()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .with_filter(EnvFilter::from_default_env())
+                .boxed()
+        }
+        Ok("minimal") => {
+            println!("tracing registry enabling MINIMAL text logs");
+            fmt::Layer::default()
+                .with_target(false)
+                .with_thread_ids(false)
+                .with_thread_names(false)
+                .with_timer(MinimalTimer)
+                .with_filter(EnvFilter::from_default_env())
+                .boxed()
+        }
+        Ok("normal") | Err(VarError::NotPresent) => {
+            println!("tracing registry enabling NORMAL text logs");
+            fmt::Layer::default().with_filter(EnvFilter::from_default_env()).boxed()
+        }
+        Err(e) => panic!("{e}"),
+        Ok(unexpected) => panic!("unexpected LOG_FORMAT={unexpected}"),
     };
 
     // configure opentelemetry layer
@@ -74,15 +99,8 @@ pub async fn init_tracing(url: Option<&String>) {
 
     // init tokio console registry
     println!("tracing registry enabling tokio console");
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().build();
+    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
     let console_layer = console_layer.with_filter(TokioConsoleFilter);
-
-    // init tokio console server
-    named_spawn("console::grpc-server", async move {
-        if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, "failed to create tokio-console server");
-        };
-    });
 
     // init registry
     tracing_subscriber::registry()
@@ -90,6 +108,21 @@ pub async fn init_tracing(url: Option<&String>) {
         .with(opentelemetry_layer)
         .with(console_layer)
         .init();
+
+    // init tokio console server
+    named_spawn("console::grpc-server", async move {
+        if let Err(e) = console_server.serve().await {
+            tracing::error!(reason = ?e, "failed to create tokio-console server");
+        };
+    });
+}
+
+struct MinimalTimer;
+
+impl FormatTime for MinimalTimer {
+    fn format_time(&self, w: &mut fmt::format::Writer<'_>) -> std::fmt::Result {
+        write!(w, "{}", Local::now().time().format("%H:%M:%S%.3f"))
+    }
 }
 
 /// Workaround filter for `tokio-console` panicking in debug mode when an event is not an event or span.

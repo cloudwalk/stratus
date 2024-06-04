@@ -55,26 +55,13 @@ pub struct Executor {
     /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Arc<BlockMiner>,
 
-    /// Provider for sending rpc calls to substrate
-    relayer: Option<Arc<TransactionRelayer>>,
-
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
-
-    /// Consensus rules for the blockchain.
-    consensus: Option<Arc<Consensus>>,
 }
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(
-        storage: Arc<StratusStorage>,
-        miner: Arc<BlockMiner>,
-        relayer: Option<Arc<TransactionRelayer>>,
-        evm_tx: crossbeam_channel::Sender<EvmTask>,
-        num_evms: usize,
-        consensus: Option<Arc<Consensus>>,
-    ) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
         tracing::info!(%num_evms, "creating executor");
 
         Self {
@@ -82,8 +69,6 @@ impl Executor {
             num_evms,
             miner,
             storage,
-            relayer,
-            consensus,
         }
     }
 
@@ -97,10 +82,9 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        // fill span
-        let span = Span::current();
-        span.rec("number", &block.number());
-
+        Span::with(|s| {
+            s.rec("number", &block.number());
+        });
         tracing::info!(number = %block.number(), "reexecuting external block");
 
         // track active block number
@@ -182,11 +166,10 @@ impl Executor {
         receipt: &'b ExternalReceipt,
         block: &ExternalBlock,
     ) -> Result<ExternalTransactionExecution, (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Error)> {
-        // fill span
-        let span = Span::current();
-        span.rec("hash", &tx.hash);
+        Span::with(|s| {
+            s.rec("hash", &tx.hash);
+        });
 
-        // execute
         self.reexecute_external_tx_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
     }
 
@@ -263,12 +246,11 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
-        // fill span
-        let span = Span::current();
-        span.rec("hash", &tx_input.hash);
-        span.rec("from", &tx_input.signer);
-        span.rec_opt("to", &tx_input.to);
-
+        Span::with(|s| {
+            s.rec("hash", &tx_input.hash);
+            s.rec("from", &tx_input.signer);
+            s.rec_opt("to", &tx_input.to);
+        });
         tracing::info!(
             hash = %tx_input.hash,
             nonce = %tx_input.nonce,
@@ -323,11 +305,10 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), input.extract_function());
 
-        // fill span
-        let span = Span::current();
-        span.rec_opt("from", &input.from);
-        span.rec_opt("to", &input.to);
-
+        Span::with(|s| {
+            s.rec_opt("from", &input.from);
+            s.rec_opt("to", &input.to);
+        });
         tracing::info!(
             from = ?input.from,
             to = ?input.to,
