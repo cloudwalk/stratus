@@ -32,7 +32,7 @@ jobs:
 
             - name: Install ripgrep
               run: |
-                cargo install ripgrep
+                cargo install ripgrep@14.1.0
                 command -v rg
 
             - name: Notify Slack
