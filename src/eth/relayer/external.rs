@@ -273,7 +273,9 @@ impl ExternalRelayer {
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
         tracing::debug!("relaying transactions");
         let mut results = vec![];
+        println!("{:?}", petgraph::dot::Dot::with_config(&dag.dag, &[petgraph::dot::Config::EdgeNoLabel]));
         while let Some(roots) = dag.take_roots() {
+            tracing::debug!(?roots);
             let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
             results.extend(join_all(futures).await);
         }
