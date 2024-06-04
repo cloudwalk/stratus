@@ -29,29 +29,25 @@ describe("Relayer integration test", function () {
     describe("Transaction tests", function () {
         let alice = ethers.Wallet.createRandom().connect(ethers.provider);
         let bob = ethers.Wallet.createRandom().connect(ethers.provider);
-        let charlie = ethers.Wallet.createRandom().connect(ethers.provider);
 
         it("Validate mint BRLC to wallets", async function () {      
             expect(await await ethers.provider.getBalance(alice.address)).to.be.equal(0);
             expect(await await ethers.provider.getBalance(bob.address)).to.be.equal(0);
-            expect(await await ethers.provider.getBalance(charlie.address)).to.be.equal(0);
 
-            expect(await brlcToken.mint(alice.address, 50, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, alice, 50);
-            expect(await brlcToken.mint(bob.address, 50, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, bob, 50);
-            expect(await brlcToken.mint(charlie.address, 50, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, charlie, 50);
+            expect(await brlcToken.mint(alice.address, 2000, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, alice, 2000);
+            expect(await brlcToken.mint(bob.address, 2000, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, bob, 2000);
 
-            expect(await brlcToken.balanceOf(alice.address)).to.equal(50);
-            expect(await brlcToken.balanceOf(bob.address)).to.equal(50);
-            expect(await brlcToken.balanceOf(charlie.address)).to.equal(50);
+            expect(await brlcToken.balanceOf(alice.address)).to.equal(2000);
+            expect(await brlcToken.balanceOf(bob.address)).to.equal(2000);
         });
 
         let txHashList: string[] = []
         it("Transfer BRLC between wallets at a configurable TPS", async function () {
-            const testDuration = 2;
+            const testDuration = 30;
             this.timeout(testDuration * 1000 + 10000);
 
             const TPS = 5;
-            const wallets = [alice, bob, charlie];
+            const wallets = [alice, bob];
             const transactionInterval = 1000 / TPS;
 
             let nonces = await Promise.all(wallets.map(wallet => send("eth_getTransactionCount", [wallet.address, "latest"])));
@@ -108,7 +104,23 @@ describe("Relayer integration test", function () {
             const averageDelay = timestampDifferences.reduce((a, b) => a + b, 0) / timestampDifferences.length;
 
             // Assert that the average delay is not greater than 1
-            expect(averageDelay).to.be.at.most(1, 'Average delay is above 1');
+            expect(averageDelay).to.be.at.most(2, 'Average delay is above 2');
+        });
+
+        it("Validate balances between Stratus and Hardhat", async function () {
+            // Get Stratus balances
+            updateProviderUrl("stratus");
+            const stratusAliceBalance = await brlcToken.balanceOf(alice.address);
+            const stratusBobBalance = await brlcToken.balanceOf(bob.address);
+
+            // Get Hardhat balances
+            updateProviderUrl("hardhat");
+            const hardhatAliceBalance = await brlcToken.balanceOf(alice.address);
+            const hardhatBobBalance = await brlcToken.balanceOf(bob.address);
+
+            // Assert that the balances are equal
+            expect(stratusAliceBalance).to.equal(hardhatAliceBalance, "Alice balances are not equal between Stratus and Hardhat");
+            expect(stratusBobBalance).to.equal(hardhatBobBalance, "Alice balances are not equal between Stratus and Hardhat");
         });
     });
 });

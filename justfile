@@ -423,8 +423,12 @@ e2e-relayer-external-down:
     docker-compose down -v
     docker volume prune -f
 
-    # Delete the data directory
-    rm -rf ./data
+    # Delete data contents
+    rm -rf ./data/*
+
+    # Recreate data directories
+    mkdir -p data/mismatched_transactions
+    rm -rf data/mismatched_transactions/*
 
     # Delete zeppelin directory
     rm -rf ./e2e-contracts/integration/.openzeppelin
