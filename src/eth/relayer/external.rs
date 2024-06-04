@@ -320,6 +320,12 @@ impl ExternalRelayerClient {
     pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
         let block_number = block.header.number;
         tracing::debug!(?block_number, "sending block to relayer");
+        
+        tracing::debug!("#################################");
+        for transaction in block.transactions.iter() {
+            tracing::debug!(?transaction, "transaction")
+        }
+        tracing::debug!("#################################");
 
         // fill span
         let span = Span::current();

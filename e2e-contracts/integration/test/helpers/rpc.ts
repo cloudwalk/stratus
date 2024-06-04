@@ -1,3 +1,5 @@
+import axios from "axios";
+import axiosRetry from 'axios-retry';
 import { ContractFactory, ContractTransactionReceipt, ContractTransactionResponse, JsonRpcProvider } from "ethers"
 import { upgrades, ethers, config, network } from "hardhat";
 import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, IERC20Hookable, PixCashier, YieldStreamer } from "../../typechain-types";
@@ -24,8 +26,35 @@ export const GAS_LIMIT_OVERRIDE = 6000000;
 export let deployer: SignerWithAddress;
 
 /* Providers */
-let providerUrl = (config.networks[network.name] as HttpNetworkConfig).url || "http://localhost:3000";
-let ETHERJS = new JsonRpcProvider(providerUrl);
+let providerUrl = (config.networks[network.name as string] as HttpNetworkConfig).url;
+if (!providerUrl) {
+    providerUrl = "http://localhost:8545";
+}
+
+export let ETHERJS = new JsonRpcProvider(
+    providerUrl,
+    undefined
+);
+
+export function updateProviderUrl(providerName: string) {
+    switch (providerName) {
+        case 'stratus':
+            providerUrl = 'http://localhost:3000';
+            break;
+        case 'hardhat':
+            providerUrl = 'http://localhost:8545';
+            break;
+        default:
+            throw new Error(`Unknown provider name: ${providerName}`);
+    }
+    ETHERJS = new JsonRpcProvider(providerUrl);
+}
+
+ETHERJS = new JsonRpcProvider(providerUrl);
+
+export function getProvider() {
+    return ETHERJS;
+}
 
 export async function setDeployer() {
     [deployer] = await ethers.getSigners();
@@ -127,4 +156,34 @@ export async function deployYieldStreamer() {
 
 export async function configureYieldStreamer() {
     waitReceipt(yieldStreamer.setBalanceTracker(await balanceTracker.getAddress()));
+}
+
+let requestId = 0;
+axiosRetry(axios, { retries: 3 });
+
+export async function sendAndGetFullResponse(method: string, params: any[] = []): Promise<any> {
+    // prepare request
+    const payload = {
+        jsonrpc: "2.0",
+        id: requestId++,
+        method: method,
+        params: params,
+    };
+    if (process.env.RPC_LOG) {
+        console.log("REQ  ->", JSON.stringify(payload));
+    }
+
+    // execute request and log response
+    const response = await axios.post(providerUrl, payload, { headers: { "Content-Type": "application/json" } });
+    if (process.env.RPC_LOG) {
+        console.log("RESP <-", JSON.stringify(response.data));
+    }
+
+    return response;
+}
+
+// Sends an RPC request to the blockchain, returning its result field.
+export async function send(method: string, params: any[] = []): Promise<any> {
+    const response = await sendAndGetFullResponse(method, params);
+    return response.data.result;
 }

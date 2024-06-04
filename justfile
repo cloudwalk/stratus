@@ -3,6 +3,7 @@ import '.justfile_helpers' # _lint, _outdated
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := "0"
+export RUST_LOG := env("RUST_LOG", "stratus=debug,rpc_downloader=info,importer_offline=info,importer_online=info,state_validator=info,relayer=debug")
 
 # Global arguments that can be passed to receipts.
 feature_flags := "dev," + env("FEATURES", "")
