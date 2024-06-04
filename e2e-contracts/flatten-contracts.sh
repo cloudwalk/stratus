@@ -40,7 +40,7 @@ flatten() {
 # ------------------------------------------------------------------------------
 
 # configure tools
-asdf local solidity 0.8.16
+asdf local solidity 0.8.16 || echo "asdf, solidity plugin or solidity version not found"
 
 # execute
 flatten brlc-token          BRLCToken

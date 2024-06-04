@@ -24,6 +24,7 @@ use stratus::ext::ResultExt;
 use stratus::infra::tracing::info_task_spawn;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
+use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::runtime::Handle;
@@ -47,6 +48,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("importer-offline");
+
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let storage = config.storage.init().await?;
@@ -145,6 +148,7 @@ async fn execute_block_importer(
     blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-executor";
+    let _timer = DropTimer::start("importer-offline::execute_block_importer");
 
     // receives blocks and receipts from the backlog to reexecute and import
     loop {
