@@ -4,8 +4,8 @@ import {
     BaseContract,
     Block,
     Contract,
-    JsonRpcProvider,
     JsonRpcApiProviderOptions,
+    JsonRpcProvider,
     keccak256,
     TransactionReceipt,
     TransactionResponse
@@ -15,7 +15,7 @@ import { HttpNetworkConfig } from "hardhat/types";
 import { Numbers } from "web3-types";
 import { WebSocket } from "ws";
 
-import { TestContractBalances, TestContractCounter } from "../../typechain-types";
+import { TestContractBalances, TestContractCounter, TestContractDenseStorage } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
 import { currentMiningIntervalInMs, currentNetwork, isStratus } from "./network";
 
@@ -150,15 +150,21 @@ export async function sendExpect(method: string, params: any[] = []): Promise<Ch
     return expect(await send(method, params));
 }
 
-// Deploys the TestContractBalances.
+// Deploys the "TestContractBalances" contract.
 export async function deployTestContractBalances(): Promise<TestContractBalances> {
     const testContractFactory = await ethers.getContractFactory("TestContractBalances");
     return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 
-// Deploys the TestContractCounter.
+// Deploys the "TestContractCounter" contract.
 export async function deployTestContractCounter(): Promise<TestContractCounter> {
     const testContractFactory = await ethers.getContractFactory("TestContractCounter");
+    return await testContractFactory.connect(CHARLIE.signer()).deploy();
+}
+
+// Deploys the "TestContractDenseStorage" contract.
+export async function deployTestContractDenseStorage(): Promise<TestContractDenseStorage> {
+    const testContractFactory = await ethers.getContractFactory("TestContractDenseStorage");
     return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 
