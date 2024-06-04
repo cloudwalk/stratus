@@ -27,12 +27,12 @@ jobs:
 
             - name: Install fd-find
               run: |
-                cargo install fd-find
+                cargo install fd-find@9.0.0
                 command -v fd
 
             - name: Install ripgrep
               run: |
-                cargo install ripgrep
+                cargo install ripgrep@14.1.0
                 command -v rg
 
             - name: Notify Slack

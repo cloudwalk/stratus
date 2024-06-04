@@ -2,6 +2,8 @@
 
 use std::env;
 use std::env::VarError;
+use std::io::stdout;
+use std::io::IsTerminal;
 use std::net::SocketAddr;
 
 use chrono::Local;
@@ -33,6 +35,8 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
     let stdout_log_format = env::var("LOG_FORMAT");
     let stdout_log_format = stdout_log_format.as_ref().map(String::as_str);
 
+    let enable_ansi = stdout().is_terminal();
+
     let stdout_layer = match stdout_log_format {
         Ok("json") => {
             println!("tracing registry enabling JSON logs");
@@ -47,6 +51,7 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
         Ok("verbose") | Ok("full") => {
             println!("tracing registry enabling VERBOSE text logs");
             fmt::Layer::default()
+                .with_ansi(enable_ansi)
                 .with_target(true)
                 .with_thread_ids(true)
                 .with_thread_names(true)
@@ -56,19 +61,17 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
         Ok("minimal") => {
             println!("tracing registry enabling MINIMAL text logs");
             fmt::Layer::default()
-                .with_target(false)
-                .with_thread_ids(false)
-                .with_thread_names(false)
+                .with_ansi(enable_ansi)
                 .with_timer(MinimalTimer)
                 .with_filter(EnvFilter::from_default_env())
                 .boxed()
         }
         Ok("normal") | Err(VarError::NotPresent) => {
             println!("tracing registry enabling NORMAL text logs");
-            fmt::Layer::default().with_filter(EnvFilter::from_default_env()).boxed()
+            fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed()
         }
-        Err(e) => panic!("{e}"),
-        Ok(unexpected) => panic!("unexpected LOG_FORMAT={unexpected}"),
+        Err(e) => panic!("Invalid UTF8 in `LOG_FORMAT`: {e}"),
+        Ok(unexpected) => panic!("unexpected `LOG_FORMAT={unexpected}`"),
     };
 
     // configure opentelemetry layer
