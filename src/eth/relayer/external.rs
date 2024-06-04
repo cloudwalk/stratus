@@ -147,7 +147,7 @@ impl ExternalRelayer {
                     if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                         let err_string = compare_error.to_string();
                         let error = log_and_err!("transaction mismatch!").context(err_string.clone());
-                        self.save_mismatch(stratus_receipt, Some(substrate_receipt), &err_string).await;
+                        self.save_mismatch(stratus_receipt, substrate_receipt, &err_string).await;
                         return error.map_err(RelayError::Mismatch);
                     } else {
                         return Ok(());
@@ -170,7 +170,7 @@ impl ExternalRelayer {
 
     /// Save a transaction mismatch to postgres, if it fails, save it to a file.
     #[tracing::instrument(name = "external_relayer::save_mismatch", skip_all)]
-    async fn save_mismatch(&self, stratus_receipt: ExternalReceipt, substrate_receipt: Option<ExternalReceipt>, err_string: &str) {
+    async fn save_mismatch(&self, stratus_receipt: ExternalReceipt, substrate_receipt: ExternalReceipt, err_string: &str) {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -211,7 +211,11 @@ impl ExternalRelayer {
             }
             Ok(res) =>
                 if res.rows_affected() == 0 {
-                    tracing::info!(?block_number, ?hash, "transaction mismatch already in database (this should only happen if this block is being retried).");
+                    tracing::info!(
+                        ?block_number,
+                        ?hash,
+                        "transaction mismatch already in database (this should only happen if this block is being retried)."
+                    );
                     return;
                 },
         }
