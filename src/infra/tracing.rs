@@ -56,9 +56,6 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
         Ok("minimal") => {
             println!("tracing registry enabling MINIMAL text logs");
             fmt::Layer::default()
-                .with_target(false)
-                .with_thread_ids(false)
-                .with_thread_names(false)
                 .with_timer(MinimalTimer)
                 .with_filter(EnvFilter::from_default_env())
                 .boxed()
