@@ -87,6 +87,10 @@ pub struct CommonConfig {
     #[arg(long = "nocapture")]
     pub nocapture: bool,
 
+    /// Direct access to peers via IP address, why will be included on data propagation and leader election.
+    #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
+    pub candidate_peers: Vec<String>,
+
     /// Url to the sentry project
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
     pub sentry_url: Option<String>,
