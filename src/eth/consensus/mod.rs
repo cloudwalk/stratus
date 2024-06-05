@@ -370,11 +370,7 @@ impl Consensus {
         );
 
         if self.peers.read().await.len() == 0 {
-            if self.is_leader().await {
-                return true;
-            } else {
-                return false;
-            }
+            return self.is_leader().await;
         }
 
         (last_arrived_block_number - 2) <= storage_block_number
