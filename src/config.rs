@@ -443,6 +443,10 @@ impl WithCommonConfig for StratusConfig {
 /// Configuration for `rpc-downlaoder` binary.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RpcDownloaderConfig {
+    /// Final block number to be downloaded.
+    #[arg(long = "block-end", env = "BLOCK_END")]
+    pub block_end: Option<u64>,
+
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
 
