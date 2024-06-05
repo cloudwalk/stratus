@@ -99,8 +99,9 @@ testcontainers-modules = { version = "=0.3.5", features = ["postgres"] }
 
 # test
 fake = { version = "=2.9.2", features = ["derive"] }
+
+#relayer
 petgraph = "0.6.5"
-daggy = { version = "0.8.0", features = ["stable_dag"] }
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
@@ -155,6 +156,10 @@ path = "src/bin/state_validator.rs"
 [[bin]]
 name = "run-with-importer"
 path = "src/bin/run_with_importer.rs"
+
+[[bin]]
+name = "relayer"
+path = "src/bin/relayer.rs"
 
 # ------------------------------------------------------------------------------
 # Features

@@ -31,10 +31,6 @@ e2e-contracts/integration/.tool-versions
 
 # E2E (NodeJS)
 node_modules/
-package.json
-package-lock.json
-e2e-contracts/integration/hardhat.config.ts
-e2e-contracts/integration/tsconfig.json
 
 # Build
 /target

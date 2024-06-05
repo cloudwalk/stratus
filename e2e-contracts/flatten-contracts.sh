@@ -28,6 +28,8 @@ flatten() {
     
     # Leave the repository folder
     cd ../../
+
+    npm install --save-dev ts-node
     
     # Lint the flattened contract
     log "Linting the flattened $contract ($repo)"
@@ -44,10 +46,10 @@ asdf local solidity 0.8.16 || echo "asdf, solidity plugin or solidity version no
 
 # execute
 flatten brlc-token          BRLCToken
-flatten brlc-periphery      CardPaymentProcessor
-flatten brlc-periphery      CashbackDistributor
-flatten brlc-pix-cashier    PixCashier
-flatten brlc-yield-streamer BalanceTracker
-flatten brlc-yield-streamer YieldStreamer
+#flatten brlc-periphery      CardPaymentProcessor
+#flatten brlc-periphery      CashbackDistributor
+#flatten brlc-pix-cashier    PixCashier
+#flatten brlc-yield-streamer BalanceTracker
+#flatten brlc-yield-streamer YieldStreamer
 #flatten brlc-multisig       MultiSigWallet
 #flatten compound-periphery  CompoundAgent
