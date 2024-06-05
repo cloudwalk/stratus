@@ -1,6 +1,0 @@
-reading env file: config/relayer.env.local
-env file error: path not found
-creating tokio runtime; async_threads=10; blocking_threads=10creating tracing registry
-tracing registry enabling NORMAL text logs
-tracing registry NOT enabling opentelemetry exporter
-tracing registry enabling tokio console

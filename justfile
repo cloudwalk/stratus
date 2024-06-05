@@ -417,7 +417,7 @@ e2e-relayer-external-up:
             exit 0
         fi
     )
-fi
+    fi
 
 # E2E: External Relayer job
 e2e-relayer-external-down:
