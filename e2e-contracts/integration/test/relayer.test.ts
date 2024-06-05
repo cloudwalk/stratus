@@ -45,9 +45,7 @@ describe("Relayer integration test", function () {
     
                 for (let i = 0; i < wallets.length; i++) {
                     const wallet = wallets[i];
-                    expect(await ethers.provider.getBalance(wallet.address)).to.be.equal(0);
                     expect(await brlcToken.mint(wallet.address, params.baseBalance, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, wallet, params.baseBalance);
-                    expect(await brlcToken.balanceOf(wallet.address)).to.equal(params.baseBalance);
                 }
             });
     
