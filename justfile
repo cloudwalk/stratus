@@ -399,7 +399,7 @@ e2e-relayer-external-up:
     if [ -d e2e-contracts ]; then
         (
           cd e2e-contracts/integration
-          npx hardhat test test/*.test.ts --network stratus > ../../e2e_logs/test.log 
+          npx hardhat test test/*.test.ts --network stratus
         )
     fi
 
