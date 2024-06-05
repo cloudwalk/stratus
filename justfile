@@ -366,6 +366,11 @@ e2e-relayer:
 e2e-relayer-external-up:
     #!/bin/bash
 
+    # Build Stratus and Relayer binaries
+    cargo build --release --bin stratus --features dev
+    cargo build --release --bin relayer --features dev
+    
+
     mkdir e2e_logs
 
     # Start Postgres
