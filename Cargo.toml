@@ -156,6 +156,10 @@ path = "src/bin/state_validator.rs"
 name = "run-with-importer"
 path = "src/bin/run_with_importer.rs"
 
+[[bin]]
+name = "relayer"
+path = "src/bin/relayer.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
