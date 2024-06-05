@@ -2,12 +2,11 @@ pub mod forward_to;
 
 use std::collections::HashMap;
 use std::env;
+use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-use rand::Rng;
-use std::net::UdpSocket;
 
 use anyhow::anyhow;
 #[cfg(feature = "kubernetes")]
@@ -18,6 +17,7 @@ use kube::api::Api;
 use kube::api::ListParams;
 #[cfg(feature = "kubernetes")]
 use kube::Client;
+use rand::Rng;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
@@ -44,13 +44,13 @@ pub mod append_entry {
 use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
-use append_entry::RequestVoteRequest;
-use append_entry::RequestVoteResponse;
 use append_entry::AppendBlockCommitRequest;
 use append_entry::AppendBlockCommitResponse;
 use append_entry::AppendTransactionExecutionsRequest;
 use append_entry::AppendTransactionExecutionsResponse;
 use append_entry::BlockHeader;
+use append_entry::RequestVoteRequest;
+use append_entry::RequestVoteResponse;
 use append_entry::StatusCode;
 
 use super::primitives::TransactionInput;
@@ -162,7 +162,7 @@ impl Consensus {
             importer_config,
             role: RwLock::new(Role::Follower),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1500..1700)), // Adjust as needed
-            election_timeout: Duration::from_millis(rand::thread_rng().gen_range(1700..1900)), // Adjust as needed
+            election_timeout: Duration::from_millis(rand::thread_rng().gen_range(1700..1900)),  // Adjust as needed
             my_address,
         };
         let consensus = Arc::new(consensus);
@@ -226,11 +226,10 @@ impl Consensus {
             });
 
             match peer_clone.client.request_vote(request).await {
-                Ok(response) => {
+                Ok(response) =>
                     if response.into_inner().vote_granted {
                         votes += 1;
-                    }
-                }
+                    },
                 Err(_) => {
                     tracing::warn!("Failed to request vote from {:?}", peer_address);
                 }
@@ -342,7 +341,7 @@ impl Consensus {
             sync_online_enabled = self.importer_config.is_some(),
             "handling request forward"
         );
-        if  is_leader && self.importer_config.is_none() {
+        if is_leader && self.importer_config.is_none() {
             return false; // the leader is on miner mode and should deal with the requests
         }
         true
@@ -487,7 +486,6 @@ impl Consensus {
         Ok(peers)
     }
 
-
     #[cfg(feature = "kubernetes")]
     async fn discover_peers_kubernetes(consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
@@ -525,7 +523,6 @@ impl Consensus {
 
         Ok(peers)
     }
-
 
     async fn handle_peer_block_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
         let mut block_queue: Vec<Block> = Vec::new();
@@ -636,10 +633,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }))
     }
 
-    async fn request_vote(
-        &self,
-        request: Request<RequestVoteRequest>,
-    ) -> Result<Response<RequestVoteResponse>, Status> {
+    async fn request_vote(&self, request: Request<RequestVoteRequest>) -> Result<Response<RequestVoteResponse>, Status> {
         let request = request.into_inner();
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);
