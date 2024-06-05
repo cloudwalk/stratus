@@ -16,10 +16,12 @@ use kube::api::Api;
 use kube::api::ListParams;
 #[cfg(feature = "kubernetes")]
 use kube::Client;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
@@ -54,7 +56,6 @@ use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
-const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,12 +68,6 @@ enum Role {
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 struct PeerAddress(String);
 
-impl PeerAddress {
-    pub fn inner(&self) -> &str {
-        &self.0
-    }
-}
-
 #[derive(Clone)]
 struct Peer {
     client: AppendEntryServiceClient<Channel>,
@@ -81,13 +76,17 @@ struct Peer {
     next_index: u64,
     role: Role,
     term: u64,
+    receiver: Arc<Mutex<broadcast::Receiver<Block>>>,
 }
 
+type PeerTuple = (Peer, JoinHandle<()>);
+
 pub struct Consensus {
-    pub sender: Sender<Block>,
+    pub sender: Sender<Block>,                      //receives blocks
+    broadcast_sender: broadcast::Sender<Block>,     //propagates the blocks
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
-    peers: Arc<RwLock<HashMap<PeerAddress, Peer>>>,
+    peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     candidate_peers: Vec<String>,
     leader_name: String,                  //XXX check the peers instead of using it
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
@@ -109,14 +108,16 @@ impl Consensus {
 
         tracing::info!(leader_name = leader_name, "Starting consensus module with leader");
 
-        let (sender, receiver) = mpsc::channel::<Block>(32);
+        let (sender, receiver) = mpsc::channel::<Block>(32); //TODO add this to metrics
         let receiver = Arc::new(Mutex::new(receiver));
+        let (broadcast_sender, _) = broadcast::channel(32); //TODO add this to metrics
 
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
         let peers = Arc::new(RwLock::new(HashMap::new()));
 
         let consensus = Self {
             sender,
+            broadcast_sender,
             storage,
             peers,
             candidate_peers,
@@ -126,7 +127,6 @@ impl Consensus {
         };
         let consensus = Arc::new(consensus);
 
-        let _ = Self::discover_peers(Arc::clone(&consensus)).await; //TODO refactor this method to also receive addresses from the environment
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
         Self::initialize_server(Arc::clone(&consensus));
@@ -136,6 +136,7 @@ impl Consensus {
 
     fn new_stand_alone(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
         let (sender, mut receiver) = mpsc::channel::<Block>(32);
+        let (broadcast_sender, _) = broadcast::channel(32);
 
         named_spawn("consensus::receiver", async move {
             while let Some(data) = channel_read!(receiver) {
@@ -150,6 +151,7 @@ impl Consensus {
             leader_name: "standalone".to_string(),
             storage,
             sender,
+            broadcast_sender,
             peers,
             candidate_peers: vec![],
             last_arrived_block_number,
@@ -161,35 +163,28 @@ impl Consensus {
         named_spawn("consensus::peer_discovery", async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
-                interval.tick().await;
                 tracing::info!("Starting periodic peer discovery...");
                 Self::discover_peers(Arc::clone(&consensus)).await;
+                interval.tick().await;
             }
         });
     }
 
     fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
+        //TODO add data to consensus-log-transactions
+        //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
+        //TODO use gRPC instead of jsonrpc
+        //FIXME for now, this has no colateral efects, but it will have in the future
+        //TODO rediscover followers on comunication error
         named_spawn("consensus::sender", async move {
-            let peers = consensus.peers.read().await;
-
             loop {
                 let mut receiver_lock = receiver.lock().await;
                 if let Some(data) = receiver_lock.recv().await {
                     if consensus.is_leader() {
-                        //TODO add data to consensus-log-transactions
-                        //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
-                        //TODO use gRPC instead of jsonrpc
-                        //FIXME for now, this has no colateral efects, but it will have in the future
-                        match Self::append_block_commit_to_followers(data.clone(), peers.clone()).await {
-                            Ok(_) => {
-                                tracing::info!(number = data.header.number.as_u64(), "Data sent to followers");
-                            }
-                            Err(e) => {
-                                //TODO rediscover followers on comunication error
-                                tracing::error!("Failed to send data to followers: {}", e);
-                            }
+                        if let Err(e) = consensus.broadcast_sender.send(data) {
+                            tracing::warn!("Failed to broadcast block: {:?}", e);
                         }
                     }
                 }
@@ -299,39 +294,45 @@ impl Consensus {
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
-        if let Ok(k8s_peers) = Self::discover_peers_kubernetes().await {
+        if let Ok(k8s_peers) = Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
             new_peers.extend(k8s_peers);
         }
 
-        if let Ok(env_peers) = Self::discover_peers_env(&consensus.candidate_peers).await {
+        if let Ok(env_peers) = Self::discover_peers_env(&consensus.candidate_peers, Arc::clone(&consensus)).await {
             new_peers.extend(env_peers);
         }
 
         let mut peers_lock = consensus.peers.write().await;
+
         for (address, new_peer) in new_peers {
-            tracing::info!("Processing peer: {}", address.0);
-            peers_lock
-                .entry(address.clone())
-                .and_modify(|existing_peer| {
-                    tracing::info!("Updating existing peer: {}", address.0);
-                    existing_peer.client = new_peer.client.clone();
-                    existing_peer.last_heartbeat = new_peer.last_heartbeat;
-                    existing_peer.role = new_peer.role.clone();
-                    existing_peer.term = new_peer.term;
-                    // Preserve match_index and next_index of existing peers
-                })
-                .or_insert_with(|| {
-                    tracing::info!("Adding new peer: {}", address.0);
-                    new_peer
-                });
+            if peers_lock.contains_key(&address) {
+                tracing::info!("Peer {} already exists, skipping initialization", address.0);
+                continue;
+            }
+
+            let peer = Peer {
+                receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
+                ..new_peer
+            };
+
+            let consensus_clone = Arc::clone(&consensus);
+            let peer_clone = peer.clone();
+
+            let handle = named_spawn("consensus::propagate", async move {
+                Self::handle_peer_block_propagation(peer_clone, consensus_clone).await;
+            });
+
+            tracing::info!("Adding new peer: {}", address.0);
+            peers_lock.insert(address, (peer, handle));
         }
+
         tracing::info!(
             peers = ?peers_lock.keys().collect::<Vec<&PeerAddress>>(),
             "Discovered peers",
         );
     }
 
-    async fn discover_peers_env(addresses: &[String]) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
+    async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         for address in addresses {
@@ -342,8 +343,9 @@ impl Consensus {
                         last_heartbeat: std::time::Instant::now(),
                         match_index: 0,
                         next_index: 0,
-                        role: Role::Follower,
-                        term: 0, // Replace with actual term
+                        role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
+                        term: 0,              // Replace with actual term
+                        receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                     };
                     peers.push((PeerAddress(address.clone()), peer));
                     tracing::info!("Peer {} is available", address);
@@ -358,7 +360,7 @@ impl Consensus {
     }
 
     #[cfg(feature = "kubernetes")]
-    async fn discover_peers_kubernetes() -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
+    async fn discover_peers_kubernetes(consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         let client = Client::try_default().await?;
@@ -379,8 +381,9 @@ impl Consensus {
                             last_heartbeat: std::time::Instant::now(),
                             match_index: 0,
                             next_index: 0,
-                            role: Role::Follower,
-                            term: 0, // Replace with actual term
+                            role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
+                            term: 0,              // Replace with actual term
+                            receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
                         peers.push((PeerAddress(address), peer));
                     }
@@ -391,95 +394,61 @@ impl Consensus {
         Ok(peers)
     }
 
-    async fn append_block_commit(
-        mut follower: Peer,
-        header: BlockHeader,
-        transaction_hashes: Vec<String>,
-        term: u64,
-        prev_log_index: u64,
-        prev_log_term: u64,
-        peer_id: String,
-    ) -> Result<(), anyhow::Error> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        for attempt in 1..=RETRY_ATTEMPTS {
-            let request = Request::new(AppendBlockCommitRequest {
-                term,
-                prev_log_index,
-                prev_log_term,
-                header: Some(header.clone()),
-                transaction_hashes: transaction_hashes.clone(),
-            });
-
-            let response = follower.client.append_block_commit(request).await;
-
-            match response {
-                Ok(resp) => {
-                    let resp = resp.into_inner();
-
-                    tracing::debug!(follower = peer_id, last_heartbeat = ?follower.last_heartbeat, match_index = follower.match_index, next_index = follower.next_index, role = ?follower.role, term = follower.term,  "current follower state"); //TODO also move this to metrics
-
-                    match StatusCode::try_from(resp.status) {
-                        Ok(StatusCode::AppendSuccess) => {
-                            #[cfg(not(feature = "metrics"))]
-                            tracing::debug!(follower = peer_id, "Block commit appended to follower: attempt {}: success", attempt);
-                            #[cfg(feature = "metrics")]
-                            tracing::info!(
-                                follower = peer_id,
-                                "Block commit appended to follower: attempt {}: success time_elapsed: {:?}",
-                                attempt,
-                                start.elapsed()
-                            );
-                            return Ok(());
-                        }
-                        _ => {
-                            tracing::error!(follower = peer_id, "Unexpected status from follower: {:?}", resp.status);
-                        }
+    async fn handle_peer_block_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
+        let mut block_queue: Vec<Block> = Vec::new();
+        loop {
+            let mut receiver_lock = peer.receiver.lock().await;
+            match receiver_lock.recv().await {
+                Ok(block) => {
+                    block_queue.push(block.clone());
+                }
+                Err(e) => {
+                    tracing::warn!("Error receiving block for peer {:?}: {:?}", peer.client, e);
+                }
+            }
+            drop(receiver_lock); // Drop the immutable borrow before making a mutable borrow
+            while let Some(block) = block_queue.first() {
+                match consensus.append_block_to_peer(&mut peer, block).await {
+                    Ok(_) => {
+                        block_queue.remove(0); // Remove the successfully sent block from the queue
+                        tracing::info!("Successfully appended block to peer: {:?}", peer.client);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to append block to peer {:?}: {:?}", peer.client, e);
+                        sleep(RETRY_DELAY).await;
                     }
                 }
-                Err(e) => tracing::error!(follower = peer_id, "Error appending block commit to follower, attempt{}: {:?}", attempt, e),
             }
-            sleep(RETRY_DELAY).await;
         }
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_append_entries(start.elapsed());
-
-        Err(anyhow!("Failed to append block commit to {} after {} attempts", peer_id, RETRY_ATTEMPTS))
     }
 
-    #[tracing::instrument(skip_all)]
-    pub async fn append_block_commit_to_followers(block: Block, followers: HashMap<PeerAddress, Peer>) -> Result<(), anyhow::Error> {
+    async fn append_block_to_peer(&self, peer: &mut Peer, block: &Block) -> Result<(), anyhow::Error> {
         let header: BlockHeader = (&block.header).into();
         let transaction_hashes = vec![]; // Replace with actual transaction hashes
 
-        let term = 0; // Populate with actual term
-        let prev_log_index = 0; // Populate with actual previous log index
-        let prev_log_term = 0; // Populate with actual previous log term
+        let request = Request::new(AppendBlockCommitRequest {
+            term: 0,
+            prev_log_index: 0,
+            prev_log_term: 0,
+            header: Some(header),
+            transaction_hashes,
+        });
 
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-        for follower in &followers {
-            if let Err(e) = Self::append_block_commit(
-                follower.1.clone(),
-                header.clone(),
-                transaction_hashes.clone(),
-                term,
-                prev_log_index,
-                prev_log_term,
-                follower.0.inner().to_string(),
-            )
-            .await
-            {
-                tracing::warn!(follower = follower.0.inner().to_string(), "Error appending block commit to follower: {:?}", e);
-            }
-        }
+
+        let response = peer.client.append_block_commit(request).await?;
+        let response = response.into_inner();
 
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        Ok(())
+        tracing::info!(last_heartbeat = ?peer.last_heartbeat, match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role, term = peer.term,  "current follower state"); //TODO also move this to metrics
+
+        match StatusCode::try_from(response.status) {
+            Ok(StatusCode::AppendSuccess) => Ok(()),
+            _ => Err(anyhow!("Unexpected status code: {:?}", response.status)),
+        }
     }
 }
 
