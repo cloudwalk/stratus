@@ -107,7 +107,7 @@ describe("Relayer integration test", function () {
                 // Total time it took for Hardhat to process all the blocks containing transactions
                 const hardhatProcessingTime = hardhatTimestamps[hardhatTimestamps.length - 1] - hardhatTimestamps[0];
     
-                console.log(`          WARN: Stratus processing time: ${stratusProcessingTime}s | Hardhat processing time: ${hardhatProcessingTime}s`);
+                console.log(`          ✔ Stratus processing time: ${stratusProcessingTime}s | Hardhat processing time: ${hardhatProcessingTime}s`);
             });
     
             it(`${params.name}: Validate balances between Stratus and Hardhat`, async function () {
@@ -185,6 +185,20 @@ describe("Relayer integration test", function () {
                 nonces[i % 2]++;
             }
             await new Promise(resolve => setTimeout(resolve, 2000));
+        });
+
+        it("Validate no mismatched transactions were generated", async function () {
+            const client = await getDbClient();
+        
+            // Validate connection to Postgres
+            const testRes = await client.query('SELECT 1');
+            expect(testRes.rowCount).to.equal(1, 'Could not connect to the database');
+        
+            // Validate that no mismatched transactions were found
+            const res = await client.query('SELECT * FROM mismatches');
+            expect(res.rows.length).to.equal(0, 'Mismatched transactions were found');
+        
+            await client.end();
         });
     });
 });
