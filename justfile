@@ -358,8 +358,11 @@ e2e-relayer:
     #!/bin/bash
 
     just e2e-relayer-external-up
+    result_code=$?
 
     just e2e-relayer-external-down
+
+    exit $result_code
 
 # E2E: External Relayer job
 e2e-relayer-external-up:
