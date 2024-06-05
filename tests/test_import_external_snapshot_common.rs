@@ -158,7 +158,7 @@ pub async fn execute_test(
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
 
     // execute and mine
-    executor.reexecute_external(&block, &receipts).await.unwrap();
+    executor.external_block(&block, &receipts).await.unwrap();
     miner.mine_external_and_commit().await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
