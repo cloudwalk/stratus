@@ -45,7 +45,7 @@ test() {
 # ------------------------------------------------------------------------------
 
 # configure tools
-asdf local nodejs 20.10.0
+asdf local nodejs 20.10.0 || echo "asdf, nodejs plugin or nodejs version not found"
 
 # Initialize variables
 token=0

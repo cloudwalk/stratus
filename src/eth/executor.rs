@@ -13,6 +13,7 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tracing::span::Id;
 use tracing::Span;
 
 use super::Consensus;
@@ -44,7 +45,23 @@ use crate::ext::SpanExt;
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
-pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
+#[derive(Debug)]
+pub struct EvmTask {
+    pub span_id: Option<Id>,
+    pub input: EvmInput,
+    pub response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>,
+}
+
+impl EvmTask {
+    pub fn new(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
+        Self {
+            span_id: Span::current().id(),
+            input,
+            response_tx,
+        }
+    }
+}
+
 pub struct Executor {
     /// Channel to send transactions to background EVMs.
     evm_tx: crossbeam_channel::Sender<EvmTask>,
@@ -337,10 +354,9 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
-    #[tracing::instrument(name = "executor::evm", skip_all)]
     async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
-        self.evm_tx.send((evm_input, execution_tx))?;
+        self.evm_tx.send(EvmTask::new(evm_input, execution_tx))?;
         execution_rx.await?
     }
 }

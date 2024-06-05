@@ -3,6 +3,7 @@ mod importer_online;
 use stratus::config::ExternalRelayerConfig;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
+use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 
@@ -14,6 +15,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("relayer");
+
     tracing::info!(?TASK_NAME, "starting");
 
     // init services
