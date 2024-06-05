@@ -358,31 +358,43 @@ e2e-relayer:
     #!/bin/bash
 
     just e2e-relayer-external-up
+    result_code=$?
 
     just e2e-relayer-external-down
+
+    exit $result_code
 
 # E2E: External Relayer job
 e2e-relayer-external-up:
     #!/bin/bash
+
+    # Build Stratus and Relayer binaries
+    echo "Building Stratus binary"
+    cargo build --release --bin stratus --features dev
+    echo "Building Stratus binary"
+    cargo build --release --bin relayer --features dev
+
+    mkdir e2e_logs
 
     # Start Postgres
     docker-compose up -V -d
 
     # Wait for Postgres to start
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
+    sleep 5
 
     # Start Stratus binary
-    cargo run --release --bin stratus --features dev -- --enable-test-accounts --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@localhost:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    cargo run --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@0.0.0.0:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     # Install npm and start hardhat node in the e2e directory
-    if [ -d e2e ]; then
+    if [ -d e2e-contracts ]; then
         (
-            cd e2e
+            cd e2e-contracts/integration
             npm install
-            BLOCK_MODE=1s npx hardhat node > ../e2e_logs/hardhat.log &
+            BLOCK_MODE=1s npx hardhat node > ../../e2e_logs/hardhat.log &
         )
     fi
 
@@ -391,13 +403,20 @@ e2e-relayer-external-up:
     sleep 5
 
     # Start Relayer External binary
-    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@localhost:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://localhost:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
-
-    if [ -d e2e ]; then
-        (
-            cd e2e
-            npx hardhat test test/relayer/*.test.ts --network stratus > ../e2e_logs/test.log
-        )
+    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
+    
+    if [ -d e2e-contracts ]; then
+    (
+        cd e2e-contracts/integration
+        npx hardhat test test/*.test.ts --network stratus
+        if [ $? -ne 0 ]; then
+            echo "Hardhat tests failed"
+            exit 1
+        else
+            echo "Hardhat tests passed successfully"
+            exit 0
+        fi
+    )
     fi
 
 # E2E: External Relayer job
@@ -420,8 +439,15 @@ e2e-relayer-external-down:
     docker-compose down -v
     docker volume prune -f
 
-    # Delete the data directory
-    rm -rf ./data
+    # Delete data contents
+    rm -rf ./data/*
+
+    # Recreate data directories
+    mkdir -p data/mismatched_transactions
+    rm -rf data/mismatched_transactions/*
+
+    # Delete zeppelin directory
+    rm -rf ./e2e-contracts/integration/.openzeppelin
 
 # ------------------------------------------------------------------------------
 # Contracts tasks

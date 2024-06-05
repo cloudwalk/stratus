@@ -203,5 +203,8 @@ metrics! {
     histogram_duration take_roots{} [],
 
     "Time to run ExternalRelayer::relay_dag."
-    histogram_duration relay_dag{} []
+    histogram_duration relay_dag{} [],
+
+    "Number of execution mismatches."
+    histogram_duration save_mismatch{} []
 }
