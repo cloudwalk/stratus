@@ -27,11 +27,12 @@ describe("Relayer integration test", function () {
         });
 
     });
-    describe("Transaction tests", function () {
+
+    describe("Long duration transaction tests", function () {
         const parameters = [
-            { name: "Few wallets, sufficient balance", wallets: 3, duration: 10, tps: 5, baseBalance: 2000 },
-            { name: "Few wallets, insufficient balance", wallets: 2, duration: 10, tps: 1, baseBalance: 5 }, // Force transfer amount exceeds balance case
-            { name: "Many wallets, sufficient balance", wallets: 30, duration: 10, tps: 30, baseBalance: 2000 },
+            { name: "Few wallets, sufficient balance", wallets: 3, duration: 20, tps: 5, baseBalance: 2000 },
+            { name: "Few wallets, insufficient balance", wallets: 2, duration: 20, tps: 1, baseBalance: 5 },
+            { name: "Many wallets, sufficient balance", wallets: 30, duration: 20, tps: 30, baseBalance: 2000 },
         ];
         parameters.forEach((params, index) => {
             const wallets: any[] = [];
@@ -159,6 +160,31 @@ describe("Relayer integration test", function () {
             
                 await client.end();
             });
+        });
+    });
+
+    describe("Edge case transaction test", function () {
+        it("Back and forth transfer with minimum funds should order successfully", async function () {
+            const alice = ethers.Wallet.createRandom().connect(ethers.provider);
+            const bob = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            let wallets = [alice, bob];
+
+            // Mint 10 tokens to Alice's account only
+            expect(await brlcToken.mint(alice.address, 10, { gasLimit: GAS_LIMIT_OVERRIDE })).to.have.changeTokenBalance(brlcToken, alice, 10);
+
+            let nonces = await Promise.all(wallets.map(wallet => send("eth_getTransactionCount", [wallet.address, "latest"])));
+
+            // Perform 10 transfers back and forth between Alice and Bob
+            for (let i = 0; i < 10; i++) {
+                let sender = wallets[i % 2];
+                let receiver = wallets[(i + 1) % 2];
+                
+                await brlcToken.connect(sender).transfer(receiver.address, 10, { gasPrice: 0, gasLimit: GAS_LIMIT_OVERRIDE, type: 0, nonce: nonces[i % 2] });
+
+                nonces[i % 2]++;
+            }
+            await new Promise(resolve => setTimeout(resolve, 5000));
         });
     });
 });
