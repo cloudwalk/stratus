@@ -65,7 +65,7 @@ const RETRY_DELAY: Duration = Duration::from_millis(10);
 enum Role {
     Leader,
     Follower,
-    Candidate,
+    _Candidate,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -109,10 +109,6 @@ impl PeerAddress {
             jsonrpc_port,
             grpc_port,
         })
-    }
-
-    fn to_string(&self) -> String {
-        format!("http://{}:{};{}", self.address, self.jsonrpc_port, self.grpc_port)
     }
 }
 
@@ -165,8 +161,8 @@ impl Consensus {
             last_arrived_block_number,
             importer_config,
             role: RwLock::new(Role::Follower),
-            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(150..300)), // Adjust as needed
-            election_timeout: Duration::from_millis(rand::thread_rng().gen_range(300..500)), // Adjust as needed
+            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1500..1700)), // Adjust as needed
+            election_timeout: Duration::from_millis(rand::thread_rng().gen_range(1700..1900)), // Adjust as needed
             my_address,
         };
         let consensus = Arc::new(consensus);
@@ -220,6 +216,8 @@ impl Consensus {
 
         let peers = self.peers.read().await;
         for (peer_address, (peer, _)) in peers.iter() {
+            let mut peer_clone = peer.clone();
+
             let request = Request::new(RequestVoteRequest {
                 term,
                 candidate_id: Self::current_node().unwrap(),
@@ -227,7 +225,7 @@ impl Consensus {
                 last_log_term: term,
             });
 
-            match peer.client.request_vote(request).await {
+            match peer_clone.client.request_vote(request).await {
                 Ok(response) => {
                     if response.into_inner().vote_granted {
                         votes += 1;
@@ -385,7 +383,7 @@ impl Consensus {
         Some(namespace.trim().to_string())
     }
 
-    pub async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
+    async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
         let peers = self.peers.read().await;
         for (address, (peer, _)) in peers.iter() {
             if peer.role == Role::Leader {
@@ -457,47 +455,38 @@ impl Consensus {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         for address in addresses {
-            // Validate and parse the address format
-            let url_parts: Vec<&str> = address.split("://").collect();
-            if url_parts.len() != 2 {
-                return Err(anyhow::anyhow!("Invalid address format: {}", address));
-            }
-            let protocol = url_parts[0];
-            let address_and_ports: Vec<&str> = url_parts[1].split(';').collect();
-            if address_and_ports.len() != 2 {
-                return Err(anyhow::anyhow!("Invalid address format: {}", address));
-            }
-            let base_address = address_and_ports[0];
-            let ports: Vec<&str> = address_and_ports[1].split(';').collect();
-            if ports.len() != 2 {
-                return Err(anyhow::anyhow!("Invalid port format: {}", address));
-            }
-            let jsonrpc_port = ports[0].parse::<u16>().map_err(|_| anyhow::anyhow!("Invalid JSON-RPC port: {}", ports[0]))?;
-            let grpc_port = ports[1].parse::<u16>().map_err(|_| anyhow::anyhow!("Invalid gRPC port: {}", ports[1]))?;
-
-            let full_grpc_address = format!("{}://{}:{}", protocol, base_address, grpc_port);
-            match AppendEntryServiceClient::connect(full_grpc_address.clone()).await {
-                Ok(client) => {
-                    let peer = Peer {
-                        client,
-                        last_heartbeat: std::time::Instant::now(),
-                        match_index: 0,
-                        next_index: 0,
-                        role: Role::Follower, //FIXME it won't be always follower, we need to check the leader or candidates
-                        term: 0,              // Replace with actual term
-                        receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
-                    };
-                    peers.push((PeerAddress::new(base_address, jsonrpc_port, grpc_port), peer));
-                    tracing::info!("Peer {} is available", address);
+            // Parse the address format using from_string method
+            match PeerAddress::from_string(address.to_string()) {
+                Ok(peer_address) => {
+                    let full_grpc_address = peer_address.full_grpc_address();
+                    match AppendEntryServiceClient::connect(full_grpc_address.clone()).await {
+                        Ok(client) => {
+                            let peer = Peer {
+                                client,
+                                last_heartbeat: std::time::Instant::now(),
+                                match_index: 0,
+                                next_index: 0,
+                                role: Role::Follower, // FIXME it won't be always follower, we need to check the leader or candidates
+                                term: 0,              // Replace with actual term
+                                receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
+                            };
+                            peers.push((peer_address, peer));
+                            tracing::info!("Peer {} is available", address);
+                        }
+                        Err(_) => {
+                            tracing::warn!("Peer {} is not available", address);
+                        }
+                    }
                 }
-                Err(_) => {
-                    tracing::warn!("Peer {} is not available", address);
+                Err(e) => {
+                    tracing::warn!("Invalid address format: {}. Error: {:?}", address, e);
                 }
             }
         }
 
         Ok(peers)
     }
+
 
     #[cfg(feature = "kubernetes")]
     async fn discover_peers_kubernetes(consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
@@ -528,7 +517,7 @@ impl Consensus {
                             term: 0,              // Replace with actual term
                             receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
-                        peers.push((PeerAddress::new(&address, jsonrpc_port, grpc_port), peer));
+                        peers.push((PeerAddress::new(address, jsonrpc_port, grpc_port), peer));
                     }
                 }
             }
@@ -670,7 +659,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let mut voted_for = consensus.voted_for.lock().await;
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
-        if voted_for.is_none() || *voted_for == Some(candidate_address) {
+        if voted_for.is_none() || *voted_for == Some(candidate_address.clone()) {
             *voted_for = Some(candidate_address);
             return Ok(Response::new(RequestVoteResponse {
                 term: request.term,
