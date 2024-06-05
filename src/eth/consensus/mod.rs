@@ -1,7 +1,5 @@
 pub mod forward_to;
 
-use tokio::task::JoinHandle;
-use tokio::sync::broadcast;
 use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::AtomicU64;
@@ -18,10 +16,12 @@ use kube::api::Api;
 use kube::api::ListParams;
 #[cfg(feature = "kubernetes")]
 use kube::Client;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
@@ -82,8 +82,8 @@ struct Peer {
 type PeerTuple = (Peer, JoinHandle<()>);
 
 pub struct Consensus {
-    pub sender: Sender<Block>, //receives blocks
-    broadcast_sender: broadcast::Sender<Block>, //propagates the blocks
+    pub sender: Sender<Block>,                      //receives blocks
+    broadcast_sender: broadcast::Sender<Block>,     //propagates the blocks
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
@@ -344,7 +344,7 @@ impl Consensus {
                         match_index: 0,
                         next_index: 0,
                         role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
-                        term: 0, // Replace with actual term
+                        term: 0,              // Replace with actual term
                         receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                     };
                     peers.push((PeerAddress(address.clone()), peer));
@@ -382,7 +382,7 @@ impl Consensus {
                             match_index: 0,
                             next_index: 0,
                             role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
-                            term: 0, // Replace with actual term
+                            term: 0,              // Replace with actual term
                             receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
                         peers.push((PeerAddress(address), peer));
@@ -450,7 +450,6 @@ impl Consensus {
             _ => Err(anyhow!("Unexpected status code: {:?}", response.status)),
         }
     }
-
 }
 
 pub struct AppendEntryServiceImpl {
