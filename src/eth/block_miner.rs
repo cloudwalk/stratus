@@ -2,13 +2,13 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Ok;
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
+use tracing::Span;
 
 use super::Consensus;
 use crate::eth::primitives::Block;
@@ -28,6 +28,7 @@ use crate::ext::named_spawn;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::DisplayExt;
+use crate::ext::SpanExt;
 use crate::log_and_err;
 
 pub struct BlockMiner {
@@ -89,7 +90,12 @@ impl BlockMiner {
     }
 
     /// Persists a transaction execution.
+    #[tracing::instrument(name = "miner::save_execution", skip_all, fields(hash))]
     pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
+        Span::with(|s| {
+            s.rec("hash", &tx_execution.hash());
+        });
+
         // save execution to temporary storage
         let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone()).await?;
@@ -123,6 +129,7 @@ impl BlockMiner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
+    #[tracing::instrument(name = "miner::mine_external", skip_all, fields(number))]
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external block");
 
@@ -139,7 +146,12 @@ impl BlockMiner {
 
         // mine external transactions
         let mined_txs = mine_external_transactions(block.number, external_txs)?;
-        block_from_external(external_block, mined_txs)
+        let block = block_from_external(external_block, mined_txs);
+
+        block.map(|block| {
+            Span::with(|s| s.rec("number", block.number()));
+            block
+        })
     }
 
     /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
@@ -151,6 +163,7 @@ impl BlockMiner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
+    #[tracing::instrument(name = "miner::mine_external_mixed", skip_all, fields(number))]
     pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external mixed block");
 
@@ -174,6 +187,8 @@ impl BlockMiner {
             block.push_execution(tx.input, tx.result);
         }
 
+        Span::with(|s| s.rec("number", block.number()));
+
         Ok(block)
     }
 
@@ -186,6 +201,7 @@ impl BlockMiner {
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
+    #[tracing::instrument(name = "miner::mine_local", skip_all, fields(number))]
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining local block");
 
@@ -198,10 +214,15 @@ impl BlockMiner {
         }
 
         // mine local transactions
-        match NonEmpty::from_vec(local_txs) {
+        let block = match NonEmpty::from_vec(local_txs) {
             Some(local_txs) => block_from_local(block.number, local_txs),
             None => Ok(Block::new_at_now(block.number)),
-        }
+        };
+
+        block.map(|block| {
+            Span::with(|s| s.rec("number", block.number()));
+            block
+        })
     }
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
@@ -211,7 +232,10 @@ impl BlockMiner {
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
+    #[tracing::instrument(name = "miner::commit", skip_all, fields(number))]
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
+        Span::with(|s| s.rec("number", block.number()));
+
         tracing::info!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 
         // extract fields to use in notifications

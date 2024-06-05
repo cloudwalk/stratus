@@ -351,7 +351,7 @@ async fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -
 async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<String, RpcError> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
-    match ctx.executor.call(call, StoragePointInTime::Present).await {
+    match ctx.executor.local_call(call, StoragePointInTime::Present).await {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 
@@ -377,7 +377,7 @@ async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<St
     });
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
-    match ctx.executor.call(call, point_in_time).await {
+    match ctx.executor.local_call(call, point_in_time).await {
         // success or failure, does not matter
         Ok(result) => Ok(hex_data(result.output)),
 
@@ -415,7 +415,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
 
     // execute
     let tx_hash = tx.hash;
-    match ctx.executor.transact(tx).await {
+    match ctx.executor.local_transaction(tx).await {
         // result is success
         Ok(evm_result) if evm_result.is_success() => Ok(hex_data(tx_hash)),
 
