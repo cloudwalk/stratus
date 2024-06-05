@@ -91,7 +91,7 @@ jobs:
         run: just contracts-flatten
 
       - name: Run e2e tests
-        run: just e2e-relayer
+        run: just e2e-relayer-external-up
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
           RUST_LOG: off 
