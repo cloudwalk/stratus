@@ -6,6 +6,8 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
+use rand::Rng;
+use std::net::UdpSocket;
 
 use anyhow::anyhow;
 #[cfg(feature = "kubernetes")]
@@ -29,7 +31,6 @@ use tonic::Request;
 use tonic::Response;
 use tonic::Status;
 
-use crate::channel_read;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
@@ -68,7 +69,52 @@ enum Role {
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
-struct PeerAddress(String);
+struct PeerAddress {
+    address: String,
+    jsonrpc_port: u16,
+    grpc_port: u16,
+}
+
+impl PeerAddress {
+    fn new(address: String, jsonrpc_port: u16, grpc_port: u16) -> Self {
+        PeerAddress {
+            address,
+            jsonrpc_port,
+            grpc_port,
+        }
+    }
+
+    fn full_grpc_address(&self) -> String {
+        format!("http://{}:{}", self.address, self.grpc_port)
+    }
+
+    fn full_jsonrpc_address(&self) -> String {
+        format!("http://{}:{}", self.address, self.jsonrpc_port)
+    }
+
+    fn from_string(s: String) -> Result<Self, anyhow::Error> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err(anyhow::anyhow!("Invalid format"));
+        }
+        let address = parts[0].to_string();
+        let ports: Vec<&str> = parts[1].split(';').collect();
+        if ports.len() != 2 {
+            return Err(anyhow::anyhow!("Invalid format"));
+        }
+        let jsonrpc_port = ports[0].parse::<u16>()?;
+        let grpc_port = ports[1].parse::<u16>()?;
+        Ok(PeerAddress {
+            address,
+            jsonrpc_port,
+            grpc_port,
+        })
+    }
+
+    fn to_string(&self) -> String {
+        format!("http://{}:{};{}", self.address, self.jsonrpc_port, self.grpc_port)
+    }
+}
 
 #[derive(Clone)]
 struct Peer {
@@ -96,6 +142,7 @@ pub struct Consensus {
     role: RwLock<Role>,
     heartbeat_timeout: Duration,
     election_timeout: Duration,
+    my_address: PeerAddress,
 }
 
 impl Consensus {
@@ -105,6 +152,7 @@ impl Consensus {
         let (broadcast_sender, _) = broadcast::channel(32);
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
         let peers = Arc::new(RwLock::new(HashMap::new()));
+        let my_address = Self::discover_my_address();
 
         let consensus = Self {
             sender,
@@ -117,8 +165,9 @@ impl Consensus {
             last_arrived_block_number,
             importer_config,
             role: RwLock::new(Role::Follower),
-            heartbeat_timeout: Duration::from_millis(150), // Adjust as needed
-            election_timeout: Duration::from_millis(300), // Adjust as needed
+            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(150..300)), // Adjust as needed
+            election_timeout: Duration::from_millis(rand::thread_rng().gen_range(300..500)), // Adjust as needed
+            my_address,
         };
         let consensus = Arc::new(consensus);
 
@@ -128,6 +177,14 @@ impl Consensus {
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
         consensus
+    }
+
+    fn discover_my_address() -> PeerAddress {
+        let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+        socket.connect("8.8.8.8:80").ok().unwrap();
+        let my_ip = socket.local_addr().ok().map(|addr| addr.ip().to_string()).unwrap();
+
+        PeerAddress::new(format!("http://{}", my_ip), 3000, 3777) //FIXME TODO pick ports from config
     }
 
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
@@ -154,10 +211,10 @@ impl Consensus {
     }
 
     async fn start_election(&self) {
-        let mut term = self.current_term.fetch_add(1, Ordering::SeqCst) + 1;
+        let term = self.current_term.fetch_add(1, Ordering::SeqCst) + 1;
         self.current_term.store(term, Ordering::SeqCst);
 
-        *self.voted_for.lock().await = Some(PeerAddress(Self::current_node().unwrap()));
+        *self.voted_for.lock().await = Some(self.my_address.clone());
 
         let mut votes = 1; // Vote for self
 
@@ -193,33 +250,33 @@ impl Consensus {
         tracing::info!("Became the leader");
         *self.role.write().await = Role::Leader;
 
-        // Initialize leader-specific tasks such as sending appendEntries
-        self.send_append_entries().await;
+        //TODO XXX // Initialize leader-specific tasks such as sending appendEntries
+        //TODO XXX self.send_append_entries().await;
     }
 
-    async fn send_append_entries(&self) {
-        loop {
-            if *self.role.read().await == Role::Leader {
-                let peers = self.peers.read().await;
-                for (_, (peer, _)) in peers.iter() {
-                    let request = Request::new(AppendEntriesRequest {
-                        term: self.current_term.load(Ordering::SeqCst),
-                        leader_id: Self::current_node().unwrap(),
-                        prev_log_index: 0, // Adjust as needed
-                        prev_log_term: 0, // Adjust as needed
-                        entries: vec![], // Empty for heartbeat
-                        leader_commit: self.last_arrived_block_number.load(Ordering::SeqCst),
-                    });
-                    if let Err(e) = peer.client.append_entries(request).await {
-                        tracing::warn!("Failed to send appendEntries to {:?}: {:?}", peer.client, e);
-                    }
-                }
-                sleep(Duration::from_millis(100)).await; // Adjust as needed
-            } else {
-                break;
-            }
-        }
-    }
+    //XXX TODO async fn send_append_entries(&self) {
+    //XXX TODO     loop {
+    //XXX TODO         if *self.role.read().await == Role::Leader {
+    //XXX TODO             let peers = self.peers.read().await;
+    //XXX TODO             for (_, (peer, _)) in peers.iter() {
+    //XXX TODO                 let request = Request::new(AppendEntriesRequest {
+    //XXX TODO                     term: self.current_term.load(Ordering::SeqCst),
+    //XXX TODO                     leader_id: Self::current_node().unwrap(),
+    //XXX TODO                     prev_log_index: 0, // Adjust as needed
+    //XXX TODO                     prev_log_term: 0, // Adjust as needed
+    //XXX TODO                     entries: vec![], // Empty for heartbeat
+    //XXX TODO                     leader_commit: self.last_arrived_block_number.load(Ordering::SeqCst),
+    //XXX TODO                 });
+    //XXX TODO                 if let Err(e) = peer.client.append_entries(request).await {
+    //XXX TODO                     tracing::warn!("Failed to send appendEntries to {:?}: {:?}", peer.client, e);
+    //XXX TODO                 }
+    //XXX TODO             }
+    //XXX TODO             sleep(Duration::from_millis(100)).await; // Adjust as needed
+    //XXX TODO         } else {
+    //XXX TODO             break;
+    //XXX TODO         }
+    //XXX TODO     }
+    //XXX TODO }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
         named_spawn("consensus::peer_discovery", async move {
@@ -281,12 +338,13 @@ impl Consensus {
     }
 
     pub async fn should_forward(&self) -> bool {
+        let is_leader = self.is_leader().await;
         tracing::info!(
-            is_leader = self.is_leader().await,
+            is_leader = is_leader,
             sync_online_enabled = self.importer_config.is_some(),
             "handling request forward"
         );
-        if self.is_leader().await && self.importer_config.is_none() {
+        if  is_leader && self.importer_config.is_none() {
             return false; // the leader is on miner mode and should deal with the requests
         }
         true
@@ -294,7 +352,7 @@ impl Consensus {
 
     pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
         //TODO rename to TransactionForward
-        let Some((http_url, _)) = self.get_chain_url() else {
+        let Some((http_url, _)) = self.get_chain_url().await else {
             return Err(anyhow!("No chain url found"));
         };
         let chain = BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await?;
@@ -327,15 +385,22 @@ impl Consensus {
         Some(namespace.trim().to_string())
     }
 
-    // XXX this is a temporary solution to get the leader node
-    // later we want the leader to GENERATE blocks
-    // and even later we want this sync to be replaced by a gossip protocol or raft
-    pub fn get_chain_url(&self) -> Option<(String, Option<String>)> {
-        if self.is_follower() {
-            if let Some(namespace) = Self::current_namespace() {
-                return Some((format!("http://{}.stratus-api.{}.svc.cluster.local:3000", self.leader_name, namespace), None));
-                //TODO use peer discovery to discover the leader
+    pub async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
+        let peers = self.peers.read().await;
+        for (address, (peer, _)) in peers.iter() {
+            if peer.role == Role::Leader {
+                return Ok(address.clone());
             }
+        }
+        Err(anyhow!("Leader not found"))
+    }
+
+    pub async fn get_chain_url(&self) -> Option<(String, Option<String>)> {
+        if self.is_follower().await {
+            if let Ok(leader_address) = self.leader_address().await {
+                return Some((leader_address.full_jsonrpc_address(), None));
+            }
+            //TODO use peer discovery to discover the leader
         }
 
         match self.importer_config.clone() {
@@ -361,10 +426,11 @@ impl Consensus {
 
         for (address, new_peer) in new_peers {
             if peers_lock.contains_key(&address) {
-                tracing::info!("Peer {} already exists, skipping initialization", address.0);
+                tracing::info!("Peer {} already exists, skipping initialization", address.address);
                 continue;
             }
 
+            //XXX why?
             let peer = Peer {
                 receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                 ..new_peer
@@ -377,7 +443,7 @@ impl Consensus {
                 Self::handle_peer_block_propagation(peer_clone, consensus_clone).await;
             });
 
-            tracing::info!("Adding new peer: {}", address.0);
+            tracing::info!("Adding new peer: {}", address.address);
             peers_lock.insert(address, (peer, handle));
         }
 
@@ -391,18 +457,37 @@ impl Consensus {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         for address in addresses {
-            match AppendEntryServiceClient::connect(address.clone()).await {
+            // Validate and parse the address format
+            let url_parts: Vec<&str> = address.split("://").collect();
+            if url_parts.len() != 2 {
+                return Err(anyhow::anyhow!("Invalid address format: {}", address));
+            }
+            let protocol = url_parts[0];
+            let address_and_ports: Vec<&str> = url_parts[1].split(';').collect();
+            if address_and_ports.len() != 2 {
+                return Err(anyhow::anyhow!("Invalid address format: {}", address));
+            }
+            let base_address = address_and_ports[0];
+            let ports: Vec<&str> = address_and_ports[1].split(';').collect();
+            if ports.len() != 2 {
+                return Err(anyhow::anyhow!("Invalid port format: {}", address));
+            }
+            let jsonrpc_port = ports[0].parse::<u16>().map_err(|_| anyhow::anyhow!("Invalid JSON-RPC port: {}", ports[0]))?;
+            let grpc_port = ports[1].parse::<u16>().map_err(|_| anyhow::anyhow!("Invalid gRPC port: {}", ports[1]))?;
+
+            let full_grpc_address = format!("{}://{}:{}", protocol, base_address, grpc_port);
+            match AppendEntryServiceClient::connect(full_grpc_address.clone()).await {
                 Ok(client) => {
                     let peer = Peer {
                         client,
                         last_heartbeat: std::time::Instant::now(),
                         match_index: 0,
                         next_index: 0,
-                        role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
+                        role: Role::Follower, //FIXME it won't be always follower, we need to check the leader or candidates
                         term: 0,              // Replace with actual term
                         receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                     };
-                    peers.push((PeerAddress(address.clone()), peer));
+                    peers.push((PeerAddress::new(base_address, jsonrpc_port, grpc_port), peer));
                     tracing::info!("Peer {} is available", address);
                 }
                 Err(_) => {
@@ -427,9 +512,12 @@ impl Consensus {
         for p in pod_list.items {
             if let Some(pod_name) = p.metadata.name {
                 if pod_name != Self::current_node().unwrap() {
-                    if let Some(namespace) = Self::current_namespace() {
-                        let address = format!("http://{}.stratus-api.{}.svc.cluster.local:3777", pod_name, namespace);
-                        let client = AppendEntryServiceClient::connect(address.clone()).await?;
+                    if let Some(pod_ip) = p.status.and_then(|status| status.pod_ip) {
+                        let address = pod_ip;
+                        let jsonrpc_port = 3000; //TODO use kubernetes env config
+                        let grpc_port = 3777; //TODO use kubernetes env config
+                        let full_grpc_address = format!("http://{}:{}", address, grpc_port);
+                        let client = AppendEntryServiceClient::connect(full_grpc_address.clone()).await?;
 
                         let peer = Peer {
                             client,
@@ -440,7 +528,7 @@ impl Consensus {
                             term: 0,              // Replace with actual term
                             receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
-                        peers.push((PeerAddress(address), peer));
+                        peers.push((PeerAddress::new(&address, jsonrpc_port, grpc_port), peer));
                     }
                 }
             }
@@ -448,6 +536,7 @@ impl Consensus {
 
         Ok(peers)
     }
+
 
     async fn handle_peer_block_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
         let mut block_queue: Vec<Block> = Vec::new();
@@ -569,7 +658,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         if request.term < current_term {
             return Ok(Response::new(RequestVoteResponse {
                 term: current_term,
-                vote_granted: false,
+                vote_granted: false, //XXX check how we are dealing with vote_granted false
             }));
         }
 
@@ -580,8 +669,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         let mut voted_for = consensus.voted_for.lock().await;
-        if voted_for.is_none() || *voted_for == Some(PeerAddress(request.candidate_id.clone())) {
-            *voted_for = Some(PeerAddress(request.candidate_id.clone()));
+        let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
+        if voted_for.is_none() || *voted_for == Some(candidate_address) {
+            *voted_for = Some(candidate_address);
             return Ok(Response::new(RequestVoteResponse {
                 term: request.term,
                 vote_granted: true,
