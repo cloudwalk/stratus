@@ -28,6 +28,8 @@ flatten() {
     
     # Leave the repository folder
     cd ../../
+
+    npm install --save-dev ts-node
     
     # Lint the flattened contract
     log "Linting the flattened $contract ($repo)"
