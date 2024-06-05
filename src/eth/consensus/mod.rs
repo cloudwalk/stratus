@@ -56,7 +56,6 @@ use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
-const RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -69,12 +68,6 @@ enum Role {
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 struct PeerAddress(String);
 
-impl PeerAddress {
-    pub fn inner(&self) -> &str {
-        &self.0
-    }
-}
-
 #[derive(Clone)]
 struct Peer {
     client: AppendEntryServiceClient<Channel>,
@@ -86,12 +79,14 @@ struct Peer {
     receiver: Arc<Mutex<broadcast::Receiver<Block>>>,
 }
 
+type PeerTuple = (Peer, JoinHandle<()>);
+
 pub struct Consensus {
     pub sender: Sender<Block>, //receives blocks
     broadcast_sender: broadcast::Sender<Block>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
-    peers: Arc<RwLock<HashMap<PeerAddress, (Peer, JoinHandle<()>)>>>,
+    peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     candidate_peers: Vec<String>,
     leader_name: String,                  //XXX check the peers instead of using it
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
@@ -299,11 +294,11 @@ impl Consensus {
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
-        if let Ok(k8s_peers) = Self::discover_peers_kubernetes(consensus.clone()).await {
+        if let Ok(k8s_peers) = Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
             new_peers.extend(k8s_peers);
         }
 
-        if let Ok(env_peers) = Self::discover_peers_env(&consensus.candidate_peers, consensus.clone()).await {
+        if let Ok(env_peers) = Self::discover_peers_env(&consensus.candidate_peers, Arc::clone(&consensus)).await {
             new_peers.extend(env_peers);
         }
 
@@ -322,7 +317,8 @@ impl Consensus {
 
             let consensus_clone = Arc::clone(&consensus);
             let peer_clone = peer.clone();
-            let handle = tokio::spawn(async move {
+
+            let handle = named_spawn("consensus::propagate", async move {
                 Self::handle_peer_block_propagation(peer_clone, consensus_clone).await;
             });
 
@@ -347,7 +343,7 @@ impl Consensus {
                         last_heartbeat: std::time::Instant::now(),
                         match_index: 0,
                         next_index: 0,
-                        role: Role::Follower,
+                        role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
                         term: 0, // Replace with actual term
                         receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                     };
@@ -385,7 +381,7 @@ impl Consensus {
                             last_heartbeat: std::time::Instant::now(),
                             match_index: 0,
                             next_index: 0,
-                            role: Role::Follower,
+                            role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
                             term: 0, // Replace with actual term
                             receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
@@ -446,6 +442,8 @@ impl Consensus {
 
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
+
+        tracing::info!(last_heartbeat = ?peer.last_heartbeat, match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role, term = peer.term,  "current follower state"); //TODO also move this to metrics
 
         match StatusCode::try_from(response.status) {
             Ok(StatusCode::AppendSuccess) => Ok(()),
