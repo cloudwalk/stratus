@@ -402,7 +402,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
 
     // forward transaction to the leader
     // HACK: if importer-online is enabled, we forward the transction to substrate
-    if ctx.consensus.should_forward() {
+    if ctx.consensus.should_forward().await {
         tracing::info!("forwarding transaction");
         return match ctx.consensus.forward(tx).await {
             Ok(hash) => Ok(hex_data(hash)),

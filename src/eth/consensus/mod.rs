@@ -43,6 +43,8 @@ pub mod append_entry {
 use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
+use append_entry::RequestVoteRequest;
+use append_entry::RequestVoteResponse;
 use append_entry::AppendBlockCommitRequest;
 use append_entry::AppendBlockCommitResponse;
 use append_entry::AppendTransactionExecutionsRequest;
@@ -60,9 +62,9 @@ const RETRY_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug, PartialEq)]
 enum Role {
-    _Leader, //TODO implement leader election
+    Leader,
     Follower,
-    _Candidate,
+    Candidate,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -87,31 +89,20 @@ pub struct Consensus {
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
-    candidate_peers: Vec<String>,
-    leader_name: String,                  //XXX check the peers instead of using it
+    direct_peers: Vec<String>,
+    voted_for: Mutex<Option<PeerAddress>>,
+    current_term: AtomicU64,
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
+    role: RwLock<Role>,
+    heartbeat_timeout: Duration,
+    election_timeout: Duration,
 }
 
 impl Consensus {
-    //XXX for now we pick the leader name from the environment
-    // the correct is to have a leader election algorithm
-    pub async fn new(storage: Arc<StratusStorage>, candidate_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
-        if Self::is_stand_alone() {
-            tracing::info!("No consensus module available, running in standalone mode");
-            return Self::new_stand_alone(storage, importer_config);
-        };
-
-        let leader_name = match importer_config.clone() {
-            Some(config) => config.leader_node.unwrap_or_default(),
-            None => "unknown".to_string(),
-        };
-
-        tracing::info!(leader_name = leader_name, "Starting consensus module with leader");
-
-        let (sender, receiver) = mpsc::channel::<Block>(32); //TODO add this to metrics
+    pub async fn new(storage: Arc<StratusStorage>, direct_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
+        let (sender, receiver) = mpsc::channel::<Block>(32);
         let receiver = Arc::new(Mutex::new(receiver));
-        let (broadcast_sender, _) = broadcast::channel(32); //TODO add this to metrics
-
+        let (broadcast_sender, _) = broadcast::channel(32);
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
         let peers = Arc::new(RwLock::new(HashMap::new()));
 
@@ -120,43 +111,114 @@ impl Consensus {
             broadcast_sender,
             storage,
             peers,
-            candidate_peers,
-            leader_name,
-            importer_config,
+            direct_peers,
+            current_term: AtomicU64::new(0),
+            voted_for: Mutex::new(None),
             last_arrived_block_number,
+            importer_config,
+            role: RwLock::new(Role::Follower),
+            heartbeat_timeout: Duration::from_millis(150), // Adjust as needed
+            election_timeout: Duration::from_millis(300), // Adjust as needed
         };
         let consensus = Arc::new(consensus);
 
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
         Self::initialize_server(Arc::clone(&consensus));
+        Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
         consensus
     }
 
-    fn new_stand_alone(storage: Arc<StratusStorage>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
-        let (sender, mut receiver) = mpsc::channel::<Block>(32);
-        let (broadcast_sender, _) = broadcast::channel(32);
-
-        named_spawn("consensus::receiver", async move {
-            while let Some(data) = channel_read!(receiver) {
-                tracing::info!(number = data.header.number.as_u64(), "Received block");
+    fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
+        named_spawn("consensus::heartbeat_timer", async move {
+            loop {
+                sleep(consensus.heartbeat_timeout).await;
+                if *consensus.role.read().await != Role::Leader {
+                    let mut leader_found = false;
+                    {
+                        let peers = consensus.peers.read().await;
+                        for (_, (peer, _)) in peers.iter() {
+                            if peer.last_heartbeat.elapsed() < consensus.election_timeout {
+                                leader_found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !leader_found {
+                        consensus.start_election().await;
+                    }
+                }
             }
         });
+    }
 
-        let last_arrived_block_number = AtomicU64::new(0);
-        let peers = Arc::new(RwLock::new(HashMap::new()));
+    async fn start_election(&self) {
+        let mut term = self.current_term.fetch_add(1, Ordering::SeqCst) + 1;
+        self.current_term.store(term, Ordering::SeqCst);
 
-        Arc::new(Self {
-            leader_name: "standalone".to_string(),
-            storage,
-            sender,
-            broadcast_sender,
-            peers,
-            candidate_peers: vec![],
-            last_arrived_block_number,
-            importer_config,
-        })
+        *self.voted_for.lock().await = Some(PeerAddress(Self::current_node().unwrap()));
+
+        let mut votes = 1; // Vote for self
+
+        let peers = self.peers.read().await;
+        for (peer_address, (peer, _)) in peers.iter() {
+            let request = Request::new(RequestVoteRequest {
+                term,
+                candidate_id: Self::current_node().unwrap(),
+                last_log_index: self.last_arrived_block_number.load(Ordering::SeqCst),
+                last_log_term: term,
+            });
+
+            match peer.client.request_vote(request).await {
+                Ok(response) => {
+                    if response.into_inner().vote_granted {
+                        votes += 1;
+                    }
+                }
+                Err(_) => {
+                    tracing::warn!("Failed to request vote from {:?}", peer_address);
+                }
+            }
+        }
+
+        if votes > peers.len() / 2 {
+            self.become_leader().await;
+        } else {
+            *self.role.write().await = Role::Follower;
+        }
+    }
+
+    async fn become_leader(&self) {
+        tracing::info!("Became the leader");
+        *self.role.write().await = Role::Leader;
+
+        // Initialize leader-specific tasks such as sending appendEntries
+        self.send_append_entries().await;
+    }
+
+    async fn send_append_entries(&self) {
+        loop {
+            if *self.role.read().await == Role::Leader {
+                let peers = self.peers.read().await;
+                for (_, (peer, _)) in peers.iter() {
+                    let request = Request::new(AppendEntriesRequest {
+                        term: self.current_term.load(Ordering::SeqCst),
+                        leader_id: Self::current_node().unwrap(),
+                        prev_log_index: 0, // Adjust as needed
+                        prev_log_term: 0, // Adjust as needed
+                        entries: vec![], // Empty for heartbeat
+                        leader_commit: self.last_arrived_block_number.load(Ordering::SeqCst),
+                    });
+                    if let Err(e) = peer.client.append_entries(request).await {
+                        tracing::warn!("Failed to send appendEntries to {:?}: {:?}", peer.client, e);
+                    }
+                }
+                sleep(Duration::from_millis(100)).await; // Adjust as needed
+            } else {
+                break;
+            }
+        }
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
@@ -180,7 +242,7 @@ impl Consensus {
             loop {
                 let mut receiver_lock = receiver.lock().await;
                 if let Some(data) = receiver_lock.recv().await {
-                    if consensus.is_leader() {
+                    if consensus.is_leader().await {
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
                         if let Err(e) = consensus.broadcast_sender.send(data) {
@@ -210,25 +272,21 @@ impl Consensus {
     }
 
     //FIXME TODO automate the way we gather the leader, instead of using a env var
-    pub fn is_leader(&self) -> bool {
-        Self::current_node().unwrap_or("standalone".to_string()) == self.leader_name
+    pub async fn is_leader(&self) -> bool {
+        *self.role.read().await == Role::Leader
     }
 
-    pub fn is_follower(&self) -> bool {
-        !self.is_leader()
+    pub async fn is_follower(&self) -> bool {
+        *self.role.read().await == Role::Follower
     }
 
-    pub fn is_stand_alone() -> bool {
-        Self::current_node().is_none()
-    }
-
-    pub fn should_forward(&self) -> bool {
+    pub async fn should_forward(&self) -> bool {
         tracing::info!(
-            is_leader = self.is_leader(),
+            is_leader = self.is_leader().await,
             sync_online_enabled = self.importer_config.is_some(),
             "handling request forward"
         );
-        if self.is_leader() && self.importer_config.is_none() {
+        if self.is_leader().await && self.importer_config.is_none() {
             return false; // the leader is on miner mode and should deal with the requests
         }
         true
@@ -247,9 +305,6 @@ impl Consensus {
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
-        if Self::is_stand_alone() {
-            return true;
-        }
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
         let storage_block_number: u64 = self.storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into();
 
@@ -298,7 +353,7 @@ impl Consensus {
             new_peers.extend(k8s_peers);
         }
 
-        if let Ok(env_peers) = Self::discover_peers_env(&consensus.candidate_peers, Arc::clone(&consensus)).await {
+        if let Ok(env_peers) = Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
             new_peers.extend(env_peers);
         }
 
@@ -500,6 +555,42 @@ impl AppendEntryService for AppendEntryServiceImpl {
             status: StatusCode::AppendSuccess as i32,
             message: "Block Commit appended successfully".into(),
             last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
+        }))
+    }
+
+    async fn request_vote(
+        &self,
+        request: Request<RequestVoteRequest>,
+    ) -> Result<Response<RequestVoteResponse>, Status> {
+        let request = request.into_inner();
+        let consensus = self.consensus.lock().await;
+        let current_term = consensus.current_term.load(Ordering::SeqCst);
+
+        if request.term < current_term {
+            return Ok(Response::new(RequestVoteResponse {
+                term: current_term,
+                vote_granted: false,
+            }));
+        }
+
+        if request.term > current_term {
+            consensus.current_term.store(request.term, Ordering::SeqCst);
+            *consensus.voted_for.lock().await = None;
+            *consensus.role.write().await = Role::Follower;
+        }
+
+        let mut voted_for = consensus.voted_for.lock().await;
+        if voted_for.is_none() || *voted_for == Some(PeerAddress(request.candidate_id.clone())) {
+            *voted_for = Some(PeerAddress(request.candidate_id.clone()));
+            return Ok(Response::new(RequestVoteResponse {
+                term: request.term,
+                vote_granted: true,
+            }));
+        }
+
+        Ok(Response::new(RequestVoteResponse {
+            term: request.term,
+            vote_granted: false,
         }))
     }
 }
