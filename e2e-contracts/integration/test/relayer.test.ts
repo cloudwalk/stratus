@@ -29,13 +29,13 @@ describe("Relayer integration test", function () {
     });
     describe("Transaction tests", function () {
         const parameters = [
-            //{ wallets: 3, duration: 10, tps: 5, baseBalance: 2000 },
-            //{ wallets: 100, duration: 10, tps: 30, baseBalance: 2000 },
-            { wallets: 2, duration: 10, tps: 1, baseBalance: 5 }, // Force transfer amount exceeds balance case
+            { name: "Few wallets, sufficient balance", wallets: 3, duration: 10, tps: 5, baseBalance: 2000 },
+            { name: "Few wallets, insufficient balance", wallets: 2, duration: 10, tps: 1, baseBalance: 5 }, // Force transfer amount exceeds balance case
+            { name: "Many wallets, sufficient balance", wallets: 50, duration: 10, tps: 30, baseBalance: 2000 },
         ];
         parameters.forEach((params, index) => {
             const wallets: any[] = [];
-            it(`Test case ${index + 1}: Prepare and mint BRLC to wallets`, async function () {  
+            it(`${params.name}: Prepare and mint BRLC to wallets`, async function () {  
                 this.timeout(params.wallets * 1000 + 10000);
 
                 for (let i = 0; i < params.wallets; i++) {
@@ -52,7 +52,7 @@ describe("Relayer integration test", function () {
             });
     
             let txHashList: string[] = []
-            it(`Test case ${index + 1}: Transfer BRLC between wallets at a configurable TPS`, async function () {
+            it(`${params.name}: Transfer BRLC between wallets at a configurable TPS`, async function () {
                 this.timeout(params.duration * 1000 + 10000);
     
                 const transactionInterval = 1000 / params.tps;
@@ -85,7 +85,7 @@ describe("Relayer integration test", function () {
                 await new Promise(resolve => setTimeout(resolve, 5000));
             });
     
-            it(`Test case ${index + 1}: Validate transaction mined delay between Stratus and Hardhat`, async function () {
+            it(`${params.name}: Validate transaction mined delay between Stratus and Hardhat`, async function () {
                 // Get Stratus timestamps
                 updateProviderUrl("stratus");
                 const stratusTimestamps = await Promise.all(txHashList.map(async (txHash) => {
@@ -108,10 +108,10 @@ describe("Relayer integration test", function () {
                 // Total time it took for Hardhat to process all the blocks containing transactions
                 const hardhatProcessingTime = hardhatTimestamps[hardhatTimestamps.length - 1] - hardhatTimestamps[0];
     
-                console.log(`WARN: Stratus processing time: ${stratusProcessingTime}s | Hardhat processing time: ${hardhatProcessingTime}s`);
+                console.log(`          WARN: Stratus processing time: ${stratusProcessingTime}s | Hardhat processing time: ${hardhatProcessingTime}s`);
             });
     
-            it(`Test case ${index + 1}: Validate balances between Stratus and Hardhat`, async function () {
+            it(`${params.name}: Validate balances between Stratus and Hardhat`, async function () {
                 for (let i = 0; i < wallets.length; i++) {
                     // Get Stratus balance
                     updateProviderUrl("stratus");
@@ -126,7 +126,7 @@ describe("Relayer integration test", function () {
                 }
             });
     
-            it(`Test case ${index + 1}: Validate transactions were relayed from Stratus to Hardhat`, async function () {
+            it(`${params.name}: Validate transactions were relayed from Stratus to Hardhat`, async function () {
                 // Get Stratus transaction receipts
                 updateProviderUrl("stratus");
                 const stratusReceipts = await Promise.all(txHashList.map(async (txHash) => {
@@ -148,7 +148,7 @@ describe("Relayer integration test", function () {
                 }
             });
     
-            it(`Test case ${index + 1}: Validate no mismatched transactions were generated`, async function () {
+            it(`${params.name}: Validate no mismatched transactions were generated`, async function () {
                 const client = await getDbClient();
             
                 // Validate connection to Postgres

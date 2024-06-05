@@ -381,7 +381,7 @@ e2e-relayer-external-up:
     sleep 5
 
     # Start Stratus binary
-    cargo run --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@localhost:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    cargo run --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@0.0.0.0:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -400,7 +400,7 @@ e2e-relayer-external-up:
     sleep 5
 
     # Start Relayer External binary
-    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@localhost:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://localhost:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
+    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
     
     if [ -d e2e-contracts ]; then
         (
