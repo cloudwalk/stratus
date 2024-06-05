@@ -145,6 +145,7 @@ describe("Relayer integration test", function () {
                     expect(stratusReceipts[i]).to.exist;
                     expect(hardhatReceipts[i]).to.exist;
                 }
+                updateProviderUrl("stratus");
             });
     
             it(`${params.name}: Validate no mismatched transactions were generated`, async function () {
