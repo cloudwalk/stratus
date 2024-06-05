@@ -3,7 +3,6 @@ import '.justfile_helpers' # _lint, _outdated
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := "0"
-export RUST_LOG := env("RUST_LOG", "stratus=debug,rpc_downloader=info,importer_offline=info,importer_online=info,state_validator=info,relayer=debug")
 
 # Global arguments that can be passed to receipts.
 feature_flags := "dev," + env("FEATURES", "")
@@ -367,9 +366,10 @@ e2e-relayer-external-up:
     #!/bin/bash
 
     # Build Stratus and Relayer binaries
+    echo "Building Stratus binary"
     cargo build --release --bin stratus --features dev
+    echo "Building Stratus binary"
     cargo build --release --bin relayer --features dev
-    
 
     mkdir e2e_logs
 
@@ -378,6 +378,7 @@ e2e-relayer-external-up:
 
     # Wait for Postgres to start
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
+    sleep 5
 
     # Start Stratus binary
     cargo run --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks --relayer-db-url "postgres://postgres:123@localhost:5432/stratus" --relayer-db-connections 5 --relayer-db-timeout 1s -a 0.0.0.0:3000 > e2e_logs/stratus.log &
