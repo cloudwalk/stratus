@@ -447,7 +447,7 @@ contracts-compile:
 
 # Contracts: Flatten solidity contracts for integration test
 contracts-flatten:
-    cd e2e-contracts && ./flatten-contracts.sh
+    cd e2e-contracts && ls && ./flatten-contracts.sh
 
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test *args="":
