@@ -2,6 +2,8 @@
 
 use std::env;
 use std::env::VarError;
+use std::io::stdout;
+use std::io::IsTerminal;
 use std::net::SocketAddr;
 
 use chrono::Local;
@@ -30,10 +32,10 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
     println!("creating tracing registry");
 
     // configure stdout log layer
-    let stdout_log_format = env::var("LOG_FORMAT");
-    let stdout_log_format = stdout_log_format.as_ref().map(String::as_str);
+    let log_format = env::var("LOG_FORMAT").map(|x| x.trim().to_lowercase());
+    let enable_ansi = stdout().is_terminal();
 
-    let stdout_layer = match stdout_log_format {
+    let stdout_layer = match log_format.as_deref() {
         Ok("json") => {
             println!("tracing registry enabling JSON logs");
             fmt::Layer::default()
@@ -47,6 +49,7 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
         Ok("verbose") | Ok("full") => {
             println!("tracing registry enabling VERBOSE text logs");
             fmt::Layer::default()
+                .with_ansi(enable_ansi)
                 .with_target(true)
                 .with_thread_ids(true)
                 .with_thread_names(true)
@@ -56,19 +59,17 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
         Ok("minimal") => {
             println!("tracing registry enabling MINIMAL text logs");
             fmt::Layer::default()
-                .with_target(false)
-                .with_thread_ids(false)
-                .with_thread_names(false)
+                .with_ansi(enable_ansi)
                 .with_timer(MinimalTimer)
                 .with_filter(EnvFilter::from_default_env())
                 .boxed()
         }
         Ok("normal") | Err(VarError::NotPresent) => {
             println!("tracing registry enabling NORMAL text logs");
-            fmt::Layer::default().with_filter(EnvFilter::from_default_env()).boxed()
+            fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed()
         }
-        Err(e) => panic!("{e}"),
-        Ok(unexpected) => panic!("unexpected LOG_FORMAT={unexpected}"),
+        Err(e) => panic!("Invalid UTF8 in `LOG_FORMAT`: {e}"),
+        Ok(unexpected) => panic!("unexpected `LOG_FORMAT={unexpected}`"),
     };
 
     // configure opentelemetry layer
@@ -97,17 +98,13 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
         }
     };
 
-    // init tokio console registry
+    // configure sentry layer
+    let sentry_layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
+
+    // configure tokio-console layer
     println!("tracing registry enabling tokio console");
     let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
     let console_layer = console_layer.with_filter(TokioConsoleFilter);
-
-    // init registry
-    tracing_subscriber::registry()
-        .with(stdout_layer)
-        .with(opentelemetry_layer)
-        .with(console_layer)
-        .init();
 
     // init tokio console server
     named_spawn("console::grpc-server", async move {
@@ -115,6 +112,14 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
             tracing::error!(reason = ?e, "failed to create tokio-console server");
         };
     });
+
+    // init registry
+    tracing_subscriber::registry()
+        .with(stdout_layer)
+        .with(opentelemetry_layer)
+        .with(sentry_layer)
+        .with(console_layer)
+        .init();
 }
 
 struct MinimalTimer;

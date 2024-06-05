@@ -13,6 +13,7 @@ use display_json::DebugAsJson;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
+use tracing::info_span;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
@@ -86,6 +87,10 @@ pub struct CommonConfig {
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,
+
+    /// Direct access to peers via IP address, why will be included on data propagation and leader election.
+    #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
+    pub candidate_peers: Vec<String>,
 
     /// Url to the sentry project
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
@@ -182,6 +187,7 @@ impl ExecutorConfig {
         tracing::info!(config = ?self, "creating executor");
 
         // spawn evm in background using native threads
+        // TODO: move EVMs initialization to Executor.
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
         for _ in 1..=num_evms {
             // create evm resources
@@ -194,31 +200,30 @@ impl ExecutorConfig {
             let evm_rx = evm_rx.clone();
 
             // spawn thread that will run evm
-            // todo: needs a way to signal error like a cancellation token in case it fails to initialize
             let t = thread::Builder::new().name("evm".into());
 
             info_task_spawn(TASK_NAME);
             t.spawn(move || {
-                // init tokio
+                // init services
                 let _tokio_guard = evm_tokio.enter();
-
-                // init storage
                 if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
                     tracing::error!(reason = ?e, "failed to allocate evm storage resources");
                 }
-
-                // init evm
                 let mut evm = Revm::new(evm_storage, evm_config);
 
                 // keep executing transactions until the channel is closed
-                while let Ok((input, tx)) = evm_rx.recv() {
+                while let Ok(task) = evm_rx.recv() {
                     if GlobalState::warn_if_shutdown(TASK_NAME) {
                         return;
                     }
 
+                    // enter span from another thread
+                    let span = task.span_id.map(|id| info_span!(parent: id, "executor::evm"));
+                    let _span_enter = span.as_ref().map(|span| span.enter());
+
                     // execute
-                    let result = evm.execute(input);
-                    if let Err(e) = tx.send(result) {
+                    let result = evm.execute(task.input);
+                    if let Err(e) = task.response_tx.send(result) {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
                     };
                 }

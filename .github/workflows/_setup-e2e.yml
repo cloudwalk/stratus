@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Cache Cargo Registry and Target Directory
         uses: actions/cache@v4.0.2
@@ -46,16 +46,12 @@ jobs:
         run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
-        uses: extractions/setup-just@v1
-
-      - name: Set up ASDF Version Manager
-        uses: asdf-vm/actions/setup@v3
+        uses: extractions/setup-just@v2
 
       - name: Install Node.js
-        run: |
-          asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
-          asdf install nodejs 20.10.0
-          asdf global nodejs 20.10.0
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
 
       - name: Install jq
         run: sudo apt-get install jq -y

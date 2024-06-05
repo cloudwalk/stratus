@@ -28,6 +28,7 @@ use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
 #[cfg(feature = "metrics")]
 use stratus::utils::calculate_tps;
+use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use tokio::sync::mpsc;
@@ -75,6 +76,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("importer-online");
+
     // init server
     let storage = config.storage.init().await?;
     let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await?;
@@ -102,6 +105,8 @@ pub async fn run_importer_online(
     chain: Arc<BlockchainClient>,
     sync_interval: Duration,
 ) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("importer-online::run_importer_online");
+
     let number = storage.read_block_number_to_resume_import().await?;
 
     let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
