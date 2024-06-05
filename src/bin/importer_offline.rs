@@ -136,7 +136,6 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 // -----------------------------------------------------------------------------
 // Block importer
 // -----------------------------------------------------------------------------
-#[tracing::instrument(name = "block_importer", skip_all)]
 async fn execute_block_importer(
     // services
     executor: Arc<Executor>,
@@ -179,7 +178,7 @@ async fn execute_block_importer(
             }
 
             // re-execute (and import) block
-            executor.reexecute_external(&block, &receipts).await?;
+            executor.external_block(&block, &receipts).await?;
             transaction_count += block.transactions.len();
 
             // mine block
@@ -215,7 +214,6 @@ async fn execute_block_importer(
 // -----------------------------------------------------------------------------
 // Block loader
 // -----------------------------------------------------------------------------
-#[tracing::instrument(name = "storage_loader", skip_all, fields(start, end, block_by_fetch))]
 async fn execute_external_rpc_storage_loader(
     // services
     rpc_storage: Arc<dyn ExternalRpcStorage>,

@@ -95,7 +95,7 @@ impl Executor {
 
     /// Reexecutes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(name = "executor::external_block", skip_all, fields(number))]
-    pub async fn reexecute_external(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
+    pub async fn external_block(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
@@ -116,7 +116,7 @@ impl Executor {
         let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                tx_parallel_executions.push(self.reexecute_external_tx(tx, receipt, block));
+                tx_parallel_executions.push(self.external_transaction(tx, receipt, block));
             }
         }
         let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.num_evms);
@@ -125,7 +125,7 @@ impl Executor {
         for tx_route in tx_routes {
             let tx = match tx_route {
                 // serial: execute now
-                ParallelExecutionRoute::Serial(tx, receipt) => self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?,
+                ParallelExecutionRoute::Serial(tx, receipt) => self.external_transaction(tx, receipt, block).await.map_err(|(_, _, e)| e)?,
 
                 // parallel: get parallel execution result and reexecute if failed
                 ParallelExecutionRoute::Parallel(..) => {
@@ -137,14 +137,14 @@ impl Executor {
                             // conflict: reexecute
                             Some(conflicts) => {
                                 tracing::warn!(?conflicts, "reexecuting serially because parallel execution conflicted");
-                                self.reexecute_external_tx(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
+                                self.external_transaction(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
                             }
                         },
 
                         // failure: reexecute
                         Err((tx, receipt, e)) => {
                             tracing::warn!(reason = ?e, "reexecuting serially because parallel execution errored");
-                            self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?
+                            self.external_transaction(tx, receipt, block).await.map_err(|(_, _, e)| e)?
                         }
                     }
                 }
@@ -176,8 +176,8 @@ impl Executor {
     ///
     /// This function wraps `reexecute_external_tx_inner` and returns back the payload
     /// to facilitate re-execution of parallel transactions that failed
-    #[tracing::instrument(name = "executor::external_tx", skip_all, fields(hash))]
-    async fn reexecute_external_tx<'a, 'b>(
+    #[tracing::instrument(name = "executor::external_transaction", skip_all, fields(hash))]
+    async fn external_transaction<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
@@ -187,11 +187,11 @@ impl Executor {
             s.rec("hash", &tx.hash);
         });
 
-        self.reexecute_external_tx_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
+        self.external_transaction_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
-    async fn reexecute_external_tx_inner<'a, 'b>(
+    async fn external_transaction_inner<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
@@ -258,8 +258,8 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Executes a transaction persisting state changes.
-    #[tracing::instrument(name = "executor::local_tx", skip_all, fields(hash, from, to))]
-    pub async fn transact(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(hash, from, to))]
+    pub async fn local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
@@ -318,7 +318,7 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
+    pub async fn local_call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), input.extract_function());
 

@@ -19,6 +19,7 @@ use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::named_spawn;
 use stratus::ext::DisplayExt;
+use stratus::ext::SpanExt;
 use stratus::if_else;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
@@ -35,6 +36,7 @@ use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::sleep;
 use tokio::time::timeout;
+use tracing::Span;
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -155,7 +157,7 @@ async fn start_block_executor(
 
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
-        if let Err(e) = executor.reexecute_external(&block, &receipts).await {
+        if let Err(e) = executor.external_block(&block, &receipts).await {
             let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
             return log_and_err!(reason = e, message);
         };
@@ -331,7 +333,6 @@ async fn start_block_fetcher(
     }
 }
 
-#[tracing::instrument(skip_all)]
 async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
     // fetch block
     let block = fetch_block(Arc::clone(&chain), number).await;
@@ -349,8 +350,12 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
     (block, receipts)
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "importer::fetch_block", skip_all, fields(number))]
 async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> ExternalBlock {
+    Span::with(|s| {
+        s.rec("number", &number);
+    });
+
     let mut backoff = 10;
     loop {
         tracing::info!(%number, "fetching block");
@@ -383,8 +388,13 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(number, hash))]
 async fn fetch_receipt(chain: Arc<BlockchainClient>, number: BlockNumber, hash: Hash) -> ExternalReceipt {
+    Span::with(|s| {
+        s.rec("number", &number);
+        s.rec("hash", &hash);
+    });
+
     loop {
         tracing::info!(%number, %hash, "fetching receipt");
 
