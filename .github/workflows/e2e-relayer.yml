@@ -28,7 +28,7 @@ jobs:
   contract_test_rocks:
     strategy:
       fail-fast: false
-    name: E2E Relayer Rocks
+    name: E2E Relayer on BRLCToken
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
