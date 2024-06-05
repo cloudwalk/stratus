@@ -31,7 +31,7 @@ describe("Relayer integration test", function () {
         const parameters = [
             //{ wallets: 3, duration: 10, tps: 5, baseBalance: 2000 },
             //{ wallets: 100, duration: 10, tps: 30, baseBalance: 2000 },
-            { wallets: 2, duration: 10, tps: 1, baseBalance: 5 },
+            { wallets: 2, duration: 10, tps: 1, baseBalance: 5 }, // Force transfer amount exceeds balance case
         ];
         parameters.forEach((params, index) => {
             const wallets: any[] = [];
