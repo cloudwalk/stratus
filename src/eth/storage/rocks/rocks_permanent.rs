@@ -27,14 +27,19 @@ use crate::eth::storage::PermanentStorage;
 pub struct RocksPermanentStorage {
     pub state: RocksStorageState,
     block_number: AtomicU64,
+    enable_backups: bool,
 }
 
 impl RocksPermanentStorage {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(enable_backups: bool) -> anyhow::Result<Self> {
         tracing::info!("starting rocksdb storage");
         let state = RocksStorageState::new("./data/rocksdb");
         let block_number = state.preload_block_number()?;
-        Ok(Self { state, block_number })
+        Ok(Self {
+            state,
+            block_number,
+            enable_backups,
+        })
     }
 
     // -------------------------------------------------------------------------
@@ -107,7 +112,7 @@ impl PermanentStorage for RocksPermanentStorage {
         {
             self.state.export_metrics();
         }
-        self.state.save_block(block).await
+        self.state.save_block(block, self.enable_backups).await
     }
 
     async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {

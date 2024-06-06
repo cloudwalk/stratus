@@ -452,7 +452,7 @@ impl RocksStorageState {
         }
     }
 
-    pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    pub async fn save_block(&self, block: Block, enable_backups: bool) -> anyhow::Result<()> {
         let account_changes = block.compact_account_changes();
 
         //TODO move those loops inside the spawn and check if speed improves
@@ -493,7 +493,9 @@ impl RocksStorageState {
 
         self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
 
-        self.check_backup_threshold_trigger(txs_len);
+        if enable_backups {
+            self.check_backup_threshold_trigger(txs_len);
+        }
 
         self.write_batch(batch).unwrap();
         Ok(())

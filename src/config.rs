@@ -45,6 +45,7 @@ use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::binary_name;
+use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -832,6 +833,10 @@ pub struct PermanentStorageConfig {
     /// Permamenent storage timeout when opening a connection (in millis).
     #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
     pub perm_storage_timeout: Duration,
+
+    // Disable RocksDB backups
+    #[arg(long = "perm-storage-disable-backups", env = "PERM_STORAGE_DISABLE_BACKUPS")]
+    pub perm_storage_disable_backups: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -852,7 +857,10 @@ impl PermanentStorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
+            PermanentStorageKind::Rocks => {
+                let enable_backups = not(self.perm_storage_disable_backups);
+                Arc::new(RocksPermanentStorage::new(enable_backups).await?)
+            }
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
