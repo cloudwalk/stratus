@@ -35,6 +35,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
 use crate::ext::named_spawn;
 use crate::ext::traced_sleep;
+use crate::ext::SleepReason;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 
@@ -200,7 +201,7 @@ impl Consensus {
             loop {
                 let timeout = consensus.heartbeat_timeout;
                 tokio::select! {
-                    _ = traced_sleep(timeout) => {
+                    _ = traced_sleep(timeout, SleepReason::Interval) => {
                         if !consensus.is_leader().await {
                             tracing::info!("starting election due to heartbeat timeout");
                             Self::start_election(Arc::clone(&consensus)).await;
@@ -612,7 +613,7 @@ impl Consensus {
                     }
                     Err(e) => {
                         tracing::warn!("failed to append block to peer {:?}: {:?}", peer.client, e);
-                        traced_sleep(RETRY_DELAY).await;
+                        traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                     }
                 }
             }

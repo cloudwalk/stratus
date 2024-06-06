@@ -20,6 +20,7 @@ use stratus::eth::Executor;
 use stratus::ext::named_spawn;
 use stratus::ext::traced_sleep;
 use stratus::ext::DisplayExt;
+use stratus::ext::SleepReason;
 use stratus::ext::SpanExt;
 use stratus::if_else;
 #[cfg(feature = "metrics")]
@@ -277,7 +278,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                     "fetched current block number via http. awaiting sync interval to retrieve again."
                 );
                 set_external_rpc_current_block(number);
-                traced_sleep(sync_interval).await;
+                traced_sleep(sync_interval, SleepReason::SyncData).await;
             }
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
@@ -343,7 +344,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
     let block = fetch_block(Arc::clone(&chain), number).await;
 
     // wait some time until receipts are available
-    let _ = traced_sleep(INTERVAL_FETCH_RECEIPTS).await;
+    let _ = traced_sleep(INTERVAL_FETCH_RECEIPTS, SleepReason::SyncData).await;
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
@@ -357,29 +358,25 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
 
 #[tracing::instrument(name = "importer::fetch_block", skip_all, fields(number))]
 async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> ExternalBlock {
+    const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("number", &number);
     });
 
-    let mut backoff_ms = 10;
     loop {
         tracing::info!(%number, "fetching block");
         let block = match chain.fetch_block(number).await {
             Ok(json) => json,
             Err(e) => {
-                backoff_ms *= 2;
-                backoff_ms = min(backoff_ms, 1000); // no more than 1000ms of backoff
-                tracing::warn!(reason = ?e, %number, %backoff_ms, "failed to retrieve block. retrying with backoff.");
-                traced_sleep(Duration::from_millis(backoff_ms)).await;
+                tracing::warn!(reason = ?e, %number, delay_ms=%RETRY_DELAY.as_millis(), "failed to retrieve block. retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                 continue;
             }
         };
 
         if block.is_null() {
-            backoff_ms *= 2;
-            backoff_ms = min(backoff_ms, 1000); // no more than 1000ms of backoff
-            tracing::warn!(%number, "block not available yet because block is not mined. retrying with backoff.");
-            traced_sleep(Duration::from_millis(backoff_ms)).await;
+            tracing::warn!(%number, delay_ms=%RETRY_DELAY.as_millis(), "block not mined yet. retrying with delay.");
+            traced_sleep(RETRY_DELAY, SleepReason::SyncData).await;
             continue;
         }
 
