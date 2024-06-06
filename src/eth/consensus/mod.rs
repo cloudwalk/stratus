@@ -92,10 +92,6 @@ impl PeerAddress {
         format!("http://{}:{}", self.address, self.jsonrpc_port)
     }
 
-    fn to_string(&self) -> String {
-        format!("http://{};{};{}", self.address, self.jsonrpc_port, self.grpc_port)
-    }
-
     fn from_string(s: String) -> Result<Self, anyhow::Error> {
         let parts: Vec<&str> = s.split(':').collect();
         if parts.len() != 2 {
@@ -113,6 +109,14 @@ impl PeerAddress {
             jsonrpc_port,
             grpc_port,
         })
+    }
+}
+
+use std::fmt;
+
+impl fmt::Display for PeerAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{};{}", self.address, self.jsonrpc_port, self.grpc_port)
     }
 }
 
@@ -173,7 +177,7 @@ impl Consensus {
         Self::initialize_server(Arc::clone(&consensus));
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
-        tracing::info!(my_address = my_address.to_string(), "consensus module initialized");
+        tracing::info!(my_address = %my_address, "consensus module initialized");
         consensus
     }
 
