@@ -238,7 +238,11 @@ impl Consensus {
 
         let mut votes = 1; // Vote for self
 
-        tracing::info!(requested_term = term, "requesting vote on election for {} peers", consensus.peers.read().await.len());
+        tracing::info!(
+            requested_term = term,
+            "requesting vote on election for {} peers",
+            consensus.peers.read().await.len()
+        );
         let peers = consensus.peers.read().await;
         for (peer_address, (peer, _)) in peers.iter() {
             let mut peer_clone = peer.clone();
@@ -251,14 +255,13 @@ impl Consensus {
             });
 
             match peer_clone.client.request_vote(request).await {
-                Ok(response) => {
+                Ok(response) =>
                     if response.into_inner().vote_granted {
                         tracing::info!(peer_address = %peer_address, "received vote on election");
                         votes += 1;
                     } else {
                         tracing::info!(peer_address = %peer_address, "did not receive vote on election");
-                    }
-                }
+                    },
                 Err(_) => {
                     tracing::warn!("failed to request vote on election from {:?}", peer_address);
                 }
@@ -704,7 +707,12 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let current_term = consensus.current_term.load(Ordering::SeqCst);
 
         if request.term < current_term {
-            tracing::info!(vote_granted = false, current_term = current_term, request_term = request.term, "requestvote received with stale term on election");
+            tracing::info!(
+                vote_granted = false,
+                current_term = current_term,
+                request_term = request.term,
+                "requestvote received with stale term on election"
+            );
             return Ok(Response::new(RequestVoteResponse {
                 term: current_term,
                 vote_granted: false, //XXX check how we are dealing with vote_granted false
