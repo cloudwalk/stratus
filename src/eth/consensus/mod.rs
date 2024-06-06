@@ -202,7 +202,7 @@ impl Consensus {
                     _ = sleep(timeout) => {
                         if !consensus.is_leader().await {
                             tracing::info!("starting election due to heartbeat timeout");
-                            consensus.start_election().await;
+                            Self::start_election(Arc::clone(&consensus)).await;
                         } else {
                             tracing::info!("heartbeat timeout reached, but I am the leader, so we ignore the election");
                         }
@@ -228,24 +228,24 @@ impl Consensus {
     /// - It then sends out `RequestVote` RPCs to all known peers.
     /// - If a majority of the peers grant their votes, the node transitions to the leader role.
     /// - If not, it remains a follower and waits for the next election cycle.
-    async fn start_election(&self) {
-        Self::discover_peers(Arc::clone(&self)).await;
+    async fn start_election(consensus: Arc<Consensus>) {
+        Self::discover_peers(Arc::clone(&consensus)).await;
 
-        let term = self.current_term.fetch_add(1, Ordering::SeqCst) + 1;
-        self.current_term.store(term, Ordering::SeqCst);
+        let term = consensus.current_term.fetch_add(1, Ordering::SeqCst) + 1;
+        consensus.current_term.store(term, Ordering::SeqCst);
 
-        *self.voted_for.lock().await = Some(self.my_address.clone());
+        *consensus.voted_for.lock().await = Some(consensus.my_address.clone());
 
         let mut votes = 1; // Vote for self
 
-        let peers = self.peers.read().await;
+        let peers = consensus.peers.read().await;
         for (peer_address, (peer, _)) in peers.iter() {
             let mut peer_clone = peer.clone();
 
             let request = Request::new(RequestVoteRequest {
                 term,
                 candidate_id: Self::current_node().unwrap(),
-                last_log_index: self.last_arrived_block_number.load(Ordering::SeqCst),
+                last_log_index: consensus.last_arrived_block_number.load(Ordering::SeqCst),
                 last_log_term: term,
             });
 
@@ -261,9 +261,9 @@ impl Consensus {
         }
 
         if votes > peers.len() / 2 {
-            self.become_leader().await;
+            consensus.become_leader().await;
         } else {
-            *self.role.write().await = Role::Follower;
+            *consensus.role.write().await = Role::Follower;
         }
     }
 
@@ -454,10 +454,7 @@ impl Consensus {
         let discovered_addresses: Vec<PeerAddress> = new_peers.iter().map(|(addr, _)| addr.clone()).collect();
 
         // Purge old peers
-        let purged_addresses: Vec<PeerAddress> = current_addresses
-            .into_iter()
-            .filter(|addr| !discovered_addresses.contains(addr))
-            .collect();
+        let purged_addresses: Vec<PeerAddress> = current_addresses.into_iter().filter(|addr| !discovered_addresses.contains(addr)).collect();
 
         for address in &purged_addresses {
             peers_lock.remove(address);
