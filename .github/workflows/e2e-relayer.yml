@@ -1,4 +1,4 @@
-name: Contracts E2E Rocks tests
+name: E2E Relayer
 
 on:
   pull_request:
