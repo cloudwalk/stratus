@@ -447,6 +447,25 @@ impl Consensus {
 
         let mut peers_lock = consensus.peers.write().await;
 
+        // Collect current peer addresses
+        let current_addresses: Vec<PeerAddress> = peers_lock.keys().cloned().collect();
+        let discovered_addresses: Vec<PeerAddress> = new_peers.iter().map(|(addr, _)| addr.clone()).collect();
+
+        // Purge old peers
+        let purged_addresses: Vec<PeerAddress> = current_addresses
+            .into_iter()
+            .filter(|addr| !discovered_addresses.contains(addr))
+            .collect();
+
+        for address in &purged_addresses {
+            peers_lock.remove(address);
+        }
+
+        tracing::info!(
+            purged_peers = purged_addresses.iter().map(|p| p.to_string()).collect::<Vec<String>>().join(", "),
+            "purged old peers",
+        );
+
         for (address, peer) in new_peers {
             if peers_lock.contains_key(&address) {
                 tracing::info!("consensus module peer {} already exists, skipping initialization", address.address);
