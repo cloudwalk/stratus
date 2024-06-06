@@ -241,6 +241,7 @@ impl Consensus {
 
         tracing::info!(
             requested_term = term,
+            candidate_id = %consensus.my_address,
             "requesting vote on election for {} peers",
             consensus.peers.read().await.len()
         );
@@ -250,7 +251,7 @@ impl Consensus {
 
             let request = Request::new(RequestVoteRequest {
                 term,
-                candidate_id: Self::current_node().unwrap(),
+                candidate_id: consensus.my_address.to_string(),
                 last_log_index: consensus.last_arrived_block_number.load(Ordering::SeqCst),
                 last_log_term: term,
             });
@@ -731,6 +732,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         let mut voted_for = consensus.voted_for.lock().await;
+        //XXX for some reason candidate_id is going wrong
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
         if voted_for.is_none() {
             *voted_for = Some(candidate_address.clone());
