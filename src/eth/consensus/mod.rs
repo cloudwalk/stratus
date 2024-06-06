@@ -145,6 +145,7 @@ pub struct Consensus {
     role: RwLock<Role>,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
+    reset_heartbeat_signal: tokio::sync::Notify,
 }
 
 impl Consensus {
@@ -167,8 +168,9 @@ impl Consensus {
             last_arrived_block_number,
             importer_config,
             role: RwLock::new(Role::Follower),
-            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1500..1700)), // Adjust as needed
+            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1200..1500)), // Adjust as needed
             my_address: my_address.clone(),
+            reset_heartbeat_signal: tokio::sync::Notify::new(),
         };
         let consensus = Arc::new(consensus);
 
@@ -189,36 +191,26 @@ impl Consensus {
         PeerAddress::new(format!("http://{}", my_ip), 3000, 3777) //FIXME TODO pick ports from config
     }
 
-    /// Initializes the heartbeat timer for the consensus module.
-    ///
-    /// The heartbeat timer is responsible for periodically checking if the node should start a new election.
-    /// This is essential in a distributed system to ensure that nodes remain in sync and a leader is always present.
-    ///
-    /// # Details
-    ///
-    /// - **Heartbeat Timeout (`heartbeat_timeout`)**: This is the duration after which the node checks for a leader's heartbeat.
-    ///   If a leader's heartbeat is not received within this duration, the node considers that the leader may be down and an election may need to be started.
-    /// - **Election Timeout (`election_timeout`)**: This is the duration within which the node expects to either complete the election process or restart it.
-    ///   If an election is not completed within this timeframe, it indicates potential issues, and the process may be retried.
+    /// Initializes the heartbeat and election timers.
+    /// This function periodically checks if the node should start a new election based on the election timeout.
+    /// The timer is reset when an `AppendEntries` request is received, ensuring the node remains a follower if a leader is active.
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
         named_spawn("consensus::heartbeat_timer", async move {
             loop {
-                sleep(consensus.heartbeat_timeout).await;
-                if *consensus.role.read().await != Role::Leader {
-                    let mut leader_found = false;
-                    {
-                        let peers = consensus.peers.read().await;
-                        for (_, (peer, _)) in peers.iter() {
-                            if peer.role == Role::Leader {
-                                leader_found = true;
-                                break;
-                            }
+                let timeout = consensus.heartbeat_timeout;
+                tokio::select! {
+                    _ = sleep(timeout) => {
+                        if !consensus.is_leader().await {
+                            tracing::info!("starting election due to heartbeat timeout");
+                            consensus.start_election().await;
+                        } else {
+                            tracing::info!("heartbeat timeout reached, but I am the leader, so we ignore the election");
                         }
-                    }
-                    if !leader_found {
-                        tracing::info!("leader not found, starting election");
-                        consensus.start_election().await;
-                    }
+                    },
+                    _ = consensus.reset_heartbeat_signal.notified() => {
+                        // Timer reset upon receiving AppendEntries
+                        tracing::info!("resetting election timer due to AppendEntries");
+                    },
                 }
             }
         });
@@ -261,7 +253,7 @@ impl Consensus {
                         votes += 1;
                     },
                 Err(_) => {
-                    tracing::warn!("Failed to request vote from {:?}", peer_address);
+                    tracing::warn!("failed to request vote on election from {:?}", peer_address);
                 }
             }
         }
@@ -274,7 +266,7 @@ impl Consensus {
     }
 
     async fn become_leader(&self) {
-        tracing::info!("Became the leader");
+        tracing::info!("became the leader on election");
         *self.role.write().await = Role::Leader;
 
         //TODO XXX // Initialize leader-specific tasks such as sending appendEntries
@@ -309,7 +301,7 @@ impl Consensus {
         named_spawn("consensus::peer_discovery", async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
-                tracing::info!("Starting periodic peer discovery...");
+                tracing::info!("starting periodic peer discovery");
                 Self::discover_peers(Arc::clone(&consensus)).await;
                 interval.tick().await;
             }
@@ -330,7 +322,7 @@ impl Consensus {
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
                         if let Err(e) = consensus.broadcast_sender.send(data) {
-                            tracing::warn!("Failed to broadcast block: {:?}", e);
+                            tracing::warn!("failed to broadcast block: {:?}", e);
                         }
                     }
                 }
@@ -340,7 +332,7 @@ impl Consensus {
 
     fn initialize_server(consensus: Arc<Consensus>) {
         named_spawn("consensus::server", async move {
-            tracing::info!("Starting append entry service at port 3777");
+            tracing::info!("starting append entry service at port 3777");
             let addr = "0.0.0.0:3777".parse().unwrap();
 
             let append_entry_service = AppendEntryServiceImpl {
@@ -550,6 +542,20 @@ impl Consensus {
         Ok(peers)
     }
 
+    async fn update_leader(&self, leader_address: PeerAddress) {
+        let mut peers = self.peers.write().await;
+
+        for (address, (peer, _)) in peers.iter_mut() {
+            if *address == leader_address {
+                peer.role = Role::Leader;
+            } else {
+                peer.role = Role::Follower;
+            }
+        }
+
+        tracing::info!(leader = %leader_address, "updated leader information");
+    }
+
     async fn handle_peer_block_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
         let mut block_queue: Vec<Block> = Vec::new();
         loop {
@@ -587,6 +593,7 @@ impl Consensus {
             prev_log_index: 0,
             prev_log_term: 0,
             header: Some(header),
+            leader_id: self.my_address.to_string(),
             transaction_hashes,
         });
 
@@ -632,7 +639,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
     }
 
     async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
-        let Some(header) = request.into_inner().header else {
+        let request_inner = request.into_inner();
+        let Some(header) = request_inner.header else {
             return Err(Status::invalid_argument("empty block header"));
         };
 
@@ -641,6 +649,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
+        consensus.reset_heartbeat_signal.notify_waiters();
+        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+            consensus.update_leader(leader_peer_address).await;
+        }
         consensus.last_arrived_block_number.store(header.number, Ordering::SeqCst);
 
         tracing::info!(
