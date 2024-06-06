@@ -6,7 +6,7 @@ use stratus::eth::Consensus;
 use stratus::GlobalServices;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<StratusConfig>::init()?;
+    let global_services = GlobalServices::<StratusConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 

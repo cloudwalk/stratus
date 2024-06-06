@@ -73,7 +73,7 @@ const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 // -----------------------------------------------------------------------------
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ImporterOnlineConfig>::init()?;
+    let global_services = GlobalServices::<ImporterOnlineConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 

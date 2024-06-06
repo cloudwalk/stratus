@@ -10,7 +10,7 @@ use stratus::GlobalState;
 const TASK_NAME: &str = "relayer";
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ExternalRelayerConfig>::init()?;
+    let global_services = GlobalServices::<ExternalRelayerConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 

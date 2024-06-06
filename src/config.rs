@@ -55,7 +55,7 @@ pub fn load_dotenv() {
     let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
     let env_filename = format!("config/{}.env.{}", binary_name(), env);
 
-    println!("reading env file: {}", env_filename);
+    println!("reading env file | filename={}", env_filename);
     if let Err(e) = dotenvy::from_filename(env_filename) {
         println!("env file error: {e}");
     }
@@ -117,22 +117,27 @@ impl WithCommonConfig for CommonConfig {
 
 impl CommonConfig {
     /// Initializes Tokio runtime.
-    pub fn init_runtime(&self) -> Runtime {
-        print!(
-            "creating tokio runtime; async_threads={}; blocking_threads={}",
+    pub fn init_runtime(&self) -> anyhow::Result<Runtime> {
+        println!(
+            "creating tokio runtime | async_threads={} blocking_threads={}",
             self.num_async_threads, self.num_blocking_threads
         );
 
-        let runtime = Builder::new_multi_thread()
+        let result = Builder::new_multi_thread()
             .enable_all()
             .thread_name("tokio")
             .worker_threads(self.num_async_threads)
             .max_blocking_threads(self.num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
-            .build()
-            .expect("failed to create tokio runtime");
+            .build();
 
-        runtime
+        match result {
+            Ok(runtime) => Ok(runtime),
+            Err(e) => {
+                println!("failed to create tokio runtime | reason={:?}", e);
+                Err(e.into())
+            }
+        }
     }
 }
 
@@ -207,7 +212,8 @@ impl ExecutorConfig {
                 // init services
                 let _tokio_guard = evm_tokio.enter();
                 if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
-                    tracing::error!(reason = ?e, "failed to allocate evm storage resources");
+                    let message = GlobalState::shutdown_from("evm-init", "failed to allocate evm storage resources");
+                    tracing::error!(reason = ?e, %message);
                 }
                 let mut evm = Revm::new(evm_storage, evm_config);
 

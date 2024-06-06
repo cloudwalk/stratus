@@ -43,7 +43,7 @@ const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 2_000_000;
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ImporterOfflineConfig>::init()?;
+    let global_services = GlobalServices::<ImporterOfflineConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 

@@ -11,7 +11,7 @@ use stratus::GlobalServices;
 use tokio::task::JoinSet;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<StateValidatorConfig>::init()?;
+    let global_services = GlobalServices::<StateValidatorConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 

@@ -17,6 +17,7 @@ use crate::infra::metrics::metrics_for_json_rpc;
 use crate::infra::metrics::metrics_for_rocks;
 use crate::infra::metrics::metrics_for_storage_read;
 use crate::infra::metrics::metrics_for_storage_write;
+use crate::log_and_err;
 
 /// Default bucket for duration based metrics.
 const BUCKET_FOR_DURATION: [f64; 37] = [
@@ -30,8 +31,8 @@ const BUCKET_FOR_DURATION: [f64; 37] = [
 /// Init application global metrics.
 ///
 /// Default configuration runs metrics exporter on port 9000.
-pub fn init_metrics(metrics_exporter_address: SocketAddr, histogram_kind: MetricsHistogramKind) {
-    tracing::info!("creating metrics exporter");
+pub fn init_metrics(address: SocketAddr, histogram_kind: MetricsHistogramKind) -> anyhow::Result<()> {
+    tracing::info!(%address, "creating metrics exporter");
 
     // get metric definitions
     let mut metrics = Vec::new();
@@ -46,7 +47,7 @@ pub fn init_metrics(metrics_exporter_address: SocketAddr, histogram_kind: Metric
     metrics.extend(metrics_for_external_relayer());
 
     // init exporter
-    let mut builder = PrometheusBuilder::new().with_http_listener(metrics_exporter_address);
+    let mut builder = PrometheusBuilder::new().with_http_listener(address);
 
     // init buckets
     if histogram_kind == MetricsHistogramKind::Histogram {
@@ -58,10 +59,15 @@ pub fn init_metrics(metrics_exporter_address: SocketAddr, histogram_kind: Metric
         }
     }
 
-    builder.install().expect("failed to create metrics exporter");
+    // init exporter
+    if let Err(e) = builder.install() {
+        return log_and_err!(reason = e, format!("failed to create metrics exporter at {}", address));
+    }
 
     // init metric description (always after provider started)
     for metric in &metrics {
         metric.register_description();
     }
+
+    Ok(())
 }
