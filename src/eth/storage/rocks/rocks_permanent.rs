@@ -123,6 +123,9 @@ impl PermanentStorage for RocksPermanentStorage {
 
     async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let block_number_u64 = block_number.as_u64();
+
+        tracing::info!(?block_number, "resetting Rocks DB to given block number");
+
         // update block number
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
             if block_number_u64 < current {
