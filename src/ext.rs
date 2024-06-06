@@ -188,7 +188,7 @@ pub trait SpanExt {
     }
 
     /// Records a value using `ToString` implementation.
-    fn rec<T>(&self, field: &'static str, value: &T)
+    fn rec_str<T>(&self, field: &'static str, value: &T)
     where
         T: ToString;
 
@@ -199,7 +199,7 @@ pub trait SpanExt {
 }
 
 impl SpanExt for Span {
-    fn rec<T>(&self, field: &'static str, value: &T)
+    fn rec_str<T>(&self, field: &'static str, value: &T)
     where
         T: ToString,
     {
