@@ -149,7 +149,7 @@ impl BlockMiner {
         let block = block_from_external(external_block, mined_txs);
 
         block.map(|block| {
-            Span::with(|s| s.rec("number", block.number()));
+            Span::with(|s| s.rec("number", &block.number()));
             block
         })
     }
@@ -187,7 +187,7 @@ impl BlockMiner {
             block.push_execution(tx.input, tx.result);
         }
 
-        Span::with(|s| s.rec("number", block.number()));
+        Span::with(|s| s.rec("number", &block.number()));
 
         Ok(block)
     }
@@ -220,7 +220,7 @@ impl BlockMiner {
         };
 
         block.map(|block| {
-            Span::with(|s| s.rec("number", block.number()));
+            Span::with(|s| s.rec("number", &block.number()));
             block
         })
     }
@@ -234,12 +234,12 @@ impl BlockMiner {
     /// Persists a mined block to permanent storage and prepares new block.
     #[tracing::instrument(name = "miner::commit", skip_all, fields(number))]
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
-        Span::with(|s| s.rec("number", block.number()));
+        Span::with(|s| s.rec("number", &block.number()));
 
         tracing::info!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 
         // extract fields to use in notifications
-        let block_number = *block.number();
+        let block_number = block.number();
         let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
 

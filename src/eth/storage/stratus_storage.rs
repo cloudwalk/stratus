@@ -396,7 +396,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
     pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        Span::with(|s| s.rec("number", block.number()));
+        Span::with(|s| s.rec("number", &block.number()));
 
         #[cfg(feature = "metrics")]
         {

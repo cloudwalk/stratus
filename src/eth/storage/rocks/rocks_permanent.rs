@@ -156,15 +156,17 @@ impl PermanentStorage for RocksPermanentStorage {
 
         // save block
         let mut futures = Vec::with_capacity(9);
-        let number = *block.number();
+        let block_number = block.number();
         let txs_rocks = Arc::clone(&self.state.transactions);
         let logs_rocks = Arc::clone(&self.state.logs);
-        futures.push(tokio::task::spawn_blocking(move || txs_rocks.insert_batch_indexed(txs_batch, number.as_u64())));
         futures.push(tokio::task::spawn_blocking(move || {
-            logs_rocks.insert_batch_indexed(logs_batch, number.as_u64());
+            txs_rocks.insert_batch_indexed(txs_batch, block_number.as_u64());
+        }));
+        futures.push(tokio::task::spawn_blocking(move || {
+            logs_rocks.insert_batch_indexed(logs_batch, block_number.as_u64());
         }));
 
-        let hash = *block.hash();
+        let block_hash = block.hash();
 
         let blocks_by_number = Arc::clone(&self.state.blocks_by_number);
         let blocks_by_hash = Arc::clone(&self.state.blocks_by_hash);
@@ -173,18 +175,18 @@ impl PermanentStorage for RocksPermanentStorage {
             // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
             transaction.execution.changes.retain(|_, change| change.bytecode.clone().is_modified());
         }
-        let hash_clone = hash;
+        let block_hash_clone = block_hash;
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_number.insert(number.into(), block_without_changes.into());
+            blocks_by_number.insert(block_number.into(), block_without_changes.into());
         }));
         futures.push(tokio::task::spawn_blocking(move || {
-            blocks_by_hash.insert_batch_indexed(vec![(hash_clone.into(), number.into())], number.as_u64());
+            blocks_by_hash.insert_batch_indexed(vec![(block_hash_clone.into(), block_number.into())], block_number.as_u64());
         }));
 
         futures.append(
             &mut self
                 .state
-                .update_state_with_execution_changes(&account_changes, number)
+                .update_state_with_execution_changes(&account_changes, block_number)
                 .context("failed to update state with execution changes")?,
         );
 
