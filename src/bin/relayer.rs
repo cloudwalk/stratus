@@ -1,6 +1,7 @@
 mod importer_online;
 
 use stratus::config::ExternalRelayerConfig;
+use stratus::ext::traced_sleep;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::utils::DropTimer;
@@ -46,7 +47,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
             Some(block_number) => tracing::info!(number = %block_number, "relayed"),
             None => {
                 tracing::info!("no pending block found");
-                tokio::time::sleep(backoff).await;
+                traced_sleep(backoff).await;
             }
         };
     }

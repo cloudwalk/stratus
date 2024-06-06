@@ -20,6 +20,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
+use crate::ext::binary_name;
 use crate::ext::named_spawn;
 
 /// Init application global tracing.
@@ -73,8 +74,9 @@ pub async fn init_tracing(url: Option<&String>, console_address: SocketAddr) -> 
     // configure opentelemetry layer
     let opentelemetry_layer = match url {
         Some(url) => {
-            println!("tracing registry: enabling opentelemetry exporter | url={}", url);
-            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")]));
+            let service_name = format!("stratus-{}", binary_name());
+            println!("tracing registry: enabling opentelemetry exporter | url={} service={}", url, service_name);
+            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", service_name)]));
             let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
 
             let tracer = opentelemetry_otlp::new_pipeline()
