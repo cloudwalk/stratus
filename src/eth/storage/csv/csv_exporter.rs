@@ -215,7 +215,7 @@ impl CsvExporter {
         let blocks: Vec<Block> = self.staged_blocks.drain(..).collect();
         for block in blocks {
             let now = now();
-            self.export_account_changes(now.clone(), *block.number(), block.compact_account_changes())?;
+            self.export_account_changes(now.clone(), block.number(), block.compact_account_changes())?;
             self.export_block(now.clone(), block.header)?;
             self.export_transactions(now.clone(), block.transactions)?;
         }

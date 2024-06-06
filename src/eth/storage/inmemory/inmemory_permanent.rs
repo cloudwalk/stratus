@@ -292,9 +292,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
         // save block
         tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
         let block = Arc::new(block);
-        let number = block.number();
-        state.blocks_by_number.insert(*number, Arc::clone(&block));
-        state.blocks_by_hash.insert(*block.hash(), Arc::clone(&block));
+        let block_number = block.number();
+        state.blocks_by_number.insert(block_number, Arc::clone(&block));
+        state.blocks_by_hash.insert(block.hash(), Arc::clone(&block));
 
         // save transactions
         for transaction in block.transactions.clone() {
@@ -316,21 +316,21 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
             // account basic info
             if let Some(nonce) = changes.nonce.take_modified() {
-                account.nonce.push(*number, nonce);
+                account.nonce.push(block_number, nonce);
             }
             if let Some(balance) = changes.balance.take_modified() {
-                account.balance.push(*number, balance);
+                account.balance.push(block_number, balance);
             }
 
             // bytecode
             if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
-                account.bytecode.push(*number, Some(bytecode));
+                account.bytecode.push(block_number, Some(bytecode));
             }
             if let Some(indexes) = changes.static_slot_indexes.take_modified() {
-                account.static_slot_indexes.push(*number, indexes);
+                account.static_slot_indexes.push(block_number, indexes);
             }
             if let Some(indexes) = changes.mapping_slot_indexes.take_modified() {
-                account.mapping_slot_indexes.push(*number, indexes);
+                account.mapping_slot_indexes.push(block_number, indexes);
             }
 
             // slots
@@ -338,10 +338,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
                 if let Some(slot) = slot.take_modified() {
                     match account.slots.get_mut(&slot.index) {
                         Some(slot_history) => {
-                            slot_history.push(*number, slot);
+                            slot_history.push(block_number, slot);
                         }
                         None => {
-                            account.slots.insert(slot.index, InMemoryHistory::new(*number, slot));
+                            account.slots.insert(slot.index, InMemoryHistory::new(block_number, slot));
                         }
                     }
                 }
@@ -376,8 +376,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         // remove blocks
         let mut state = self.lock_write().await;
-        state.blocks_by_hash.retain(|_, b| *b.number() <= block_number);
-        state.blocks_by_number.retain(|_, b| *b.number() <= block_number);
+        state.blocks_by_hash.retain(|_, b| b.number() <= block_number);
+        state.blocks_by_number.retain(|_, b| b.number() <= block_number);
 
         // remove transactions and logs
         state.transactions.retain(|_, t| t.block_number <= block_number);
