@@ -353,7 +353,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
 #[tracing::instrument(name = "importer::fetch_block", skip_all, fields(number))]
 async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> ExternalBlock {
     Span::with(|s| {
-        s.rec("number", &number);
+        s.rec_str("number", &number);
     });
 
     let mut backoff = 10;
@@ -391,8 +391,8 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
 #[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(number, hash))]
 async fn fetch_receipt(chain: Arc<BlockchainClient>, number: BlockNumber, hash: Hash) -> ExternalReceipt {
     Span::with(|s| {
-        s.rec("number", &number);
-        s.rec("hash", &hash);
+        s.rec_str("number", &number);
+        s.rec_str("hash", &hash);
     });
 
     loop {

@@ -282,12 +282,12 @@ async fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::
     Ok(serde_json::to_value(number).expect_infallible())
 }
 
-#[tracing::instrument(name = "rpc::eth_getBlockByHash", parent = None, skip_all, fields(hash))]
+#[tracing::instrument(name = "rpc::eth_getBlockByHash", parent = None, skip_all, fields(filter, found, number))]
 async fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     eth_get_block_by_selector(params, ctx).await
 }
 
-#[tracing::instrument(name = "rpc::eth_getBlockByNumber", parent = None, skip_all, fields(number))]
+#[tracing::instrument(name = "rpc::eth_getBlockByNumber", parent = None, skip_all, fields(filter, found, number))]
 async fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     eth_get_block_by_selector(params, ctx).await
 }
@@ -298,14 +298,23 @@ async fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>) -> 
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
     Span::with(|s| match block_selection {
-        BlockSelection::Hash(hash) => s.rec("hash", &hash),
-        BlockSelection::Latest => s.rec("number", &"latest"),
-        BlockSelection::Earliest => s.rec("number", &"earliest"),
-        BlockSelection::Number(number) => s.rec("number", &number),
+        BlockSelection::Hash(hash) => s.rec_str("filter", &hash),
+        BlockSelection::Latest => s.rec_str("filter", &"latest"),
+        BlockSelection::Earliest => s.rec_str("filter", &"earliest"),
+        BlockSelection::Number(number) => s.rec_str("filter", &number),
     });
 
     // execute
     let block = ctx.storage.read_block(&block_selection).await?;
+
+    Span::with(|s| {
+        s.record("found", block.is_some());
+        if let Some(ref block) = block {
+            s.rec_str("number", &block.number());
+        }
+    });
+
+    // handle response
     match (block, full_transactions) {
         (Some(block), true) => Ok(block.to_json_rpc_with_full_transactions()),
         (Some(block), false) => Ok(block.to_json_rpc_with_transactions_hashes()),
@@ -326,22 +335,30 @@ async fn eth_get_uncle_by_block_hash_and_index(_params: Params<'_>, _ctx: Arc<Rp
 async fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
 
-    Span::with(|s| s.rec("hash", &hash));
+    Span::with(|s| s.rec_str("hash", &hash));
 
     let mined = ctx.storage.read_mined_transaction(&hash).await?;
+    Span::with(|s| {
+        s.record("found", mined.is_some());
+    });
+
     match mined {
         Some(mined) => Ok(mined.to_json_rpc_transaction()),
         None => Ok(JsonValue::Null),
     }
 }
 
-#[tracing::instrument(name = "rpc::eth_getTransactionReceipt", parent = None, skip_all, fields(hash))]
+#[tracing::instrument(name = "rpc::eth_getTransactionReceipt", parent = None, skip_all, fields(hash, found))]
 async fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
+    Span::with(|s| s.rec_str("hash", &hash));
 
-    Span::with(|s| s.rec("hash", &hash));
+    let mined = ctx.storage.read_mined_transaction(&hash).await?;
+    Span::with(|s| {
+        s.record("found", mined.is_some());
+    });
 
-    match ctx.storage.read_mined_transaction(&hash).await? {
+    match mined {
         Some(mined_transaction) => Ok(mined_transaction.to_json_rpc_receipt()),
         None => Ok(JsonValue::Null),
     }
@@ -395,8 +412,8 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>) -> a
     let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
 
     Span::with(|s| {
-        s.rec("hash", &tx.hash);
-        s.rec("from", &tx.signer);
+        s.rec_str("hash", &tx.hash);
+        s.rec_str("from", &tx.signer);
         s.rec_opt("to", &tx.to);
     });
 
@@ -458,7 +475,7 @@ async fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>) -> 
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     Span::with(|s| {
-        s.rec("address", &address);
+        s.rec_str("address", &address);
     });
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
@@ -472,7 +489,7 @@ async fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Re
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     Span::with(|s| {
-        s.rec("address", &address);
+        s.rec_str("address", &address);
     });
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
@@ -487,7 +504,7 @@ async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow::Resul
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     Span::with(|s| {
-        s.rec("address", &address);
+        s.rec_str("address", &address);
     });
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
@@ -540,8 +557,8 @@ async fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>) -> anyhow:
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     Span::with(|s| {
-        s.rec("address", &address);
-        s.rec("index", &index);
+        s.rec_str("address", &address);
+        s.rec_str("index", &index);
     });
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
