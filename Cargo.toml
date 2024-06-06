@@ -46,7 +46,7 @@ dotenvy = "=0.15.7"
 
 # serialization
 bincode = { version = "=1.3.3", optional = true }
-display_json = "0.2.1"
+display_json = "=0.2.1"
 prost = "=0.12.6"
 serde = "=1.0.203"
 serde_json = "=1.0.117"
@@ -101,7 +101,7 @@ testcontainers-modules = { version = "=0.3.5", features = ["postgres"] }
 fake = { version = "=2.9.2", features = ["derive"] }
 
 #relayer
-petgraph = "0.6.5"
+petgraph = "=0.6.5"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
