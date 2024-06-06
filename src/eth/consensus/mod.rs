@@ -229,6 +229,8 @@ impl Consensus {
     /// - If a majority of the peers grant their votes, the node transitions to the leader role.
     /// - If not, it remains a follower and waits for the next election cycle.
     async fn start_election(&self) {
+        Self::discover_peers(Arc::clone(&self)).await;
+
         let term = self.current_term.fetch_add(1, Ordering::SeqCst) + 1;
         self.current_term.store(term, Ordering::SeqCst);
 
