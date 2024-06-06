@@ -2,8 +2,8 @@ pub mod forward_to;
 
 use std::collections::HashMap;
 use std::env;
-use std::net::UdpSocket;
 use std::net::SocketAddr;
+use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -152,7 +152,13 @@ pub struct Consensus {
 }
 
 impl Consensus {
-    pub async fn new(storage: Arc<StratusStorage>, direct_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>, jsonrpc_address: SocketAddr, grpc_address: SocketAddr) -> Arc<Self> {
+    pub async fn new(
+        storage: Arc<StratusStorage>,
+        direct_peers: Vec<String>,
+        importer_config: Option<RunWithImporterConfig>,
+        jsonrpc_address: SocketAddr,
+        grpc_address: SocketAddr,
+    ) -> Arc<Self> {
         let (sender, receiver) = mpsc::channel::<Block>(32);
         let receiver = Arc::new(Mutex::new(receiver));
         let (broadcast_sender, _) = broadcast::channel(32);
@@ -173,7 +179,7 @@ impl Consensus {
             role: RwLock::new(Role::Follower),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1200..1500)), // Adjust as needed
             my_address: my_address.clone(),
-            grpc_address: grpc_address,
+            grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
         };
         let consensus = Arc::new(consensus);
