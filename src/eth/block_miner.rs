@@ -93,7 +93,7 @@ impl BlockMiner {
     #[tracing::instrument(name = "miner::save_execution", skip_all, fields(hash))]
     pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
         Span::with(|s| {
-            s.rec("hash", &tx_execution.hash());
+            s.rec_str("hash", &tx_execution.hash());
         });
 
         // save execution to temporary storage
@@ -149,7 +149,7 @@ impl BlockMiner {
         let block = block_from_external(external_block, mined_txs);
 
         block.map(|block| {
-            Span::with(|s| s.rec("number", &block.number()));
+            Span::with(|s| s.rec_str("number", &block.number()));
             block
         })
     }
@@ -187,7 +187,7 @@ impl BlockMiner {
             block.push_execution(tx.input, tx.result);
         }
 
-        Span::with(|s| s.rec("number", &block.number()));
+        Span::with(|s| s.rec_str("number", &block.number()));
 
         Ok(block)
     }
@@ -220,7 +220,7 @@ impl BlockMiner {
         };
 
         block.map(|block| {
-            Span::with(|s| s.rec("number", &block.number()));
+            Span::with(|s| s.rec_str("number", &block.number()));
             block
         })
     }
@@ -234,7 +234,7 @@ impl BlockMiner {
     /// Persists a mined block to permanent storage and prepares new block.
     #[tracing::instrument(name = "miner::commit", skip_all, fields(number))]
     pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
-        Span::with(|s| s.rec("number", &block.number()));
+        Span::with(|s| s.rec_str("number", &block.number()));
 
         tracing::info!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 

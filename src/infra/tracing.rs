@@ -21,7 +21,6 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
 use crate::ext::named_spawn;
-use crate::GlobalState;
 
 /// Init application global tracing.
 pub async fn init_tracing(url: Option<&String>, console_address: SocketAddr) -> anyhow::Result<()> {
@@ -106,8 +105,7 @@ pub async fn init_tracing(url: Option<&String>, console_address: SocketAddr) -> 
     let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(console_address).build();
     named_spawn("console::grpc-server", async move {
         if let Err(e) = console_server.serve().await {
-            let message = GlobalState::shutdown_from("tracing-init", &format!("failed to create tokio-console server at {}", console_address));
-            tracing::error!(reason = ?e, address = %console_address, %message);
+            tracing::error!(reason = ?e, address = %console_address, "failed to create tokio-console server");
         };
     });
 
