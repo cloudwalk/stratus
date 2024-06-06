@@ -381,9 +381,8 @@ e2e-relayer-external-up:
 
     # Wait for Postgres to start
     wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
-    sleep 5
 
-    # Wait for build to finish
+    # Wait for builds to finish
     wait
 
     # Start Stratus binary
