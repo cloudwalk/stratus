@@ -19,6 +19,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
+use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
@@ -164,7 +165,7 @@ impl ExternalRelayer {
                 }
             }
             substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            traced_sleep(Duration::from_millis(50)).await;
         }
     }
 
@@ -259,7 +260,7 @@ impl ExternalRelayer {
         let mut tries = 0;
         while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
             tracing::warn!(?tx_mined.input.hash, ?tries, "transaction not found, retrying...");
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            traced_sleep(Duration::from_millis(100)).await;
             tries += 1;
         }
 

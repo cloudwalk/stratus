@@ -6,6 +6,8 @@ use anyhow::anyhow;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
+use tracing::info_span;
+use tracing::Instrument;
 use tracing::Span;
 
 use crate::infra::tracing::info_task_spawn;
@@ -270,6 +272,18 @@ macro_rules! log_and_err {
 // -----------------------------------------------------------------------------
 // Tokio
 // -----------------------------------------------------------------------------
+
+#[inline(always)]
+pub async fn traced_sleep(duration: Duration) {
+    #[cfg(feature = "tracing")]
+    {
+        let span = info_span!("tokio::sleep", duration_ms = %duration.as_millis());
+        tokio::time::sleep(duration).instrument(span).await;
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    tokio::time::sleep(duration).await;
+}
 
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
