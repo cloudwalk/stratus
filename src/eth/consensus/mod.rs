@@ -238,6 +238,11 @@ impl Consensus {
 
         let mut votes = 1; // Vote for self
 
+        tracing::info!(
+            requested_term = term,
+            "requesting vote on election for {} peers",
+            consensus.peers.read().await.len()
+        );
         let peers = consensus.peers.read().await;
         for (peer_address, (peer, _)) in peers.iter() {
             let mut peer_clone = peer.clone();
@@ -252,7 +257,10 @@ impl Consensus {
             match peer_clone.client.request_vote(request).await {
                 Ok(response) =>
                     if response.into_inner().vote_granted {
+                        tracing::info!(peer_address = %peer_address, "received vote on election");
                         votes += 1;
+                    } else {
+                        tracing::info!(peer_address = %peer_address, "did not receive vote on election");
                     },
                 Err(_) => {
                     tracing::warn!("failed to request vote on election from {:?}", peer_address);
@@ -260,15 +268,19 @@ impl Consensus {
             }
         }
 
-        if votes > peers.len() / 2 {
+        let total_nodes = peers.len() + 1; // Including self
+        let majority = total_nodes / 2 + 1;
+
+        if votes >= majority {
+            tracing::info!(votes = votes, peers = peers.len(), term = term, "became the leader on election");
             consensus.become_leader().await;
         } else {
+            tracing::info!(votes = votes, peers = peers.len(), term = term, "failed to become the leader on election");
             *consensus.role.write().await = Role::Follower;
         }
     }
 
     async fn become_leader(&self) {
-        tracing::info!("became the leader on election");
         *self.role.write().await = Role::Leader;
 
         //TODO XXX // Initialize leader-specific tasks such as sending appendEntries
@@ -624,7 +636,7 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role, term = peer.term,  "current follower state"); //TODO also move this to metrics
+        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role, term = peer.term,  "current follower state on election"); //TODO also move this to metrics
 
         match StatusCode::try_from(response.status) {
             Ok(StatusCode::AppendSuccess) => Ok(()),
@@ -695,6 +707,12 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let current_term = consensus.current_term.load(Ordering::SeqCst);
 
         if request.term < current_term {
+            tracing::info!(
+                vote_granted = false,
+                current_term = current_term,
+                request_term = request.term,
+                "requestvote received with stale term on election"
+            );
             return Ok(Response::new(RequestVoteResponse {
                 term: current_term,
                 vote_granted: false, //XXX check how we are dealing with vote_granted false
@@ -709,14 +727,16 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let mut voted_for = consensus.voted_for.lock().await;
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
-        if voted_for.is_none() || *voted_for == Some(candidate_address.clone()) {
-            *voted_for = Some(candidate_address);
+        if voted_for.is_none() {
+            *voted_for = Some(candidate_address.clone());
+            tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
             return Ok(Response::new(RequestVoteResponse {
                 term: request.term,
                 vote_granted: true,
             }));
         }
 
+        tracing::info!(vote_granted = false, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "already voted for another candidate on election");
         Ok(Response::new(RequestVoteResponse {
             term: request.term,
             vote_granted: false,
