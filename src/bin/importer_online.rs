@@ -371,17 +371,11 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
         };
 
         if block.is_null() {
-            #[cfg(not(feature = "perf"))]
-            {
-                backoff *= 2;
-                backoff = min(backoff, 1000); // no more than 1000ms of backoff
-                tracing::warn!(%number, "block not available yet because block is not mined. retrying with backoff.");
-                sleep(Duration::from_millis(backoff)).await;
-                continue;
-            }
-
-            #[cfg(feature = "perf")]
-            std::process::exit(0);
+            backoff *= 2;
+            backoff = min(backoff, 1000); // no more than 1000ms of backoff
+            tracing::warn!(%number, "block not available yet because block is not mined. retrying with backoff.");
+            sleep(Duration::from_millis(backoff)).await;
+            continue;
         }
 
         return ExternalBlock::deserialize(&block).expect("cannot fail to deserialize external block");
