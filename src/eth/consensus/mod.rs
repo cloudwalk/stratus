@@ -3,6 +3,7 @@ pub mod forward_to;
 use std::collections::HashMap;
 use std::env;
 use std::net::UdpSocket;
+use std::net::SocketAddr;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -146,17 +147,18 @@ pub struct Consensus {
     role: RwLock<Role>,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
+    grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
 }
 
 impl Consensus {
-    pub async fn new(storage: Arc<StratusStorage>, direct_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
+    pub async fn new(storage: Arc<StratusStorage>, direct_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>, jsonrpc_address: SocketAddr, grpc_address: SocketAddr) -> Arc<Self> {
         let (sender, receiver) = mpsc::channel::<Block>(32);
         let receiver = Arc::new(Mutex::new(receiver));
         let (broadcast_sender, _) = broadcast::channel(32);
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
         let peers = Arc::new(RwLock::new(HashMap::new()));
-        let my_address = Self::discover_my_address();
+        let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
         let consensus = Self {
             sender,
@@ -171,6 +173,7 @@ impl Consensus {
             role: RwLock::new(Role::Follower),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1200..1500)), // Adjust as needed
             my_address: my_address.clone(),
+            grpc_address: grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
         };
         let consensus = Arc::new(consensus);
@@ -184,12 +187,12 @@ impl Consensus {
         consensus
     }
 
-    fn discover_my_address() -> PeerAddress {
+    fn discover_my_address(jsonrpc_port: u16, grpc_port: u16) -> PeerAddress {
         let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
         socket.connect("8.8.8.8:80").ok().unwrap();
         let my_ip = socket.local_addr().ok().map(|addr| addr.ip().to_string()).unwrap();
 
-        PeerAddress::new(format!("http://{}", my_ip), 3000, 3777) //FIXME TODO pick ports from config
+        PeerAddress::new(format!("http://{}", my_ip), jsonrpc_port, grpc_port) //FIXME TODO pick ports from config
     }
 
     /// Initializes the heartbeat and election timers.
@@ -347,8 +350,8 @@ impl Consensus {
 
     fn initialize_server(consensus: Arc<Consensus>) {
         named_spawn("consensus::server", async move {
-            tracing::info!("starting append entry service at port 3777");
-            let addr = "0.0.0.0:3777".parse().unwrap();
+            tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
+            let addr = consensus.grpc_address;
 
             let append_entry_service = AppendEntryServiceImpl {
                 consensus: Mutex::new(consensus),
@@ -555,8 +558,8 @@ impl Consensus {
                 if pod_name != Self::current_node().unwrap() {
                     if let Some(pod_ip) = p.status.and_then(|status| status.pod_ip) {
                         let address = pod_ip;
-                        let jsonrpc_port = 3000; //TODO use kubernetes env config
-                        let grpc_port = 3777; //TODO use kubernetes env config
+                        let jsonrpc_port = consensus.my_address.jsonrpc_port;
+                        let grpc_port = consensus.my_address.grpc_port;
                         let full_grpc_address = format!("http://{}:{}", address, grpc_port);
                         let client = AppendEntryServiceClient::connect(full_grpc_address.clone()).await?;
 
