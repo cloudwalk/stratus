@@ -36,6 +36,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
 use crate::ext::named_spawn;
 use crate::infra::BlockchainClient;
+use crate::GlobalState;
 
 pub mod append_entry {
     tonic::include_proto!("append_entry");
@@ -353,11 +354,15 @@ impl Consensus {
                 consensus: Mutex::new(consensus),
             };
 
-            Server::builder()
+            let server = Server::builder()
                 .add_service(AppendEntryServiceServer::new(append_entry_service))
                 .serve(addr)
-                .await
-                .unwrap();
+                .await;
+
+            if let Err(e) = server {
+                let message = GlobalState::shutdown_from("consensus", &format!("failed to create server at {}", addr));
+                tracing::error!(reason = ?e, %message);
+            }
         });
     }
 

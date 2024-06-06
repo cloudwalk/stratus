@@ -101,7 +101,7 @@ pub fn init_config_and_data(
     InMemoryPermanentStorageState,
 ) {
     // init config
-    let mut global_services = GlobalServices::<IntegrationTestConfig>::init().unwrap();
+    let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
     global_services.config.executor.chain_id = 2009;
     global_services.config.executor.num_evms = 8;
     global_services.config.storage.perm_storage.perm_storage_connections = 9;

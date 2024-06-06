@@ -22,7 +22,7 @@ use stratus::GlobalServices;
 const BLOCKS_BY_TASK: usize = 1_000;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<RpcDownloaderConfig>::init()?;
+    let global_services = GlobalServices::<RpcDownloaderConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 

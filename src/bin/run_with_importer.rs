@@ -13,7 +13,7 @@ use stratus::GlobalState;
 use tokio::join;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<RunWithImporterConfig>::init()?;
+    let global_services = GlobalServices::<RunWithImporterConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 
