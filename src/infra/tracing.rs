@@ -13,23 +13,19 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
 use opentelemetry_sdk::Resource;
-use tracing::Metadata;
-use tracing::Subscriber;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::time::FormatTime;
-use tracing_subscriber::layer::Context;
-use tracing_subscriber::layer::Filter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
+use crate::ext::binary_name;
 use crate::ext::named_spawn;
-use crate::ext::not;
 
 /// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAddr) {
-    println!("creating tracing registry");
+pub async fn init_tracing(url: Option<&String>, console_address: SocketAddr) -> anyhow::Result<()> {
+    println!("creating global tracing registry");
 
     // configure stdout log layer
     let log_format = env::var("LOG_FORMAT").map(|x| x.trim().to_lowercase());
@@ -37,7 +33,7 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
 
     let stdout_layer = match log_format.as_deref() {
         Ok("json") => {
-            println!("tracing registry enabling JSON logs");
+            println!("tracing registry: enabling json logs");
             fmt::Layer::default()
                 .json()
                 .with_target(true)
@@ -47,7 +43,7 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
                 .boxed()
         }
         Ok("verbose") | Ok("full") => {
-            println!("tracing registry enabling VERBOSE text logs");
+            println!("tracing registry: enabling verbose text logs");
             fmt::Layer::default()
                 .with_ansi(enable_ansi)
                 .with_target(true)
@@ -57,26 +53,29 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
                 .boxed()
         }
         Ok("minimal") => {
-            println!("tracing registry enabling MINIMAL text logs");
+            println!("tracing registry: enabling minimal text logs");
             fmt::Layer::default()
+                .with_thread_ids(false)
+                .with_thread_names(false)
+                .with_target(false)
                 .with_ansi(enable_ansi)
                 .with_timer(MinimalTimer)
                 .with_filter(EnvFilter::from_default_env())
                 .boxed()
         }
         Ok("normal") | Err(VarError::NotPresent) => {
-            println!("tracing registry enabling NORMAL text logs");
+            println!("tracing registry: enabling normal text logs");
             fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed()
         }
-        Err(e) => panic!("Invalid UTF8 in `LOG_FORMAT`: {e}"),
         Ok(unexpected) => panic!("unexpected `LOG_FORMAT={unexpected}`"),
+        Err(e) => panic!("invalid utf-8 in `LOG_FORMAT`: {e}"),
     };
 
     // configure opentelemetry layer
     let opentelemetry_layer = match url {
         Some(url) => {
-            println!("tracing registry enabling opentelemetry exporter | url={}", url);
-            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", "stratus")]));
+            println!("tracing registry: enabling opentelemetry exporter | url={}", url);
+            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", format!("stratus-{}", binary_name()))]));
             let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
 
             let tracer = opentelemetry_otlp::new_pipeline()
@@ -93,33 +92,39 @@ pub async fn init_tracing(url: Option<&String>, tokio_console_address: SocketAdd
             Some(layer)
         }
         None => {
-            println!("tracing registry NOT enabling opentelemetry exporter");
+            println!("tracing registry: skipping opentelemetry exporter");
             None
         }
     };
 
     // configure sentry layer
+    println!("tracing registry: enabling tracing layer");
     let sentry_layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
 
     // configure tokio-console layer
-    println!("tracing registry enabling tokio console");
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-    let console_layer = console_layer.with_filter(TokioConsoleFilter);
-
-    // init tokio console server
+    println!("tracing registry: enabling tokio console | address={}", console_address);
+    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(console_address).build();
     named_spawn("console::grpc-server", async move {
         if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, "failed to create tokio-console server");
+            tracing::error!(reason = ?e, address = %console_address, "failed to create tokio-console server");
         };
     });
 
     // init registry
-    tracing_subscriber::registry()
+    let result = tracing_subscriber::registry()
         .with(stdout_layer)
         .with(opentelemetry_layer)
         .with(sentry_layer)
         .with(console_layer)
-        .init();
+        .try_init();
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            println!("failed to create global tracing registry | reason={:?}", e);
+            Err(e.into())
+        }
+    }
 }
 
 struct MinimalTimer;
@@ -127,27 +132,6 @@ struct MinimalTimer;
 impl FormatTime for MinimalTimer {
     fn format_time(&self, w: &mut fmt::format::Writer<'_>) -> std::fmt::Result {
         write!(w, "{}", Local::now().time().format("%H:%M:%S%.3f"))
-    }
-}
-
-/// Workaround filter for `tokio-console` panicking in debug mode when an event is not an event or span.
-///
-/// Can be removed after this PR is merged: https://github.com/tokio-rs/console/pull/554
-struct TokioConsoleFilter;
-
-impl<S> Filter<S> for TokioConsoleFilter
-where
-    S: Subscriber,
-{
-    fn enabled(&self, meta: &Metadata<'_>, _: &Context<'_, S>) -> bool {
-        meta.is_span() || meta.is_event()
-    }
-
-    fn callsite_enabled(&self, meta: &'static Metadata<'static>) -> tracing::subscriber::Interest {
-        if not(meta.is_span()) && not(meta.is_event()) {
-            return tracing::subscriber::Interest::never();
-        }
-        tracing::subscriber::Interest::always()
     }
 }
 

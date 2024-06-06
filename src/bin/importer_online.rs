@@ -73,7 +73,7 @@ const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 // -----------------------------------------------------------------------------
 #[allow(dead_code)]
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ImporterOnlineConfig>::init()?;
+    let global_services = GlobalServices::<ImporterOnlineConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 
@@ -353,7 +353,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
 #[tracing::instrument(name = "importer::fetch_block", skip_all, fields(number))]
 async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> ExternalBlock {
     Span::with(|s| {
-        s.rec("number", &number);
+        s.rec_str("number", &number);
     });
 
     let mut backoff = 10;
@@ -371,17 +371,11 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
         };
 
         if block.is_null() {
-            #[cfg(not(feature = "perf"))]
-            {
-                backoff *= 2;
-                backoff = min(backoff, 1000); // no more than 1000ms of backoff
-                tracing::warn!(%number, "block not available yet because block is not mined. retrying with backoff.");
-                sleep(Duration::from_millis(backoff)).await;
-                continue;
-            }
-
-            #[cfg(feature = "perf")]
-            std::process::exit(0);
+            backoff *= 2;
+            backoff = min(backoff, 1000); // no more than 1000ms of backoff
+            tracing::warn!(%number, "block not available yet because block is not mined. retrying with backoff.");
+            sleep(Duration::from_millis(backoff)).await;
+            continue;
         }
 
         return ExternalBlock::deserialize(&block).expect("cannot fail to deserialize external block");
@@ -391,8 +385,8 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
 #[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(number, hash))]
 async fn fetch_receipt(chain: Arc<BlockchainClient>, number: BlockNumber, hash: Hash) -> ExternalReceipt {
     Span::with(|s| {
-        s.rec("number", &number);
-        s.rec("hash", &hash);
+        s.rec_str("number", &number);
+        s.rec_str("hash", &hash);
     });
 
     loop {

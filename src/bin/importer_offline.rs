@@ -43,7 +43,7 @@ const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 2_000_000;
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ImporterOfflineConfig>::init()?;
+    let global_services = GlobalServices::<ImporterOfflineConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 
@@ -185,7 +185,7 @@ async fn execute_block_importer(
             let mined_block = miner.mine_external().await?;
 
             // export snapshot for tests
-            if blocks_to_export_snapshot.contains(mined_block.number()) {
+            if blocks_to_export_snapshot.contains(&mined_block.number()) {
                 export_snapshot(&block, &receipts, &mined_block)?;
             }
 
@@ -329,12 +329,12 @@ async fn import_external_to_csv(
     block_last_index: usize,
 ) -> anyhow::Result<()> {
     // export block to csv
-    let number = *block.number();
+    let block_number = block.number();
     csv.add_block(block)?;
 
     let is_last_block = block_index == block_last_index;
-    let is_chunk_interval_end = number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
-    let is_flush_interval_end = number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
+    let is_chunk_interval_end = block_number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
+    let is_flush_interval_end = block_number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
 
     // check if should flush
     let should_chunk_csv_files = is_chunk_interval_end;
@@ -348,8 +348,8 @@ async fn import_external_to_csv(
 
     // chunk
     if should_chunk_csv_files {
-        tracing::info!("Chunk ended at block number {number}, starting next CSV chunks for the next block");
-        csv.finish_current_chunks(number)?;
+        tracing::info!("Chunk ended at block number {block_number}, starting next CSV chunks for the next block");
+        csv.finish_current_chunks(block_number)?;
     }
 
     Ok(())

@@ -86,7 +86,7 @@ impl ExternalRelayer {
 
         // fill span
         let span = Span::current();
-        span.rec("block_number", &block_number);
+        span.rec_str("block_number", &block_number);
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(block.transactions);
@@ -137,7 +137,7 @@ impl ExternalRelayer {
 
         // fill span
         let span = Span::current();
-        span.rec("hash", &tx_hash);
+        span.rec_str("hash", &tx_hash);
 
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
@@ -233,7 +233,7 @@ impl ExternalRelayer {
 
         // fill span
         let span = Span::current();
-        span.rec("hash", &tx_hash);
+        span.rec_str("hash", &tx_hash);
 
         let ethers_tx = Transaction::from(tx_mined.input.clone());
         let tx = loop {
@@ -324,7 +324,7 @@ impl ExternalRelayerClient {
 
         // fill span
         let span = Span::current();
-        span.rec("block_number", &block_number);
+        span.rec_str("block_number", &block_number);
 
         sqlx::query!(
             "INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)",

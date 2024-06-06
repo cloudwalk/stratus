@@ -133,7 +133,7 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::set_active_block_number", skip_all, fields(number))]
     pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         Span::with(|s| {
-            s.rec("number", &number);
+            s.rec_str("number", &number);
         });
 
         #[cfg(feature = "metrics")]
@@ -165,7 +165,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(number))]
     pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        Span::with(|s| s.rec("number", &number));
+        Span::with(|s| s.rec_str("number", &number));
 
         #[cfg(feature = "metrics")]
         {
@@ -236,8 +236,8 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::read_account", skip_all, fields(address, point_in_time))]
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         Span::with(|s| {
-            s.rec("address", address);
-            s.rec("point_in_time", point_in_time);
+            s.rec_str("address", address);
+            s.rec_str("point_in_time", point_in_time);
         });
 
         #[cfg(feature = "metrics")]
@@ -273,9 +273,9 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::read_slot", skip_all, fields(address, index, point_in_time))]
     pub async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         Span::with(|s| {
-            s.rec("address", address);
-            s.rec("index", index);
-            s.rec("point_in_time", point_in_time);
+            s.rec_str("address", address);
+            s.rec_str("index", index);
+            s.rec_str("point_in_time", point_in_time);
         });
 
         #[cfg(feature = "metrics")]
@@ -359,7 +359,7 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::save_execution", skip_all, fields(hash))]
     pub async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         Span::with(|s| {
-            s.rec("hash", &tx.hash());
+            s.rec_str("hash", &tx.hash());
         });
 
         #[cfg(feature = "metrics")]
@@ -388,7 +388,7 @@ impl StratusStorage {
         let result = self.temp.finish_block().await;
 
         if let Ok(ref block) = result {
-            Span::with(|s| s.rec("number", &block.number));
+            Span::with(|s| s.rec_str("number", &block.number));
         }
 
         result
@@ -396,7 +396,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
     pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        Span::with(|s| s.rec("number", block.number()));
+        Span::with(|s| s.rec_str("number", &block.number()));
 
         #[cfg(feature = "metrics")]
         {
@@ -426,7 +426,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
     pub async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        Span::with(|s| s.rec("hash", hash));
+        Span::with(|s| s.rec_str("hash", hash));
 
         #[cfg(feature = "metrics")]
         {

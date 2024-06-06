@@ -33,6 +33,18 @@ pub fn not(value: bool) -> bool {
     !value
 }
 
+/// Gets the current binary basename.
+pub fn binary_name() -> String {
+    let binary = std::env::current_exe().unwrap();
+    let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
+
+    if binary_basename.starts_with("test_") {
+        "tests".to_string()
+    } else {
+        binary_basename
+    }
+}
+
 // -----------------------------------------------------------------------------
 // From / TryFrom
 // -----------------------------------------------------------------------------
@@ -183,12 +195,14 @@ pub trait SpanExt {
     where
         F: Fn(Span),
     {
-        let span = Span::current();
-        fill(span);
+        if cfg!(tracing) {
+            let span = Span::current();
+            fill(span);
+        }
     }
 
     /// Records a value using `ToString` implementation.
-    fn rec<T>(&self, field: &'static str, value: &T)
+    fn rec_str<T>(&self, field: &'static str, value: &T)
     where
         T: ToString;
 
@@ -199,7 +213,7 @@ pub trait SpanExt {
 }
 
 impl SpanExt for Span {
-    fn rec<T>(&self, field: &'static str, value: &T)
+    fn rec_str<T>(&self, field: &'static str, value: &T)
     where
         T: ToString,
     {

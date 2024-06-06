@@ -114,6 +114,13 @@ revm = { version = "=8.0.0", features = ["asm-keccak"]}
 revm = { version = "=8.0.0" }
 
 # ------------------------------------------------------------------------------
+# Patches
+# ------------------------------------------------------------------------------
+[patch.crates-io]
+console-subscriber = { git = "https://github.com/tokio-rs/console.git", rev = "852a977bab71d0f6ae47c6c5c1c20b8679c9e576" }
+
+
+# ------------------------------------------------------------------------------
 # Dev dependencies
 # ------------------------------------------------------------------------------
 
@@ -166,16 +173,16 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["rocks", "metrics", "kubernetes"]
+default = ["metrics", "tracing", "rocks", "kubernetes"]
 
 # Application is running in develoment mode.
 dev  = []
 
-# Application is running in performance test mode.
-perf = []
-
-# Enable metrics dependencies and code for metrics collection.
+# Enable runtime metrics collection.
 metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
+
+# Enable runtime tracing/spans collection.
+tracing = []
 
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]

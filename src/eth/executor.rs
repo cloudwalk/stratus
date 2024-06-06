@@ -100,7 +100,7 @@ impl Executor {
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
         Span::with(|s| {
-            s.rec("number", &block.number());
+            s.rec_str("number", &block.number());
         });
         tracing::info!(number = %block.number(), "reexecuting external block");
 
@@ -184,7 +184,7 @@ impl Executor {
         block: &ExternalBlock,
     ) -> Result<ExternalTransactionExecution, (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Error)> {
         Span::with(|s| {
-            s.rec("hash", &tx.hash);
+            s.rec_str("hash", &tx.hash);
         });
 
         self.external_transaction_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
@@ -264,8 +264,8 @@ impl Executor {
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
         Span::with(|s| {
-            s.rec("hash", &tx_input.hash);
-            s.rec("from", &tx_input.signer);
+            s.rec_str("hash", &tx_input.hash);
+            s.rec_str("from", &tx_input.signer);
             s.rec_opt("to", &tx_input.to);
         });
         tracing::info!(
