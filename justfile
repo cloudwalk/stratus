@@ -371,7 +371,7 @@ e2e-relayer-external-up:
     # Build Stratus and Relayer binaries
     echo "Building Stratus binary"
     cargo build --release --bin stratus --features dev &
-    echo "Building Stratus binary"
+    echo "Building Relayer binary"
     cargo build --release --bin relayer --features dev &
 
     mkdir e2e_logs
