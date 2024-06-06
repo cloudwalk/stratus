@@ -6,7 +6,6 @@ use serde_json::Value as JsonValue;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
-use tokio::time::sleep;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -16,6 +15,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
+use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
 use crate::log_and_err;
 
@@ -99,7 +99,8 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     if attempts < MAX_RETRIES {
                         attempts += 1;
                         tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
-                        sleep(Duration::from_millis(attempts.pow(2))).await; // Exponential backoff
+                        traced_sleep(Duration::from_millis(attempts.pow(2))).await;
+                    // Exponential backoff
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve external blocks");
                     }
@@ -133,7 +134,8 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     if attempts < MAX_RETRIES {
                         attempts += 1;
                         tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
-                        sleep(Duration::from_millis(attempts.pow(2))).await; // Exponential backoff
+                        traced_sleep(Duration::from_millis(attempts.pow(2))).await;
+                    // Exponential backoff
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve receipts");
                     }
