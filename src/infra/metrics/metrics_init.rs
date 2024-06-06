@@ -17,7 +17,6 @@ use crate::infra::metrics::metrics_for_json_rpc;
 use crate::infra::metrics::metrics_for_rocks;
 use crate::infra::metrics::metrics_for_storage_read;
 use crate::infra::metrics::metrics_for_storage_write;
-use crate::log_and_err;
 
 /// Default bucket for duration based metrics.
 const BUCKET_FOR_DURATION: [f64; 37] = [
@@ -61,7 +60,7 @@ pub fn init_metrics(address: SocketAddr, histogram_kind: MetricsHistogramKind) -
 
     // init exporter
     if let Err(e) = builder.install() {
-        return log_and_err!(reason = e, format!("failed to create metrics exporter at {}", address));
+        tracing::error!(reason = ?e, %address, "failed to create metrics exporter");
     }
 
     // init metric description (always after provider started)
