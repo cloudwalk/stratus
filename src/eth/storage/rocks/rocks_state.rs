@@ -66,7 +66,7 @@ impl RocksStorageState {
             account_slots_history: RocksDb::new(&format!("{}./data/account_slots_history.rocksdb", path_prefix), DbConfig::FastWriteSST).unwrap(),
             transactions: RocksDb::new(&format!("{}./data/transactions.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(),
             blocks_by_number: RocksDb::new(&format!("{}./data/blocks_by_number.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_hash: RocksDb::new(&format!("{}./data/blocks_by_hash.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_hash: RocksDb::new(&format!("{}./data/blocks_by_hash.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: RocksDb::new(&format!("{}./data/logs.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(),
             backup_trigger: Arc::new(tx),
         };
