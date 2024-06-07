@@ -18,6 +18,7 @@ use crate::eth::primitives::LogMined;
 use crate::ext::named_spawn;
 use crate::ext::not;
 use crate::ext::traced_sleep;
+use crate::ext::SleepReason;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -84,7 +85,7 @@ impl RpcSubscriptions {
                 }
 
                 // await next iteration
-                traced_sleep(CLEANING_FREQUENCY).await;
+                traced_sleep(CLEANING_FREQUENCY, SleepReason::Interval).await;
             }
         })
     }

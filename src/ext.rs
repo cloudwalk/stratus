@@ -273,12 +273,34 @@ macro_rules! log_and_err {
 // Tokio
 // -----------------------------------------------------------------------------
 
+/// Indicates why a sleep is happening.
+#[derive(Debug, strum::Display)]
+pub enum SleepReason {
+    /// Task is executed at predefined intervals.
+    #[strum(to_string = "interval")]
+    Interval,
+
+    /// Task is awaiting a backoff before retrying the operation.
+    #[strum(to_string = "retry-backoff")]
+    RetryBackoff,
+
+    /// Task is awaiting an external system or component to produde or synchronize data.
+    #[strum(to_string = "sync-data")]
+    SyncData,
+}
+
+/// Sleeps the current task and tracks why it is sleeping.
 #[inline(always)]
-pub async fn traced_sleep(duration: Duration) {
+pub async fn traced_sleep(duration: Duration, reason: SleepReason) {
     #[cfg(feature = "tracing")]
     {
-        let span = info_span!("tokio::sleep", duration_ms = %duration.as_millis());
-        tokio::time::sleep(duration).instrument(span).await;
+        let span = info_span!("tokio::sleep", duration_ms = %duration.as_millis(), %reason);
+        async {
+            tracing::debug!(duration_ms = %duration.as_millis(), %reason, "sleeping");
+            tokio::time::sleep(duration).await;
+        }
+        .instrument(span)
+        .await;
     }
 
     #[cfg(not(feature = "tracing"))]
