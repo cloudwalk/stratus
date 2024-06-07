@@ -725,6 +725,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     last_last_arrived_block_number,
                     header.number
                 );
+                return Err(Status::new(
+                    (StatusCode::EntryAlreadyExists as i32).into(),
+                    "Leader is behind follower".to_string(),
+                ));
             }
         }
 
