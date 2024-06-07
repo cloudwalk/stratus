@@ -24,6 +24,7 @@ use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::eth::rpc::RpcClientApp;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -55,8 +56,12 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             _ => None,
         };
 
+        // extract client app
+        let client = request.extensions().get::<RpcClientApp>().unwrap_or(&RpcClientApp::Unknown).clone();
+
         // trace request
         tracing::info!(
+            %client,
             id = %request.id,
             %method,
             function = %function.clone().unwrap_or_default(),
@@ -73,6 +78,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         }
 
         RpcResponse {
+            client,
             id: request.id.to_string(),
             method: method.to_string(),
             function,
@@ -103,6 +109,7 @@ pub struct RpcResponse<'a> {
     #[pin]
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 
+    client: RpcClientApp,
     id: String,
     method: String,
     function: Option<SoliditySignature>,
@@ -125,6 +132,7 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
+                client = %proj.client,
                 id = %proj.id,
                 method = %proj.method,
                 function = %proj.function.clone().unwrap_or_default(),

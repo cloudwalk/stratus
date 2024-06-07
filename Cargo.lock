@@ -5387,6 +5387,7 @@ dependencies = [
  "sentry-tracing",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "serde_with 3.8.1",
  "sqlx",
  "stringreader",
