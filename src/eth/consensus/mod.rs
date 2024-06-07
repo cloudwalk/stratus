@@ -716,7 +716,17 @@ impl AppendEntryService for AppendEntryServiceImpl {
         );
 
         #[cfg(feature = "metrics")]
-        metrics::set_append_entries_block_number_diff(last_last_arrived_block_number - header.number);
+        {
+            if let Some(diff) = last_last_arrived_block_number.checked_sub(header.number) {
+                metrics::set_append_entries_block_number_diff(diff);
+            } else {
+                tracing::error!(
+                    "leader is behind follower: arrived_block: {}, header_block: {}",
+                    last_last_arrived_block_number,
+                    header.number
+                );
+            }
+        }
 
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
