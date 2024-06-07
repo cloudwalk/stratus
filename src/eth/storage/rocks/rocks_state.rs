@@ -57,7 +57,7 @@ impl RocksStorageState {
     pub fn new(rocks_path_prefix: Option<String>) -> Self {
         let (tx, rx) = mpsc::channel::<()>(1);
 
-        let path_prefix = rocks_path_prefix.unwrap_or_else(|| "".to_string());
+        let path_prefix = rocks_path_prefix.unwrap_or_default();
 
         let state = Self {
             accounts: RocksDb::new(&format!("{}./data/accounts.rocksdb", path_prefix), DbConfig::Default).unwrap(),
