@@ -52,7 +52,7 @@ fn parse_client_app(uri: &Uri) -> RpcClientApp {
     };
 
     match query_params.get("app") {
-        Some(app) => RpcClientApp::Identified(app.to_string()),
+        Some(app) => RpcClientApp::Identified(app.to_owned()),
         None => RpcClientApp::Unknown,
     }
 }
