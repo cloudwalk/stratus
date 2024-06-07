@@ -57,6 +57,8 @@ impl RocksStorageState {
     pub fn new(rocks_path_prefix: Option<String>) -> Self {
         let (tx, rx) = mpsc::channel::<()>(1);
 
+        //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
+
         let path_prefix = rocks_path_prefix.unwrap_or_default();
 
         let state = Self {
