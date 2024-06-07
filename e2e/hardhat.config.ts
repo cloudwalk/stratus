@@ -1,6 +1,5 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import "@openzeppelin/hardhat-upgrades";
 
 const ACCOUNTS_MNEMONIC = "test test test test test test test test test test test junk";
 const MINING_INTERVAL_PATTERN = /^(\d+)s$/;
@@ -34,7 +33,7 @@ const config: HardhatUserConfig = {
             initialBaseFeePerGas: 0,
             mining: {
                 auto: process.env.BLOCK_MODE === "automine",
-                interval: defineBlockMiningIntervalInMs(process.env.BLOCK_MODE)
+                interval: defineBlockMiningIntervalInMs(process.env.BLOCK_MODE),
             },
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,
