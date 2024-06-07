@@ -1,28 +1,51 @@
-# Build
-FROM rust:1.75 as builder
+# Base stage with Rust and build tools
+FROM rust:1.75 as base
 
 WORKDIR /app
-COPY src /app/src
-COPY static /app/static
-COPY .sqlx /app/.sqlx
-COPY build.rs /app/build.rs
-COPY Cargo.toml /app/Cargo.toml
-COPY Cargo.lock /app/Cargo.lock
-COPY .cargo .cargo
-COPY config /app/config
-COPY proto /app/proto
+RUN apt update && apt-get install -y libclang-dev cmake protobuf-compiler
 
-RUN apt update
-RUN apt-get install -y libclang-dev cmake protobuf-compiler
+# Dependencies stage
+FROM base as deps
 
+# Set environment variables for the build
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json
 ENV NO_COLOR=1
 
+# Copy only the Cargo files and build dependencies
+COPY Cargo.toml Cargo.lock /app/
+COPY .cargo /app/.cargo
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release --bin stratus --features metrics
+RUN rm -r src
+
+# Build stage
+FROM base as builder
+
+WORKDIR /app
+
+# Set environment variables for the build
+ENV CARGO_PROFILE_RELEASE_DEBUG=1
+ENV LOG_FORMAT=json
+ENV NO_COLOR=1
+
+# Copy dependencies from the deps stage
+COPY --from=deps /app/target /app/target
+COPY --from=deps /app/Cargo.toml /app/Cargo.toml
+COPY --from=deps /app/Cargo.lock /app/Cargo.lock
+COPY --from=deps /app/.cargo /app/.cargo
+
+# Copy the rest of the application code
+COPY src /app/src
+COPY static /app/static
+COPY .sqlx /app/.sqlx
+COPY build.rs /app/build.rs
+COPY config /app/config
+COPY proto /app/proto
+
 RUN cargo build --release --bin stratus --features metrics
 
-
-# Runtime
+# Runtime stage
 FROM rust:1.75 as runtime
 WORKDIR /app
 COPY --from=builder /app/target/release/stratus /app/stratus
