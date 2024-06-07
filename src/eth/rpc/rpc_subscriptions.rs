@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use futures::join;
 use itertools::Itertools;
+use jsonrpsee::ConnectionId;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use tokio::sync::broadcast;
@@ -30,8 +31,6 @@ const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
 
 /// Timeout used when sending notifications to subscribers.
 const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
-
-type SubscriptionId = usize;
 
 #[cfg(feature = "metrics")]
 mod label {
@@ -200,15 +199,15 @@ impl RpcSubscriptionsHandles {
 /// Active client subscriptions.
 #[derive(Debug, Default)]
 pub struct RpcSubscriptionsConnected {
-    new_pending_txs: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
-    new_heads: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
-    logs: RwLock<HashMap<SubscriptionId, (SubscriptionSink, LogFilter)>>,
+    new_pending_txs: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
+    new_heads: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
+    logs: RwLock<HashMap<ConnectionId, (SubscriptionSink, LogFilter)>>,
 }
 
 impl RpcSubscriptionsConnected {
     /// Adds a new subscriber to `newPendingTransactions` event.
     pub async fn add_new_pending_txs(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id(), "subscribing to newPendingTransactions event");
+        tracing::debug!(id = %sink.connection_id().0, "subscribing to newPendingTransactions event");
         let mut subs = self.new_pending_txs.write().await;
         subs.insert(sink.connection_id(), sink);
 
@@ -218,7 +217,7 @@ impl RpcSubscriptionsConnected {
 
     /// Adds a new subscriber to `newHeads` event.
     pub async fn add_new_heads(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id(), "subscribing to newHeads event");
+        tracing::debug!(id = %sink.connection_id().0, "subscribing to newHeads event");
         let mut subs = self.new_heads.write().await;
         subs.insert(sink.connection_id(), sink);
 
@@ -228,7 +227,7 @@ impl RpcSubscriptionsConnected {
 
     /// Adds a new subscriber to `logs` event.
     pub async fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
-        tracing::debug!(id = %sink.connection_id(), ?filter, "subscribing to logs event");
+        tracing::debug!(id = %sink.connection_id().0, ?filter, "subscribing to logs event");
         let mut subs = self.logs.write().await;
         subs.insert(sink.connection_id(), (sink, filter));
 
