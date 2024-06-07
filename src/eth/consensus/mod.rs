@@ -94,10 +94,10 @@ impl PeerAddress {
     }
 
     fn from_string(s: String) -> Result<Self, anyhow::Error> {
-        let (scheme, address_part) = if s.starts_with("http://") {
-            ("http://", &s[7..])
-        } else if s.starts_with("https://") {
-            ("https://", &s[8..])
+        let (scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
+            ("http://", address)
+        } else if let Some(address) = s.strip_prefix("https://") {
+            ("https://", address)
         } else {
             return Err(anyhow::anyhow!("invalid scheme"));
         };
