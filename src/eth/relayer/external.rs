@@ -197,9 +197,7 @@ impl ExternalRelayer {
         match res {
             Err(err) => {
                 tracing::error!(?block_number, ?hash, "failed to insert row in pgsql, saving mismatche to json");
-                let mut file = File::create(format!("data/mismatched_transactions/{}.json", hash))
-                    .await
-                    .expect("opening the file should not fail");
+                let mut file = File::create(format!("data/{}.json", hash)).await.expect("opening the file should not fail");
                 let json = serde_json::json!(
                     {
                         "stratus_receipt": stratus_json,
@@ -270,7 +268,7 @@ impl ExternalRelayer {
 
     /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
     /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
-    /// on the `mismatches` table in pgsql, or in data/mismatched_transactions as a fallback.
+    /// on the `mismatches` table in pgsql, or in ./data as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
         tracing::debug!("relaying transactions");
