@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: stratus-api
-          image: local/run_with_importer_chaos:latest
+          image: stratus-api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

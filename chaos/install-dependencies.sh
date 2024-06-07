@@ -14,21 +14,11 @@ fi
 echo "Configuring kubectl to use Kind cluster..."
 export KUBECONFIG=$(pwd)/kubeconfig.yaml
 
-mkdir -p ~/.docker/cli-plugins
-curl -L https://github.com/docker/buildx/releases/download/v0.8.2/buildx-v0.8.2.darwin-amd64 -o ~/.docker/cli-plugins/docker-buildx
-chmod +x ~/.docker/cli-plugins/docker-buildx
-
-echo "Checking if Docker image is already built..."
-if ! docker images | grep -q local/run_with_importer_cached; then
-    echo "Building Docker image..."
-    docker buildx inspect mybuilder > /dev/null 2>&1 || docker buildx create --name mybuilder --use
-    DOCKER_BUILDKIT=1 docker buildx build -t local/run_with_importer_cached -f ./docker/Dockerfile.run_with_importer_cached .
-else
-    echo "Docker image already built."
-fi
+echo "Building Docker image..."
+docker build -t stratus-api --file ./docker/Dockerfile.run_stratus .
 
 echo "Loading Docker image into Kind..."
-kind load docker-image local/run_with_importer_cached --name local-testing
+kind load docker-image stratus-api --name local-testing
 
 echo "Deploying application..."
 kubectl apply -f chaos/local-deployment.yaml
