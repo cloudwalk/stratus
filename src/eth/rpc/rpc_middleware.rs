@@ -10,6 +10,9 @@ use std::sync::atomic::Ordering;
 use std::task::Poll;
 use std::time::Instant;
 
+use futures::future::BoxFuture;
+use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
+use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
@@ -36,15 +39,12 @@ static ACTIVE_REQUESTS: AtomicU64 = AtomicU64::new(0);
 // -----------------------------------------------------------------------------
 
 #[derive(Debug, derive_new::new)]
-pub struct RpcMiddleware<S> {
-    service: S,
+pub struct RpcMiddleware {
+    service: RpcService,
 }
 
-impl<'a, S> RpcServiceT<'a> for RpcMiddleware<S>
-where
-    S: RpcServiceT<'a> + Send + Sync,
-{
-    type Future = RpcResponse<S::Future>;
+impl<'a> RpcServiceT<'a> for RpcMiddleware {
+    type Future = RpcResponse<'a>;
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // extract signature if available
@@ -99,9 +99,9 @@ fn extract_function_from_transaction(params: Params) -> Option<SoliditySignature
 
 /// https://blog.adamchalmers.com/pin-unpin/
 #[pin_project]
-pub struct RpcResponse<F> {
+pub struct RpcResponse<'a> {
     #[pin]
-    future_response: F,
+    future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 
     id: String,
     method: String,
@@ -109,8 +109,8 @@ pub struct RpcResponse<F> {
     start: Instant,
 }
 
-impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
-    type Output = F::Output;
+impl<'a> Future for RpcResponse<'a> {
+    type Output = MethodResponse;
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
         // poll future
