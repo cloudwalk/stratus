@@ -197,9 +197,7 @@ impl ExternalRelayer {
         match res {
             Err(err) => {
                 tracing::error!(?block_number, ?hash, "failed to insert row in pgsql, saving mismatche to json");
-                let mut file = File::create(format!("data/{}.json", hash))
-                    .await
-                    .expect("opening the file should not fail");
+                let mut file = File::create(format!("data/{}.json", hash)).await.expect("opening the file should not fail");
                 let json = serde_json::json!(
                     {
                         "stratus_receipt": stratus_json,
