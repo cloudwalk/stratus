@@ -15,11 +15,11 @@ use crate::infra::metrics::MetricLabelValue;
 pub enum StoragePointInTime {
     /// The current state of the EVM storage.
     #[default]
-    #[strum(serialize = "present")]
+    #[strum(to_string = "present")]
     Present,
 
     /// The state of the EVM storage at the given block number.
-    #[strum(serialize = "past")]
+    #[strum(to_string = "past")]
     Past(BlockNumber),
 }
 

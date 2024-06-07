@@ -6,6 +6,8 @@ use anyhow::anyhow;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
+use tracing::info_span;
+use tracing::Instrument;
 use tracing::Span;
 
 use crate::infra::tracing::info_task_spawn;
@@ -270,6 +272,40 @@ macro_rules! log_and_err {
 // -----------------------------------------------------------------------------
 // Tokio
 // -----------------------------------------------------------------------------
+
+/// Indicates why a sleep is happening.
+#[derive(Debug, strum::Display)]
+pub enum SleepReason {
+    /// Task is executed at predefined intervals.
+    #[strum(to_string = "interval")]
+    Interval,
+
+    /// Task is awaiting a backoff before retrying the operation.
+    #[strum(to_string = "retry-backoff")]
+    RetryBackoff,
+
+    /// Task is awaiting an external system or component to produde or synchronize data.
+    #[strum(to_string = "sync-data")]
+    SyncData,
+}
+
+/// Sleeps the current task and tracks why it is sleeping.
+#[inline(always)]
+pub async fn traced_sleep(duration: Duration, reason: SleepReason) {
+    #[cfg(feature = "tracing")]
+    {
+        let span = info_span!("tokio::sleep", duration_ms = %duration.as_millis(), %reason);
+        async {
+            tracing::debug!(duration_ms = %duration.as_millis(), %reason, "sleeping");
+            tokio::time::sleep(duration).await;
+        }
+        .instrument(span)
+        .await;
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    tokio::time::sleep(duration).await;
+}
 
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]

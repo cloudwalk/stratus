@@ -21,6 +21,7 @@ use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
@@ -121,13 +122,15 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
             let elapsed = proj.start.elapsed();
 
             // trace response
+            let response_success = response.is_success();
+            let response_result = response.as_result();
             tracing::info!(
                 id = %proj.id,
                 method = %proj.method,
                 function = %proj.function.clone().unwrap_or_default(),
                 duration_us = %elapsed.as_micros(),
-                success = %response.is_success(),
-                result = %response.as_result(),
+                success = %response_success,
+                result = %response_result,
                 "rpc response"
             );
 
@@ -136,7 +139,12 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
             {
                 let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
                 metrics::set_rpc_requests_active(active, proj.method.clone(), proj.function.clone());
-                metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), proj.function.clone(), response.is_success());
+
+                let mut rpc_result = "error";
+                if response_success {
+                    rpc_result = if_else!(response_result.contains("\"result\":null"), "missing", "present");
+                }
+                metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), proj.function.clone(), rpc_result, response.is_success());
             }
         }
 

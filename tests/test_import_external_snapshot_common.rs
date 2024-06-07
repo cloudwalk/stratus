@@ -18,6 +18,8 @@ use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StratusStorage;
+use stratus::ext::traced_sleep;
+use stratus::ext::SleepReason;
 use stratus::infra::docker::Docker;
 use stratus::GlobalServices;
 #[cfg(feature = "metrics")]
@@ -162,7 +164,7 @@ pub async fn execute_test(
     miner.mine_external_and_commit().await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    traced_sleep(Duration::from_secs(5), SleepReason::SyncData).await;
 
     println!("{}\n{}\n{}", "=".repeat(80), test_name, "=".repeat(80));
     for query in METRIC_QUERIES {

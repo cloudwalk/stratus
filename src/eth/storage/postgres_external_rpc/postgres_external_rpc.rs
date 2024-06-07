@@ -6,7 +6,6 @@ use serde_json::Value as JsonValue;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
-use tokio::time::sleep;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -16,7 +15,9 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
+use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
+use crate::ext::SleepReason;
 use crate::log_and_err;
 
 const MAX_RETRIES: u64 = 50;
@@ -75,7 +76,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
     async fn read_blocks_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlock>> {
         tracing::debug!(%start, %end, "retrieving external blocks in range");
-        let mut attempts: u64 = 0;
+        let mut attempt: u64 = 1;
 
         loop {
             let result = sqlx::query_file!(
@@ -95,22 +96,23 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     let blocks_sorted = blocks.into_iter().sorted_by_key(|x| x.number()).collect();
                     return Ok(blocks_sorted);
                 }
-                Err(e) => {
-                    if attempts < MAX_RETRIES {
-                        attempts += 1;
-                        tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
-                        sleep(Duration::from_millis(attempts.pow(2))).await; // Exponential backoff
+                Err(e) =>
+                    if attempt <= MAX_RETRIES {
+                        tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
+                        attempt += 1;
+
+                        let backoff = Duration::from_millis(attempt.pow(2));
+                        traced_sleep(backoff, SleepReason::RetryBackoff).await;
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve external blocks");
-                    }
-                }
+                    },
             }
         }
     }
 
     async fn read_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalReceipt>> {
         tracing::debug!(%start, %end, "retrieving external receipts in range");
-        let mut attempts: u64 = 0;
+        let mut attempt: u64 = 1;
 
         loop {
             let result = sqlx::query_file!(
@@ -129,15 +131,16 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     }
                     return Ok(receipts);
                 }
-                Err(e) => {
-                    if attempts < MAX_RETRIES {
-                        attempts += 1;
-                        tracing::warn!("Attempt {} failed, retrying...: {}", attempts, e);
-                        sleep(Duration::from_millis(attempts.pow(2))).await; // Exponential backoff
+                Err(e) =>
+                    if attempt <= MAX_RETRIES {
+                        tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
+                        attempt += 1;
+
+                        let backoff = Duration::from_millis(attempt.pow(2));
+                        traced_sleep(backoff, SleepReason::RetryBackoff).await;
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve receipts");
-                    }
-                }
+                    },
             }
         }
     }

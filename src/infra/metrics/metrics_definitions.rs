@@ -11,7 +11,7 @@ metrics! {
     counter   rpc_requests_started{method, function} [],
 
     "Number of JSON-RPC requests that finished."
-    histogram_duration rpc_requests_finished{method, function, success} [],
+    histogram_duration rpc_requests_finished{method, function, result, success} [],
 
     "Number of JSON-RPC subscriptions active right now."
     gauge rpc_subscriptions_active{subscription} []

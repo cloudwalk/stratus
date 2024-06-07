@@ -19,7 +19,9 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
+use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
+use crate::ext::SleepReason;
 use crate::ext::SpanExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
@@ -164,7 +166,7 @@ impl ExternalRelayer {
                 }
             }
             substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            traced_sleep(Duration::from_millis(50), SleepReason::SyncData).await;
         }
     }
 
@@ -195,9 +197,7 @@ impl ExternalRelayer {
         match res {
             Err(err) => {
                 tracing::error!(?block_number, ?hash, "failed to insert row in pgsql, saving mismatche to json");
-                let mut file = File::create(format!("data/mismatched_transactions/{}.json", hash))
-                    .await
-                    .expect("opening the file should not fail");
+                let mut file = File::create(format!("data/{}.json", hash)).await.expect("opening the file should not fail");
                 let json = serde_json::json!(
                     {
                         "stratus_receipt": stratus_json,
@@ -259,7 +259,7 @@ impl ExternalRelayer {
         let mut tries = 0;
         while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
             tracing::warn!(?tx_mined.input.hash, ?tries, "transaction not found, retrying...");
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            traced_sleep(Duration::from_millis(100), SleepReason::SyncData).await;
             tries += 1;
         }
 
@@ -268,7 +268,7 @@ impl ExternalRelayer {
 
     /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
     /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
-    /// on the `mismatches` table in pgsql, or in data/mismatched_transactions as a fallback.
+    /// on the `mismatches` table in pgsql, or in ./data as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
         tracing::debug!("relaying transactions");

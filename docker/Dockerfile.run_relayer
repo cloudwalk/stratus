@@ -18,14 +18,12 @@ RUN apt-get install -y libclang-dev cmake protobuf-compiler
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json
 ENV NO_COLOR=1
-
-RUN cargo build --release --bin stratus --features metrics
-
+RUN cargo build --release --bin relayer --no-default-features --features metrics
 
 # Runtime
 FROM rust:1.75 as runtime
 WORKDIR /app
-COPY --from=builder /app/target/release/stratus /app/stratus
+COPY --from=builder /app/target/release/relayer /app/relayer
 COPY --from=builder /app/config/* /app/config/
 
-CMD ["sh", "-c", "/app/stratus"]
+CMD ["sh", "-c", "/app/relayer"]
