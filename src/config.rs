@@ -44,6 +44,7 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::binary_name;
 use crate::ext::parse_duration;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -927,21 +928,5 @@ impl FromStr for ValidatorMethodConfig {
             "compare_tables" => Ok(Self::CompareTables),
             s => Ok(Self::Rpc { url: s.to_string() }),
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
-
-/// Gets the current binary basename.
-fn binary_name() -> String {
-    let binary = std::env::current_exe().unwrap();
-    let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
-
-    if binary_basename.starts_with("test_") {
-        "tests".to_string()
-    } else {
-        binary_basename
     }
 }

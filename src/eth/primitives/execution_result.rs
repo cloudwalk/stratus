@@ -8,15 +8,15 @@ use sqlx::error::BoxDynError;
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionResult {
     /// Finished normally (RETURN opcode).
-    #[strum(serialize = "success")]
+    #[strum(to_string = "success")]
     Success,
 
     /// Transaction execution finished with a reversion (REVERT opcode).
-    #[strum(serialize = "reverted")]
+    #[strum(to_string = "reverted")]
     Reverted,
 
     /// Transaction execution did not finish.
-    #[strum(serialize = "halted")]
+    #[strum(to_string = "halted")]
     Halted { reason: String },
 }
 

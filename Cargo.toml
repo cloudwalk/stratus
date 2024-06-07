@@ -173,16 +173,16 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["rocks", "metrics", "kubernetes"]
+default = ["metrics", "tracing", "rocks", "kubernetes"]
 
 # Application is running in develoment mode.
 dev  = []
 
-# Application is running in performance test mode.
-perf = []
-
-# Enable metrics dependencies and code for metrics collection.
+# Enable runtime metrics collection.
 metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
+
+# Enable runtime tracing/spans collection.
+tracing = []
 
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
