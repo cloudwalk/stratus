@@ -207,7 +207,7 @@ impl Consensus {
         socket.connect("8.8.8.8:80").ok().unwrap();
         let my_ip = socket.local_addr().ok().map(|addr| addr.ip().to_string()).unwrap();
 
-        PeerAddress::new(format!("http://{}", my_ip), jsonrpc_port, grpc_port) //FIXME TODO pick ports from config
+        PeerAddress::new(format!("http://{}", my_ip), jsonrpc_port, grpc_port)
     }
 
     /// Initializes the heartbeat and election timers.
