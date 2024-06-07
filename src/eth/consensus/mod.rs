@@ -95,14 +95,22 @@ impl PeerAddress {
     }
 
     fn from_string(s: String) -> Result<Self, anyhow::Error> {
-        let parts: Vec<&str> = s.split(':').collect();
+        let (scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
+            ("http://", address)
+        } else if let Some(address) = s.strip_prefix("https://") {
+            ("https://", address)
+        } else {
+            return Err(anyhow::anyhow!("invalid scheme"));
+        };
+
+        let parts: Vec<&str> = address_part.split(':').collect();
         if parts.len() != 2 {
-            return Err(anyhow::anyhow!("Invalid format"));
+            return Err(anyhow::anyhow!("invalid format"));
         }
-        let address = parts[0].to_string();
+        let address = format!("{}{}", scheme, parts[0]);
         let ports: Vec<&str> = parts[1].split(';').collect();
         if ports.len() != 2 {
-            return Err(anyhow::anyhow!("Invalid format"));
+            return Err(anyhow::anyhow!("invalid format for jsonrpc and grpc ports"));
         }
         let jsonrpc_port = ports[0].parse::<u16>()?;
         let grpc_port = ports[1].parse::<u16>()?;
@@ -242,6 +250,7 @@ impl Consensus {
 
         tracing::info!(
             requested_term = term,
+            candidate_id = %consensus.my_address,
             "requesting vote on election for {} peers",
             consensus.peers.read().await.len()
         );
@@ -251,7 +260,7 @@ impl Consensus {
 
             let request = Request::new(RequestVoteRequest {
                 term,
-                candidate_id: Self::current_node().unwrap(),
+                candidate_id: consensus.my_address.to_string(),
                 last_log_index: consensus.last_arrived_block_number.load(Ordering::SeqCst),
                 last_log_term: term,
             });
@@ -732,6 +741,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         let mut voted_for = consensus.voted_for.lock().await;
+        //XXX for some reason candidate_id is going wrong
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
         if voted_for.is_none() {
             *voted_for = Some(candidate_address.clone());
@@ -747,5 +757,43 @@ impl AppendEntryService for AppendEntryServiceImpl {
             term: request.term,
             vote_granted: false,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_peer_address_from_string_valid() {
+        let input = "http://127.0.0.1:3000;3777".to_string();
+        let result = PeerAddress::from_string(input);
+
+        assert!(result.is_ok());
+        let peer_address = result.unwrap();
+        assert_eq!(peer_address.address, "http://127.0.0.1");
+        assert_eq!(peer_address.jsonrpc_port, 3000);
+        assert_eq!(peer_address.grpc_port, 3777);
+    }
+
+    #[test]
+    fn test_another_peer_address_from_string_valid() {
+        let input = "https://127.0.0.1:3000;3777".to_string();
+        let result = PeerAddress::from_string(input);
+
+        assert!(result.is_ok());
+        let peer_address = result.unwrap();
+        assert_eq!(peer_address.address, "https://127.0.0.1");
+        assert_eq!(peer_address.jsonrpc_port, 3000);
+        assert_eq!(peer_address.grpc_port, 3777);
+    }
+
+    #[test]
+    fn test_peer_address_from_string_invalid_format() {
+        let input = "http://127.0.0.1-3000;3777".to_string();
+        let result = PeerAddress::from_string(input);
+
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "invalid format");
     }
 }
