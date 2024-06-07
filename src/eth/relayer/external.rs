@@ -19,7 +19,9 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
+use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
+use crate::ext::SleepReason;
 use crate::ext::SpanExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
@@ -86,7 +88,7 @@ impl ExternalRelayer {
 
         // fill span
         let span = Span::current();
-        span.rec("block_number", &block_number);
+        span.rec_str("block_number", &block_number);
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(block.transactions);
@@ -137,7 +139,7 @@ impl ExternalRelayer {
 
         // fill span
         let span = Span::current();
-        span.rec("hash", &tx_hash);
+        span.rec_str("hash", &tx_hash);
 
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
@@ -164,7 +166,7 @@ impl ExternalRelayer {
                 }
             }
             substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            traced_sleep(Duration::from_millis(50), SleepReason::SyncData).await;
         }
     }
 
@@ -233,7 +235,7 @@ impl ExternalRelayer {
 
         // fill span
         let span = Span::current();
-        span.rec("hash", &tx_hash);
+        span.rec_str("hash", &tx_hash);
 
         let ethers_tx = Transaction::from(tx_mined.input.clone());
         let tx = loop {
@@ -259,7 +261,7 @@ impl ExternalRelayer {
         let mut tries = 0;
         while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
             tracing::warn!(?tx_mined.input.hash, ?tries, "transaction not found, retrying...");
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            traced_sleep(Duration::from_millis(100), SleepReason::SyncData).await;
             tries += 1;
         }
 
@@ -324,7 +326,7 @@ impl ExternalRelayerClient {
 
         // fill span
         let span = Span::current();
-        span.rec("block_number", &block_number);
+        span.rec_str("block_number", &block_number);
 
         sqlx::query!(
             "INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)",
