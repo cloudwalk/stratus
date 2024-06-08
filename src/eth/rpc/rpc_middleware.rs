@@ -10,6 +10,9 @@ use std::sync::atomic::Ordering;
 use std::task::Poll;
 use std::time::Instant;
 
+use futures::future::BoxFuture;
+use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
+use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
@@ -21,6 +24,7 @@ use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::eth::rpc::RpcClientApp;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -36,15 +40,12 @@ static ACTIVE_REQUESTS: AtomicU64 = AtomicU64::new(0);
 // -----------------------------------------------------------------------------
 
 #[derive(Debug, derive_new::new)]
-pub struct RpcMiddleware<S> {
-    service: S,
+pub struct RpcMiddleware {
+    service: RpcService,
 }
 
-impl<'a, S> RpcServiceT<'a> for RpcMiddleware<S>
-where
-    S: RpcServiceT<'a> + Send + Sync,
-{
-    type Future = RpcResponse<S::Future>;
+impl<'a> RpcServiceT<'a> for RpcMiddleware {
+    type Future = RpcResponse<'a>;
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // extract signature if available
@@ -55,8 +56,12 @@ where
             _ => None,
         };
 
+        // extract client app
+        let client = request.extensions().get::<RpcClientApp>().unwrap_or(&RpcClientApp::Unknown).clone();
+
         // trace request
         tracing::info!(
+            %client,
             id = %request.id,
             %method,
             function = %function.clone().unwrap_or_default(),
@@ -73,6 +78,7 @@ where
         }
 
         RpcResponse {
+            client,
             id: request.id.to_string(),
             method: method.to_string(),
             function,
@@ -99,18 +105,19 @@ fn extract_function_from_transaction(params: Params) -> Option<SoliditySignature
 
 /// https://blog.adamchalmers.com/pin-unpin/
 #[pin_project]
-pub struct RpcResponse<F> {
+pub struct RpcResponse<'a> {
     #[pin]
-    future_response: F,
+    future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 
+    client: RpcClientApp,
     id: String,
     method: String,
     function: Option<SoliditySignature>,
     start: Instant,
 }
 
-impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
-    type Output = F::Output;
+impl<'a> Future for RpcResponse<'a> {
+    type Output = MethodResponse;
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
         // poll future
@@ -125,6 +132,7 @@ impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
+                client = %proj.client,
                 id = %proj.id,
                 method = %proj.method,
                 function = %proj.function.clone().unwrap_or_default(),
