@@ -137,7 +137,6 @@ struct Peer {
     match_index: u64,
     next_index: u64,
     role: Role,
-    term: u64,
     receiver: Arc<Mutex<broadcast::Receiver<Block>>>,
 }
 
@@ -542,7 +541,6 @@ impl Consensus {
                                 match_index: 0,
                                 next_index: 0,
                                 role: Role::Follower, // FIXME it won't be always follower, we need to check the leader or candidates
-                                term: 0,              // Replace with actual term
                                 receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                             };
                             peers.push((peer_address.clone(), peer));
@@ -587,7 +585,6 @@ impl Consensus {
                             match_index: 0,
                             next_index: 0,
                             role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
-                            term: 0,              // Replace with actual term
                             receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
                         peers.push((PeerAddress::new(address, jsonrpc_port, grpc_port), peer));
@@ -663,7 +660,7 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role, term = peer.term,  "current follower state on election"); //TODO also move this to metrics
+        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role,  "current follower state on election"); //TODO also move this to metrics
 
         match StatusCode::try_from(response.status) {
             Ok(StatusCode::AppendSuccess) => Ok(()),
