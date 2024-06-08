@@ -466,12 +466,25 @@ impl Consensus {
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
-        if let Ok(k8s_peers) = Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
-            new_peers.extend(k8s_peers);
+        match Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
+            Ok(k8s_peers) => {
+                new_peers.extend(k8s_peers);
+            }
+            Err(e) => {
+                // this is critical, a leader can emerge and take requests while a brain split happens...
+                // we need to retry this over and over again if this happens and finally commit sepukku if it fails too much
+                tracing::warn!("failed to discover peers from kubernetes: {:?}", e);
+            }
         }
 
-        if let Ok(env_peers) = Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
-            new_peers.extend(env_peers);
+
+        match Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
+            Ok(env_peers) => {
+                new_peers.extend(env_peers);
+            }
+            Err(e) => {
+                tracing::warn!("failed to discover peers from env: {:?}", e);
+            }
         }
 
         let mut peers_lock = consensus.peers.write().await;
