@@ -62,6 +62,7 @@ use crate::eth::primitives::Block;
 use crate::infra::metrics;
 
 const RETRY_DELAY: Duration = Duration::from_millis(10);
+const PEER_DISCOVERY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq)]
 enum Role {
@@ -149,7 +150,7 @@ pub struct Consensus {
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
-    voted_for: Mutex<Option<PeerAddress>>,
+    voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
     role: RwLock<Role>,
@@ -204,10 +205,21 @@ impl Consensus {
     /// Initializes the heartbeat and election timers.
     /// This function periodically checks if the node should start a new election based on the election timeout.
     /// The timer is reset when an `AppendEntries` request is received, ensuring the node remains a follower if a leader is active.
+    ///
+    /// When there are healthy peers we need to wait for the grace period of discovery
+    /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
         named_spawn("consensus::heartbeat_timer", async move {
+            if consensus.peers.read().await.is_empty() {
+                tracing::info!("no peers, starting hearbeat timer immediately");
+                Self::start_election(Arc::clone(&consensus)).await;
+            } else {
+                traced_sleep(PEER_DISCOVERY_DELAY, SleepReason::Interval).await;
+                tracing::info!("waiting for peer discovery grace period");
+            }
+
+            let timeout = consensus.heartbeat_timeout;
             loop {
-                let timeout = consensus.heartbeat_timeout;
                 tokio::select! {
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
                         if !consensus.is_leader().await {
@@ -324,7 +336,7 @@ impl Consensus {
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
         named_spawn("consensus::peer_discovery", async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            let mut interval = tokio::time::interval(PEER_DISCOVERY_DELAY);
             loop {
                 tracing::info!("starting periodic peer discovery");
                 Self::discover_peers(Arc::clone(&consensus)).await;
