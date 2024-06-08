@@ -24,6 +24,7 @@ use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
 use tonic::Request;
@@ -466,20 +467,43 @@ impl Consensus {
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
-        match Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
-            Ok(k8s_peers) => {
-                new_peers.extend(k8s_peers);
-            }
-            Err(e) => {
-                // this is critical, a leader can emerge and take requests while a brain split happens...
-                // we need to retry this over and over again if this happens and finally commit sepukku if it fails too much
-                tracing::warn!("failed to discover peers from kubernetes: {:?}", e);
+        {
+            let mut attempts = 0;
+            let max_attempts = 100;
+
+            while attempts < max_attempts {
+                match Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
+                    Ok(k8s_peers) => {
+                        new_peers.extend(k8s_peers);
+                        tracing::info!("discovered {} peers from kubernetes", new_peers.len());
+                        break;
+                    }
+                    Err(e) => {
+                        attempts += 1;
+                        tracing::warn!(
+                            "failed to discover peers from Kubernetes (attempt {}/{}): {:?}",
+                            attempts,
+                            max_attempts,
+                            e
+                        );
+
+                        if attempts >= max_attempts {
+                            tracing::error!(
+                                "exceeded maximum attempts to discover peers from kubernetes. initiating shutdown."
+                            );
+                            GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
+                        }
+
+                        // Optionally, sleep for a bit before retrying
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                }
             }
         }
 
-
         match Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
             Ok(env_peers) => {
+                tracing::info!("discovered {} peers from env", env_peers.len());
                 new_peers.extend(env_peers);
             }
             Err(e) => {
