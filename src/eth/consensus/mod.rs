@@ -491,17 +491,10 @@ impl Consensus {
                     }
                     Err(e) => {
                         attempts += 1;
-                        tracing::warn!(
-                            "failed to discover peers from Kubernetes (attempt {}/{}): {:?}",
-                            attempts,
-                            max_attempts,
-                            e
-                        );
+                        tracing::warn!("failed to discover peers from Kubernetes (attempt {}/{}): {:?}", attempts, max_attempts, e);
 
                         if attempts >= max_attempts {
-                            tracing::error!(
-                                "exceeded maximum attempts to discover peers from kubernetes. initiating shutdown."
-                            );
+                            tracing::error!("exceeded maximum attempts to discover peers from kubernetes. initiating shutdown.");
                             GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
                         }
 
