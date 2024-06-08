@@ -39,7 +39,7 @@ export let ETHERJS = new JsonRpcProvider(
 export function updateProviderUrl(providerName: string) {
     switch (providerName) {
         case 'stratus':
-            providerUrl = 'http://localhost:3000';
+            providerUrl = 'http://localhost:3000?app=e2e';
             break;
         case 'hardhat':
             providerUrl = 'http://localhost:8545';

@@ -39,6 +39,7 @@ use crate::eth::rpc::rpc_internal_error;
 use crate::eth::rpc::rpc_invalid_params_error;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
+use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
@@ -98,6 +99,7 @@ pub async fn serve_rpc(
     // configure middleware
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
     let http_middleware = tower::ServiceBuilder::new()
+        .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
         .layer(ProxyGetRequestLayer::new("/readiness", "stratus_readiness").unwrap())
         .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap());
