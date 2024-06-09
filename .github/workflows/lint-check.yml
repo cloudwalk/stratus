@@ -36,28 +36,26 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Cache Cargo Registry and Target Directory
-        uses: actions/cache@v4.0.2
-        id: cache-cargo
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-v2-cargo-nightly-debug-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-v2-cargo-nightly-debug-
+        uses: actions/checkout@v4
 
       - name: Set up Rust Nightly
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: nightly-debug
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
-        uses: extractions/setup-just@v1
+        uses: extractions/setup-just@v2
 
       - name: Just lint-check
         run: just lint-check -2024-01-01

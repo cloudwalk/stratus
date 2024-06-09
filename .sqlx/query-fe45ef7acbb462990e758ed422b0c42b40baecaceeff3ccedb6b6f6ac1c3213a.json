@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO relayer_blocks VALUES ($1, $2)",
+  "query": "INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "35533fa6336bf7eb472c5f82700cd065b9738cadba80e0bdd4537ffbe538e7bf"
+  "hash": "fe45ef7acbb462990e758ed422b0c42b40baecaceeff3ccedb6b6f6ac1c3213a"
 }

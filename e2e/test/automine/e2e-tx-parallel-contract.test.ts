@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import { TestContractBalances, TestContractCounter } from "../typechain-types";
+import { TestContractBalances, TestContractCounter } from "../../typechain-types";
 import { ALICE, BOB, CHARLIE, randomAccounts } from "../helpers/account";
 import {
     TX_PARAMS,
@@ -12,7 +12,7 @@ import {
 } from "../helpers/rpc";
 
 describe("Transaction: parallel TestContractBalances", async () => {
-    var _contract: TestContractBalances;
+    let _contract: TestContractBalances;
 
     it("Resets blockchain", async () => {
         await sendReset();
@@ -94,7 +94,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
 });
 
 describe("Transaction: parallel TestContractCounter", async () => {
-    var _contract: TestContractCounter;
+    let _contract: TestContractCounter;
 
     it("Resets blockchain", async () => {
         await sendReset();
@@ -112,7 +112,7 @@ describe("Transaction: parallel TestContractCounter", async () => {
         const incSender = ALICE;
         const doubleSender = BOB;
 
-        // send pair of inc and double requests
+        // send a pair of inc and double requests
         for (let i = 0; i < 20; i++) {
             // calculate expected double counter
             const doubleCounter = Number(await _contract.getDoubleCounter());

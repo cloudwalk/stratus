@@ -11,7 +11,7 @@ metrics! {
     counter   rpc_requests_started{method, function} [],
 
     "Number of JSON-RPC requests that finished."
-    histogram_duration rpc_requests_finished{method, function, success} [],
+    histogram_duration rpc_requests_finished{method, function, result, success} [],
 
     "Number of JSON-RPC subscriptions active right now."
     gauge rpc_subscriptions_active{subscription} []
@@ -203,5 +203,8 @@ metrics! {
     histogram_duration take_roots{} [],
 
     "Time to run ExternalRelayer::relay_dag."
-    histogram_duration relay_dag{} []
+    histogram_duration relay_dag{} [],
+
+    "Number of execution mismatches."
+    histogram_duration save_mismatch{} []
 }

@@ -13,7 +13,7 @@ use stratus::GlobalState;
 use tokio::join;
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<RunWithImporterConfig>::init()?;
+    let global_services = GlobalServices::<RunWithImporterConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 
@@ -22,22 +22,17 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     // init services
     let storage = config.storage.init().await?;
-    let consensus = Consensus::new(Arc::clone(&storage), Some(config.clone())).await; // in development, with no leader configured, the current node ends up being the leader
-    let Some((http_url, ws_url)) = consensus.get_chain_url() else {
+    let consensus = Consensus::new(Arc::clone(&storage), config.clone().candidate_peers.clone(), Some(config.clone())).await; // in development, with no leader configured, the current node ends up being the leader
+    let Some((http_url, ws_url)) = consensus.get_chain_url().await else {
         return Err(anyhow!("No chain url found"));
     };
     let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref(), config.online.external_rpc_timeout).await?);
 
-    let relayer = config.relayer.init().await?;
-    let external_relayer = if let Some(c) = config.external_relayer { Some(c.init().await) } else { None };
     let miner = config
         .miner
-        .init_external_mode(Arc::clone(&storage), Some(Arc::clone(&consensus)), external_relayer)
+        .init_external_mode(Arc::clone(&storage), Some(Arc::clone(&consensus)), None)
         .await?;
-    let executor = config
-        .executor
-        .init(Arc::clone(&storage), Arc::clone(&miner), relayer, Some(Arc::clone(&consensus)))
-        .await;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
 
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);

@@ -1,19 +1,24 @@
 mod importer_online;
 
 use stratus::config::ExternalRelayerConfig;
+use stratus::ext::traced_sleep;
+use stratus::ext::SleepReason;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
+use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 
 const TASK_NAME: &str = "relayer";
 
 fn main() -> anyhow::Result<()> {
-    let global_services = GlobalServices::<ExternalRelayerConfig>::init()?;
+    let global_services = GlobalServices::<ExternalRelayerConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
+    let _timer = DropTimer::start("relayer");
+
     tracing::info!(?TASK_NAME, "starting");
 
     // init services
@@ -43,7 +48,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
             Some(block_number) => tracing::info!(number = %block_number, "relayed"),
             None => {
                 tracing::info!("no pending block found");
-                tokio::time::sleep(backoff).await;
+                traced_sleep(backoff, SleepReason::RetryBackoff).await;
             }
         };
     }

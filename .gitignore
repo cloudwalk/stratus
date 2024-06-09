@@ -1,6 +1,5 @@
 # IDEs / Tools
 .vscode
-.tool-versions
 .env
 .idea
 
@@ -17,6 +16,7 @@ e2e/typechain-types
 e2e/node_modules
 e2e/rpc-mock-server/node_modules
 e2e/cache
+e2e/.tool-versions
 flamegraph.svg
 
 # E2E (Solidity contracts)
@@ -26,13 +26,11 @@ e2e-contracts/integration/cache
 e2e-contracts/integration/typechain-types
 e2e-contracts/integration/artifacts
 e2e-contracts/integration/.openzeppelin
+e2e-contracts/.tool-versions
+e2e-contracts/integration/.tool-versions
 
 # E2E (NodeJS)
 node_modules/
-package.json
-package-lock.json
-e2e-contracts/integration/hardhat.config.ts
-e2e-contracts/integration/tsconfig.json
 
 # Build
 /target

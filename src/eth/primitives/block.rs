@@ -125,13 +125,13 @@ impl Block {
     }
 
     /// Returns the block number.
-    pub fn number(&self) -> &BlockNumber {
-        &self.header.number
+    pub fn number(&self) -> BlockNumber {
+        self.header.number
     }
 
     /// Returns the block hash.
-    pub fn hash(&self) -> &Hash {
-        &self.header.hash
+    pub fn hash(&self) -> Hash {
+        self.header.hash
     }
 
     /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.

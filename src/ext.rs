@@ -6,6 +6,8 @@ use anyhow::anyhow;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
+use tracing::info_span;
+use tracing::Instrument;
 use tracing::Span;
 
 use crate::infra::tracing::info_task_spawn;
@@ -31,6 +33,18 @@ macro_rules! if_else {
 #[inline(always)]
 pub fn not(value: bool) -> bool {
     !value
+}
+
+/// Gets the current binary basename.
+pub fn binary_name() -> String {
+    let binary = std::env::current_exe().unwrap();
+    let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
+
+    if binary_basename.starts_with("test_") {
+        "tests".to_string()
+    } else {
+        binary_basename
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -178,22 +192,30 @@ macro_rules! channel_read_impl {
 
 /// Extensions for `tracing::Span`.
 pub trait SpanExt {
+    /// Applies the provided function to the current span.
+    fn with<F>(fill: F)
+    where
+        F: Fn(Span),
+    {
+        if cfg!(tracing) {
+            let span = Span::current();
+            fill(span);
+        }
+    }
+
     /// Records a value using `ToString` implementation.
-    ///
-    /// This helper exists because `tracing` crate does not allow us to implement `tracing::Value` for our own types.
-    ///
-    /// See: https://github.com/tokio-rs/tracing/discussions/1455
-    fn rec<T>(&self, field: &'static str, value: &T)
+    fn rec_str<T>(&self, field: &'static str, value: &T)
     where
         T: ToString;
 
+    /// Records a value using `ToString` implementation if the option value is present.
     fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
     where
         T: ToString;
 }
 
 impl SpanExt for Span {
-    fn rec<T>(&self, field: &'static str, value: &T)
+    fn rec_str<T>(&self, field: &'static str, value: &T)
     where
         T: ToString,
     {
@@ -251,14 +273,64 @@ macro_rules! log_and_err {
 // Tokio
 // -----------------------------------------------------------------------------
 
-/// Spawns a Tokio task with a name to be displayed in tokio-console.
+/// Indicates why a sleep is happening.
+#[derive(Debug, strum::Display)]
+pub enum SleepReason {
+    /// Task is executed at predefined intervals.
+    #[strum(to_string = "interval")]
+    Interval,
+
+    /// Task is awaiting a backoff before retrying the operation.
+    #[strum(to_string = "retry-backoff")]
+    RetryBackoff,
+
+    /// Task is awaiting an external system or component to produde or synchronize data.
+    #[strum(to_string = "sync-data")]
+    SyncData,
+}
+
+/// Sleeps the current task and tracks why it is sleeping.
+#[inline(always)]
+pub async fn traced_sleep(duration: Duration, reason: SleepReason) {
+    #[cfg(feature = "tracing")]
+    {
+        let span = info_span!("tokio::sleep", duration_ms = %duration.as_millis(), %reason);
+        async {
+            tracing::debug!(duration_ms = %duration.as_millis(), %reason, "sleeping");
+            tokio::time::sleep(duration).await;
+        }
+        .instrument(span)
+        .await;
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    tokio::time::sleep(duration).await;
+}
+
+/// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
-pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn named_spawn<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
     info_task_spawn(name);
-    tokio::task::Builder::new().name(name).spawn(task).expect("spawning named task should not fail")
+    tokio::task::Builder::new()
+        .name(name)
+        .spawn(task)
+        .expect("spawning named async task should not fail")
+}
+
+/// Spawns a blocking Tokio task with a name to be displayed in tokio-console.
+#[track_caller]
+pub fn named_spawn_blocking<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
+where
+    T: Send + 'static,
+{
+    info_task_spawn(name);
+    tokio::task::Builder::new()
+        .name(name)
+        .spawn_blocking(task)
+        .expect("spawning named blocking task should not fail")
 }
 
 /// Spawns a handler that listens to system signals.
@@ -274,7 +346,7 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
         Err(e) => return log_and_err!(reason = e, "failed to init SIGINT watcher"),
     };
 
-    spawn_named("sys::signal_handler", async move {
+    named_spawn("sys::signal_handler", async move {
         select! {
             _ = sigterm.recv() => {
                 GlobalState::shutdown_from(TASK_NAME, "received SIGTERM");

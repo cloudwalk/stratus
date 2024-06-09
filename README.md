@@ -1,17 +1,24 @@
 # Stratus ☁️
 
-Stratus is an EVM executor and JSON-RPC server with custom storage that scales horizontally, written in Rust 🦀.
+Welcome to Stratus, the cutting-edge EVM executor and JSON-RPC server with custom storage that scales horizontally. Built in Rust 🦀 for speed and reliability, Stratus is here to take your blockchain projects to the next level!
 
 ## Current storage implementations
 
 - In Memory
 - PostgreSQL
+- RocksDB (default)
 
-## Contributing
+## Performance Landscape
 
-Check our `CONTRIBUTING.md` to get started.
+Stratus is engineered for high performance, with a unique node Stratus was capable of handling:
+
+- 10k transactions per second (TPS) for reading
+- 1,8k transactions per second (TPS) for writing (custom contract operations), reaching around 32M of gas per second
+
+We aim to reach 5k write transactions per second with a unique node and 1M in a cluster.
 
 ## Getting Started with Stratus
+
 To run the optimized version of Stratus, ensure you have installed the dependencies:
 
 - [Rust](https://www.rust-lang.org/tools/install)
@@ -20,7 +27,7 @@ To run the optimized version of Stratus, ensure you have installed the dependenc
 Then simply run:
 
 ```bash
-just run-release
+RELEASE=1 just run
 ```
 
 If you want to use OpenTelemery use the flag `--tracing-collector-url <url>` and pass
@@ -47,6 +54,10 @@ Then run one of test recipes we provide. You can `just | grep test` to see them.
 To see all available tasks you can simply run `just`.
 
 We recommend using just recipes whenever applicable.
+
+## Join the Party
+
+We love contributions! Check out our [Contributing Guide](CONTRIBUTING.md) and help make Stratus even more awesome.
 
 ## License
 

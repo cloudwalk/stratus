@@ -1,7 +1,7 @@
 # Contributing to Stratus
 
 ## Set Up Environment
-TODO
+Check [Getting Started](README.md#getting-started-with-stratus) session.
 
 ## Running End-to-End Tests
 

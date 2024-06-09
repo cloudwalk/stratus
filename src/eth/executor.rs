@@ -13,6 +13,7 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tracing::span::Id;
 use tracing::Span;
 
 use super::Consensus;
@@ -44,7 +45,23 @@ use crate::ext::SpanExt;
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
-pub type EvmTask = (EvmInput, oneshot::Sender<anyhow::Result<EvmExecutionResult>>);
+#[derive(Debug)]
+pub struct EvmTask {
+    pub span_id: Option<Id>,
+    pub input: EvmInput,
+    pub response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>,
+}
+
+impl EvmTask {
+    pub fn new(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
+        Self {
+            span_id: Span::current().id(),
+            input,
+            response_tx,
+        }
+    }
+}
+
 pub struct Executor {
     /// Channel to send transactions to background EVMs.
     evm_tx: crossbeam_channel::Sender<EvmTask>,
@@ -55,26 +72,13 @@ pub struct Executor {
     /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Arc<BlockMiner>,
 
-    /// Provider for sending rpc calls to substrate
-    relayer: Option<Arc<TransactionRelayer>>,
-
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
-
-    /// Consensus rules for the blockchain.
-    consensus: Option<Arc<Consensus>>,
 }
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(
-        storage: Arc<StratusStorage>,
-        miner: Arc<BlockMiner>,
-        relayer: Option<Arc<TransactionRelayer>>,
-        evm_tx: crossbeam_channel::Sender<EvmTask>,
-        num_evms: usize,
-        consensus: Option<Arc<Consensus>>,
-    ) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
         tracing::info!(%num_evms, "creating executor");
 
         Self {
@@ -82,8 +86,6 @@ impl Executor {
             num_evms,
             miner,
             storage,
-            relayer,
-            consensus,
         }
     }
 
@@ -93,14 +95,13 @@ impl Executor {
 
     /// Reexecutes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(name = "executor::external_block", skip_all, fields(number))]
-    pub async fn reexecute_external(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
+    pub async fn external_block(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
-        // fill span
-        let span = Span::current();
-        span.rec("number", &block.number());
-
+        Span::with(|s| {
+            s.rec_str("number", &block.number());
+        });
         tracing::info!(number = %block.number(), "reexecuting external block");
 
         // track active block number
@@ -115,7 +116,7 @@ impl Executor {
         let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
         for tx_route in &tx_routes {
             if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                tx_parallel_executions.push(self.reexecute_external_tx(tx, receipt, block));
+                tx_parallel_executions.push(self.external_transaction(tx, receipt, block));
             }
         }
         let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.num_evms);
@@ -124,7 +125,7 @@ impl Executor {
         for tx_route in tx_routes {
             let tx = match tx_route {
                 // serial: execute now
-                ParallelExecutionRoute::Serial(tx, receipt) => self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?,
+                ParallelExecutionRoute::Serial(tx, receipt) => self.external_transaction(tx, receipt, block).await.map_err(|(_, _, e)| e)?,
 
                 // parallel: get parallel execution result and reexecute if failed
                 ParallelExecutionRoute::Parallel(..) => {
@@ -136,14 +137,14 @@ impl Executor {
                             // conflict: reexecute
                             Some(conflicts) => {
                                 tracing::warn!(?conflicts, "reexecuting serially because parallel execution conflicted");
-                                self.reexecute_external_tx(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
+                                self.external_transaction(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
                             }
                         },
 
                         // failure: reexecute
                         Err((tx, receipt, e)) => {
                             tracing::warn!(reason = ?e, "reexecuting serially because parallel execution errored");
-                            self.reexecute_external_tx(tx, receipt, block).await.map_err(|(_, _, e)| e)?
+                            self.external_transaction(tx, receipt, block).await.map_err(|(_, _, e)| e)?
                         }
                     }
                 }
@@ -175,23 +176,22 @@ impl Executor {
     ///
     /// This function wraps `reexecute_external_tx_inner` and returns back the payload
     /// to facilitate re-execution of parallel transactions that failed
-    #[tracing::instrument(name = "executor::external_tx", skip_all, fields(hash))]
-    async fn reexecute_external_tx<'a, 'b>(
+    #[tracing::instrument(name = "executor::external_transaction", skip_all, fields(hash))]
+    async fn external_transaction<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
         block: &ExternalBlock,
     ) -> Result<ExternalTransactionExecution, (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Error)> {
-        // fill span
-        let span = Span::current();
-        span.rec("hash", &tx.hash);
+        Span::with(|s| {
+            s.rec_str("hash", &tx.hash);
+        });
 
-        // execute
-        self.reexecute_external_tx_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
+        self.external_transaction_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
-    async fn reexecute_external_tx_inner<'a, 'b>(
+    async fn external_transaction_inner<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
@@ -258,17 +258,16 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Executes a transaction persisting state changes.
-    #[tracing::instrument(name = "executor::local_tx", skip_all, fields(hash, from, to))]
-    pub async fn transact(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(hash, from, to))]
+    pub async fn local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
-        // fill span
-        let span = Span::current();
-        span.rec("hash", &tx_input.hash);
-        span.rec("from", &tx_input.signer);
-        span.rec_opt("to", &tx_input.to);
-
+        Span::with(|s| {
+            s.rec_str("hash", &tx_input.hash);
+            s.rec_str("from", &tx_input.signer);
+            s.rec_opt("to", &tx_input.to);
+        });
         tracing::info!(
             hash = %tx_input.hash,
             nonce = %tx_input.nonce,
@@ -319,15 +318,14 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub async fn call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
+    pub async fn local_call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), input.extract_function());
 
-        // fill span
-        let span = Span::current();
-        span.rec_opt("from", &input.from);
-        span.rec_opt("to", &input.to);
-
+        Span::with(|s| {
+            s.rec_opt("from", &input.from);
+            s.rec_opt("to", &input.to);
+        });
         tracing::info!(
             from = ?input.from,
             to = ?input.to,
@@ -356,10 +354,9 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
-    #[tracing::instrument(name = "executor::evm", skip_all)]
     async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
-        self.evm_tx.send((evm_input, execution_tx))?;
+        self.evm_tx.send(EvmTask::new(evm_input, execution_tx))?;
         execution_rx.await?
     }
 }

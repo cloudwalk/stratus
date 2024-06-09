@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use daggy::stable_dag::StableDag;
-use daggy::Walker;
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
+use petgraph::stable_graph::StableGraph;
 use petgraph::visit::IntoNodeIdentifiers;
 
 use crate::eth::primitives::Address;
@@ -15,20 +14,29 @@ use crate::eth::primitives::TransactionMined;
 use crate::infra::metrics;
 
 pub struct TransactionDag {
-    dag: StableDag<TransactionMined, i32>,
+    dag: StableGraph<TransactionMined, i32>,
 }
 
 impl TransactionDag {
     /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
     /// Each vertex of the graph is a transaction, and two vertices are connected iff they conflict
-    /// on either a slot or balance.
+    /// on either a slot or balance and they don't have the same "from" field (since those transactions will
+    /// be ordered by nonce).
     /// The direction of an edge connecting the transactions A and B is always from
     /// `min(A.transaction_index, B.transaction_index)` to `max(A.transaction_index, B.transaction_index)`.
+    /// This combined with the fact transactions indexes are unique makes it impossible for a cycle to be inserted.
+    ///
+    /// Proof:
+    /// Assume that it was the case that a cycle $C = (v_1, v_2, ..., v_n, v_1)$ was inserted, since we only insert edges from
+    /// $min(TransactionIndex(A), TransactionIndex(B))$ to $max(TransactionIndex(A), TransactionIndex(B))$ and
+    /// $A != B \iff TransactionIndex(A) != TransactionIndex(B)$ then $TransactionIndex(v_i) < TransactionIndex(v_{i+1})$ it
+    /// follows that $TransactionIndex(v_1) < TransactionIndex(v_2)$. Thus by induction and the transitive property of inequality
+    /// $TransactionIndex(v_1) < TransactionIndex(v_n)$, and therefore there cannot be an edge going from $v_n$ to $v_1$. □
+    ///
     /// Possible issues: this accounts for writes but not for reads, a transaction that reads a certain
     ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
     ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
     ///     and contract calls that is not taken into consideration yet.
-    /// If this algorithm is correct we could do away with StableDag and use StableGraph instead, for better performance
     #[tracing::instrument(skip_all)]
     pub fn new(block_transactions: Vec<TransactionMined>) -> Self {
         #[cfg(feature = "metrics")]
@@ -37,7 +45,7 @@ impl TransactionDag {
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
         let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
-        let mut dag = StableDag::new();
+        let mut dag = StableGraph::new();
 
         for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
             let tx_idx = tx.transaction_index;
@@ -56,28 +64,32 @@ impl TransactionDag {
             node_indexes.insert(tx_idx, node_idx);
         }
 
-        for (i, (tx1, set1)) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in slot_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
-                if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1)
-                        .expect("adding an edge between two known vertices should not fail");
-                }
-            }
-        }
-
-        for (i, (tx1, set1)) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            for (tx2, set2) in balance_conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
-                if !set1.is_disjoint(set2) {
-                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1)
-                        .expect("adding an edge between two known vertices should not fail");
-                }
-            }
-        }
+        Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
+        Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
 
         #[cfg(feature = "metrics")]
         metrics::inc_compute_tx_dag(start.elapsed());
 
         Self { dag }
+    }
+
+    fn compute_edges<T: std::hash::Hash + std::cmp::Eq + serde::Serialize>(
+        dag: &mut StableGraph<TransactionMined, i32>,
+        conflicts: HashMap<Index, HashSet<T>>,
+        node_indexes: &HashMap<Index, NodeIndex>,
+    ) {
+        for (i, (tx1, set1)) in conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
+            let tx1_node_index = *node_indexes.get(tx1).unwrap();
+            let tx1_from = dag.node_weight(tx1_node_index).unwrap().input.signer;
+            for (tx2, set2) in conflicts.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
+                let tx2_node_index = *node_indexes.get(tx2).unwrap();
+                let tx2_from = dag.node_weight(tx2_node_index).unwrap().input.signer;
+
+                if tx1_from != tx2_from && !set1.is_disjoint(set2) {
+                    dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
+                }
+            }
+        }
     }
 
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
@@ -91,7 +103,7 @@ impl TransactionDag {
 
         let mut root_indexes = vec![];
         for index in dag.node_identifiers() {
-            if dag.parents(index).walk_next(dag).is_none() {
+            if dag.neighbors_directed(index, petgraph::Direction::Incoming).next().is_none() {
                 root_indexes.push(index);
             }
         }
@@ -114,10 +126,16 @@ impl TransactionDag {
 
 #[cfg(test)]
 mod tests {
+
     use std::collections::HashSet;
+    use std::io::BufReader;
+
+    use fake::Fake;
+    use fake::Faker;
 
     use super::TransactionDag;
     use crate::eth::primitives::Address;
+    use crate::eth::primitives::Block;
     use crate::eth::primitives::Bytes;
     use crate::eth::primitives::CodeHash;
     use crate::eth::primitives::EvmExecution;
@@ -128,9 +146,9 @@ mod tests {
     use crate::eth::primitives::Hash;
     use crate::eth::primitives::Slot;
     use crate::eth::primitives::SlotIndex;
-    use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
+
     const ADDRESS: Address = Address::ZERO;
 
     fn create_tx(changed_slots_inidices: HashSet<SlotIndex>, tx_idx: u64) -> TransactionMined {
@@ -160,13 +178,30 @@ mod tests {
         };
 
         TransactionMined {
-            input: TransactionInput::default(),
+            input: Faker.fake(),
             execution,
             logs: vec![],
             transaction_index: tx_idx.into(),
             block_number: 0.into(),
             block_hash: Hash::default(),
         }
+    }
+
+    #[test]
+    fn test_real_tx() {
+        let file = std::fs::File::open("./tests/fixtures/blocks/simple_dag_test.json").unwrap();
+        let reader = BufReader::new(file);
+        let block = serde_json::from_reader::<_, Block>(reader).unwrap();
+        let mut dag = TransactionDag::new(block.transactions);
+
+        let expected = [[0], [1], [2]];
+        let mut i = 0;
+        while let Some(roots) = dag.take_roots() {
+            assert_eq!(roots.len(), expected[i].len());
+            assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+            i += 1;
+        }
+        //println!("{:?}", petgraph::dot::Dot::with_config(&dag.dag, &[petgraph::dot::Config::EdgeNoLabel, petgraph::dot::Config::NodeIndexLabel]));
     }
 
     #[test]

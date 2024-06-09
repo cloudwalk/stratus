@@ -1,0 +1,84 @@
+name: E2E Relayer
+
+on:
+  pull_request:
+    branches:
+      - '*'
+    paths-ignore:
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/docs-release.yml'
+      - '.github/workflows/outdated.yml'
+      - '.github/workflows/comment-tag-report.yml'
+      - '.github/workflows/pr-agent.yml'
+      - '.github/CODEOWNERS'
+      - 'config/**'
+      - 'README.md'
+      - 'LICENSE'
+      - 'CONTRIBUTING.md'
+      - 'utils/slack-notifiers/**'
+  workflow_dispatch:
+  push: # Rebuild cache policy
+    branches:
+      - 'main'
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+
+jobs:
+  contract_test_rocks:
+    strategy:
+      fail-fast: false
+    name: E2E Relayer on BRLCToken
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: stable-release
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+
+      - name: Clone BRLCToken repository
+        run: just contracts-clone --token
+
+      - name: Flatten BRLCToken contract
+        run: just contracts-flatten
+
+      - name: Run e2e tests
+        run: just e2e-relayer-external-up
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0 
+          RUST_LOG: off 
+          RELEASE: 1

@@ -40,39 +40,31 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Cache Cargo Registry and Target Directory
-        uses: actions/cache@v4.0.2
-        id: cache-cargo
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            target
-          key: ${{ runner.os }}-v2-cargo-stable-release-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-v2-cargo-stable-release-
+        uses: actions/checkout@v4
 
       - name: Set up Rust
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: stable-release
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
-        uses: extractions/setup-just@v1
-
-      - name: Set up ASDF Version Manager
-        uses: asdf-vm/actions/setup@v3
+        uses: extractions/setup-just@v2
 
       - name: Install Node.js
-        run: |
-          asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
-          asdf install nodejs 20.10.0
-          asdf global nodejs 20.10.0
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
 
       - name: Set up dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}

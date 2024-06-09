@@ -95,10 +95,11 @@ message TransactionExecution {
 
 // Append Transaction Execution message
 message AppendTransactionExecutionsRequest {
-    uint64 term = 1;
-    uint64 prevLogIndex = 2;
-    uint64 prevLogTerm = 3;
-    repeated TransactionExecution executions = 4;
+    string leader_id = 1;
+    uint64 term = 2;
+    uint64 prevLogIndex = 3;
+    uint64 prevLogTerm = 4;
+    repeated TransactionExecution executions = 5;
 }
 
 message AppendTransactionExecutionsResponse {
@@ -131,11 +132,12 @@ message BlockHeader {
 
 // Append Block Commit message
 message AppendBlockCommitRequest {
-    uint64 term = 1;
-    uint64 prevLogIndex = 2;
-    uint64 prevLogTerm = 3;
-    BlockHeader header = 4;
-    repeated string transactionHashes = 5;
+    string leader_id = 1;
+    uint64 term = 2;
+    uint64 prevLogIndex = 3;
+    uint64 prevLogTerm = 4;
+    BlockHeader header = 5;
+    repeated string transactionHashes = 6;
 }
 
 message AppendBlockCommitResponse {
@@ -144,8 +146,22 @@ message AppendBlockCommitResponse {
     uint64 last_committed_block_number = 3;
 }
 
+// Request Vote message
+message RequestVoteRequest {
+    uint64 term = 1;
+    string candidate_id = 2;
+    uint64 last_log_index = 3;
+    uint64 last_log_term = 4;
+}
+
+message RequestVoteResponse {
+    uint64 term = 1;
+    bool vote_granted = 2;
+}
+
 // Service definition
 service AppendEntryService {
     rpc AppendTransactionExecutions (AppendTransactionExecutionsRequest) returns (AppendTransactionExecutionsResponse);
     rpc AppendBlockCommit (AppendBlockCommitRequest) returns (AppendBlockCommitResponse);
+    rpc RequestVote (RequestVoteRequest) returns (RequestVoteResponse);
 }

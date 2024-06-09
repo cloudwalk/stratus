@@ -18,6 +18,8 @@ use stratus::eth::storage::InMemoryPermanentStorageState;
 use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StratusStorage;
+use stratus::ext::traced_sleep;
+use stratus::ext::SleepReason;
 use stratus::infra::docker::Docker;
 use stratus::GlobalServices;
 #[cfg(feature = "metrics")]
@@ -101,7 +103,7 @@ pub fn init_config_and_data(
     InMemoryPermanentStorageState,
 ) {
     // init config
-    let mut global_services = GlobalServices::<IntegrationTestConfig>::init().unwrap();
+    let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
     global_services.config.executor.chain_id = 2009;
     global_services.config.executor.num_evms = 8;
     global_services.config.storage.perm_storage.perm_storage_connections = 9;
@@ -154,16 +156,15 @@ pub async fn execute_test(
 
     // init services
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage)));
-    let relayer = config.relayer.init().await.unwrap();
     let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await.unwrap();
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner), relayer, None).await;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
 
     // execute and mine
-    executor.reexecute_external(&block, &receipts).await.unwrap();
+    executor.external_block(&block, &receipts).await.unwrap();
     miner.mine_external_and_commit().await.unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    traced_sleep(Duration::from_secs(5), SleepReason::SyncData).await;
 
     println!("{}\n{}\n{}", "=".repeat(80), test_name, "=".repeat(80));
     for query in METRIC_QUERIES {

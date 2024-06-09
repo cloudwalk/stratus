@@ -13,6 +13,7 @@ use display_json::DebugAsJson;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
+use tracing::info_span;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
@@ -43,6 +44,7 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::binary_name;
 use crate::ext::parse_duration;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -54,7 +56,7 @@ pub fn load_dotenv() {
     let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
     let env_filename = format!("config/{}.env.{}", binary_name(), env);
 
-    println!("reading env file: {}", env_filename);
+    println!("reading env file | filename={}", env_filename);
     if let Err(e) = dotenvy::from_filename(env_filename) {
         println!("env file error: {e}");
     }
@@ -87,6 +89,10 @@ pub struct CommonConfig {
     #[arg(long = "nocapture")]
     pub nocapture: bool,
 
+    /// Direct access to peers via IP address, why will be included on data propagation and leader election.
+    #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
+    pub candidate_peers: Vec<String>,
+
     /// Url to the sentry project
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
     pub sentry_url: Option<String>,
@@ -95,9 +101,13 @@ pub struct CommonConfig {
     #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
     pub tracing_url: Option<String>,
 
-    /// Enables tokio-console.
-    #[arg(long = "enable-tokio-console", env = "ENABLE_TOKIO_CONSOLE", default_value = "true")]
-    pub enable_tokio_console: bool,
+    // Address for the Tokio Console
+    #[arg(long = "tokio-console-address", env = "TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
+    pub tokio_console_address: SocketAddr,
+
+    // Address for the Prometheus Metrics Exporter
+    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    pub metrics_exporter_address: SocketAddr,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -108,22 +118,27 @@ impl WithCommonConfig for CommonConfig {
 
 impl CommonConfig {
     /// Initializes Tokio runtime.
-    pub fn init_runtime(&self) -> Runtime {
-        print!(
-            "creating tokio runtime; async_threads={}; blocking_threads={}",
+    pub fn init_runtime(&self) -> anyhow::Result<Runtime> {
+        println!(
+            "creating tokio runtime | async_threads={} blocking_threads={}",
             self.num_async_threads, self.num_blocking_threads
         );
 
-        let runtime = Builder::new_multi_thread()
+        let result = Builder::new_multi_thread()
             .enable_all()
             .thread_name("tokio")
             .worker_threads(self.num_async_threads)
             .max_blocking_threads(self.num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
-            .build()
-            .expect("failed to create tokio runtime");
+            .build();
 
-        runtime
+        match result {
+            Ok(runtime) => Ok(runtime),
+            Err(e) => {
+                println!("failed to create tokio runtime | reason={:?}", e);
+                Err(e.into())
+            }
+        }
     }
 }
 
@@ -171,19 +186,14 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    pub async fn init(
-        &self,
-        storage: Arc<StratusStorage>,
-        miner: Arc<BlockMiner>,
-        relayer: Option<Arc<TransactionRelayer>>,
-        consensus: Option<Arc<Consensus>>,
-    ) -> Arc<Executor> {
+    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
         const TASK_NAME: &str = "evm-thread";
 
         let num_evms = max(self.num_evms, 1);
         tracing::info!(config = ?self, "creating executor");
 
         // spawn evm in background using native threads
+        // TODO: move EVMs initialization to Executor.
         let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
         for _ in 1..=num_evms {
             // create evm resources
@@ -196,31 +206,31 @@ impl ExecutorConfig {
             let evm_rx = evm_rx.clone();
 
             // spawn thread that will run evm
-            // todo: needs a way to signal error like a cancellation token in case it fails to initialize
             let t = thread::Builder::new().name("evm".into());
 
             info_task_spawn(TASK_NAME);
             t.spawn(move || {
-                // init tokio
+                // init services
                 let _tokio_guard = evm_tokio.enter();
-
-                // init storage
                 if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
-                    tracing::error!(reason = ?e, "failed to allocate evm storage resources");
+                    let message = GlobalState::shutdown_from("evm-init", "failed to allocate evm storage resources");
+                    tracing::error!(reason = ?e, %message);
                 }
-
-                // init evm
                 let mut evm = Revm::new(evm_storage, evm_config);
 
                 // keep executing transactions until the channel is closed
-                while let Ok((input, tx)) = evm_rx.recv() {
+                while let Ok(task) = evm_rx.recv() {
                     if GlobalState::warn_if_shutdown(TASK_NAME) {
                         return;
                     }
 
+                    // enter span from another thread
+                    let span = task.span_id.map(|id| info_span!(parent: id, "executor::evm"));
+                    let _span_enter = span.as_ref().map(|span| span.enter());
+
                     // execute
-                    let result = evm.execute(input);
-                    if let Err(e) = tx.send(result) {
+                    let result = evm.execute(task.input);
+                    if let Err(e) = task.response_tx.send(result) {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
                     };
                 }
@@ -230,7 +240,7 @@ impl ExecutorConfig {
             .expect("spawning evm threads should not fail");
         }
 
-        let executor = Executor::new(storage, miner, relayer, evm_tx, self.num_evms, consensus);
+        let executor = Executor::new(storage, miner, evm_tx, self.num_evms);
         Arc::new(executor)
     }
 }
@@ -440,6 +450,10 @@ impl WithCommonConfig for StratusConfig {
 /// Configuration for `rpc-downlaoder` binary.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RpcDownloaderConfig {
+    /// Final block number to be downloaded.
+    #[arg(long = "block-end", env = "BLOCK_END")]
+    pub block_end: Option<u64>,
+
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
 
@@ -914,21 +928,5 @@ impl FromStr for ValidatorMethodConfig {
             "compare_tables" => Ok(Self::CompareTables),
             s => Ok(Self::Rpc { url: s.to_string() }),
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
-
-/// Gets the current binary basename.
-fn binary_name() -> String {
-    let binary = std::env::current_exe().unwrap();
-    let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
-
-    if binary_basename.starts_with("test_") {
-        "tests".to_string()
-    } else {
-        binary_basename
     }
 }

@@ -71,7 +71,7 @@ impl StratusStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_block_number_to_resume_import", skip_all)]
     pub async fn read_block_number_to_resume_import(&self) -> anyhow::Result<BlockNumber> {
         // if does not have the zero block present, should resume from zero
         let zero = self.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
@@ -102,7 +102,7 @@ impl StratusStorage {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_active_block_number", skip_all)]
     pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         #[cfg(feature = "metrics")]
         {
@@ -116,7 +116,7 @@ impl StratusStorage {
         self.temp.read_active_block_number().await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_mined_block_number", skip_all)]
     pub async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         #[cfg(feature = "metrics")]
         {
@@ -130,8 +130,12 @@ impl StratusStorage {
         self.perm.read_mined_block_number().await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::set_active_block_number", skip_all, fields(number))]
     pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        Span::with(|s| {
+            s.rec_str("number", &number);
+        });
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -144,6 +148,7 @@ impl StratusStorage {
         self.temp.set_active_block_number(number).await
     }
 
+    #[tracing::instrument(name = "storage::set_active_block_number_as_next", skip_all)]
     pub async fn set_active_block_number_as_next(&self) -> anyhow::Result<()> {
         let last_mined_block = self.read_mined_block_number().await?;
         self.set_active_block_number(last_mined_block.next()).await?;
@@ -158,8 +163,10 @@ impl StratusStorage {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(number))]
     pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+        Span::with(|s| s.rec_str("number", &number));
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -189,7 +196,7 @@ impl StratusStorage {
         self.temp.set_active_external_block(block).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::save_accounts", skip_all)]
     pub async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         // keep only accounts that does not exist in permanent storage
         let mut missing_accounts = Vec::new();
@@ -212,7 +219,7 @@ impl StratusStorage {
         self.perm.save_accounts(missing_accounts).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::check_conflicts", skip_all)]
     pub async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
         #[cfg(feature = "metrics")]
         {
@@ -228,13 +235,13 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_account", skip_all, fields(address, point_in_time))]
     pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+        Span::with(|s| {
+            s.rec_str("address", address);
+            s.rec_str("point_in_time", point_in_time);
+        });
+
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-
-        // fill span
-        let span = Span::current();
-        span.rec("address", address);
-        span.rec("point_in_time", point_in_time);
 
         // read from temp only if present
         if point_in_time.is_present() {
@@ -263,8 +270,14 @@ impl StratusStorage {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_slot", skip_all, fields(address, index, point_in_time))]
     pub async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+        Span::with(|s| {
+            s.rec_str("address", address);
+            s.rec_str("index", index);
+            s.rec_str("point_in_time", point_in_time);
+        });
+
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -295,7 +308,7 @@ impl StratusStorage {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_slots", skip_all)]
     pub async fn read_slots(&self, address: &Address, slot_indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -334,7 +347,7 @@ impl StratusStorage {
         Ok(slots)
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
     pub async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
         self.perm.read_all_slots(address).await
     }
@@ -343,36 +356,48 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    #[tracing::instrument(skip_all)]
-    pub async fn save_execution(&self, transaction_execution: TransactionExecution) -> anyhow::Result<()> {
+    #[tracing::instrument(name = "storage::save_execution", skip_all, fields(hash))]
+    pub async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        Span::with(|s| {
+            s.rec_str("hash", &tx.hash());
+        });
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.save_execution(transaction_execution).await;
+            let result = self.temp.save_execution(tx).await;
             metrics::inc_storage_save_execution(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.save_execution(transaction_execution).await
+        self.temp.save_execution(tx).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::finish_block", skip_all, fields(number))]
     pub async fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         #[cfg(feature = "metrics")]
-        {
+        let result = {
             let start = metrics::now();
             let result = self.temp.finish_block().await;
             metrics::inc_storage_finish_block(start.elapsed(), result.is_ok());
             result
-        }
+        };
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.finish_block().await
+        let result = self.temp.finish_block().await;
+
+        if let Ok(ref block) = result {
+            Span::with(|s| s.rec_str("number", &block.number));
+        }
+
+        result
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
     pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+        Span::with(|s| s.rec_str("number", &block.number()));
+
         #[cfg(feature = "metrics")]
         {
             let (start, label_size_by_tx, label_size_by_gas) = (metrics::now(), block.label_size_by_transactions(), block.label_size_by_gas());
@@ -385,7 +410,7 @@ impl StratusStorage {
         self.perm.save_block(block).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_block", skip_all)]
     pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         #[cfg(feature = "metrics")]
         {
@@ -399,8 +424,10 @@ impl StratusStorage {
         self.perm.read_block(block_selection).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
     pub async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+        Span::with(|s| s.rec_str("hash", hash));
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -413,7 +440,7 @@ impl StratusStorage {
         self.perm.read_mined_transaction(hash).await
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::read_logs", skip_all)]
     pub async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         #[cfg(feature = "metrics")]
         {
@@ -427,7 +454,11 @@ impl StratusStorage {
         self.perm.read_logs(filter).await
     }
 
-    #[tracing::instrument(skip_all)]
+    // -------------------------------------------------------------------------
+    // General state
+    // -------------------------------------------------------------------------
+
+    #[tracing::instrument(name = "storage::flush", skip_all)]
     pub async fn flush(&self) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
@@ -444,11 +475,7 @@ impl StratusStorage {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // General state
-    // -------------------------------------------------------------------------
-
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(name = "storage::reset", skip_all)]
     pub async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
@@ -493,7 +520,7 @@ impl StratusStorage {
             BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection).await? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
                 None => Err(anyhow!(
-                    "failed to select block because it is greater than current block number or block hash is invalid."
+                    "failed to select block because it is greater than current block number or block hash is invalid"
                 )),
             },
         }

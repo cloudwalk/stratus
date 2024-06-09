@@ -1,6 +1,7 @@
 //! Metrics services.
 #![cfg(feature = "metrics")]
 
+use std::net::SocketAddr;
 use std::stringify;
 
 use metrics_exporter_prometheus::Matcher;
@@ -29,8 +30,8 @@ const BUCKET_FOR_DURATION: [f64; 37] = [
 /// Init application global metrics.
 ///
 /// Default configuration runs metrics exporter on port 9000.
-pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
-    tracing::info!("creating metrics exporter");
+pub fn init_metrics(address: SocketAddr, histogram_kind: MetricsHistogramKind) -> anyhow::Result<()> {
+    tracing::info!(%address, "creating metrics exporter");
 
     // get metric definitions
     let mut metrics = Vec::new();
@@ -45,7 +46,7 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
     metrics.extend(metrics_for_external_relayer());
 
     // init exporter
-    let mut builder = PrometheusBuilder::new();
+    let mut builder = PrometheusBuilder::new().with_http_listener(address);
 
     // init buckets
     if histogram_kind == MetricsHistogramKind::Histogram {
@@ -57,10 +58,15 @@ pub fn init_metrics(histogram_kind: MetricsHistogramKind) {
         }
     }
 
-    builder.install().expect("failed to create metrics exporter");
+    // init exporter
+    if let Err(e) = builder.install() {
+        tracing::error!(reason = ?e, %address, "failed to create metrics exporter");
+    }
 
     // init metric description (always after provider started)
     for metric in &metrics {
         metric.register_description();
     }
+
+    Ok(())
 }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use futures::join;
 use itertools::Itertools;
+use jsonrpsee::ConnectionId;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use tokio::sync::broadcast;
@@ -15,8 +16,10 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::ext::named_spawn;
 use crate::ext::not;
-use crate::ext::spawn_named;
+use crate::ext::traced_sleep;
+use crate::ext::SleepReason;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -28,8 +31,6 @@ const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
 
 /// Timeout used when sending notifications to subscribers.
 const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
-
-type SubscriptionId = usize;
 
 #[cfg(feature = "metrics")]
 mod label {
@@ -63,7 +64,7 @@ impl RpcSubscriptions {
     /// Spawns a new task to clean up closed subscriptions from time to time.
     fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::cleaner";
-        spawn_named(TASK_NAME, async move {
+        named_spawn(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -83,7 +84,7 @@ impl RpcSubscriptions {
                 }
 
                 // await next iteration
-                tokio::time::sleep(CLEANING_FREQUENCY).await;
+                traced_sleep(CLEANING_FREQUENCY, SleepReason::Interval).await;
             }
         })
     }
@@ -91,7 +92,7 @@ impl RpcSubscriptions {
     /// Spawns a new task that notifies subscribers about new executed transactions.
     fn spawn_new_pending_txs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_tx_hash: broadcast::Receiver<Hash>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newPendingTransactions";
-        spawn_named(TASK_NAME, async move {
+        named_spawn(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -112,7 +113,7 @@ impl RpcSubscriptions {
     /// Spawns a new task that notifies subscribers about new created blocks.
     fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_block_header: broadcast::Receiver<BlockHeader>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newHeads";
-        spawn_named(TASK_NAME, async move {
+        named_spawn(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -133,7 +134,7 @@ impl RpcSubscriptions {
     /// Spawns a new task that notifies subscribers about new transactions logs.
     fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_log_mined: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::logs";
-        spawn_named(TASK_NAME, async move {
+        named_spawn(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -198,15 +199,15 @@ impl RpcSubscriptionsHandles {
 /// Active client subscriptions.
 #[derive(Debug, Default)]
 pub struct RpcSubscriptionsConnected {
-    new_pending_txs: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
-    new_heads: RwLock<HashMap<SubscriptionId, SubscriptionSink>>,
-    logs: RwLock<HashMap<SubscriptionId, (SubscriptionSink, LogFilter)>>,
+    new_pending_txs: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
+    new_heads: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
+    logs: RwLock<HashMap<ConnectionId, (SubscriptionSink, LogFilter)>>,
 }
 
 impl RpcSubscriptionsConnected {
     /// Adds a new subscriber to `newPendingTransactions` event.
     pub async fn add_new_pending_txs(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id(), "subscribing to newPendingTransactions event");
+        tracing::debug!(id = %sink.connection_id().0, "subscribing to newPendingTransactions event");
         let mut subs = self.new_pending_txs.write().await;
         subs.insert(sink.connection_id(), sink);
 
@@ -216,7 +217,7 @@ impl RpcSubscriptionsConnected {
 
     /// Adds a new subscriber to `newHeads` event.
     pub async fn add_new_heads(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id(), "subscribing to newHeads event");
+        tracing::debug!(id = %sink.connection_id().0, "subscribing to newHeads event");
         let mut subs = self.new_heads.write().await;
         subs.insert(sink.connection_id(), sink);
 
@@ -226,7 +227,7 @@ impl RpcSubscriptionsConnected {
 
     /// Adds a new subscriber to `logs` event.
     pub async fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
-        tracing::debug!(id = %sink.connection_id(), ?filter, "subscribing to logs event");
+        tracing::debug!(id = %sink.connection_id().0, ?filter, "subscribing to logs event");
         let mut subs = self.logs.write().await;
         subs.insert(sink.connection_id(), (sink, filter));
 
