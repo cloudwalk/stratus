@@ -555,6 +555,8 @@ contracts-test-stratus-rocks *args="":
     echo "-> Killing Stratus"
     killport 3000
 
+    cat stratus.log
+
     exit $result_code
 
 # Contracts: run contract integration tests
