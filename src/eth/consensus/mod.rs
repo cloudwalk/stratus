@@ -1,6 +1,7 @@
 pub mod forward_to;
 
 use std::collections::HashMap;
+#[cfg(feature = "kubernetes")]
 use std::env;
 use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
@@ -24,6 +25,8 @@ use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+#[cfg(feature = "kubernetes")]
+use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
 use tonic::Request;
@@ -438,11 +441,13 @@ impl Consensus {
         (last_arrived_block_number - 2) <= storage_block_number
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_node() -> Option<String> {
         let pod_name = env::var("MY_POD_NAME").ok()?;
         Some(pod_name.trim().to_string())
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_namespace() -> Option<String> {
         let namespace = env::var("NAMESPACE").ok()?;
         Some(namespace.trim().to_string())
@@ -477,12 +482,41 @@ impl Consensus {
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
-        if let Ok(k8s_peers) = Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
-            new_peers.extend(k8s_peers);
+        {
+            let mut attempts = 0;
+            let max_attempts = 100;
+
+            while attempts < max_attempts {
+                match Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
+                    Ok(k8s_peers) => {
+                        new_peers.extend(k8s_peers);
+                        tracing::info!("discovered {} peers from kubernetes", new_peers.len());
+                        break;
+                    }
+                    Err(e) => {
+                        attempts += 1;
+                        tracing::warn!("failed to discover peers from Kubernetes (attempt {}/{}): {:?}", attempts, max_attempts, e);
+
+                        if attempts >= max_attempts {
+                            tracing::error!("exceeded maximum attempts to discover peers from kubernetes. initiating shutdown.");
+                            GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
+                        }
+
+                        // Optionally, sleep for a bit before retrying
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
         }
 
-        if let Ok(env_peers) = Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
-            new_peers.extend(env_peers);
+        match Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
+            Ok(env_peers) => {
+                tracing::info!("discovered {} peers from env", env_peers.len());
+                new_peers.extend(env_peers);
+            }
+            Err(e) => {
+                tracing::warn!("failed to discover peers from env: {:?}", e);
+            }
         }
 
         let mut peers_lock = consensus.peers.write().await;

@@ -174,7 +174,7 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing", "rocks", "kubernetes"]
+default = ["metrics", "tracing", "rocks"]
 
 # Application is running in develoment mode.
 dev  = []
