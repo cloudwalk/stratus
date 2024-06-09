@@ -207,7 +207,7 @@ e2e-stratus block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}}  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -229,7 +229,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -258,7 +258,7 @@ e2e-stratus-postgres block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage {{ database_url }} > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage {{ database_url }}  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -273,7 +273,7 @@ e2e-stratus-postgres block-mode="automine" test="":
     echo "-> Killing Postgres"
     docker compose down
 
-    echo "** -> Stratus log accessible in ./stratus.log **"
+    echo "** - accessible in ./stratus.log **"
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
@@ -281,7 +281,7 @@ e2e-clock-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev, -- --block-mode 1s -a 0.0.0.0:3000  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -299,7 +299,7 @@ e2e-clock-stratus-rocks:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev, -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -497,7 +497,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 > stratus.log &
+    just run -a 0.0.0.0:3000  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -522,7 +522,7 @@ contracts-test-stratus-postgres *args="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }}  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
@@ -543,7 +543,7 @@ contracts-test-stratus-rocks *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage=rocks  &
 
     echo "-> Waiting Stratus to start"
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
