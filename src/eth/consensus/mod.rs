@@ -439,11 +439,13 @@ impl Consensus {
         (last_arrived_block_number - 2) <= storage_block_number
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_node() -> Option<String> {
         let pod_name = env::var("MY_POD_NAME").ok()?;
         Some(pod_name.trim().to_string())
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_namespace() -> Option<String> {
         let namespace = env::var("NAMESPACE").ok()?;
         Some(namespace.trim().to_string())
