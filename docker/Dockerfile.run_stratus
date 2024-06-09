@@ -19,7 +19,7 @@ ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json
 ENV NO_COLOR=1
 
-RUN cargo build --release --bin stratus --features metrics
+RUN cargo build --release --bin stratus --features metrics,kubernetes
 
 
 # Runtime
