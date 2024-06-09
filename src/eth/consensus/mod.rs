@@ -1,6 +1,7 @@
 pub mod forward_to;
 
 use std::collections::HashMap;
+#[cfg(feature = "kubernetes")]
 use std::env;
 use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
@@ -24,6 +25,7 @@ use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+#[cfg(feature = "kubernetes")]
 use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
