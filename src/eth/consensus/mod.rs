@@ -725,6 +725,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }))
     }
 
+    //FIXME if I'm leader already, I should not allow this request
     async fn request_vote(&self, request: Request<RequestVoteRequest>) -> Result<Response<RequestVoteResponse>, Status> {
         let request = request.into_inner();
         let consensus = self.consensus.lock().await;
