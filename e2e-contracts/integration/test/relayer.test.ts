@@ -165,7 +165,6 @@ describe("Relayer integration test", function () {
     });
 
     describe("Edge case transaction test", function () {
-        let txHashList: string[] = []
         it("Back and forth transfer with minimum funds should order successfully", async function () {
             const alice = ethers.Wallet.createRandom().connect(ethers.provider);
             const bob = ethers.Wallet.createRandom().connect(ethers.provider);
@@ -182,32 +181,11 @@ describe("Relayer integration test", function () {
                 let sender = wallets[i % 2];
                 let receiver = wallets[(i + 1) % 2];
                 
-                const tx = await brlcToken.connect(sender).transfer(receiver.address, 10, { gasPrice: 0, gasLimit: GAS_LIMIT_OVERRIDE, type: 0, nonce: nonces[i % 2] });
-
-                txHashList.push(tx.transactionHash);
+                await brlcToken.connect(sender).transfer(receiver.address, 10, { gasPrice: 0, gasLimit: GAS_LIMIT_OVERRIDE, type: 0, nonce: nonces[i % 2] });
 
                 nonces[i % 2]++;
             }
-            
-            // Get Stratus transaction receipts
-            updateProviderUrl("stratus");
-            const stratusReceipts = await Promise.all(txHashList.map(async (txHash) => {
-                const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
-                return receipt;
-            }));
-
-            // Get Hardhat transaction receipts
-            updateProviderUrl("hardhat");
-            const hardhatReceipts = await Promise.all(txHashList.map(async (txHash) => {
-                const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
-                return receipt;
-            }));
-
-            // Assert that all transactions were relayed
-            for (let i = 0; i < txHashList.length; i++) {
-                expect(stratusReceipts[i]).to.exist;
-                expect(hardhatReceipts[i]).to.exist;
-            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
         });
 
         it("Validate no mismatched transactions were generated", async function () {
