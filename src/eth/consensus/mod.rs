@@ -857,6 +857,15 @@ mod tests {
     }
 
     #[test]
+    fn test_peer_address_from_string_invalid_format() {
+        let input = "http://127.0.0.1-3000;3777".to_string();
+        let result = PeerAddress::from_string(input);
+
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "invalid format");
+    }
+
+    #[test]
     fn test_peer_address_from_string_missing_scheme() {
         let input = "127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
