@@ -20,7 +20,14 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     };
     let miner = config.miner.init(Arc::clone(&storage), None, external_relayer).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
-    let consensus = Consensus::new(Arc::clone(&storage), config.clone().candidate_peers.clone(), None).await; // for now, we force None to initiate with the current node being the leader
+    let consensus = Consensus::new(
+        Arc::clone(&storage),
+        config.clone().candidate_peers.clone(),
+        None,
+        config.address,
+        config.grpc_server_address,
+    )
+    .await; // for now, we force None to initiate with the current node being the leader
 
     // start rpc server
     serve_rpc(storage, executor, miner, consensus, config.address, config.executor.chain_id.into()).await?;
