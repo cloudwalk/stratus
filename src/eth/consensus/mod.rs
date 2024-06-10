@@ -573,7 +573,6 @@ impl Consensus {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
     
         for address in addresses {
-            tracing::info!("Parsing address: {}", address);
             match PeerAddress::from_string(address.to_string()) {
                 Ok(peer_address) => {
                     let grpc_address = peer_address.full_grpc_address();
