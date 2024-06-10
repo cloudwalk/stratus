@@ -92,7 +92,7 @@ impl PeerAddress {
     }
 
     fn full_grpc_address(&self) -> String {
-        format!("http://{}:{}", self.address, self.grpc_port)
+        format!("{}:{}", self.address, self.grpc_port)
     }
 
     fn full_jsonrpc_address(&self) -> String {
@@ -100,7 +100,7 @@ impl PeerAddress {
     }
 
     fn from_string(s: String) -> Result<Self, anyhow::Error> {
-        let (_scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
+        let (scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
             ("http://", address)
         } else if let Some(address) = s.strip_prefix("https://") {
             ("https://", address)
@@ -112,7 +112,7 @@ impl PeerAddress {
         if parts.len() != 2 {
             return Err(anyhow::anyhow!("invalid format"));
         }
-        let address = parts[0].to_string();
+        let address = format!("{}{}", scheme, parts[0]);
         let ports: Vec<&str> = parts[1].split(';').collect();
         if ports.len() != 2 {
             return Err(anyhow::anyhow!("invalid format for jsonrpc and grpc ports"));
@@ -839,7 +839,7 @@ mod tests {
 
         assert!(result.is_ok());
         let peer_address = result.unwrap();
-        assert_eq!(peer_address.address, "127.0.0.1");
+        assert_eq!(peer_address.address, "http://127.0.0.1");
         assert_eq!(peer_address.jsonrpc_port, 3000);
         assert_eq!(peer_address.grpc_port, 3777);
     }
@@ -851,7 +851,7 @@ mod tests {
 
         assert!(result.is_ok());
         let peer_address = result.unwrap();
-        assert_eq!(peer_address.address, "127.0.0.1");
+        assert_eq!(peer_address.address, "https://127.0.0.1");
         assert_eq!(peer_address.jsonrpc_port, 3000);
         assert_eq!(peer_address.grpc_port, 3777);
     }
