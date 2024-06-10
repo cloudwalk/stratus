@@ -9,7 +9,8 @@ import {
     setDeployer, 
     send,
     deployer,
-    updateProviderUrl
+    updateProviderUrl,
+    sendWithRetry
 } from "./helpers/rpc";
 
 describe("Relayer integration test", function () {
@@ -81,23 +82,22 @@ describe("Relayer integration test", function () {
     
                     await new Promise(resolve => setTimeout(resolve, transactionInterval));
                 }
-                await new Promise(resolve => setTimeout(resolve, 2000));
             });
     
             it(`${params.name}: Validate transaction mined delay between Stratus and Hardhat`, async function () {
                 // Get Stratus timestamps
                 updateProviderUrl("stratus");
                 const stratusTimestamps = await Promise.all(txHashList.map(async (txHash) => {
-                    const receipt = await send("eth_getTransactionReceipt", [txHash]);
-                    const block = await send("eth_getBlockByNumber", [receipt.blockNumber, false]);
+                    const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                    const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
                     return parseInt(block.timestamp, 16);
                 }));
     
                 // Get Hardhat timestamps
                 updateProviderUrl("hardhat");
                 const hardhatTimestamps = await Promise.all(txHashList.map(async (txHash) => {
-                    const receipt = await send("eth_getTransactionReceipt", [txHash]);
-                    const block = await send("eth_getBlockByNumber", [receipt.blockNumber, false]);
+                    const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                    const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
                     return parseInt(block.timestamp, 16);
                 }));
     

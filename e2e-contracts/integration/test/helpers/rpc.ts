@@ -187,3 +187,20 @@ export async function send(method: string, params: any[] = []): Promise<any> {
     const response = await sendAndGetFullResponse(method, params);
     return response.data.result;
 }
+
+async function sendWithRetry(methodName: string, params: any[], maxAttempts = 3, delay = 1000) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            // Assuming `send` is the function used to make the RPC call
+            const result = await send(methodName, params);
+            return result;
+        } catch (error) {
+            lastError = error;
+            if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    throw lastError;
+}
