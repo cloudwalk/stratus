@@ -1,7 +1,5 @@
 //! Tracing services.
 
-use std::env;
-use std::env::VarError;
 use std::io::stdout;
 use std::io::IsTerminal;
 use std::net::SocketAddr;
@@ -20,59 +18,51 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
+use crate::config::LogFormat;
 use crate::ext::binary_name;
 use crate::ext::named_spawn;
 
-/// Init application global tracing.
-pub async fn init_tracing(url: Option<&String>, console_address: SocketAddr) -> anyhow::Result<()> {
-    println!("creating global tracing registry");
+/// Init application tracing.
+pub async fn init_tracing(
+    log_format: LogFormat,
+    opentelemetry_url: Option<&str>,
+    sentry_url: Option<&str>,
+    tokio_console_address: SocketAddr,
+) -> anyhow::Result<()> {
+    println!("creating tracing registry");
 
     // configure stdout log layer
-    let log_format = env::var("LOG_FORMAT").map(|x| x.trim().to_lowercase());
     let enable_ansi = stdout().is_terminal();
 
-    let stdout_layer = match log_format.as_deref() {
-        Ok("json") => {
-            println!("tracing registry: enabling json logs");
-            fmt::Layer::default()
-                .json()
-                .with_target(true)
-                .with_thread_ids(true)
-                .with_thread_names(true)
-                .with_filter(EnvFilter::from_default_env())
-                .boxed()
-        }
-        Ok("verbose") | Ok("full") => {
-            println!("tracing registry: enabling verbose text logs");
-            fmt::Layer::default()
-                .with_ansi(enable_ansi)
-                .with_target(true)
-                .with_thread_ids(true)
-                .with_thread_names(true)
-                .with_filter(EnvFilter::from_default_env())
-                .boxed()
-        }
-        Ok("minimal") => {
-            println!("tracing registry: enabling minimal text logs");
-            fmt::Layer::default()
-                .with_thread_ids(false)
-                .with_thread_names(false)
-                .with_target(false)
-                .with_ansi(enable_ansi)
-                .with_timer(MinimalTimer)
-                .with_filter(EnvFilter::from_default_env())
-                .boxed()
-        }
-        Ok("normal") | Err(VarError::NotPresent) => {
-            println!("tracing registry: enabling normal text logs");
-            fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed()
-        }
-        Ok(unexpected) => panic!("unexpected `LOG_FORMAT={unexpected}`"),
-        Err(e) => panic!("invalid utf-8 in `LOG_FORMAT`: {e}"),
+    println!("tracing registry: enabling console logs | format={} ansi={}", log_format, enable_ansi);
+    let stdout_layer = match log_format {
+        LogFormat::Json => fmt::Layer::default()
+            .json()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_thread_names(true)
+            .with_filter(EnvFilter::from_default_env())
+            .boxed(),
+        LogFormat::Minimal => fmt::Layer::default()
+            .with_thread_ids(false)
+            .with_thread_names(false)
+            .with_target(false)
+            .with_ansi(enable_ansi)
+            .with_timer(MinimalTimer)
+            .with_filter(EnvFilter::from_default_env())
+            .boxed(),
+        LogFormat::Normal => fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed(),
+        LogFormat::Verbose => fmt::Layer::default()
+            .with_ansi(enable_ansi)
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_thread_names(true)
+            .with_filter(EnvFilter::from_default_env())
+            .boxed(),
     };
 
     // configure opentelemetry layer
-    let opentelemetry_layer = match url {
+    let opentelemetry_layer = match opentelemetry_url {
         Some(url) => {
             let service_name = format!("stratus-{}", binary_name());
             println!("tracing registry: enabling opentelemetry exporter | url={} service={}", url, service_name);
@@ -99,15 +89,24 @@ pub async fn init_tracing(url: Option<&String>, console_address: SocketAddr) -> 
     };
 
     // configure sentry layer
-    println!("tracing registry: enabling tracing layer");
-    let sentry_layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
+    let sentry_layer = match sentry_url {
+        Some(sentry_url) => {
+            println!("tracing registry: enabling sentry exporter | url={}", sentry_url);
+            let layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
+            Some(layer)
+        }
+        None => {
+            println!("tracing registry: skipping sentry exporter");
+            None
+        }
+    };
 
     // configure tokio-console layer
-    println!("tracing registry: enabling tokio console | address={}", console_address);
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(console_address).build();
+    println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
+    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
     named_spawn("console::grpc-server", async move {
         if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, address = %console_address, "failed to create tokio-console server");
+            tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
         };
     });
 
@@ -122,7 +121,7 @@ pub async fn init_tracing(url: Option<&String>, console_address: SocketAddr) -> 
     match result {
         Ok(()) => Ok(()),
         Err(e) => {
-            println!("failed to create global tracing registry | reason={:?}", e);
+            println!("failed to create tracing registry | reason={:?}", e);
             Err(e.into())
         }
     }
