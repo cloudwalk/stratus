@@ -262,6 +262,9 @@ impl Consensus {
     /// - If a majority of the peers grant their votes, the node transitions to the leader role.
     /// - If not, it remains a follower and waits for the next election cycle.
     async fn start_election(consensus: Arc<Consensus>) {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         Self::discover_peers(Arc::clone(&consensus)).await;
 
         let term = consensus.current_term.fetch_add(1, Ordering::SeqCst) + 1;
@@ -312,6 +315,9 @@ impl Consensus {
             tracing::info!(votes = votes, peers = peers.len(), term = term, "failed to become the leader on election");
             *consensus.role.write().await = Role::Follower;
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_start_election(start.elapsed());
     }
 
     async fn become_leader(&self) {
@@ -422,6 +428,9 @@ impl Consensus {
     }
 
     pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         //TODO rename to TransactionForward
         let Some((http_url, _)) = self.get_chain_url().await else {
             return Err(anyhow!("No chain url found"));
@@ -429,6 +438,10 @@ impl Consensus {
         let chain = BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await?;
         let forward_to = forward_to::TransactionRelayer::new(chain);
         let result = forward_to.forward(transaction).await?;
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_forward(start.elapsed());
+
         Ok(result.tx_hash) //XXX HEX
     }
 
@@ -684,6 +697,9 @@ impl Consensus {
     }
 
     async fn append_block_to_peer(&self, peer: &mut Peer, block: &Block) -> Result<(), anyhow::Error> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let header: BlockHeader = (&block.header).into();
         let transaction_hashes = vec![]; // Replace with actual transaction hashes
 
@@ -696,16 +712,13 @@ impl Consensus {
             transaction_hashes,
         });
 
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         let response = peer.client.append_block_commit(request).await?;
         let response = response.into_inner();
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_append_entries(start.elapsed());
-
         tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role,  "current follower state on election"); //TODO also move this to metrics
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_append_block_to_peer(start.elapsed());
 
         match StatusCode::try_from(response.status) {
             Ok(StatusCode::AppendSuccess) => Ok(()),
