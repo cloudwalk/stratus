@@ -48,20 +48,18 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
     type Future = RpcResponse<'a>;
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
-        // extract signature if available
+        // extract request data
+        let app = extract_client_app(&request);
         let method = request.method_name();
         let function = match method {
-            "eth_call" | "eth_estimateGas" => extract_function_from_call(request.params()),
-            "eth_sendRawTransaction" => extract_function_from_transaction(request.params()),
+            "eth_call" | "eth_estimateGas" => extract_call_function(request.params()),
+            "eth_sendRawTransaction" => extract_transaction_function(request.params()),
             _ => None,
         };
 
-        // extract client app
-        let client = request.extensions().get::<RpcClientApp>().unwrap_or(&RpcClientApp::Unknown).clone();
-
         // trace request
         tracing::info!(
-            %client,
+            %app,
             id = %request.id,
             %method,
             function = %function.clone().unwrap_or_default(),
@@ -73,12 +71,12 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         #[cfg(feature = "metrics")]
         {
             let active = ACTIVE_REQUESTS.fetch_add(1, Ordering::Relaxed) + 1;
-            metrics::set_rpc_requests_active(active, method, function.clone());
-            metrics::inc_rpc_requests_started(method, function.clone());
+            metrics::set_rpc_requests_active(active, &app, method, function.clone());
+            metrics::inc_rpc_requests_started(&app, method, function.clone());
         }
 
         RpcResponse {
-            client,
+            app,
             id: request.id.to_string(),
             method: method.to_string(),
             function,
@@ -86,17 +84,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             start: Instant::now(),
         }
     }
-}
-
-fn extract_function_from_call(params: Params) -> Option<SoliditySignature> {
-    let (_, call) = next_rpc_param::<CallInput>(params.sequence()).ok()?;
-    call.extract_function()
-}
-
-fn extract_function_from_transaction(params: Params) -> Option<SoliditySignature> {
-    let (_, data) = next_rpc_param::<Bytes>(params.sequence()).ok()?;
-    let transaction = parse_rpc_rlp::<TransactionInput>(&data).ok()?;
-    transaction.extract_function()
 }
 
 // -----------------------------------------------------------------------------
@@ -109,7 +96,7 @@ pub struct RpcResponse<'a> {
     #[pin]
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 
-    client: RpcClientApp,
+    app: RpcClientApp,
     id: String,
     method: String,
     function: Option<SoliditySignature>,
@@ -132,7 +119,7 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                client = %proj.client,
+                app = %proj.app,
                 id = %proj.id,
                 method = %proj.method,
                 function = %proj.function.clone().unwrap_or_default(),
@@ -146,16 +133,43 @@ impl<'a> Future for RpcResponse<'a> {
             #[cfg(feature = "metrics")]
             {
                 let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
-                metrics::set_rpc_requests_active(active, proj.method.clone(), proj.function.clone());
+                metrics::set_rpc_requests_active(active, &*proj.app, proj.method.clone(), proj.function.clone());
 
                 let mut rpc_result = "error";
                 if response_success {
                     rpc_result = if_else!(response_result.contains("\"result\":null"), "missing", "present");
                 }
-                metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), proj.function.clone(), rpc_result, response.is_success());
+
+                metrics::inc_rpc_requests_finished(
+                    elapsed,
+                    &*proj.app,
+                    proj.method.clone(),
+                    proj.function.clone(),
+                    rpc_result,
+                    response.is_success(),
+                );
             }
         }
 
         response
     }
+}
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+fn extract_client_app(request: &jsonrpsee::types::Request) -> RpcClientApp {
+    request.extensions().get::<RpcClientApp>().unwrap_or(&RpcClientApp::Unknown).clone()
+}
+
+fn extract_call_function(params: Params) -> Option<SoliditySignature> {
+    let (_, call) = next_rpc_param::<CallInput>(params.sequence()).ok()?;
+    call.extract_function()
+}
+
+fn extract_transaction_function(params: Params) -> Option<SoliditySignature> {
+    let (_, data) = next_rpc_param::<Bytes>(params.sequence()).ok()?;
+    let transaction = parse_rpc_rlp::<TransactionInput>(&data).ok()?;
+    transaction.extract_function()
 }
