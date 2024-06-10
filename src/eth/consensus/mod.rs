@@ -448,7 +448,7 @@ impl Consensus {
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
 
         if last_arrived_block_number == std::u64::MAX {
-            tracing::warn!("last arrived block number is at max, this means no block has been received yet");
+            tracing::warn!("no appendEntry has been received yet");
             return false;
         }
 
