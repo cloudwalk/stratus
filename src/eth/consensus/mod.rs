@@ -366,7 +366,7 @@ impl Consensus {
                     if consensus.is_leader().await {
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
-                        if let Err(_) = consensus.broadcast_sender.send(data) {
+                        if consensus.broadcast_sender.send(data).is_err() {
                             tracing::error!("failed to broadcast block");
                         }
                     }
