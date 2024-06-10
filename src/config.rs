@@ -82,7 +82,7 @@ pub struct CommonConfig {
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
     pub num_blocking_threads: usize,
 
-    // Address where Prometheus metrics will be exposed.
+    /// Address where Prometheus metrics will be exposed.
     #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
     pub metrics_exporter_address: SocketAddr,
 
@@ -889,19 +889,24 @@ impl FromStr for PermanentStorageKind {
 // Enum: LogFormat
 // -----------------------------------------------------------------------------
 
+/// Tracing event log format.
 #[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
 pub enum LogFormat {
-    #[strum(to_string = "json")]
-    Json,
-
+    /// Time (no date), level and message.
     #[strum(to_string = "minimal")]
     Minimal,
 
+    /// `tracing` crate default configuration.
     #[strum(to_string = "normal")]
     Normal,
 
+    /// Full datetime, level, thread, target and message.
     #[strum(to_string = "verbose")]
     Verbose,
+
+    /// Same as verbose, but formatted as JSON.
+    #[strum(to_string = "json")]
+    Json,
 }
 
 impl FromStr for LogFormat {
