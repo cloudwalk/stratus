@@ -316,19 +316,34 @@ impl ExternalRelayerClient {
     /// the insertion fails.
     #[tracing::instrument(name = "external_relayer_client::send_to_relayer", skip_all, fields(block_number))]
     pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let block_number = block.header.number;
         tracing::info!(?block_number, "sending block to relayer");
-
+        let block_json = serde_json::to_value(block)?;
         // fill span
         Span::with(|s| s.rec_str("block_number", &block_number));
+        let mut remaining_tries = 5;
 
-        sqlx::query!(
-            "INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)",
-            block_number as _,
-            serde_json::to_value(block)?
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        while remaining_tries > 0 {
+            if let Err(err) = sqlx::query!("INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)", block_number as _, &block_json)
+                .execute(&self.pool)
+                .await
+            {
+                remaining_tries -= 1;
+                tracing::warn!(?err, ?remaining_tries, "failed to insert into relayer_blocks");
+            } else {
+                break;
+            }
+        }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_send_to_relayer(start.elapsed());
+
+        match remaining_tries {
+            0 => Err(anyhow!("failed to insert block into relayer_blocks after 5 tries")),
+            _ => Ok(()),
+        }
     }
 }
