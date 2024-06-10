@@ -100,7 +100,7 @@ impl PeerAddress {
     }
 
     fn from_string(s: String) -> Result<Self, anyhow::Error> {
-        let (scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
+        let (_scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
             ("http://", address)
         } else if let Some(address) = s.strip_prefix("https://") {
             ("https://", address)
@@ -112,7 +112,7 @@ impl PeerAddress {
         if parts.len() != 2 {
             return Err(anyhow::anyhow!("invalid format"));
         }
-        let address = format!("{}{}", scheme, parts[0]);
+        let address = parts[0].to_string();
         let ports: Vec<&str> = parts[1].split(';').collect();
         if ports.len() != 2 {
             return Err(anyhow::anyhow!("invalid format for jsonrpc and grpc ports"));
@@ -571,13 +571,14 @@ impl Consensus {
 
     async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
-
+    
         for address in addresses {
-            // Parse the address format using from_string method
+            tracing::info!("Parsing address: {}", address);
             match PeerAddress::from_string(address.to_string()) {
                 Ok(peer_address) => {
-                    let full_grpc_address = peer_address.full_grpc_address();
-                    match AppendEntryServiceClient::connect(full_grpc_address.clone()).await {
+                    let grpc_address = peer_address.full_grpc_address();
+                    tracing::info!("Connecting to gRPC address: {}", grpc_address);
+                    match AppendEntryServiceClient::connect(grpc_address).await {
                         Ok(client) => {
                             let peer = Peer {
                                 client,
@@ -589,8 +590,8 @@ impl Consensus {
                             peers.push((peer_address.clone(), peer));
                             tracing::info!(peer = peer_address.to_string(), "peer is available");
                         }
-                        Err(_) => {
-                            tracing::warn!(peer = peer_address.to_string(), "peer is not available");
+                        Err(e) => {
+                            tracing::warn!(peer = peer_address.to_string(), "peer is not available. Error: {:?}", e);
                         }
                     }
                 }
@@ -599,7 +600,7 @@ impl Consensus {
                 }
             }
         }
-
+    
         Ok(peers)
     }
 
