@@ -892,19 +892,19 @@ impl FromStr for PermanentStorageKind {
 /// Tracing event log format.
 #[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
 pub enum LogFormat {
-    /// Time (no date), level and message.
+    /// Minimal format: Time (no date), level, and message.
     #[strum(to_string = "minimal")]
     Minimal,
 
-    /// `tracing` crate default configuration.
+    /// Normal format: Default `tracing` crate configuration.
     #[strum(to_string = "normal")]
     Normal,
 
-    /// Full datetime, level, thread, target and message.
+    /// Verbose format: Full datetime, level, thread, target, and message.
     #[strum(to_string = "verbose")]
     Verbose,
 
-    /// Same as verbose, but formatted as JSON.
+    /// JSON format: Verbose information formatted as JSON.
     #[strum(to_string = "json")]
     Json,
 }
