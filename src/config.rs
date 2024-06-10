@@ -88,6 +88,7 @@ pub struct CommonConfig {
     #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
     pub metrics_exporter_address: SocketAddr,
 
+    #[cfg(feature = "metrics")]
     /// Metrics histograms will be collected using summaries or histograms (buckets)?
     #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
     pub metrics_histogram_kind: MetricsHistogramKind,
