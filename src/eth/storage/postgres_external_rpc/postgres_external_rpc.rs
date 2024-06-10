@@ -96,7 +96,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     let blocks_sorted = blocks.into_iter().sorted_by_key(|x| x.number()).collect();
                     return Ok(blocks_sorted);
                 }
-                Err(e) =>
+                Err(e) => {
                     if attempt <= MAX_RETRIES {
                         tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
                         attempt += 1;
@@ -105,7 +105,8 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                         traced_sleep(backoff, SleepReason::RetryBackoff).await;
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve external blocks");
-                    },
+                    }
+                }
             }
         }
     }
@@ -131,7 +132,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                     }
                     return Ok(receipts);
                 }
-                Err(e) =>
+                Err(e) => {
                     if attempt <= MAX_RETRIES {
                         tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
                         attempt += 1;
@@ -140,7 +141,8 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                         traced_sleep(backoff, SleepReason::RetryBackoff).await;
                     } else {
                         return log_and_err!(reason = e, "failed to retrieve receipts");
-                    },
+                    }
+                }
             }
         }
     }

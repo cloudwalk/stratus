@@ -113,7 +113,7 @@ pub struct CommonConfig {
     // Address for the GRPC Server
     #[arg(long = "grpc-server-address", env = "GRPC_SERVER_ADDRESS", default_value = "0.0.0.0:3777")]
     pub grpc_server_address: SocketAddr,
-  
+
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,

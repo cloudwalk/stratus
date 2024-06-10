@@ -497,12 +497,13 @@ impl RocksStorageState {
             })
             .flatten_ok()
             .filter_map(|log_res| match log_res {
-                Ok(log) =>
+                Ok(log) => {
                     if filter.matches(&log) {
                         Some(Ok(log))
                     } else {
                         None
-                    },
+                    }
+                }
                 err => Some(err),
             })
             .collect()
