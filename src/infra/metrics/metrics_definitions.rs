@@ -5,16 +5,16 @@ metrics! {
     group: json_rpc,
 
     "Number of JSON-RPC requests active right now."
-    gauge rpc_requests_active{method, function} [],
+    gauge              rpc_requests_active{app, method, function} [],
 
     "Number of JSON-RPC requests that started."
-    counter   rpc_requests_started{method, function} [],
+    counter            rpc_requests_started{app, method, function} [],
 
     "Number of JSON-RPC requests that finished."
-    histogram_duration rpc_requests_finished{method, function, result, success} [],
+    histogram_duration rpc_requests_finished{app, method, function, result, success} [],
 
     "Number of JSON-RPC subscriptions active right now."
-    gauge rpc_subscriptions_active{subscription} []
+    gauge              rpc_subscriptions_active{subscription} []
 }
 
 // Storage reads.
