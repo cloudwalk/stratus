@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+#[cfg(feature = "metrics")]
 use crate::infra::metrics::MetricLabelValue;
 
 #[derive(Debug, Clone, Default)]
