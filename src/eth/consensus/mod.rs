@@ -890,7 +890,7 @@ mod tests {
     #[test]
     fn test_peer_address_full_grpc_address() {
         let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
-        assert_eq!(peer_address.full_grpc_address(), "http://127.0.0.1:3777");
+        assert_eq!(peer_address.full_grpc_address(), "127.0.0.1:3777");
     }
 
     #[test]
