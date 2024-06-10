@@ -177,11 +177,14 @@ metrics! {
 metrics! {
     group: consensus,
 
-    "Time to run Consensus::apend_entries."
-    histogram_duration append_entries{} [],
+    "Time to run Consensus::append_block_to_peer."
+    histogram_duration consensus_append_block_to_peer{} [],
 
-    "Time to run Consensus::append_entries_to_followers."
-    histogram_duration append_entries_to_followers{} [],
+    "Time to run Consensus::start_election."
+    histogram_duration consensus_start_election{} [],
+
+    "Time to run Consensus::forward."
+    histogram_duration consensus_forward{} [],
 
     "The diff between what is on the follower database and what it received from Append Entries."
     gauge append_entries_block_number_diff{} []
