@@ -221,6 +221,7 @@ impl Consensus {
     /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
         named_spawn("consensus::heartbeat_timer", async move {
+            Self::discover_peers(Arc::clone(&consensus)).await;
             if consensus.peers.read().await.is_empty() {
                 tracing::info!("no peers, starting hearbeat timer immediately");
                 Self::start_election(Arc::clone(&consensus)).await;
@@ -375,8 +376,8 @@ impl Consensus {
                     if consensus.is_leader().await {
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
-                        if let Err(e) = consensus.broadcast_sender.send(data) {
-                            tracing::warn!("failed to broadcast block: {:?}", e);
+                        if consensus.broadcast_sender.send(data).is_err() {
+                            tracing::error!("failed to broadcast block");
                         }
                     }
                 }
@@ -524,7 +525,6 @@ impl Consensus {
                             GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
                         }
 
-                        // Optionally, sleep for a bit before retrying
                         sleep(Duration::from_millis(100)).await;
                     }
                 }
