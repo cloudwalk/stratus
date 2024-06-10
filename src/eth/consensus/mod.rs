@@ -833,35 +833,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_peer_address_from_string_valid() {
+    fn test_peer_address_from_string_valid_http() {
         let input = "http://127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
 
         assert!(result.is_ok());
         let peer_address = result.unwrap();
-        assert_eq!(peer_address.address, "http://127.0.0.1");
+        assert_eq!(peer_address.address, "127.0.0.1");
         assert_eq!(peer_address.jsonrpc_port, 3000);
         assert_eq!(peer_address.grpc_port, 3777);
     }
 
     #[test]
-    fn test_another_peer_address_from_string_valid() {
+    fn test_peer_address_from_string_valid_https() {
         let input = "https://127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
 
         assert!(result.is_ok());
         let peer_address = result.unwrap();
-        assert_eq!(peer_address.address, "https://127.0.0.1");
+        assert_eq!(peer_address.address, "127.0.0.1");
         assert_eq!(peer_address.jsonrpc_port, 3000);
         assert_eq!(peer_address.grpc_port, 3777);
     }
 
     #[test]
-    fn test_peer_address_from_string_invalid_format() {
-        let input = "http://127.0.0.1-3000;3777".to_string();
+    fn test_peer_address_from_string_missing_scheme() {
+        let input = "127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
 
         assert!(result.is_err());
-        assert_eq!(result.err().unwrap().to_string(), "invalid format");
+        assert_eq!(result.err().unwrap().to_string(), "invalid scheme");
+    }
+
+    #[test]
+    fn test_peer_address_full_grpc_address() {
+        let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
+        assert_eq!(peer_address.full_grpc_address(), "http://127.0.0.1:3777");
+    }
+
+    #[test]
+    fn test_peer_address_full_jsonrpc_address() {
+        let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
+        assert_eq!(peer_address.full_jsonrpc_address(), "http://127.0.0.1:3000");
     }
 }
