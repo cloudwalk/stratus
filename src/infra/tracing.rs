@@ -23,7 +23,12 @@ use crate::ext::binary_name;
 use crate::ext::named_spawn;
 
 /// Init application tracing.
-pub async fn init_tracing(log_format: LogFormat, opentelemetry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
+pub async fn init_tracing(
+    log_format: LogFormat,
+    opentelemetry_url: Option<&str>,
+    sentry_url: Option<&str>,
+    tokio_console_address: SocketAddr,
+) -> anyhow::Result<()> {
     println!("creating tracing registry");
 
     // configure stdout log layer
@@ -84,8 +89,17 @@ pub async fn init_tracing(log_format: LogFormat, opentelemetry_url: Option<&str>
     };
 
     // configure sentry layer
-    println!("tracing registry: enabling sentry exporter");
-    let sentry_layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
+    let sentry_layer = match sentry_url {
+        Some(sentry_url) => {
+            println!("tracing registry: enabling sentry exporter | url={}", sentry_url);
+            let layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
+            Some(layer)
+        }
+        None => {
+            println!("tracing registry: skipping sentry exporter");
+            None
+        }
+    };
 
     // configure tokio-console layer
     println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
