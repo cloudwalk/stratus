@@ -8,6 +8,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::time::timeout;
 use tokio::time::Instant;
 use tracing::Span;
 
@@ -142,8 +143,17 @@ impl ExternalRelayer {
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
         loop {
-            match substrate_receipt.await {
-                Ok(Some(substrate_receipt)) =>
+
+            let receipt = match timeout(Duration::from_secs(30), substrate_receipt).await {
+                Ok(res) => res,
+                Err(_) => {
+                    tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
+                    return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+                }
+            };
+
+            match receipt {
+                Ok(Some(substrate_receipt)) => {
                     if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                         let err_string = compare_error.to_string();
                         let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -151,14 +161,16 @@ impl ExternalRelayer {
                         return error.map_err(RelayError::Mismatch);
                     } else {
                         return Ok(());
-                    },
-                Ok(None) =>
+                    }
+                }
+                Ok(None) => {
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
                         tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
                         return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
-                    },
+                    }
+                }
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -207,7 +219,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) =>
+            Ok(res) => {
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -215,7 +227,8 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                },
+                }
+            }
         }
 
         #[cfg(feature = "metrics")]
