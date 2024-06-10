@@ -3,9 +3,12 @@
 use std::io::stdout;
 use std::io::IsTerminal;
 use std::net::SocketAddr;
+use std::str::FromStr;
 
+use anyhow::anyhow;
 use chrono::Local;
 use console_subscriber::ConsoleLayer;
+use display_json::DebugAsJson;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::runtime;
@@ -18,13 +21,12 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
-use crate::config::LogFormat;
 use crate::ext::binary_name;
 use crate::ext::named_spawn;
 
 /// Init application tracing.
 pub async fn init_tracing(
-    log_format: LogFormat,
+    log_format: TracingLogFormat,
     opentelemetry_url: Option<&str>,
     sentry_url: Option<&str>,
     tokio_console_address: SocketAddr,
@@ -36,14 +38,14 @@ pub async fn init_tracing(
 
     println!("tracing registry: enabling console logs | format={} ansi={}", log_format, enable_ansi);
     let stdout_layer = match log_format {
-        LogFormat::Json => fmt::Layer::default()
+        TracingLogFormat::Json => fmt::Layer::default()
             .json()
             .with_target(true)
             .with_thread_ids(true)
             .with_thread_names(true)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
-        LogFormat::Minimal => fmt::Layer::default()
+        TracingLogFormat::Minimal => fmt::Layer::default()
             .with_thread_ids(false)
             .with_thread_names(false)
             .with_target(false)
@@ -51,8 +53,8 @@ pub async fn init_tracing(
             .with_timer(MinimalTimer)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
-        LogFormat::Normal => fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed(),
-        LogFormat::Verbose => fmt::Layer::default()
+        TracingLogFormat::Normal => fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed(),
+        TracingLogFormat::Verbose => fmt::Layer::default()
             .with_ansi(enable_ansi)
             .with_target(true)
             .with_thread_ids(true)
@@ -123,6 +125,44 @@ pub async fn init_tracing(
         Err(e) => {
             println!("failed to create tracing registry | reason={:?}", e);
             Err(e.into())
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tracing types
+// -----------------------------------------------------------------------------
+
+/// Tracing event log format.
+#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
+pub enum TracingLogFormat {
+    /// Minimal format: Time (no date), level, and message.
+    #[strum(to_string = "minimal")]
+    Minimal,
+
+    /// Normal format: Default `tracing` crate configuration.
+    #[strum(to_string = "normal")]
+    Normal,
+
+    /// Verbose format: Full datetime, level, thread, target, and message.
+    #[strum(to_string = "verbose")]
+    Verbose,
+
+    /// JSON format: Verbose information formatted as JSON.
+    #[strum(to_string = "json")]
+    Json,
+}
+
+impl FromStr for TracingLogFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s.to_lowercase().trim() {
+            "json" => Ok(Self::Json),
+            "minimal" => Ok(Self::Minimal),
+            "normal" => Ok(Self::Normal),
+            "verbose" | "full" => Ok(Self::Verbose),
+            s => Err(anyhow!("unknown log format: {}", s)),
         }
     }
 }
