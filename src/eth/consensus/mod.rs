@@ -289,14 +289,13 @@ impl Consensus {
             });
 
             match peer_clone.client.request_vote(request).await {
-                Ok(response) => {
+                Ok(response) =>
                     if response.into_inner().vote_granted {
                         tracing::info!(peer_address = %peer_address, "received vote on election");
                         votes += 1;
                     } else {
                         tracing::info!(peer_address = %peer_address, "did not receive vote on election");
-                    }
-                }
+                    },
                 Err(_) => {
                     tracing::warn!("failed to request vote on election from {:?}", peer_address);
                 }

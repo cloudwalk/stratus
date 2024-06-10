@@ -158,15 +158,14 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let mut conn = PoolOrThreadConnection::take(&self.pool).await?;
         let slot_value_vec: Option<Vec<u8>> = match point_in_time {
-            StoragePointInTime::Present => {
+            StoragePointInTime::Present =>
                 sqlx::query_file_scalar!(
                     "src/eth/storage/postgres_permanent/sql/select_slot.sql",
                     address.as_ref(),
                     slot_index_u8.as_ref(),
                 )
                 .fetch_optional(conn.for_sqlx())
-                .await?
-            }
+                .await?,
             StoragePointInTime::Past(number) => {
                 let block_number: i64 = (*number).try_into()?;
                 sqlx::query_file_scalar!(
@@ -204,7 +203,7 @@ impl PermanentStorage for PostgresPermanentStorage {
 
         let indexes_as_vec = indexes.iter().cloned().collect_vec();
         let slots = match point_in_time {
-            StoragePointInTime::Present => {
+            StoragePointInTime::Present =>
                 sqlx::query_file_as!(
                     Slot,
                     "src/eth/storage/postgres_permanent/sql/select_slots.sql",
@@ -212,9 +211,8 @@ impl PermanentStorage for PostgresPermanentStorage {
                     address as _
                 )
                 .fetch_all(&self.pool)
-                .await?
-            }
-            StoragePointInTime::Past(block_number) => {
+                .await?,
+            StoragePointInTime::Past(block_number) =>
                 sqlx::query_file_as!(
                     Slot,
                     "src/eth/storage/postgres_permanent/sql/select_historical_slots.sql",
@@ -223,8 +221,7 @@ impl PermanentStorage for PostgresPermanentStorage {
                     block_number as _
                 )
                 .fetch_all(&self.pool)
-                .await?
-            }
+                .await?,
         };
         Ok(slots.into_iter().map(|slot| (slot.index, slot.value)).collect())
     }
