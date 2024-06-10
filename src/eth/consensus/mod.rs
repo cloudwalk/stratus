@@ -576,9 +576,10 @@ impl Consensus {
             match PeerAddress::from_string(address.to_string()) {
                 Ok(peer_address) => {
                     let grpc_address = peer_address.full_grpc_address();
-                    tracing::info!("Connecting to gRPC address: {}", grpc_address);
-                    match AppendEntryServiceClient::connect(grpc_address).await {
+                    tracing::info!("Attempting to connect to peer gRPC address: {}", grpc_address);
+                    match AppendEntryServiceClient::connect(grpc_address.clone()).await {
                         Ok(client) => {
+                            tracing::info!("Successfully connected to peer gRPC address: {}", grpc_address);
                             let peer = Peer {
                                 client,
                                 match_index: 0,
@@ -595,11 +596,12 @@ impl Consensus {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Invalid address format: {}. Error: {:?}", address, e);
+                    tracing::error!("Invalid address format: {}. Error: {:?}", address, e);
                 }
             }
         }
     
+        tracing::info!("Completed peer discovery with {} peers found", peers.len());
         Ok(peers)
     }
 
