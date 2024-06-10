@@ -13,6 +13,7 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tracing::info_span;
 use tracing::span::Id;
 use tracing::Span;
 
@@ -47,7 +48,7 @@ use crate::infra::BlockchainClient;
 
 #[derive(Debug)]
 pub struct EvmTask {
-    pub span_id: Option<Id>,
+    pub span: Span,
     pub input: EvmInput,
     pub response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>,
 }
@@ -55,7 +56,7 @@ pub struct EvmTask {
 impl EvmTask {
     pub fn new(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
         Self {
-            span_id: Span::current().id(),
+            span: info_span!("evm::task"),
             input,
             response_tx,
         }
@@ -354,6 +355,7 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
+    #[tracing::instrument(name = "executor::evm", skip_all)]
     async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
         self.evm_tx.send(EvmTask::new(evm_input, execution_tx))?;
