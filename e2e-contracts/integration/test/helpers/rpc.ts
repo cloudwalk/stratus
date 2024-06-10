@@ -189,7 +189,7 @@ export async function send(method: string, params: any[] = []): Promise<any> {
 }
 
 // Sends an RPC request to the blockchain with retry logic, returning its result field.
-export async function sendWithRetry(methodName: string, params: any[], maxAttempts = 3, delay = 1000) {
+export async function sendWithRetry(methodName: string, params: any[], maxAttempts = 5, delay = 2000) {
     let lastError;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
