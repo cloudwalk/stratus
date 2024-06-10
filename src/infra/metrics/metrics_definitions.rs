@@ -209,5 +209,8 @@ metrics! {
     histogram_duration relay_dag{} [],
 
     "Number of execution mismatches."
-    histogram_duration save_mismatch{} []
+    histogram_duration save_mismatch{} [],
+
+    "Time to run ExternalRelayerClient::send_to_relayer."
+    histogram_duration send_to_relayer{} []
 }
