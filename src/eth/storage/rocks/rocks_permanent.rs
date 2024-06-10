@@ -41,10 +41,10 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
         tracing::info!("creating rocksdb storage");
 
-        let state = RocksStorageState::new();
+        let state = RocksStorageState::new(rocks_path_prefix);
         state.sync_data().await?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
