@@ -45,8 +45,13 @@ where
         let runtime = config.common().init_runtime().expect("failed to init tokio runtime");
 
         // init tracing
+        let common = config.common();
         runtime
-            .block_on(infra::init_tracing(config.common().tracing_url.as_ref(), config.common().tokio_console_address))
+            .block_on(infra::init_tracing(
+                common.log_format,
+                common.opentelemetry_url.as_deref(),
+                common.tokio_console_address,
+            ))
             .expect("failed to init tracing");
 
         // init metrics
