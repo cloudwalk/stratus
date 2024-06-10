@@ -7,7 +7,6 @@ use std::stringify;
 use metrics_exporter_prometheus::Matcher;
 use metrics_exporter_prometheus::PrometheusBuilder;
 
-use crate::config::MetricsHistogramKind;
 use crate::infra::metrics::metrics_for_consensus;
 use crate::infra::metrics::metrics_for_evm;
 use crate::infra::metrics::metrics_for_executor;
@@ -17,6 +16,7 @@ use crate::infra::metrics::metrics_for_json_rpc;
 use crate::infra::metrics::metrics_for_rocks;
 use crate::infra::metrics::metrics_for_storage_read;
 use crate::infra::metrics::metrics_for_storage_write;
+use crate::infra::metrics::MetricsHistogramKind;
 
 /// Default bucket for duration based metrics.
 const BUCKET_FOR_DURATION: [f64; 37] = [

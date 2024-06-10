@@ -45,8 +45,11 @@ use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::binary_name;
 use crate::ext::parse_duration;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics::MetricsHistogramKind;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
+use crate::infra::tracing::TracingLogFormat;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 
@@ -99,7 +102,7 @@ pub struct CommonConfig {
 
     /// How tracing events will be formatted.
     #[arg(long = "log-format", env = "LOG_FORMAT", default_value = "normal")]
-    pub log_format: LogFormat,
+    pub log_format: TracingLogFormat,
 
     /// Sentry URL where error events will be pushed.
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
@@ -886,74 +889,6 @@ impl FromStr for PermanentStorageKind {
             "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: LogFormat
-// -----------------------------------------------------------------------------
-
-/// Tracing event log format.
-#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
-pub enum LogFormat {
-    /// Minimal format: Time (no date), level, and message.
-    #[strum(to_string = "minimal")]
-    Minimal,
-
-    /// Normal format: Default `tracing` crate configuration.
-    #[strum(to_string = "normal")]
-    Normal,
-
-    /// Verbose format: Full datetime, level, thread, target, and message.
-    #[strum(to_string = "verbose")]
-    Verbose,
-
-    /// JSON format: Verbose information formatted as JSON.
-    #[strum(to_string = "json")]
-    Json,
-}
-
-impl FromStr for LogFormat {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s.to_lowercase().trim() {
-            "json" => Ok(Self::Json),
-            "minimal" => Ok(Self::Minimal),
-            "normal" => Ok(Self::Normal),
-            "verbose" | "full" => Ok(Self::Verbose),
-            s => Err(anyhow!("unknown log format: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: MetricsHistogramKind
-// -----------------------------------------------------------------------------
-
-/// See: <https://prometheus.io/docs/practices/histograms/>
-#[derive(DebugAsJson, Clone, Copy, Eq, PartialEq, serde::Serialize)]
-pub enum MetricsHistogramKind {
-    /// Quantiles are calculated on client-side based on recent data kept in-memory.
-    ///
-    /// Client defines the quantiles to calculate.
-    Summary,
-
-    /// Quantiles are calculated on server-side based on bucket counts.
-    ///
-    /// Cient defines buckets to group observations.
-    Histogram,
-}
-
-impl FromStr for MetricsHistogramKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s.to_lowercase().trim() {
-            "summary" => Ok(Self::Summary),
-            "histogram" => Ok(Self::Histogram),
-            s => Err(anyhow!("unknown metrics histogram kind: {}", s)),
         }
     }
 }
