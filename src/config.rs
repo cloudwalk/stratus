@@ -13,7 +13,6 @@ use display_json::DebugAsJson;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
-use tracing::info_span;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
@@ -233,11 +232,8 @@ impl ExecutorConfig {
                         return;
                     }
 
-                    // enter span from another thread
-                    let span = task.span_id.map(|id| info_span!(parent: id, "executor::evm"));
-                    let _span_enter = span.as_ref().map(|span| span.enter());
-
                     // execute
+                    let _span_enter = task.span.enter();
                     let result = evm.execute(task.input);
                     if let Err(e) = task.response_tx.send(result) {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
