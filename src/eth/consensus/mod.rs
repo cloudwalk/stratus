@@ -212,6 +212,7 @@ impl Consensus {
     /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
         named_spawn("consensus::heartbeat_timer", async move {
+            Self::discover_peers(Arc::clone(&consensus)).await;
             if consensus.peers.read().await.is_empty() {
                 tracing::info!("no peers, starting hearbeat timer immediately");
                 Self::start_election(Arc::clone(&consensus)).await;
