@@ -6,6 +6,8 @@ import { send, sendEvmMine, sendGetBalance, sendRawTransactions, sendReset } fro
 describe("Multiple Transactions Per Block", () => {
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
     it("Send multiple transactions and mine block", async () => {
         const counterParty = randomAccounts(1)[0];

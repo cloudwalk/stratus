@@ -3,6 +3,9 @@ use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
+/// Amount of bytes in one GB
+pub const GIGABYTE: usize = 1024 * 1024 * 1024;
+
 pub fn new_context_id() -> String {
     Uuid::new_v4().to_string()
 }

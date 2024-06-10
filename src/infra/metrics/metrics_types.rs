@@ -5,6 +5,10 @@ use metrics::describe_gauge;
 use metrics::describe_histogram;
 use metrics::Label;
 
+pub type HistogramInt = u32;
+pub type Sum = u64;
+pub type Count = u64;
+
 // -----------------------------------------------------------------------------
 // Metric
 // -----------------------------------------------------------------------------

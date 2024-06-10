@@ -235,7 +235,7 @@ impl From<BlockNumberRocksdb> for u64 {
     }
 }
 
-#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndexRocksdb(U256);
 
 gen_newtype_from!(self = SlotIndexRocksdb, other = u64);

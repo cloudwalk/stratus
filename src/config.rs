@@ -43,6 +43,7 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::tracing::info_task_spawn;
@@ -848,8 +849,12 @@ pub struct PermanentStorageConfig {
 
     #[cfg(feature = "rocks")]
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
-    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
+    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
+
+    // Disable RocksDB backups
+    #[arg(long = "perm-storage-disable-backups", env = "PERM_STORAGE_DISABLE_BACKUPS")]
+    pub perm_storage_disable_backups: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -870,7 +875,11 @@ impl PermanentStorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
+            PermanentStorageKind::Rocks => {
+                let enable_backups = not(self.perm_storage_disable_backups);
+                let prefix = self.rocks_path_prefix.clone();
+                Arc::new(RocksPermanentStorage::new(enable_backups, prefix).await?)
+            }
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),

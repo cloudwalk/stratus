@@ -1,11 +1,13 @@
 import { expect } from "chai";
 
 import { TEST_ACCOUNTS, randomAccounts } from "../helpers/account";
-import { sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
+import { sendGetBalance, sendRawTransactions, sendReset, send } from "../helpers/rpc";
 
 describe("Transaction: parallel transfer", () => {
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
     it("Sends parallel requests", async () => {
         const counterParty = randomAccounts(1)[0];
