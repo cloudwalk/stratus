@@ -1,8 +1,20 @@
+//! Importer-Offline binary.
+//!
+//! It loads blocks (and receipts) from an external RPC server, or from a PostgreSQL DB
+//! that was prepared with the `rpc-downloader` binary.
+//!
+//! This importer will check on startup what is the `block_end` value at the external
+//! storage, and will not update while running, in contrast with that, the
+//! Importer-Online (other binary) will stay up to date with the newer blocks that
+//! arrive.
+
 use std::cmp::min;
 use std::fs;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use anyhow::Context;
+use futures::join;
 use futures::try_join;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -17,18 +29,17 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
-use stratus::ext::spawn_thread;
+use stratus::ext::spawn_named;
 use stratus::ext::ResultExt;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
-/// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
+/// Number of tasks in the backlog. Each task contains `--blocks-by-fetch` blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
@@ -67,36 +78,13 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
     storage.save_accounts(initial_accounts.clone())?;
 
-    // execute thread: external rpc storage loader
-    let storage_loader_thread = spawn_thread("storage-loader", move || {
-        let result = Handle::current().block_on(execute_external_rpc_storage_loader(
-            rpc_storage,
-            config.blocks_by_fetch,
-            config.paralellism,
-            block_start,
-            block_end,
-            backlog_tx,
-        ));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "storage-loader failed");
-        }
-    });
+    let storage_loader = execute_external_rpc_storage_loader(rpc_storage, config.blocks_by_fetch, config.paralellism, block_start, block_end, backlog_tx);
+    let storage_loader = spawn_named("storage-loader", async move { storage_loader.await.context("'storage-loader' task failed") });
 
-    // execute thread: block importer
-    let block_importer_thread = spawn_thread("block-importer", move || {
-        let result = Handle::current().block_on(execute_block_importer(executor, miner, backlog_rx, block_snapshots));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "block-importer failed");
-        }
-    });
+    let block_importer = execute_block_importer(executor, miner, backlog_rx, block_snapshots);
+    let block_importer = spawn_named("block-importer", async move { block_importer.await.context("'block-importer' task failed") });
 
-    // await tasks
-    if let Err(e) = block_importer_thread.join() {
-        tracing::error!(reason = ?e, "block-importer thread failed");
-    }
-    if let Err(e) = storage_loader_thread.join() {
-        tracing::error!(reason = ?e, "storage-loader thread failed");
-    }
+    let (_, _) = join!(storage_loader, block_importer);
 
     Ok(())
 }
