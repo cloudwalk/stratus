@@ -1,6 +1,7 @@
 pub mod forward_to;
 
 use std::collections::HashMap;
+#[cfg(feature = "kubernetes")]
 use std::env;
 use std::net::SocketAddr;
 use std::net::UdpSocket;
@@ -25,6 +26,8 @@ use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+#[cfg(feature = "kubernetes")]
+use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
 use tonic::Request;
@@ -63,6 +66,7 @@ use crate::eth::primitives::Block;
 use crate::infra::metrics;
 
 const RETRY_DELAY: Duration = Duration::from_millis(10);
+const PEER_DISCOVERY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq)]
 enum Role {
@@ -137,7 +141,6 @@ struct Peer {
     match_index: u64,
     next_index: u64,
     role: Role,
-    term: u64,
     receiver: Arc<Mutex<broadcast::Receiver<Block>>>,
 }
 
@@ -150,7 +153,7 @@ pub struct Consensus {
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
-    voted_for: Mutex<Option<PeerAddress>>,
+    voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
     last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
     role: RwLock<Role>,
@@ -213,10 +216,21 @@ impl Consensus {
     /// Initializes the heartbeat and election timers.
     /// This function periodically checks if the node should start a new election based on the election timeout.
     /// The timer is reset when an `AppendEntries` request is received, ensuring the node remains a follower if a leader is active.
+    ///
+    /// When there are healthy peers we need to wait for the grace period of discovery
+    /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
         named_spawn("consensus::heartbeat_timer", async move {
+            if consensus.peers.read().await.is_empty() {
+                tracing::info!("no peers, starting hearbeat timer immediately");
+                Self::start_election(Arc::clone(&consensus)).await;
+            } else {
+                traced_sleep(PEER_DISCOVERY_DELAY, SleepReason::Interval).await;
+                tracing::info!("waiting for peer discovery grace period");
+            }
+
+            let timeout = consensus.heartbeat_timeout;
             loop {
-                let timeout = consensus.heartbeat_timeout;
                 tokio::select! {
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
                         if !consensus.is_leader().await {
@@ -333,7 +347,7 @@ impl Consensus {
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
         named_spawn("consensus::peer_discovery", async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            let mut interval = tokio::time::interval(PEER_DISCOVERY_DELAY);
             loop {
                 tracing::info!("starting periodic peer discovery");
                 Self::discover_peers(Arc::clone(&consensus)).await;
@@ -436,11 +450,13 @@ impl Consensus {
         (last_arrived_block_number - 2) <= storage_block_number
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_node() -> Option<String> {
         let pod_name = env::var("MY_POD_NAME").ok()?;
         Some(pod_name.trim().to_string())
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_namespace() -> Option<String> {
         let namespace = env::var("NAMESPACE").ok()?;
         Some(namespace.trim().to_string())
@@ -475,12 +491,41 @@ impl Consensus {
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
-        if let Ok(k8s_peers) = Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
-            new_peers.extend(k8s_peers);
+        {
+            let mut attempts = 0;
+            let max_attempts = 100;
+
+            while attempts < max_attempts {
+                match Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
+                    Ok(k8s_peers) => {
+                        new_peers.extend(k8s_peers);
+                        tracing::info!("discovered {} peers from kubernetes", new_peers.len());
+                        break;
+                    }
+                    Err(e) => {
+                        attempts += 1;
+                        tracing::warn!("failed to discover peers from Kubernetes (attempt {}/{}): {:?}", attempts, max_attempts, e);
+
+                        if attempts >= max_attempts {
+                            tracing::error!("exceeded maximum attempts to discover peers from kubernetes. initiating shutdown.");
+                            GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
+                        }
+
+                        // Optionally, sleep for a bit before retrying
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
         }
 
-        if let Ok(env_peers) = Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
-            new_peers.extend(env_peers);
+        match Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
+            Ok(env_peers) => {
+                tracing::info!("discovered {} peers from env", env_peers.len());
+                new_peers.extend(env_peers);
+            }
+            Err(e) => {
+                tracing::warn!("failed to discover peers from env: {:?}", e);
+            }
         }
 
         let mut peers_lock = consensus.peers.write().await;
@@ -539,7 +584,6 @@ impl Consensus {
                                 match_index: 0,
                                 next_index: 0,
                                 role: Role::Follower, // FIXME it won't be always follower, we need to check the leader or candidates
-                                term: 0,              // Replace with actual term
                                 receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                             };
                             peers.push((peer_address.clone(), peer));
@@ -584,7 +628,6 @@ impl Consensus {
                             match_index: 0,
                             next_index: 0,
                             role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
-                            term: 0,              // Replace with actual term
                             receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
                         peers.push((PeerAddress::new(address, jsonrpc_port, grpc_port), peer));
@@ -660,7 +703,7 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_append_entries(start.elapsed());
 
-        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role, term = peer.term,  "current follower state on election"); //TODO also move this to metrics
+        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role,  "current follower state on election"); //TODO also move this to metrics
 
         match StatusCode::try_from(response.status) {
             Ok(StatusCode::AppendSuccess) => Ok(()),
