@@ -110,10 +110,6 @@ pub struct CommonConfig {
     #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
     pub candidate_peers: Vec<String>,
 
-    // Address for the Prometheus Metrics Exporter
-    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
-    pub metrics_exporter_address: SocketAddr,
-
     // Address for the GRPC Server
     #[arg(long = "grpc-server-address", env = "GRPC_SERVER_ADDRESS", default_value = "0.0.0.0:3777")]
     pub grpc_server_address: SocketAddr,
