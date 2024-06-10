@@ -155,7 +155,7 @@ pub struct Consensus {
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
-    last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
+    last_arrived_block_number: AtomicU64,
     role: RwLock<Role>,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
@@ -174,7 +174,7 @@ impl Consensus {
         let (sender, receiver) = mpsc::channel::<Block>(32);
         let receiver = Arc::new(Mutex::new(receiver));
         let (broadcast_sender, _) = broadcast::channel(32);
-        let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
+        let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
@@ -221,6 +221,7 @@ impl Consensus {
     /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
         named_spawn("consensus::heartbeat_timer", async move {
+            Self::discover_peers(Arc::clone(&consensus)).await;
             if consensus.peers.read().await.is_empty() {
                 tracing::info!("no peers, starting hearbeat timer immediately");
                 Self::start_election(Arc::clone(&consensus)).await;
@@ -323,6 +324,8 @@ impl Consensus {
     async fn become_leader(&self) {
         *self.role.write().await = Role::Leader;
 
+        self.last_arrived_block_number.store(std::u64::MAX, Ordering::SeqCst); //as leader, we don't have a last block number
+
         //TODO XXX // Initialize leader-specific tasks such as sending appendEntries
         //TODO XXX self.send_append_entries().await;
     }
@@ -375,8 +378,8 @@ impl Consensus {
                     if consensus.is_leader().await {
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
-                        if let Err(e) = consensus.broadcast_sender.send(data) {
-                            tracing::warn!("failed to broadcast block: {:?}", e);
+                        if consensus.broadcast_sender.send(data).is_err() {
+                            tracing::error!("failed to broadcast block");
                         }
                     }
                 }
@@ -447,7 +450,17 @@ impl Consensus {
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
+        if self.is_leader().await {
+            return true;
+        }
+
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
+
+        if last_arrived_block_number == std::u64::MAX {
+            tracing::warn!("no appendEntry has been received yet");
+            return false;
+        }
+
         let storage_block_number: u64 = self.storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into();
 
         tracing::info!(
@@ -455,10 +468,6 @@ impl Consensus {
             last_arrived_block_number,
             storage_block_number
         );
-
-        if self.peers.read().await.len() == 0 {
-            return self.is_leader().await;
-        }
 
         (last_arrived_block_number - 2) <= storage_block_number
     }
@@ -524,7 +533,6 @@ impl Consensus {
                             GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
                         }
 
-                        // Optionally, sleep for a bit before retrying
                         sleep(Duration::from_millis(100)).await;
                     }
                 }
@@ -811,7 +819,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             );
             return Ok(Response::new(RequestVoteResponse {
                 term: current_term,
-                vote_granted: false, //XXX check how we are dealing with vote_granted false
+                vote_granted: false,
             }));
         }
 
@@ -822,7 +830,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         let mut voted_for = consensus.voted_for.lock().await;
-        //XXX for some reason candidate_id is going wrong
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
         if voted_for.is_none() {
             *voted_for = Some(candidate_address.clone());
