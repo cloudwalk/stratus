@@ -3,6 +3,7 @@ pub mod forward_to;
 use std::collections::HashMap;
 #[cfg(feature = "kubernetes")]
 use std::env;
+use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -91,7 +92,7 @@ impl PeerAddress {
     }
 
     fn full_grpc_address(&self) -> String {
-        format!("http://{}:{}", self.address, self.grpc_port)
+        format!("{}:{}", self.address, self.grpc_port)
     }
 
     fn full_jsonrpc_address(&self) -> String {
@@ -158,17 +159,24 @@ pub struct Consensus {
     role: RwLock<Role>,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
+    grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
 }
 
 impl Consensus {
-    pub async fn new(storage: Arc<StratusStorage>, direct_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
+    pub async fn new(
+        storage: Arc<StratusStorage>,
+        direct_peers: Vec<String>,
+        importer_config: Option<RunWithImporterConfig>,
+        jsonrpc_address: SocketAddr,
+        grpc_address: SocketAddr,
+    ) -> Arc<Self> {
         let (sender, receiver) = mpsc::channel::<Block>(32);
         let receiver = Arc::new(Mutex::new(receiver));
         let (broadcast_sender, _) = broadcast::channel(32);
         let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
         let peers = Arc::new(RwLock::new(HashMap::new()));
-        let my_address = Self::discover_my_address();
+        let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
         let consensus = Self {
             sender,
@@ -183,6 +191,7 @@ impl Consensus {
             role: RwLock::new(Role::Follower),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1200..1500)), // Adjust as needed
             my_address: my_address.clone(),
+            grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
         };
         let consensus = Arc::new(consensus);
@@ -196,12 +205,12 @@ impl Consensus {
         consensus
     }
 
-    fn discover_my_address() -> PeerAddress {
+    fn discover_my_address(jsonrpc_port: u16, grpc_port: u16) -> PeerAddress {
         let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
         socket.connect("8.8.8.8:80").ok().unwrap();
         let my_ip = socket.local_addr().ok().map(|addr| addr.ip().to_string()).unwrap();
 
-        PeerAddress::new(format!("http://{}", my_ip), 3000, 3777) //FIXME TODO pick ports from config
+        PeerAddress::new(format!("http://{}", my_ip), jsonrpc_port, grpc_port)
     }
 
     /// Initializes the heartbeat and election timers.
@@ -377,8 +386,8 @@ impl Consensus {
 
     fn initialize_server(consensus: Arc<Consensus>) {
         named_spawn("consensus::server", async move {
-            tracing::info!("starting append entry service at port 3777");
-            let addr = "0.0.0.0:3777".parse().unwrap();
+            tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
+            let addr = consensus.grpc_address;
 
             let append_entry_service = AppendEntryServiceImpl {
                 consensus: Mutex::new(consensus),
@@ -577,12 +586,13 @@ impl Consensus {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         for address in addresses {
-            // Parse the address format using from_string method
             match PeerAddress::from_string(address.to_string()) {
                 Ok(peer_address) => {
-                    let full_grpc_address = peer_address.full_grpc_address();
-                    match AppendEntryServiceClient::connect(full_grpc_address.clone()).await {
+                    let grpc_address = peer_address.full_grpc_address();
+                    tracing::info!("Attempting to connect to peer gRPC address: {}", grpc_address);
+                    match AppendEntryServiceClient::connect(grpc_address.clone()).await {
                         Ok(client) => {
+                            tracing::info!("Successfully connected to peer gRPC address: {}", grpc_address);
                             let peer = Peer {
                                 client,
                                 match_index: 0,
@@ -593,17 +603,18 @@ impl Consensus {
                             peers.push((peer_address.clone(), peer));
                             tracing::info!(peer = peer_address.to_string(), "peer is available");
                         }
-                        Err(_) => {
-                            tracing::warn!(peer = peer_address.to_string(), "peer is not available");
+                        Err(e) => {
+                            tracing::warn!(peer = peer_address.to_string(), "peer is not available. Error: {:?}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Invalid address format: {}. Error: {:?}", address, e);
+                    tracing::error!("Invalid address format: {}. Error: {:?}", address, e);
                 }
             }
         }
 
+        tracing::info!("Completed peer discovery with {} peers found", peers.len());
         Ok(peers)
     }
 
@@ -622,8 +633,8 @@ impl Consensus {
                 if pod_name != Self::current_node().unwrap() {
                     if let Some(pod_ip) = p.status.and_then(|status| status.pod_ip) {
                         let address = pod_ip;
-                        let jsonrpc_port = 3000; //TODO use kubernetes env config
-                        let grpc_port = 3777; //TODO use kubernetes env config
+                        let jsonrpc_port = consensus.my_address.jsonrpc_port;
+                        let grpc_port = consensus.my_address.grpc_port;
                         let full_grpc_address = format!("http://{}:{}", address, grpc_port);
                         let client = AppendEntryServiceClient::connect(full_grpc_address.clone()).await?;
 
@@ -762,8 +773,22 @@ impl AppendEntryService for AppendEntryServiceImpl {
             "last arrived block number set",
         );
 
-        #[cfg(feature = "metrics")]
-        metrics::set_append_entries_block_number_diff(last_last_arrived_block_number - header.number);
+        if let Some(diff) = last_last_arrived_block_number.checked_sub(header.number) {
+            #[cfg(feature = "metrics")]
+            {
+                metrics::set_append_entries_block_number_diff(diff);
+            }
+        } else {
+            tracing::error!(
+                "leader is behind follower: arrived_block: {}, header_block: {}",
+                last_last_arrived_block_number,
+                header.number
+            );
+            return Err(Status::new(
+                (StatusCode::EntryAlreadyExists as i32).into(),
+                "Leader is behind follower".to_string(),
+            ));
+        }
 
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
@@ -821,7 +846,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_peer_address_from_string_valid() {
+    fn test_peer_address_from_string_valid_http() {
         let input = "http://127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
 
@@ -833,7 +858,7 @@ mod tests {
     }
 
     #[test]
-    fn test_another_peer_address_from_string_valid() {
+    fn test_peer_address_from_string_valid_https() {
         let input = "https://127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
 
@@ -851,5 +876,26 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(result.err().unwrap().to_string(), "invalid format");
+    }
+
+    #[test]
+    fn test_peer_address_from_string_missing_scheme() {
+        let input = "127.0.0.1:3000;3777".to_string();
+        let result = PeerAddress::from_string(input);
+
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "invalid scheme");
+    }
+
+    #[test]
+    fn test_peer_address_full_grpc_address() {
+        let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
+        assert_eq!(peer_address.full_grpc_address(), "127.0.0.1:3777");
+    }
+
+    #[test]
+    fn test_peer_address_full_jsonrpc_address() {
+        let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
+        assert_eq!(peer_address.full_jsonrpc_address(), "http://127.0.0.1:3000");
     }
 }

@@ -110,6 +110,10 @@ pub struct CommonConfig {
     #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
     pub candidate_peers: Vec<String>,
 
+    // Address for the GRPC Server
+    #[arg(long = "grpc-server-address", env = "GRPC_SERVER_ADDRESS", default_value = "0.0.0.0:3777")]
+    pub grpc_server_address: SocketAddr,
+
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,
@@ -837,6 +841,11 @@ pub struct PermanentStorageConfig {
     /// Permamenent storage timeout when opening a connection (in millis).
     #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
     pub perm_storage_timeout: Duration,
+
+    #[cfg(feature = "rocks")]
+    /// RocksDB storage path prefix to execute multiple local Stratus instances.
+    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
+    pub rocks_path_prefix: Option<String>,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -857,7 +866,7 @@ impl PermanentStorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),

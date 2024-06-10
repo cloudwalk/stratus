@@ -53,32 +53,29 @@ pub struct RocksStorageState {
     pub backup_trigger: Arc<mpsc::Sender<()>>,
 }
 
-impl Default for RocksStorageState {
-    fn default() -> Self {
+impl RocksStorageState {
+    pub fn new(rocks_path_prefix: Option<String>) -> Self {
         let (tx, rx) = mpsc::channel::<()>(1);
 
         //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
+
+        let path_prefix = rocks_path_prefix.unwrap_or_default();
+
         let state = Self {
-            accounts: RocksDb::new("./data/accounts.rocksdb", DbConfig::Default).unwrap(),
-            accounts_history: RocksDb::new("./data/accounts_history.rocksdb", DbConfig::FastWriteSST).unwrap(),
-            account_slots: RocksDb::new("./data/account_slots.rocksdb", DbConfig::Default).unwrap(),
-            account_slots_history: RocksDb::new("./data/account_slots_history.rocksdb", DbConfig::FastWriteSST).unwrap(),
-            transactions: RocksDb::new("./data/transactions.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_number: RocksDb::new("./data/blocks_by_number.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
-            blocks_by_hash: RocksDb::new("./data/blocks_by_hash.rocksdb", DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
-            logs: RocksDb::new("./data/logs.rocksdb", DbConfig::LargeSSTFiles).unwrap(),
+            accounts: RocksDb::new(&format!("{}./data/accounts.rocksdb", path_prefix), DbConfig::Default).unwrap(),
+            accounts_history: RocksDb::new(&format!("{}./data/accounts_history.rocksdb", path_prefix), DbConfig::FastWriteSST).unwrap(),
+            account_slots: RocksDb::new(&format!("{}./data/account_slots.rocksdb", path_prefix), DbConfig::Default).unwrap(),
+            account_slots_history: RocksDb::new(&format!("{}./data/account_slots_history.rocksdb", path_prefix), DbConfig::FastWriteSST).unwrap(),
+            transactions: RocksDb::new(&format!("{}./data/transactions.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_number: RocksDb::new(&format!("{}./data/blocks_by_number.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(),
+            blocks_by_hash: RocksDb::new(&format!("{}./data/blocks_by_hash.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            logs: RocksDb::new(&format!("{}./data/logs.rocksdb", path_prefix), DbConfig::LargeSSTFiles).unwrap(),
             backup_trigger: Arc::new(tx),
         };
 
         state.listen_for_backup_trigger(rx).unwrap();
 
         state
-    }
-}
-
-impl RocksStorageState {
-    pub fn new() -> Self {
-        Self::default()
     }
 
     pub fn listen_for_backup_trigger(&self, mut rx: mpsc::Receiver<()>) -> anyhow::Result<()> {

@@ -22,7 +22,14 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
 
     // init services
     let storage = config.storage.init().await?;
-    let consensus = Consensus::new(Arc::clone(&storage), config.clone().candidate_peers.clone(), Some(config.clone())).await; // in development, with no leader configured, the current node ends up being the leader
+    let consensus = Consensus::new(
+        Arc::clone(&storage),
+        config.clone().candidate_peers.clone(),
+        Some(config.clone()),
+        config.address,
+        config.grpc_server_address,
+    )
+    .await; // in development, with no leader configured, the current node ends up being the leader
     let Some((http_url, ws_url)) = consensus.get_chain_url().await else {
         return Err(anyhow!("No chain url found"));
     };
