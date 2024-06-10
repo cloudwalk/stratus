@@ -82,28 +82,33 @@ pub struct CommonConfig {
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
     pub num_blocking_threads: usize,
 
+    // Address where Prometheus metrics will be exposed.
+    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    pub metrics_exporter_address: SocketAddr,
+
+    /// Metrics histograms will be collected using summaries or histograms (buckets)?
     #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
     pub metrics_histogram_kind: MetricsHistogramKind,
 
-    /// Prevents clap from breaking when passing `nocapture` options in tests.
-    #[arg(long = "nocapture")]
-    pub nocapture: bool,
+    // Address where Tokio Console GRPC server will be exposed.
+    #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
+    pub tokio_console_address: SocketAddr,
+
+    /// URL of the OpenTelemetry collector where tracing will be pushed.
+    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
+    pub opentelemetry_url: Option<String>,
+
+    /// How tracing events will be formatted.
+    #[arg(long = "log-format", env = "LOG_FORMAT", default_value = "normal")]
+    pub log_format: LogFormat,
+
+    /// Sentry URL where error events will be pushed.
+    #[arg(long = "sentry-url", env = "SENTRY_URL")]
+    pub sentry_url: Option<String>,
 
     /// Direct access to peers via IP address, why will be included on data propagation and leader election.
     #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
     pub candidate_peers: Vec<String>,
-
-    /// Url to the sentry project
-    #[arg(long = "sentry-url", env = "SENTRY_URL")]
-    pub sentry_url: Option<String>,
-
-    /// Url to the tracing collector (Opentelemetry over gRPC)
-    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
-    pub tracing_url: Option<String>,
-
-    // Address for the Tokio Console
-    #[arg(long = "tokio-console-address", env = "TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
-    pub tokio_console_address: SocketAddr,
 
     // Address for the Prometheus Metrics Exporter
     #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
@@ -112,6 +117,10 @@ pub struct CommonConfig {
     // Address for the GRPC Server
     #[arg(long = "grpc-server-address", env = "GRPC_SERVER_ADDRESS", default_value = "0.0.0.0:3777")]
     pub grpc_server_address: SocketAddr,
+  
+    /// Prevents clap from breaking when passing `nocapture` options in tests.
+    #[arg(long = "nocapture")]
+    pub nocapture: bool,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -885,6 +894,39 @@ impl FromStr for PermanentStorageKind {
             "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Enum: LogFormat
+// -----------------------------------------------------------------------------
+
+#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
+pub enum LogFormat {
+    #[strum(to_string = "json")]
+    Json,
+
+    #[strum(to_string = "minimal")]
+    Minimal,
+
+    #[strum(to_string = "normal")]
+    Normal,
+
+    #[strum(to_string = "verbose")]
+    Verbose,
+}
+
+impl FromStr for LogFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s.to_lowercase().trim() {
+            "json" => Ok(Self::Json),
+            "minimal" => Ok(Self::Minimal),
+            "normal" => Ok(Self::Normal),
+            "verbose" | "full" => Ok(Self::Verbose),
+            s => Err(anyhow!("unknown log format: {}", s)),
         }
     }
 }
