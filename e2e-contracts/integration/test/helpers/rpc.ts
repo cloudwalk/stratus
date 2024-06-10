@@ -192,7 +192,6 @@ async function sendWithRetry(methodName: string, params: any[], maxAttempts = 3,
     let lastError;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            // Assuming `send` is the function used to make the RPC call
             const result = await send(methodName, params);
             return result;
         } catch (error) {
