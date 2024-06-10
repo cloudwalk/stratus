@@ -119,7 +119,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 let tx_opt = tx_res.unwrap();
 
                 if tx_opt.is_none() {
-                    if *this.retries_remaining == 0 {
+                    if *this.retries_remaining <= 0 {
                         *this.state = PendingTxState::Completed;
                         return Poll::Ready(Ok(None));
                     }
