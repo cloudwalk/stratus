@@ -35,16 +35,6 @@ jobs:
       group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
-  e2e-automine-stratus-postgres:
-    name: E2E Automine Stratus Postgres
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: 'e2e-stratus-postgres automine'
-
-    concurrency:
-      group: ${{ github.workflow }}-automine-postgres-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
   e2e-automine-stratus-rocks:
     name: E2E Automine Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
@@ -63,16 +53,6 @@ jobs:
 
     concurrency:
       group: ${{ github.workflow }}-external-inmemory-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
-  e2e-external-stratus-postgres:
-    name: E2E External Stratus Postgres
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: 'e2e-stratus-postgres external'
-
-    concurrency:
-      group: ${{ github.workflow }}-external-postgres-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
   e2e-external-stratus-rocks:
