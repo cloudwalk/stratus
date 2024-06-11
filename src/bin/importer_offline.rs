@@ -90,7 +90,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     storage.save_accounts(initial_accounts.clone()).await?;
     if let Some(ref mut csv) = csv {
         if csv.is_accounts_empty() {
-            csv.export_initial_accounts(initial_accounts.clone())?;
+            csv.export_initial_accounts(initial_accounts)?;
         }
     }
 
@@ -201,8 +201,8 @@ async fn execute_block_importer(
 
             // export to csv OR permanent storage
             match &mut csv {
-                Some(csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
-                None => miner.commit(mined_block.clone()).await?,
+                Some(csv) => import_external_to_csv(&storage, csv, mined_block, block_index, block_last_index).await?,
+                None => miner.commit(mined_block).await?,
             }
         }
 
