@@ -7,7 +7,6 @@ macro_rules! metrics {
         $(
             $description:literal
             $kind:ident $name:ident{ $($label:ident),* }
-            $buckets:expr
         ),+
     ) => {
         // Generate function to get metric definition.
@@ -25,7 +24,6 @@ macro_rules! metrics {
                             kind: stringify!($kind),
                             name: stringify!([<stratus_ $name>]),
                             description: stringify!($description),
-                            buckets: $buckets.to_vec()
                         },
                     )+
                 ]
