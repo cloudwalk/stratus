@@ -49,7 +49,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // extract request data
-        let app = extract_client_app(&request);
+        let client = extract_client_app(&request);
         let method = request.method_name();
         let function = match method {
             "eth_call" | "eth_estimateGas" => extract_call_function(request.params()),
@@ -59,7 +59,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
         // trace request
         tracing::info!(
-            %app,
+            %client,
             id = %request.id,
             %method,
             function = %function.clone().unwrap_or_default(),
@@ -71,12 +71,12 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         #[cfg(feature = "metrics")]
         {
             let active = ACTIVE_REQUESTS.fetch_add(1, Ordering::Relaxed) + 1;
-            metrics::set_rpc_requests_active(active, &app, method, function.clone());
-            metrics::inc_rpc_requests_started(&app, method, function.clone());
+            metrics::set_rpc_requests_active(active, &client, method, function.clone());
+            metrics::inc_rpc_requests_started(&client, method, function.clone());
         }
 
         RpcResponse {
-            app,
+            client,
             id: request.id.to_string(),
             method: method.to_string(),
             function,
@@ -96,7 +96,7 @@ pub struct RpcResponse<'a> {
     #[pin]
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 
-    app: RpcClientApp,
+    client: RpcClientApp,
     id: String,
     method: String,
     function: Option<SoliditySignature>,
@@ -119,7 +119,7 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                app = %proj.app,
+                client = %proj.client,
                 id = %proj.id,
                 method = %proj.method,
                 function = %proj.function.clone().unwrap_or_default(),
@@ -133,7 +133,7 @@ impl<'a> Future for RpcResponse<'a> {
             #[cfg(feature = "metrics")]
             {
                 let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
-                metrics::set_rpc_requests_active(active, &*proj.app, proj.method.clone(), proj.function.clone());
+                metrics::set_rpc_requests_active(active, &*proj.client, proj.method.clone(), proj.function.clone());
 
                 let mut rpc_result = "error";
                 if response_success {
@@ -142,7 +142,7 @@ impl<'a> Future for RpcResponse<'a> {
 
                 metrics::inc_rpc_requests_finished(
                     elapsed,
-                    &*proj.app,
+                    &*proj.client,
                     proj.method.clone(),
                     proj.function.clone(),
                     rpc_result,
