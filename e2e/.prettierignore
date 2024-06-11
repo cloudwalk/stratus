@@ -1,0 +1,4 @@
+# Files and folders that Prettier must ignore
+artifacts/**
+cache/**
+typechain-types/**
