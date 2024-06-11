@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 contract TestContractCounter {
-
     uint256 counter;
     uint256 doubleCounter;
 

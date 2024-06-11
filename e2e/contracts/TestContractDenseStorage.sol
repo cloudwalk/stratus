@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 contract TestContractDenseStorage {
-
     struct Record {
         uint16 field16;
         uint16 reserve;
