@@ -143,12 +143,9 @@ impl ExternalRelayer {
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
         loop {
-            let receipt = match timeout(Duration::from_secs(30), substrate_receipt).await {
-                Ok(res) => res,
-                Err(_) => {
-                    tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
-                    return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
-                }
+            let Ok(receipt) = timeout(Duration::from_secs(30), substrate_receipt).await else {
+                tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
+                return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
             };
 
             match receipt {
