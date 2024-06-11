@@ -18,7 +18,8 @@ pub mod rocks_test {
 
             let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
 
-            let rocks = RocksPermanentStorage::new().await.unwrap();
+            let rocks_path_prefix: Option<String> = Some(String::new());
+            let rocks = RocksPermanentStorage::new(rocks_path_prefix).await.unwrap();
             rocks.save_accounts(accounts).await.unwrap();
             rocks.state.write_slots(slots, BlockNumber::ZERO);
 

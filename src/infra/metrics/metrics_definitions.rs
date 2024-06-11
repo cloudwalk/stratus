@@ -5,16 +5,16 @@ metrics! {
     group: json_rpc,
 
     "Number of JSON-RPC requests active right now."
-    gauge rpc_requests_active{method, function} [],
+    gauge              rpc_requests_active{app, method, function} [],
 
     "Number of JSON-RPC requests that started."
-    counter   rpc_requests_started{method, function} [],
+    counter            rpc_requests_started{app, method, function} [],
 
     "Number of JSON-RPC requests that finished."
-    histogram_duration rpc_requests_finished{method, function, result, success} [],
+    histogram_duration rpc_requests_finished{app, method, function, result, success} [],
 
     "Number of JSON-RPC subscriptions active right now."
-    gauge rpc_subscriptions_active{subscription} []
+    gauge              rpc_subscriptions_active{subscription} []
 }
 
 // Storage reads.
@@ -177,11 +177,14 @@ metrics! {
 metrics! {
     group: consensus,
 
-    "Time to run Consensus::apend_entries."
-    histogram_duration append_entries{} [],
+    "Time to run Consensus::append_block_to_peer."
+    histogram_duration consensus_append_block_to_peer{} [],
 
-    "Time to run Consensus::append_entries_to_followers."
-    histogram_duration append_entries_to_followers{} [],
+    "Time to run Consensus::start_election."
+    histogram_duration consensus_start_election{} [],
+
+    "Time to run Consensus::forward."
+    histogram_duration consensus_forward{} [],
 
     "The diff between what is on the follower database and what it received from Append Entries."
     gauge append_entries_block_number_diff{} []
@@ -206,5 +209,8 @@ metrics! {
     histogram_duration relay_dag{} [],
 
     "Number of execution mismatches."
-    histogram_duration save_mismatch{} []
+    histogram_duration save_mismatch{} [],
+
+    "Time to run ExternalRelayerClient::send_to_relayer."
+    histogram_duration send_to_relayer{} []
 }

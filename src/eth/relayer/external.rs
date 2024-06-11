@@ -8,6 +8,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::time::timeout;
 use tokio::time::Instant;
 use tracing::Span;
 
@@ -84,11 +85,10 @@ impl ExternalRelayer {
         let block: Block = row.payload.try_into()?;
         let block_number = block.header.number;
 
-        tracing::debug!(?block_number, "relaying block");
+        tracing::info!(?block_number, "relaying block");
 
         // fill span
-        let span = Span::current();
-        span.rec_str("block_number", &block_number);
+        Span::with(|s| s.rec_str("block_number", &block_number));
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(block.transactions);
@@ -138,13 +138,17 @@ impl ExternalRelayer {
         tracing::info!(?tx_hash, "comparing receipts");
 
         // fill span
-        let span = Span::current();
-        span.rec_str("hash", &tx_hash);
+        Span::with(|s| s.rec_str("hash", &tx_hash));
 
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
         loop {
-            match substrate_receipt.await {
+            let Ok(receipt) = timeout(Duration::from_secs(30), substrate_receipt).await else {
+                tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
+                return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+            };
+
+            match receipt {
                 Ok(Some(substrate_receipt)) =>
                     if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                         let err_string = compare_error.to_string();
@@ -229,23 +233,22 @@ impl ExternalRelayer {
     #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(hash))]
     pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> (PendingTransaction, ExternalReceipt) {
         let tx_hash = tx_mined.input.hash;
-        tracing::debug!(?tx_hash, "relaying transaction");
+        tracing::info!(?tx_hash, "relaying transaction");
 
         // fill span
-        let span = Span::current();
-        span.rec_str("hash", &tx_hash);
+        Span::with(|s| s.rec_str("hash", &tx_hash));
 
         let ethers_tx = Transaction::from(tx_mined.input.clone());
         let tx = loop {
             match self.substrate_chain.send_raw_transaction(tx_hash, ethers_tx.rlp()).await {
                 Ok(tx) => break tx,
                 Err(err) => {
-                    tracing::debug!(
+                    tracing::info!(
                         ?tx_hash,
                         "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
                     );
                     if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
-                        tracing::debug!(?tx_hash, "transaction found on substrate");
+                        tracing::info!(?tx_hash, "transaction found on substrate");
                         return (PendingTransaction::new(tx_hash, &self.substrate_chain), ExternalReceipt(tx_mined.into()));
                     }
                     tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
@@ -319,20 +322,34 @@ impl ExternalRelayerClient {
     /// the insertion fails.
     #[tracing::instrument(name = "external_relayer_client::send_to_relayer", skip_all, fields(block_number))]
     pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let block_number = block.header.number;
-        tracing::debug!(?block_number, "sending block to relayer");
-
+        tracing::info!(?block_number, "sending block to relayer");
+        let block_json = serde_json::to_value(block)?;
         // fill span
-        let span = Span::current();
-        span.rec_str("block_number", &block_number);
+        Span::with(|s| s.rec_str("block_number", &block_number));
+        let mut remaining_tries = 5;
 
-        sqlx::query!(
-            "INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)",
-            block_number as _,
-            serde_json::to_value(block)?
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        while remaining_tries > 0 {
+            if let Err(err) = sqlx::query!("INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)", block_number as _, &block_json)
+                .execute(&self.pool)
+                .await
+            {
+                remaining_tries -= 1;
+                tracing::warn!(?err, ?remaining_tries, "failed to insert into relayer_blocks");
+            } else {
+                break;
+            }
+        }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_send_to_relayer(start.elapsed());
+
+        match remaining_tries {
+            0 => Err(anyhow!("failed to insert block into relayer_blocks after 5 tries")),
+            _ => Ok(()),
+        }
     }
 }
