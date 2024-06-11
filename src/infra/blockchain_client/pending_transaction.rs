@@ -88,7 +88,7 @@ impl<'a> Future for PendingTransaction<'a> {
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let this = self.project();
-        tracing::debug!(?this.state);
+        tracing::debug!(?this.state, ?this.retries_remaining);
 
         match this.state {
             PendingTxState::InitialDelay(fut) => {
@@ -119,7 +119,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 let tx_opt = tx_res.unwrap();
 
                 if tx_opt.is_none() {
-                    if *this.retries_remaining == 0 {
+                    if *this.retries_remaining <= 0 {
                         *this.state = PendingTxState::Completed;
                         return Poll::Ready(Ok(None));
                     }
