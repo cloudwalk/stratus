@@ -2,9 +2,15 @@
     "name": "hardhat-project",
     "devDependencies": {
         "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+        "@stylistic/eslint-plugin": "^1.8.1",
         "@trivago/prettier-plugin-sort-imports": "^4.3.0",
+        "@typescript-eslint/eslint-plugin": "^7.12.0",
+        "@typescript-eslint/parser": "^7.12.0",
         "axios": "^1.7.2",
+        "eslint": "^8.57.0",
+        "eslint-plugin-sort": "^3.0.2",
         "prettier": "^3.3.1",
+        "typescript-eslint": "^7.12.0",
         "web3-types": "^1.6.0",
         "ws": "^8.17.0"
     }
