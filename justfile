@@ -312,13 +312,23 @@ e2e-clock-stratus-rocks:
     killport 3000
     exit $result_code
 
-# E2E: Lint and format code
+# E2E: Lint and format TS/JS and Solidity code. IMPORTANT: Styling (indents, spaces, etc.) for Solidity is not checked
 e2e-lint:
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
-    node_modules/.bin/prettier . --write
+    npx eslint . --fix
+    npx solhint 'contracts/**/*.sol' --fix  --noPrompt
+
+# E2E: Autoformat TS/JS and Solidity code
+e2e-prettier:
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+    npx prettier . --write
+
 
 # E2E: profiles rpc sync and generates a flamegraph
 e2e-flamegraph:
