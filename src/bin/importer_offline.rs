@@ -1,3 +1,13 @@
+//! Importer-Offline binary.
+//!
+//! It loads blocks (and receipts) from an external RPC server, or from a PostgreSQL DB
+//! that was prepared with the `rpc-downloader` binary.
+//!
+//! This importer will check on startup what is the `block_end` value at the external
+//! storage, and will not update while running, in contrast with that, the
+//! Importer-Online (other binary) will stay up to date with the newer blocks that
+//! arrive.
+
 use std::cmp::min;
 use std::fs;
 use std::sync::Arc;
@@ -31,7 +41,7 @@ use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
-/// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
+/// Number of tasks in the backlog. Each task contains `--blocks-by-fetch` blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 
 /// Number of blocks processed in memory before data is flushed to temporary storage and CSV files.
