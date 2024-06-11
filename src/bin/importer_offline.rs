@@ -171,7 +171,7 @@ async fn execute_block_importer(
             }
 
             // export to permanent storage
-            miner.commit(mined_block.clone()).await?
+            miner.commit(mined_block.clone()).await?;
         }
 
         let duration = instant_before_execution.elapsed();
