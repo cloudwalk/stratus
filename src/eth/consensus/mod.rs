@@ -769,18 +769,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
-        consensus.reset_heartbeat_signal.notify_waiters();
-        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
-            consensus.update_leader(leader_peer_address).await;
-        }
-        consensus.last_arrived_block_number.store(header.number, Ordering::SeqCst);
-
-        tracing::info!(
-            last_last_arrived_block_number = last_last_arrived_block_number,
-            new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
-            "last arrived block number set",
-        );
-
         if let Some(diff) = last_last_arrived_block_number.checked_sub(header.number) {
             #[cfg(feature = "metrics")]
             {
@@ -794,9 +782,21 @@ impl AppendEntryService for AppendEntryServiceImpl {
             );
             return Err(Status::new(
                 (StatusCode::EntryAlreadyExists as i32).into(),
-                "Leader is behind follower".to_string(),
+                "Leader is behind follower and should step down".to_string(),
             ));
         }
+
+        consensus.reset_heartbeat_signal.notify_waiters();
+        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+            consensus.update_leader(leader_peer_address).await;
+        }
+        consensus.last_arrived_block_number.store(header.number, Ordering::SeqCst);
+
+        tracing::info!(
+            last_last_arrived_block_number = last_last_arrived_block_number,
+            new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
+            "last arrived block number set",
+        );
 
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
