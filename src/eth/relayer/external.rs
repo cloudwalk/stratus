@@ -8,6 +8,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::time::timeout;
 use tokio::time::Instant;
 use tracing::Span;
 
@@ -142,7 +143,12 @@ impl ExternalRelayer {
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
         loop {
-            match substrate_receipt.await {
+            let Ok(receipt) = timeout(Duration::from_secs(30), substrate_receipt).await else {
+                tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
+                return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+            };
+
+            match receipt {
                 Ok(Some(substrate_receipt)) =>
                     if let Err(compare_error) = substrate_receipt.compare(&stratus_receipt) {
                         let err_string = compare_error.to_string();
