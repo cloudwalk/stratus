@@ -41,8 +41,8 @@ where
 
 /// Extracts the client application name from the `app` query parameter.
 fn parse_client_app(uri: &Uri) -> RpcClientApp {
+    // parse query params
     let Some(query_params_str) = uri.query() else { return RpcClientApp::Unknown };
-
     let query_params: HashMap<String, String> = match serde_urlencoded::from_str(query_params_str) {
         Ok(url) => url,
         Err(e) => {
@@ -51,8 +51,11 @@ fn parse_client_app(uri: &Uri) -> RpcClientApp {
         }
     };
 
-    match query_params.get("app") {
-        Some(app) => RpcClientApp::Identified(app.to_owned()),
-        None => RpcClientApp::Unknown,
+    // try to extract client from query params
+    for param in ["app", "client"] {
+        if let Some(client_app) = query_params.get(param) {
+            return RpcClientApp::Identified(client_app.to_owned());
+        }
     }
+    RpcClientApp::Unknown
 }
