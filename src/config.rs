@@ -29,10 +29,6 @@ use crate::eth::storage::ExternalRpcStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::PostgresExternalRpcStorage;
-use crate::eth::storage::PostgresExternalRpcStorageConfig;
-use crate::eth::storage::PostgresPermanentStorage;
-use crate::eth::storage::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StratusStorage;
@@ -211,7 +207,7 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: matches!(storage.perm_kind(), PermanentStorageKind::Postgres { .. }),
+                prefetch_slots: false, // HACK: prefetch is disabled upon postgres removal
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
@@ -719,7 +715,7 @@ impl WithCommonConfig for IntegrationTestConfig {
 pub struct ExternalRpcStorageConfig {
     /// External RPC storage implementation.
     #[arg(long = "external-rpc-storage", env = "EXTERNAL_RPC_STORAGE")]
-    pub external_rpc_storage_kind: ExternalRpcStorageKind,
+    pub external_rpc_storage_kind: Option<ExternalRpcStorageKind>,
 
     /// External RPC storage number of parallel open connections.
     #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS")]
@@ -730,9 +726,10 @@ pub struct ExternalRpcStorageConfig {
     pub external_rpc_storage_timeout: Duration,
 }
 
+
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum ExternalRpcStorageKind {
-    Postgres { url: String },
+    // HACK: removed postgres, leaving the enum empty
 }
 
 impl ExternalRpcStorageConfig {
@@ -740,16 +737,7 @@ impl ExternalRpcStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
         tracing::info!(config = ?self, "creating external rpc storage");
 
-        match self.external_rpc_storage_kind {
-            ExternalRpcStorageKind::Postgres { ref url } => {
-                let config = PostgresExternalRpcStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.external_rpc_storage_connections,
-                    acquire_timeout: self.external_rpc_storage_timeout,
-                };
-                Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
-            }
-        }
+        Err(anyhow!("There are no external rpc storage implementations yet."))
     }
 }
 
@@ -758,7 +746,7 @@ impl FromStr for ExternalRpcStorageKind {
 
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
+            s if s.starts_with("postgres://") => Err(anyhow!("postgres storage is no longer supported")),
             s => Err(anyhow!("unknown external rpc storage: {}", s)),
         }
     }
@@ -853,9 +841,6 @@ pub enum PermanentStorageKind {
     InMemory,
     #[cfg(feature = "rocks")]
     Rocks,
-    Postgres {
-        url: String,
-    },
 }
 
 impl PermanentStorageConfig {
@@ -867,14 +852,6 @@ impl PermanentStorageConfig {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
-            PermanentStorageKind::Postgres { ref url } => {
-                let config = PostgresPermanentStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.perm_storage_connections,
-                    acquire_timeout: self.perm_storage_timeout,
-                };
-                Arc::new(PostgresPermanentStorage::new(config).await?)
-            }
         };
         Ok(perm)
     }
@@ -888,7 +865,7 @@ impl FromStr for PermanentStorageKind {
             "inmemory" => Ok(Self::InMemory),
             #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
+            s if s.starts_with("postgres://") => Err(anyhow!("postgres storage is no longer supported")),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }
