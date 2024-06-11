@@ -232,6 +232,9 @@ impl ExternalRelayer {
     /// calling eth_getTransactionByHash. (infallible)
     #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(hash))]
     pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> (PendingTransaction, ExternalReceipt) {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let tx_hash = tx_mined.input.hash;
         tracing::info!(?tx_hash, "relaying transaction");
 
@@ -265,6 +268,9 @@ impl ExternalRelayer {
             traced_sleep(Duration::from_millis(100), SleepReason::SyncData).await;
             tries += 1;
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_and_check_mempool(start.elapsed());
 
         (tx, ExternalReceipt(tx_mined.into()))
     }

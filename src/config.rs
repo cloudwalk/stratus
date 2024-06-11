@@ -41,8 +41,6 @@ use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::binary_name;
 use crate::ext::parse_duration;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics::MetricsHistogramKind;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::TracingLogFormat;
@@ -83,11 +81,6 @@ pub struct CommonConfig {
     /// Address where Prometheus metrics will be exposed.
     #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
     pub metrics_exporter_address: SocketAddr,
-
-    #[cfg(feature = "metrics")]
-    /// Metrics histograms will be collected using summaries or histograms (buckets)?
-    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
-    pub metrics_histogram_kind: MetricsHistogramKind,
 
     // Address where Tokio Console GRPC server will be exposed.
     #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
