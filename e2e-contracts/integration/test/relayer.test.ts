@@ -9,7 +9,8 @@ import {
     setDeployer, 
     send,
     deployer,
-    updateProviderUrl
+    updateProviderUrl,
+    sendWithRetry
 } from "./helpers/rpc";
 
 describe("Relayer integration test", function () {
@@ -81,23 +82,22 @@ describe("Relayer integration test", function () {
     
                     await new Promise(resolve => setTimeout(resolve, transactionInterval));
                 }
-                await new Promise(resolve => setTimeout(resolve, 2000));
             });
     
             it(`${params.name}: Validate transaction mined delay between Stratus and Hardhat`, async function () {
                 // Get Stratus timestamps
                 updateProviderUrl("stratus");
                 const stratusTimestamps = await Promise.all(txHashList.map(async (txHash) => {
-                    const receipt = await send("eth_getTransactionReceipt", [txHash]);
-                    const block = await send("eth_getBlockByNumber", [receipt.blockNumber, false]);
+                    const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                    const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
                     return parseInt(block.timestamp, 16);
                 }));
     
                 // Get Hardhat timestamps
                 updateProviderUrl("hardhat");
                 const hardhatTimestamps = await Promise.all(txHashList.map(async (txHash) => {
-                    const receipt = await send("eth_getTransactionReceipt", [txHash]);
-                    const block = await send("eth_getBlockByNumber", [receipt.blockNumber, false]);
+                    const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                    const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
                     return parseInt(block.timestamp, 16);
                 }));
     
@@ -165,6 +165,7 @@ describe("Relayer integration test", function () {
     });
 
     describe("Edge case transaction test", function () {
+        let txHashList: string[] = []
         it("Back and forth transfer with minimum funds should order successfully", async function () {
             const alice = ethers.Wallet.createRandom().connect(ethers.provider);
             const bob = ethers.Wallet.createRandom().connect(ethers.provider);
@@ -181,11 +182,26 @@ describe("Relayer integration test", function () {
                 let sender = wallets[i % 2];
                 let receiver = wallets[(i + 1) % 2];
                 
-                await brlcToken.connect(sender).transfer(receiver.address, 10, { gasPrice: 0, gasLimit: GAS_LIMIT_OVERRIDE, type: 0, nonce: nonces[i % 2] });
+                const tx = await brlcToken.connect(sender).transfer(receiver.address, 10, { gasPrice: 0, gasLimit: GAS_LIMIT_OVERRIDE, type: 0, nonce: nonces[i % 2] });
+
+                txHashList.push(tx.transactionHash);
 
                 nonces[i % 2]++;
             }
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Get Stratus transaction receipts
+            updateProviderUrl("stratus");
+            await Promise.all(txHashList.map(async (txHash) => {
+                const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                return receipt;
+            }));
+
+            // Get Hardhat transaction receipts
+            updateProviderUrl("hardhat");
+            await Promise.all(txHashList.map(async (txHash) => {
+                const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                return receipt;
+            }));
         });
 
         it("Validate no mismatched transactions were generated", async function () {
