@@ -29,11 +29,12 @@ app.post("/rpc", (req, res) => {
         };
 
         switch (method) {
-            case "net_listening":
+            case "net_listening": {
                 res.json({ ...response, result: true });
                 break;
+            }
 
-            case "eth_getBlockByNumber":
+            case "eth_getBlockByNumber": {
                 const blockNumberHex = req.body.params[0];
                 const blockNumber = parseInt(blockNumberHex, 16);
 
@@ -47,8 +48,9 @@ app.post("/rpc", (req, res) => {
                     res.json({ ...response, result: null });
                 }
                 break;
+            }
 
-            case "eth_getTransactionReceipt":
+            case "eth_getTransactionReceipt": {
                 const txHash = req.body.params[0];
 
                 const matchingReceipt = csvData.find((row) => "0x" + row.transaction_hash === txHash);
@@ -60,11 +62,13 @@ app.post("/rpc", (req, res) => {
                     res.json({ ...response, result: null });
                 }
                 break;
+            }
 
-            case "eth_blockNumber":
+            case "eth_blockNumber": {
                 const latestBlock = csvData.reduce((max, row) => Math.max(max, row.block_number), 0);
                 res.json({ ...response, result: `0x${latestBlock.toString(16)}` });
                 break;
+            }
         }
     } catch (error) {
         console.error("Error processing request:", error);

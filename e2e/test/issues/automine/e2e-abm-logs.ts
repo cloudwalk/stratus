@@ -3,14 +3,11 @@ import { TransactionReceipt } from "ethers";
 
 import { ALICE } from "../../helpers/account";
 import { BlockMode, currentBlockMode } from "../../helpers/network";
-import { deployTestContractBalances, ETHERJS, send, toHex } from "../../helpers/rpc";
+import { ETHERJS, deployTestContractBalances, send, toHex } from "../../helpers/rpc";
 
 describe("Known issues for the auto block mining mode. The results of the 'eth_getLogs' API call are", async () => {
     before(async () => {
-        expect(currentBlockMode()).eq(
-            BlockMode.Automine,
-            "Wrong block mining mode is used"
-        );
+        expect(currentBlockMode()).eq(BlockMode.Automine, "Wrong block mining mode is used");
     });
 
     it("Correct for next non-existent blocks after a contract transaction", async () => {
@@ -23,13 +20,13 @@ describe("Known issues for the auto block mining mode. The results of the 'eth_g
         const txBlockNumber = txReceipt?.blockNumber ?? 0;
 
         expect(
-            await send("eth_getLogs", [{ fromBlock: toHex(txBlockNumber), address: contract.target }])
+            await send("eth_getLogs", [{ fromBlock: toHex(txBlockNumber), address: contract.target }]),
         ).length(1);
         expect(
-            await send("eth_getLogs", [{ fromBlock: toHex(txBlockNumber + 1), address: contract.target }])
+            await send("eth_getLogs", [{ fromBlock: toHex(txBlockNumber + 1), address: contract.target }]),
         ).length(0);
         expect(
-            await send("eth_getLogs", [{ fromBlock: toHex(txBlockNumber + 2), address: contract.target }])
+            await send("eth_getLogs", [{ fromBlock: toHex(txBlockNumber + 2), address: contract.target }]),
         ).length(0);
     });
 });

@@ -1,4 +1,5 @@
 import { network } from "hardhat";
+
 import { defineBlockMiningIntervalInMs } from "../../hardhat.config";
 
 export enum Network {
@@ -10,7 +11,7 @@ export enum Network {
 export enum BlockMode {
     Automine = "automine",
     External = "external",
-    Interval = "interval"
+    Interval = "interval",
 }
 
 export function currentNetwork(): Network {

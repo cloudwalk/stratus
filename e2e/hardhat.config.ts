@@ -1,5 +1,5 @@
-import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import { HardhatUserConfig } from "hardhat/config";
 
 const ACCOUNTS_MNEMONIC = "test test test test test test test test test test test junk";
 const MINING_INTERVAL_PATTERN = /^(\d+)s$/;

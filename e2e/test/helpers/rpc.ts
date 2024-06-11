@@ -6,9 +6,9 @@ import {
     Contract,
     JsonRpcApiProviderOptions,
     JsonRpcProvider,
-    keccak256,
     TransactionReceipt,
-    TransactionResponse
+    TransactionResponse,
+    keccak256,
 } from "ethers";
 import { config, ethers } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
@@ -54,14 +54,10 @@ if (!providerUrl) {
 
 const providerOptions: JsonRpcApiProviderOptions = {
     cacheTimeout: -1, // Do not use cash request results
-    batchMaxCount: 1 // Do not unite the request in batches
+    batchMaxCount: 1, // Do not unite the request in batches
 };
 
-export let ETHERJS = new JsonRpcProvider(
-    providerUrl,
-    undefined,
-    providerOptions
-);
+export let ETHERJS = new JsonRpcProvider(providerUrl, undefined, providerOptions);
 
 export function updateProviderUrl(newUrl: string) {
     providerUrl = newUrl;
@@ -91,7 +87,7 @@ function log(event: any) {
 }
 
 if (process.env.RPC_LOG) {
-    ETHERJS.on("debug", log).catch(error => {
+    ETHERJS.on("debug", log).catch((error) => {
         console.error("Registering listener for a debug event of the RPC failed:", error);
         process.exit(1);
     });
@@ -179,7 +175,7 @@ export function toPaddedHex(number: number | bigint, bytes: number): string {
 
 // Converts a hex string timestamp into unix time in seconds
 export function fromHexTimestamp(timestamp: Numbers): number {
-    let value = timestamp.valueOf();
+    const value = timestamp.valueOf();
     if (typeof value == "string") return parseInt(value, 16);
     else throw new Error("Expected block timestamp to be a hexstring. Got: " + timestamp.valueOf());
 }
@@ -270,7 +266,7 @@ function addOpenListener(socket: WebSocket, subscription: string, params: any) {
 function addMessageListener(
     socket: WebSocket,
     messageToReturn: number,
-    callback: (messageEvent: { data: string }) => Promise<void>
+    callback: (messageEvent: { data: string }) => Promise<void>,
 ): Promise<any> {
     return new Promise((resolve) => {
         let messageCount = 0;
@@ -295,7 +291,7 @@ async function asyncContractOperation(contract: TestContractBalances) {
     const contractOps = contract.connect(CHARLIE.signer());
     await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
 
-    return new Promise(resolve => setTimeout(resolve, 1000));
+    return new Promise((resolve) => setTimeout(resolve, 1000));
 }
 
 /// Start a subscription and return its N-th event
@@ -306,12 +302,12 @@ export async function subscribeAndGetEvent(
 ): Promise<any> {
     const socket = openWebSocketConnection();
     addOpenListener(socket, subscription, {});
-    const event = await addMessageListener(socket, messageToReturn, async (_messageEvent) => {
-    });
+    const event = await addMessageListener(socket, messageToReturn, async (_messageEvent) => {});
 
     // Wait for the specified time, if necessary
-    if (waitTimeInMilliseconds > 0)
+    if (waitTimeInMilliseconds > 0) {
         await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
+    }
 
     return event;
 }
@@ -325,25 +321,25 @@ export async function subscribeAndGetEventWithContract(
     const contract = await deployTestContractBalances();
     const contractAddress = await contract.getAddress();
     const socket = openWebSocketConnection();
-    addOpenListener(socket, subscription, { "address": contractAddress });
+    addOpenListener(socket, subscription, { address: contractAddress });
     const event = await addMessageListener(socket, messageToReturn, async (_messageEvent) => {
         await asyncContractOperation(contract);
     });
 
     // Wait for the specified time, if necessary
-    if (waitTimeInMilliseconds > 0)
+    if (waitTimeInMilliseconds > 0) {
         await new Promise((resolve) => setTimeout(resolve, waitTimeInMilliseconds));
+    }
 
     return event;
 }
 
-
 // Prepares a signed transaction to interact with a contract
 export async function prepareSignedTx(props: {
-    contract: BaseContract,
-    account: Account,
-    methodName: string,
-    methodParameters: any[]
+    contract: BaseContract;
+    account: Account;
+    methodName: string;
+    methodParameters: any[];
 }): Promise<string> {
     const { contract, account, methodName, methodParameters } = props;
     const nonce = await sendGetNonce(account);
@@ -352,7 +348,8 @@ export async function prepareSignedTx(props: {
         {
             nonce,
             ...TX_PARAMS,
-        });
+        },
+    );
     return await account.signer().signTransaction(tx);
 }
 
@@ -360,16 +357,16 @@ export async function prepareSignedTx(props: {
 export async function pollForTransactions(
     txHashes: string[],
     options: {
-        timeoutInMs?: number,
-        pollingIntervalInMs?: number
-    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+        timeoutInMs?: number;
+        pollingIntervalInMs?: number;
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 },
 ): Promise<TransactionReceipt[]> {
     const { timeoutInMs, pollingIntervalInMs } = normalizePollingOptions(options);
     const startTimestamp = Date.now();
     const transactionReceipts: TransactionReceipt[] = [];
     const remainingTxHashes: Set<string> = new Set(txHashes);
     while (1) {
-        let requestTimeInMs = Date.now();
+        const requestTimeInMs = Date.now();
         const receiptPromises: Promise<TransactionReceipt | null>[] = [];
         for (const txHash of remainingTxHashes) {
             receiptPromises.push(ETHERJS.getTransactionReceipt(txHash));
@@ -388,7 +385,7 @@ export async function pollForTransactions(
         if (currentTimeInMs - startTimestamp >= timeoutInMs) {
             throw new Error(
                 `Failed to wait for transaction minting: timeout of ${timeoutInMs} ms. ` +
-                `Still waiting the transactions with hashes: ${Array.from(remainingTxHashes)}`
+                `Still waiting the transactions with hashes: ${Array.from(remainingTxHashes)}`,
             );
         }
         const cycleDurationInMs = currentTimeInMs - requestTimeInMs;
@@ -397,8 +394,8 @@ export async function pollForTransactions(
         }
     }
     const orderedTransactionReceipts: TransactionReceipt[] = [];
-    txHashes.forEach(txHash => {
-        const targetReceipt = transactionReceipts.find(receipt => receipt.hash == txHash);
+    txHashes.forEach((txHash) => {
+        const targetReceipt = transactionReceipts.find((receipt) => receipt.hash == txHash);
         if (!targetReceipt) {
             throw new Error(`Failed to wait for transaction minting: a logical error with hash: ${txHash}`);
         } else {
@@ -412,9 +409,9 @@ export async function pollForTransactions(
 export async function pollForTransaction(
     tx: TransactionResponse | string | Promise<TransactionResponse> | Promise<string> | null | undefined,
     options: {
-        timeoutInMs?: number,
-        pollingIntervalInMs?: number
-    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+        timeoutInMs?: number;
+        pollingIntervalInMs?: number;
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 },
 ): Promise<TransactionReceipt> {
     if (!tx) {
         throw new Error("Transaction not found");
@@ -429,9 +426,9 @@ export async function pollForTransaction(
 export async function pollForBlock(
     blockNumber: number,
     options: {
-        timeoutInMs?: number,
-        pollingIntervalInMs?: number
-    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+        timeoutInMs?: number;
+        pollingIntervalInMs?: number;
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 },
 ): Promise<Block> {
     const { timeoutInMs, pollingIntervalInMs } = normalizePollingOptions(options);
     const startTimeInMs = Date.now();
@@ -439,9 +436,7 @@ export async function pollForBlock(
     let block: Block | null = await ETHERJS.getBlock(blockNumber);
     while (!block) {
         if (Date.now() - startTimeInMs >= timeoutInMs) {
-            throw new Error(
-                `Failed to wait for minting of block ${blockNumber}: timeout of ${timeoutInMs} ms. `
-            );
+            throw new Error(`Failed to wait for minting of block ${blockNumber}: timeout of ${timeoutInMs} ms. `);
         }
         const cycleDurationInMs = Date.now() - requestTimeInMs;
         if (cycleDurationInMs < pollingIntervalInMs) {
@@ -456,23 +451,25 @@ export async function pollForBlock(
 // Polls for the next block is minted
 export async function pollForNextBlock(
     options: {
-        timeoutInMs?: number,
-        pollingIntervalInMs?: number
-    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 }
+        timeoutInMs?: number;
+        pollingIntervalInMs?: number;
+    } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 },
 ): Promise<Block> {
     const latestBlockNumber = await sendGetBlockNumber();
     return pollForBlock(latestBlockNumber + 1, options);
 }
 
 // Normalizes the options for poll functions
-function normalizePollingOptions(options: {
-    timeoutInMs?: number;
-    pollingIntervalInMs?: number
-} = {}): { timeoutInMs: number; pollingIntervalInMs: number } {
+function normalizePollingOptions(
+    options: {
+        timeoutInMs?: number;
+        pollingIntervalInMs?: number;
+    } = {},
+): { timeoutInMs: number; pollingIntervalInMs: number } {
     const timeoutInMs: number = options.timeoutInMs ? options.timeoutInMs : DEFAULT_TX_TIMEOUT_IN_MS;
     const pollingIntervalInMs: number = options.pollingIntervalInMs ? options.pollingIntervalInMs : timeoutInMs / 100;
     return {
         timeoutInMs,
-        pollingIntervalInMs
+        pollingIntervalInMs,
     };
 }

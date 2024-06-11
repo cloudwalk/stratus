@@ -1,7 +1,8 @@
 import { expect } from "chai";
-import { prepareSignedTx } from "./rpc";
-import { Account } from "./account";
+
 import { TestContractDenseStorage } from "../../typechain-types";
+import { Account } from "./account";
+import { prepareSignedTx } from "./rpc";
 
 export interface AccountRecord {
     field16: bigint;
@@ -10,7 +11,7 @@ export interface AccountRecord {
     field64: bigint;
     field128: bigint;
 
-    [key: string]: bigint;  // Index signature
+    [key: string]: bigint; // Index signature
 }
 
 export const initialRecord: AccountRecord = {
@@ -18,7 +19,7 @@ export const initialRecord: AccountRecord = {
     reserve: BigInt("0xABCD"),
     field32: BigInt(2) ** BigInt(32 - 1), // 0x8000_0000
     field64: BigInt(2) ** BigInt(64 - 1), // 0x8000_0000_0000_0000
-    field128: BigInt(2) ** BigInt(128 - 1) // 0x8000_0000_0000_0000_0000_0000_0000_0000
+    field128: BigInt(2) ** BigInt(128 - 1), // 0x8000_0000_0000_0000_0000_0000_0000_0000
 };
 
 export interface RecordChange {
@@ -41,7 +42,7 @@ export function defineRecordChange(index: number): RecordChange {
     if ((index & 4) !== 0) {
         changeOfField64 *= BigInt(-1);
     }
-    let changeOfField128: bigint = BigInt(2) ** BigInt(128 - 6) - BigInt(7777 * index);
+    const changeOfField128: bigint = BigInt(2) ** BigInt(128 - 6) - BigInt(7777 * index);
     if ((index & 8) !== 0) {
         changeOfField64 *= BigInt(-1);
     }
@@ -50,7 +51,7 @@ export function defineRecordChange(index: number): RecordChange {
         forField16: changeOfField16,
         forField32: changeOfField32,
         forField64: changeOfField64,
-        forField128: changeOfField128
+        forField128: changeOfField128,
     };
 }
 
@@ -63,10 +64,7 @@ export function inverseRecordChange(change: RecordChange): RecordChange {
     };
 }
 
-export function applyRecordChange(
-    record: AccountRecord,
-    change: RecordChange,
-) {
+export function applyRecordChange(record: AccountRecord, change: RecordChange) {
     record.field16 += change.forField16;
     record.field32 += change.forField32;
     record.field64 += change.forField64;
@@ -74,10 +72,10 @@ export function applyRecordChange(
 }
 
 export function compareRecords(actualRecord: any, expectedRecord: AccountRecord) {
-    Object.keys(expectedRecord).forEach(property => {
+    Object.keys(expectedRecord).forEach((property) => {
         expect(actualRecord[property]).to.eq(
             expectedRecord[property],
-            `Mismatch in the "${property}" property of the storage record`
+            `Mismatch in the "${property}" property of the storage record`,
         );
     });
 }
@@ -86,7 +84,7 @@ export async function prepareSignedTxOfRecordChange(
     contract: TestContractDenseStorage,
     sender: Account,
     targetAccount: Account,
-    recordChange: RecordChange
+    recordChange: RecordChange,
 ): Promise<string> {
     return await prepareSignedTx({
         contract,
@@ -97,7 +95,7 @@ export async function prepareSignedTxOfRecordChange(
             recordChange.forField16,
             recordChange.forField32,
             recordChange.forField64,
-            recordChange.forField128
-        ]
+            recordChange.forField128,
+        ],
     });
 }

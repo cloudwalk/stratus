@@ -69,7 +69,7 @@ export const TEST_ACCOUNTS = [ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE];
 export function randomAccounts(n: number): Account[] {
     const wallets: Account[] = [];
     for (let i = 0; i < n; i++) {
-        let wallet = Wallet.createRandom();
+        const wallet = Wallet.createRandom();
         wallets.push(new Account(wallet.address, wallet.privateKey));
     }
     return wallets;

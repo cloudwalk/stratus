@@ -1,5 +1,4 @@
-import { Account, ALICE, BOB, randomAccounts } from "../helpers/account";
-import { deployTestContractDenseStorage, sendEvmMine, sendRawTransactions, } from "../helpers/rpc";
+import { ALICE, Account, BOB, randomAccounts } from "../helpers/account";
 import {
     AccountRecord,
     applyRecordChange,
@@ -7,8 +6,9 @@ import {
     defineRecordChange,
     initialRecord,
     inverseRecordChange,
-    prepareSignedTxOfRecordChange
+    prepareSignedTxOfRecordChange,
 } from "../helpers/contract-dense-storage";
+import { deployTestContractDenseStorage, sendEvmMine, sendRawTransactions } from "../helpers/rpc";
 
 describe("Transaction: parallel for the 'TestContractDenseStorage' contract", async () => {
     it("Parallel transactions execute properly when no reverts are expected", async () => {
@@ -24,7 +24,6 @@ describe("Transaction: parallel for the 'TestContractDenseStorage' contract", as
         await sendEvmMine();
         await contract.set(BOB.address, expectedRecords[BOB.address]);
         await sendEvmMine();
-
 
         // Prepare a pair of transactions: one for Alice and another for Bob
         const txCountPerUser = 32;

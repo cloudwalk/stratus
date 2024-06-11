@@ -26,13 +26,13 @@ describe("Multiple Transactions Per Block", () => {
 
         const txHashes = await sendRawTransactions(signedTxs);
 
-        const latestBlockBeforeMining = await send('eth_getBlockByNumber', ['latest', true]);
+        const latestBlockBeforeMining = await send("eth_getBlockByNumber", ["latest", true]);
 
         // mine the block
         await sendEvmMine();
 
         // get the latest block after mining
-        const latestBlockAfterMining = await send('eth_getBlockByNumber', ['latest', true]);
+        const latestBlockAfterMining = await send("eth_getBlockByNumber", ["latest", true]);
 
         // check if block was mined
         expect(latestBlockAfterMining).to.exist;
@@ -41,27 +41,27 @@ describe("Multiple Transactions Per Block", () => {
         expect(latestBlockAfterMining.hash).to.not.equal(latestBlockBeforeMining.hash);
 
         // check if all transactions are in the block
-        for (let txHash of txHashes) {
+        for (const txHash of txHashes) {
             expect(latestBlockAfterMining.transactions.map((tx: any) => tx.hash)).to.include(txHash);
         }
 
         // check if transactions receipt are valid
-        for (let txHash of txHashes) {
-            const receipt = await send('eth_getTransactionReceipt', [txHash]);
+        for (const txHash of txHashes) {
+            const receipt = await send("eth_getTransactionReceipt", [txHash]);
             expect(receipt).to.exist;
             expect(receipt.transactionHash).to.equal(txHash);
 
             expect(receipt.blockHash).to.equal(latestBlockAfterMining.hash);
             expect(receipt.blockNumber).to.equal(latestBlockAfterMining.number);
             expect(receipt.contractAddress).to.be.null;
-            expect(receipt.cumulativeGasUsed).to.be.a('string');
-            expect(receipt.from).to.be.a('string');
-            expect(receipt.gasUsed).to.be.a('string');
-            expect(receipt.logs).to.be.an('array');
-            expect(receipt.logsBloom).to.be.a('string');
-            expect(receipt.status).to.be.a('string');
-            expect(receipt.to).to.be.a('string');
-            expect(receipt.transactionIndex).to.be.a('string');
+            expect(receipt.cumulativeGasUsed).to.be.a("string");
+            expect(receipt.from).to.be.a("string");
+            expect(receipt.gasUsed).to.be.a("string");
+            expect(receipt.logs).to.be.an("array");
+            expect(receipt.logsBloom).to.be.a("string");
+            expect(receipt.status).to.be.a("string");
+            expect(receipt.to).to.be.a("string");
+            expect(receipt.transactionIndex).to.be.a("string");
         }
 
         // check counterParty balance

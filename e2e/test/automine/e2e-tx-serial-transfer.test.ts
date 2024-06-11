@@ -22,17 +22,17 @@ import {
 } from "../helpers/rpc";
 
 describe("Transaction: serial transfer", () => {
-    var _tx: Transaction;
-    var _txHash: string;
-    var _block: Block;
-    var _txSentTimestamp: number;
-    var new_account: Account;
+    let _tx: Transaction;
+    let _txHash: string;
+    let _block: Block;
+    let _txSentTimestamp: number;
+    let new_account: Account;
 
     it("Resets blockchain", async () => {
         await sendReset();
     });
     it("Send transaction", async () => {
-        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
+        const txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
         expect(_txHash).eq(keccak256(txSigned));
@@ -74,11 +74,11 @@ describe("Transaction: serial transfer", () => {
         expect(fromHexTimestamp(_block.timestamp)).lte(Date.now());
 
         // ParentHash is the previous block's hash
-        let parentBlock = await send("eth_getBlockByNumber", [ZERO, true]);
+        const parentBlock = await send("eth_getBlockByNumber", [ZERO, true]);
         expect(_block.parentHash).eq(parentBlock.hash);
     });
     it("Receipt is created", async () => {
-        let receipt: TransactionReceipt = await send("eth_getTransactionReceipt", [_txHash]);
+        const receipt: TransactionReceipt = await send("eth_getTransactionReceipt", [_txHash]);
         expect(receipt.blockNumber).eq(_block.number, "receipt.blockNumber");
         expect(receipt.blockHash).eq(_block.hash, "receipt.blockHash");
         expect(receipt.transactionHash).eq(_txHash, "rceipt.txHash");
@@ -108,7 +108,7 @@ describe("Transaction: serial transfer", () => {
     });
     it("Send transaction to new account", async () => {
         new_account = randomAccounts(1)[0];
-        let txSigned = await ALICE.signWeiTransfer(new_account.address, TEST_TRANSFER, 1);
+        const txSigned = await ALICE.signWeiTransfer(new_account.address, TEST_TRANSFER, 1);
         _txSentTimestamp = Math.floor(Date.now() / 1000);
         _txHash = await sendRawTransaction(txSigned);
     });

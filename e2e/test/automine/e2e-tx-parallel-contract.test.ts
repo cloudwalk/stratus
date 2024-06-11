@@ -75,7 +75,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
         const signedTxs = [];
         const senders = randomAccounts(20);
         for (const sender of senders) {
-            let nonce = await sendGetNonce(sender.address);
+            const nonce = await sendGetNonce(sender.address);
             const tx = await _contract.connect(sender.signer()).sub.populateTransaction(ALICE.address, 75, {
                 nonce: nonce,
                 ...TX_PARAMS,
@@ -84,8 +84,8 @@ describe("Transaction: parallel TestContractBalances", async () => {
         }
 
         // send transactions in parallel
-        let hashes = await sendRawTransactions(signedTxs);
-        let failed = hashes.filter(x => x === undefined).length;
+        const hashes = await sendRawTransactions(signedTxs);
+        const failed = hashes.filter((x) => x === undefined).length;
 
         // check remaining balance
         expect(await _contract.get(ALICE.address)).eq(15);

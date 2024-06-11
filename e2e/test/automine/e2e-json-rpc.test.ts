@@ -7,16 +7,16 @@ import {
     CHAIN_ID,
     CHAIN_ID_DEC,
     HEX_PATTERN,
+    ONE,
     TEST_BALANCE,
     ZERO,
     send,
     sendAndGetError,
-    sendExpect,
     sendEvmMine,
+    sendExpect,
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
-    ONE,
 } from "../helpers/rpc";
 
 describe("JSON-RPC", () => {
@@ -46,7 +46,7 @@ describe("JSON-RPC", () => {
             (await sendExpect("net_version")).eq(CHAIN_ID_DEC + "");
         });
         it("web3_clientVersion", async () => {
-            let client = await sendExpect("web3_clientVersion");
+            const client = await sendExpect("web3_clientVersion");
             if (isStratus) {
                 client.eq("stratus");
             }
@@ -55,7 +55,7 @@ describe("JSON-RPC", () => {
 
     describe("Gas", () => {
         it("eth_gasPrice", async () => {
-            let gasPrice = await sendExpect("eth_gasPrice");
+            const gasPrice = await sendExpect("eth_gasPrice");
             if (isStratus) {
                 gasPrice.eq(ZERO);
             } else {
@@ -63,8 +63,8 @@ describe("JSON-RPC", () => {
             }
         });
         it("eth_estimateGas", async () => {
-            let tx = { from: ALICE.address, to: BOB.address, value: "0x1" }
-            let gas = await send("eth_estimateGas", [tx]);
+            const tx = { from: ALICE.address, to: BOB.address, value: "0x1" };
+            const gas = await send("eth_estimateGas", [tx]);
             expect(gas).match(HEX_PATTERN, "format");
 
             const gasDec = parseInt(gas, 16);
@@ -91,7 +91,7 @@ describe("JSON-RPC", () => {
             await sendReset();
         });
         it("eth_getBlockByNumber", async function () {
-            let block: Block = await send("eth_getBlockByNumber", [ZERO, true]);
+            const block: Block = await send("eth_getBlockByNumber", [ZERO, true]);
             expect(block.transactions.length).eq(0);
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
@@ -108,13 +108,13 @@ describe("JSON-RPC", () => {
         }
 
         it("evm_mine", async () => {
-            let prev_number = (await latest()).block_number;
+            const prev_number = (await latest()).block_number;
             await sendEvmMine();
             expect((await latest()).block_number).eq(prev_number + 1);
         });
 
         describe("evm_setNextBlockTimestamp", () => {
-            let target = Math.floor(Date.now() / 1000) + 10;
+            const target = Math.floor(Date.now() / 1000) + 10;
             it("Should set the next block timestamp", async () => {
                 await send("evm_setNextBlockTimestamp", [target]);
                 await sendEvmMine();
@@ -129,9 +129,9 @@ describe("JSON-RPC", () => {
 
             it("Should reset the changes when sending 0", async () => {
                 await send("evm_setNextBlockTimestamp", [0]);
-                let mined_timestamp = Math.floor(Date.now() / 1000);
+                const mined_timestamp = Math.floor(Date.now() / 1000);
                 await sendEvmMine();
-                let latest_timestamp = (await latest()).timestamp;
+                const latest_timestamp = (await latest()).timestamp;
                 expect(latest_timestamp)
                     .gte(mined_timestamp)
                     .lte(Math.floor(Date.now() / 1000));
@@ -182,21 +182,20 @@ describe("JSON-RPC", () => {
 
             it("Subscribe to newPendingTransactions receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
-                 const response = await subscribeAndGetEvent("newPendingTransactions", waitTimeInMilliseconds);
-                 expect(response).to.not.be.undefined;
-                 expect(response.id).to.not.be.undefined;
-                 expect(response.result).to.not.be.undefined;
+                const response = await subscribeAndGetEvent("newPendingTransactions", waitTimeInMilliseconds);
+                expect(response).to.not.be.undefined;
+                expect(response.id).to.not.be.undefined;
+                expect(response.result).to.not.be.undefined;
             });
 
-
             it("Subscribe to unsupported receives error subscription event", async () => {
-               const waitTimeInMilliseconds = 40;
+                const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("unsupportedSubscription", waitTimeInMilliseconds);
                 expect(response).to.not.be.undefined;
                 expect(response.id).to.not.be.undefined;
                 expect(response.error).to.not.be.undefined;
                 expect(response.error.code).to.not.be.undefined;
-                expect(response.error.code).to.be.a('number');
+                expect(response.error.code).to.be.a("number");
                 expect(response.error.code).eq(-32602);
             });
 
@@ -206,30 +205,30 @@ describe("JSON-RPC", () => {
                 expect(response).to.not.be.undefined;
 
                 const params = response.params;
-                expect(params).to.have.property('subscription').that.is.a('string');
-                expect(params).to.have.property('result').that.is.an('object');
+                expect(params).to.have.property("subscription").that.is.a("string");
+                expect(params).to.have.property("result").that.is.an("object");
 
                 const result = params.result;
-                expect(result).to.have.property('hash').that.is.a('string');
-                expect(result).to.have.property('parentHash').that.is.a('string');
-                expect(result).to.have.property('sha3Uncles').that.is.a('string');
-                expect(result).to.have.property('miner').that.is.a('string');
-                expect(result).to.have.property('stateRoot').that.is.a('string');
-                expect(result).to.have.property('transactionsRoot').that.is.a('string');
-                expect(result).to.have.property('receiptsRoot').that.is.a('string');
-                expect(result).to.have.property('number').that.is.a('string');
-                expect(result).to.have.property('gasUsed').that.is.a('string');
-                expect(result).to.have.property('extraData').that.is.a('string');
-                expect(result).to.have.property('logsBloom').that.is.a('string');
-                expect(result).to.have.property('timestamp').that.is.a('string');
-                expect(result).to.have.property('difficulty').that.is.a('string');
-                expect(result).to.have.property('totalDifficulty').that.is.a('string');
-                expect(result).to.have.property('uncles').that.is.an('array');
-                expect(result).to.have.property('transactions').that.is.an('array');
-                expect(result).to.have.property('size')
-                expect(result).to.have.property('mixHash')
-                expect(result).to.have.property('nonce').that.is.a('string');
-                expect(result).to.have.property('baseFeePerGas').that.is.a('string');
+                expect(result).to.have.property("hash").that.is.a("string");
+                expect(result).to.have.property("parentHash").that.is.a("string");
+                expect(result).to.have.property("sha3Uncles").that.is.a("string");
+                expect(result).to.have.property("miner").that.is.a("string");
+                expect(result).to.have.property("stateRoot").that.is.a("string");
+                expect(result).to.have.property("transactionsRoot").that.is.a("string");
+                expect(result).to.have.property("receiptsRoot").that.is.a("string");
+                expect(result).to.have.property("number").that.is.a("string");
+                expect(result).to.have.property("gasUsed").that.is.a("string");
+                expect(result).to.have.property("extraData").that.is.a("string");
+                expect(result).to.have.property("logsBloom").that.is.a("string");
+                expect(result).to.have.property("timestamp").that.is.a("string");
+                expect(result).to.have.property("difficulty").that.is.a("string");
+                expect(result).to.have.property("totalDifficulty").that.is.a("string");
+                expect(result).to.have.property("uncles").that.is.an("array");
+                expect(result).to.have.property("transactions").that.is.an("array");
+                expect(result).to.have.property("size");
+                expect(result).to.have.property("mixHash");
+                expect(result).to.have.property("nonce").that.is.a("string");
+                expect(result).to.have.property("baseFeePerGas").that.is.a("string");
             });
 
             it("Validate logs event", async () => {
@@ -239,30 +238,34 @@ describe("JSON-RPC", () => {
                 expect(response).to.not.be.undefined;
 
                 const params = response.params;
-                expect(params).to.have.property('subscription').that.is.a('string');
-                expect(params).to.have.property('result').that.is.an('object');
+                expect(params).to.have.property("subscription").that.is.a("string");
+                expect(params).to.have.property("result").that.is.an("object");
 
                 const result = params.result;
-                expect(result).to.have.property('address').that.is.a('string');
-                expect(result).to.have.property('topics').that.is.an('array');
-                expect(result).to.have.property('data').that.is.a('string');
-                expect(result).to.have.property('blockHash').that.is.a('string');
-                expect(result).to.have.property('blockNumber').that.is.a('string');
-                expect(result).to.have.property('transactionHash').that.is.a('string');
-                expect(result).to.have.property('transactionIndex').that.is.a('string');
-                expect(result).to.have.property('logIndex').that.is.a('string');
-                expect(result).to.have.property('removed').that.is.a('boolean');
+                expect(result).to.have.property("address").that.is.a("string");
+                expect(result).to.have.property("topics").that.is.an("array");
+                expect(result).to.have.property("data").that.is.a("string");
+                expect(result).to.have.property("blockHash").that.is.a("string");
+                expect(result).to.have.property("blockNumber").that.is.a("string");
+                expect(result).to.have.property("transactionHash").that.is.a("string");
+                expect(result).to.have.property("transactionIndex").that.is.a("string");
+                expect(result).to.have.property("logIndex").that.is.a("string");
+                expect(result).to.have.property("removed").that.is.a("boolean");
             });
 
             it("Validate newPendingTransactions event", async () => {
                 await sendReset();
                 const waitTimeInMilliseconds = 40;
-                const response = await subscribeAndGetEventWithContract("newPendingTransactions", waitTimeInMilliseconds, 2);
+                const response = await subscribeAndGetEventWithContract(
+                    "newPendingTransactions",
+                    waitTimeInMilliseconds,
+                    2,
+                );
                 expect(response).to.not.be.undefined;
 
                 const params = response.params;
-                expect(params).to.have.property('subscription').that.is.a('string');
-                expect(params).to.have.property('result').that.is.an('string');
+                expect(params).to.have.property("subscription").that.is.a("string");
+                expect(params).to.have.property("result").that.is.an("string");
             });
         });
     });
