@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 contract TestContractCounter {
-    uint256 counter;
-    uint256 doubleCounter;
+    uint256 internal counter;
+    uint256 internal doubleCounter;
 
     function inc() public {
         counter += 1;

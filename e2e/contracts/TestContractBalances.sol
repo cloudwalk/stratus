@@ -4,9 +4,9 @@ pragma solidity ^0.8.0;
 contract TestContractBalances {
     mapping(address => uint256) public balances;
 
-    event Add(address indexed account, uint amount);
-    event Sub(address indexed account, uint amount);
-    event Set(address indexed account, uint amount);
+    event Add(address indexed account, uint256 amount);
+    event Sub(address indexed account, uint256 amount);
+    event Set(address indexed account, uint256 amount);
 
     /// @dev Add amount to the balance of an account.
     /// @return The new balance.
