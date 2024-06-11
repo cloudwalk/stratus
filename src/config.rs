@@ -726,7 +726,6 @@ pub struct ExternalRpcStorageConfig {
     pub external_rpc_storage_timeout: Duration,
 }
 
-
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum ExternalRpcStorageKind {
     // HACK: removed postgres, leaving the enum empty
