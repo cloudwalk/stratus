@@ -775,7 +775,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 metrics::set_append_entries_block_number_diff(diff);
             }
         } else {
-            tracing::error!(
+            tracing::warn!(
                 "leader is behind follower: arrived_block: {}, header_block: {}",
                 last_last_arrived_block_number,
                 header.number
