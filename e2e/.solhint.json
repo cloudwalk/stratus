@@ -1,0 +1,6 @@
+{
+    "extends": "solhint:recommended",
+    "rules": {
+        "gas-custom-errors": "off"
+    }
+}
