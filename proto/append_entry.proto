@@ -19,7 +19,6 @@ enum StatusCode {
     FOLLOWER_IN_CANDIDATE_STATE = 12; // Follower is in candidate state. Leader may need to step down.
     FOLLOWER_IN_LEADER_STATE = 13; // Follower believes it is the leader. Resolve split-brain scenario.
     ENTRY_ALREADY_EXISTS = 14; // Entry already exists. Verify log consistency.
-    RETRY_LATER = 15; // Follower requests retry later. Wait and retry the request.
 }
 
 // Transaction Execution message
