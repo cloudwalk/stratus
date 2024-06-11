@@ -1,7 +1,9 @@
 pub mod forward_to;
 
 use std::collections::HashMap;
+#[cfg(feature = "kubernetes")]
 use std::env;
+use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -24,6 +26,8 @@ use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+#[cfg(feature = "kubernetes")]
+use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
 use tonic::Request;
@@ -62,6 +66,7 @@ use crate::eth::primitives::Block;
 use crate::infra::metrics;
 
 const RETRY_DELAY: Duration = Duration::from_millis(10);
+const PEER_DISCOVERY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq)]
 enum Role {
@@ -87,7 +92,7 @@ impl PeerAddress {
     }
 
     fn full_grpc_address(&self) -> String {
-        format!("http://{}:{}", self.address, self.grpc_port)
+        format!("{}:{}", self.address, self.grpc_port)
     }
 
     fn full_jsonrpc_address(&self) -> String {
@@ -136,7 +141,6 @@ struct Peer {
     match_index: u64,
     next_index: u64,
     role: Role,
-    term: u64,
     receiver: Arc<Mutex<broadcast::Receiver<Block>>>,
 }
 
@@ -149,23 +153,30 @@ pub struct Consensus {
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
-    voted_for: Mutex<Option<PeerAddress>>,
+    voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
-    last_arrived_block_number: AtomicU64, //TODO use a true index for both executions and blocks, currently we use something like Bully algorithm so block number is fine
+    last_arrived_block_number: AtomicU64,
     role: RwLock<Role>,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
+    grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
 }
 
 impl Consensus {
-    pub async fn new(storage: Arc<StratusStorage>, direct_peers: Vec<String>, importer_config: Option<RunWithImporterConfig>) -> Arc<Self> {
+    pub async fn new(
+        storage: Arc<StratusStorage>,
+        direct_peers: Vec<String>,
+        importer_config: Option<RunWithImporterConfig>,
+        jsonrpc_address: SocketAddr,
+        grpc_address: SocketAddr,
+    ) -> Arc<Self> {
         let (sender, receiver) = mpsc::channel::<Block>(32);
         let receiver = Arc::new(Mutex::new(receiver));
         let (broadcast_sender, _) = broadcast::channel(32);
-        let last_arrived_block_number = AtomicU64::new(storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into());
+        let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
-        let my_address = Self::discover_my_address();
+        let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
         let consensus = Self {
             sender,
@@ -180,6 +191,7 @@ impl Consensus {
             role: RwLock::new(Role::Follower),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1200..1500)), // Adjust as needed
             my_address: my_address.clone(),
+            grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
         };
         let consensus = Arc::new(consensus);
@@ -193,21 +205,33 @@ impl Consensus {
         consensus
     }
 
-    fn discover_my_address() -> PeerAddress {
+    fn discover_my_address(jsonrpc_port: u16, grpc_port: u16) -> PeerAddress {
         let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
         socket.connect("8.8.8.8:80").ok().unwrap();
         let my_ip = socket.local_addr().ok().map(|addr| addr.ip().to_string()).unwrap();
 
-        PeerAddress::new(format!("http://{}", my_ip), 3000, 3777) //FIXME TODO pick ports from config
+        PeerAddress::new(format!("http://{}", my_ip), jsonrpc_port, grpc_port)
     }
 
     /// Initializes the heartbeat and election timers.
     /// This function periodically checks if the node should start a new election based on the election timeout.
     /// The timer is reset when an `AppendEntries` request is received, ensuring the node remains a follower if a leader is active.
+    ///
+    /// When there are healthy peers we need to wait for the grace period of discovery
+    /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
         named_spawn("consensus::heartbeat_timer", async move {
+            Self::discover_peers(Arc::clone(&consensus)).await;
+            if consensus.peers.read().await.is_empty() {
+                tracing::info!("no peers, starting hearbeat timer immediately");
+                Self::start_election(Arc::clone(&consensus)).await;
+            } else {
+                traced_sleep(PEER_DISCOVERY_DELAY, SleepReason::Interval).await;
+                tracing::info!("waiting for peer discovery grace period");
+            }
+
+            let timeout = consensus.heartbeat_timeout;
             loop {
-                let timeout = consensus.heartbeat_timeout;
                 tokio::select! {
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
                         if !consensus.is_leader().await {
@@ -239,6 +263,9 @@ impl Consensus {
     /// - If a majority of the peers grant their votes, the node transitions to the leader role.
     /// - If not, it remains a follower and waits for the next election cycle.
     async fn start_election(consensus: Arc<Consensus>) {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         Self::discover_peers(Arc::clone(&consensus)).await;
 
         let term = consensus.current_term.fetch_add(1, Ordering::SeqCst) + 1;
@@ -289,10 +316,15 @@ impl Consensus {
             tracing::info!(votes = votes, peers = peers.len(), term = term, "failed to become the leader on election");
             *consensus.role.write().await = Role::Follower;
         }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_start_election(start.elapsed());
     }
 
     async fn become_leader(&self) {
         *self.role.write().await = Role::Leader;
+
+        self.last_arrived_block_number.store(std::u64::MAX, Ordering::SeqCst); //as leader, we don't have a last block number
 
         //TODO XXX // Initialize leader-specific tasks such as sending appendEntries
         //TODO XXX self.send_append_entries().await;
@@ -324,7 +356,7 @@ impl Consensus {
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
         named_spawn("consensus::peer_discovery", async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            let mut interval = tokio::time::interval(PEER_DISCOVERY_DELAY);
             loop {
                 tracing::info!("starting periodic peer discovery");
                 Self::discover_peers(Arc::clone(&consensus)).await;
@@ -346,8 +378,8 @@ impl Consensus {
                     if consensus.is_leader().await {
                         tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
 
-                        if let Err(e) = consensus.broadcast_sender.send(data) {
-                            tracing::warn!("failed to broadcast block: {:?}", e);
+                        if consensus.broadcast_sender.send(data).is_err() {
+                            tracing::error!("failed to broadcast block");
                         }
                     }
                 }
@@ -357,8 +389,8 @@ impl Consensus {
 
     fn initialize_server(consensus: Arc<Consensus>) {
         named_spawn("consensus::server", async move {
-            tracing::info!("starting append entry service at port 3777");
-            let addr = "0.0.0.0:3777".parse().unwrap();
+            tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
+            let addr = consensus.grpc_address;
 
             let append_entry_service = AppendEntryServiceImpl {
                 consensus: Mutex::new(consensus),
@@ -399,6 +431,9 @@ impl Consensus {
     }
 
     pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         //TODO rename to TransactionForward
         let Some((http_url, _)) = self.get_chain_url().await else {
             return Err(anyhow!("No chain url found"));
@@ -406,12 +441,26 @@ impl Consensus {
         let chain = BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await?;
         let forward_to = forward_to::TransactionRelayer::new(chain);
         let result = forward_to.forward(transaction).await?;
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_forward(start.elapsed());
+
         Ok(result.tx_hash) //XXX HEX
     }
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
+        if self.is_leader().await {
+            return true;
+        }
+
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
+
+        if last_arrived_block_number == std::u64::MAX {
+            tracing::warn!("no appendEntry has been received yet");
+            return false;
+        }
+
         let storage_block_number: u64 = self.storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into();
 
         tracing::info!(
@@ -420,18 +469,16 @@ impl Consensus {
             storage_block_number
         );
 
-        if self.peers.read().await.len() == 0 {
-            return self.is_leader().await;
-        }
-
         (last_arrived_block_number - 2) <= storage_block_number
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_node() -> Option<String> {
         let pod_name = env::var("MY_POD_NAME").ok()?;
         Some(pod_name.trim().to_string())
     }
 
+    #[cfg(feature = "kubernetes")]
     fn current_namespace() -> Option<String> {
         let namespace = env::var("NAMESPACE").ok()?;
         Some(namespace.trim().to_string())
@@ -466,12 +513,40 @@ impl Consensus {
         let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         #[cfg(feature = "kubernetes")]
-        if let Ok(k8s_peers) = Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
-            new_peers.extend(k8s_peers);
+        {
+            let mut attempts = 0;
+            let max_attempts = 100;
+
+            while attempts < max_attempts {
+                match Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
+                    Ok(k8s_peers) => {
+                        new_peers.extend(k8s_peers);
+                        tracing::info!("discovered {} peers from kubernetes", new_peers.len());
+                        break;
+                    }
+                    Err(e) => {
+                        attempts += 1;
+                        tracing::warn!("failed to discover peers from Kubernetes (attempt {}/{}): {:?}", attempts, max_attempts, e);
+
+                        if attempts >= max_attempts {
+                            tracing::error!("exceeded maximum attempts to discover peers from kubernetes. initiating shutdown.");
+                            GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
+                        }
+
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
         }
 
-        if let Ok(env_peers) = Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
-            new_peers.extend(env_peers);
+        match Self::discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
+            Ok(env_peers) => {
+                tracing::info!("discovered {} peers from env", env_peers.len());
+                new_peers.extend(env_peers);
+            }
+            Err(e) => {
+                tracing::warn!("failed to discover peers from env: {:?}", e);
+            }
         }
 
         let mut peers_lock = consensus.peers.write().await;
@@ -519,34 +594,35 @@ impl Consensus {
         let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
         for address in addresses {
-            // Parse the address format using from_string method
             match PeerAddress::from_string(address.to_string()) {
                 Ok(peer_address) => {
-                    let full_grpc_address = peer_address.full_grpc_address();
-                    match AppendEntryServiceClient::connect(full_grpc_address.clone()).await {
+                    let grpc_address = peer_address.full_grpc_address();
+                    tracing::info!("Attempting to connect to peer gRPC address: {}", grpc_address);
+                    match AppendEntryServiceClient::connect(grpc_address.clone()).await {
                         Ok(client) => {
+                            tracing::info!("Successfully connected to peer gRPC address: {}", grpc_address);
                             let peer = Peer {
                                 client,
                                 match_index: 0,
                                 next_index: 0,
                                 role: Role::Follower, // FIXME it won't be always follower, we need to check the leader or candidates
-                                term: 0,              // Replace with actual term
                                 receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                             };
                             peers.push((peer_address.clone(), peer));
                             tracing::info!(peer = peer_address.to_string(), "peer is available");
                         }
-                        Err(_) => {
-                            tracing::warn!(peer = peer_address.to_string(), "peer is not available");
+                        Err(e) => {
+                            tracing::warn!(peer = peer_address.to_string(), "peer is not available. Error: {:?}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Invalid address format: {}. Error: {:?}", address, e);
+                    tracing::error!("Invalid address format: {}. Error: {:?}", address, e);
                 }
             }
         }
 
+        tracing::info!("Completed peer discovery with {} peers found", peers.len());
         Ok(peers)
     }
 
@@ -565,8 +641,8 @@ impl Consensus {
                 if pod_name != Self::current_node().unwrap() {
                     if let Some(pod_ip) = p.status.and_then(|status| status.pod_ip) {
                         let address = pod_ip;
-                        let jsonrpc_port = 3000; //TODO use kubernetes env config
-                        let grpc_port = 3777; //TODO use kubernetes env config
+                        let jsonrpc_port = consensus.my_address.jsonrpc_port;
+                        let grpc_port = consensus.my_address.grpc_port;
                         let full_grpc_address = format!("http://{}:{}", address, grpc_port);
                         let client = AppendEntryServiceClient::connect(full_grpc_address.clone()).await?;
 
@@ -575,7 +651,6 @@ impl Consensus {
                             match_index: 0,
                             next_index: 0,
                             role: Role::Follower, //FIXME it wont be always follower, we need to check the leader or candidates
-                            term: 0,              // Replace with actual term
                             receiver: Arc::new(Mutex::new(consensus.broadcast_sender.subscribe())),
                         };
                         peers.push((PeerAddress::new(address, jsonrpc_port, grpc_port), peer));
@@ -630,6 +705,9 @@ impl Consensus {
     }
 
     async fn append_block_to_peer(&self, peer: &mut Peer, block: &Block) -> Result<(), anyhow::Error> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let header: BlockHeader = (&block.header).into();
         let transaction_hashes = vec![]; // Replace with actual transaction hashes
 
@@ -642,16 +720,13 @@ impl Consensus {
             transaction_hashes,
         });
 
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         let response = peer.client.append_block_commit(request).await?;
         let response = response.into_inner();
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_append_entries(start.elapsed());
+        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role,  "current follower state on election"); //TODO also move this to metrics
 
-        tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role, term = peer.term,  "current follower state on election"); //TODO also move this to metrics
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_append_block_to_peer(start.elapsed());
 
         match StatusCode::try_from(response.status) {
             Ok(StatusCode::AppendSuccess) => Ok(()),
@@ -694,6 +769,23 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
+        if let Some(diff) = last_last_arrived_block_number.checked_sub(header.number) {
+            #[cfg(feature = "metrics")]
+            {
+                metrics::set_append_entries_block_number_diff(diff);
+            }
+        } else {
+            tracing::error!(
+                "leader is behind follower: arrived_block: {}, header_block: {}",
+                last_last_arrived_block_number,
+                header.number
+            );
+            return Err(Status::new(
+                (StatusCode::EntryAlreadyExists as i32).into(),
+                "Leader is behind follower and should step down".to_string(),
+            ));
+        }
+
         consensus.reset_heartbeat_signal.notify_waiters();
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
@@ -705,9 +797,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
             "last arrived block number set",
         );
-
-        #[cfg(feature = "metrics")]
-        metrics::set_append_entries_block_number_diff(last_last_arrived_block_number - header.number);
 
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
@@ -730,7 +819,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             );
             return Ok(Response::new(RequestVoteResponse {
                 term: current_term,
-                vote_granted: false, //XXX check how we are dealing with vote_granted false
+                vote_granted: false,
             }));
         }
 
@@ -741,7 +830,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         let mut voted_for = consensus.voted_for.lock().await;
-        //XXX for some reason candidate_id is going wrong
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
         if voted_for.is_none() {
             *voted_for = Some(candidate_address.clone());
@@ -765,7 +853,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_peer_address_from_string_valid() {
+    fn test_peer_address_from_string_valid_http() {
         let input = "http://127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
 
@@ -777,7 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn test_another_peer_address_from_string_valid() {
+    fn test_peer_address_from_string_valid_https() {
         let input = "https://127.0.0.1:3000;3777".to_string();
         let result = PeerAddress::from_string(input);
 
@@ -795,5 +883,26 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(result.err().unwrap().to_string(), "invalid format");
+    }
+
+    #[test]
+    fn test_peer_address_from_string_missing_scheme() {
+        let input = "127.0.0.1:3000;3777".to_string();
+        let result = PeerAddress::from_string(input);
+
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap().to_string(), "invalid scheme");
+    }
+
+    #[test]
+    fn test_peer_address_full_grpc_address() {
+        let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
+        assert_eq!(peer_address.full_grpc_address(), "127.0.0.1:3777");
+    }
+
+    #[test]
+    fn test_peer_address_full_jsonrpc_address() {
+        let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
+        assert_eq!(peer_address.full_jsonrpc_address(), "http://127.0.0.1:3000");
     }
 }

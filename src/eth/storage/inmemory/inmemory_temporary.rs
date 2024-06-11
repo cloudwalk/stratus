@@ -205,10 +205,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                 account.info.bytecode = Some(bytecode.clone());
             }
             if let Some(indexes) = change.static_slot_indexes.take_ref() {
-                account.info.static_slot_indexes = indexes.clone();
+                account.info.static_slot_indexes.clone_from(indexes);
             }
             if let Some(indexes) = change.mapping_slot_indexes.take_ref() {
-                account.info.mapping_slot_indexes = indexes.clone();
+                account.info.mapping_slot_indexes.clone_from(indexes);
             }
 
             // slots

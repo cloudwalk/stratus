@@ -24,7 +24,7 @@ pub enum StoragePointInTime {
 }
 
 // -----------------------------------------------------------------------------
-// Conversions: Other -> Self
+// Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 #[cfg(feature = "metrics")]
 impl From<&StoragePointInTime> for MetricLabelValue {

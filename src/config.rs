@@ -13,7 +13,6 @@ use display_json::DebugAsJson;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
-use tracing::info_span;
 
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
@@ -46,8 +45,11 @@ use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::binary_name;
 use crate::ext::parse_duration;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics::MetricsHistogramKind;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
+use crate::infra::tracing::TracingLogFormat;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 
@@ -82,32 +84,42 @@ pub struct CommonConfig {
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
     pub num_blocking_threads: usize,
 
+    /// Address where Prometheus metrics will be exposed.
+    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    pub metrics_exporter_address: SocketAddr,
+
+    #[cfg(feature = "metrics")]
+    /// Metrics histograms will be collected using summaries or histograms (buckets)?
     #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
     pub metrics_histogram_kind: MetricsHistogramKind,
 
-    /// Prevents clap from breaking when passing `nocapture` options in tests.
-    #[arg(long = "nocapture")]
-    pub nocapture: bool,
+    // Address where Tokio Console GRPC server will be exposed.
+    #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
+    pub tokio_console_address: SocketAddr,
+
+    /// URL of the OpenTelemetry collector where tracing will be pushed.
+    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
+    pub opentelemetry_url: Option<String>,
+
+    /// How tracing events will be formatted.
+    #[arg(long = "log-format", env = "LOG_FORMAT", default_value = "normal")]
+    pub log_format: TracingLogFormat,
+
+    /// Sentry URL where error events will be pushed.
+    #[arg(long = "sentry-url", env = "SENTRY_URL")]
+    pub sentry_url: Option<String>,
 
     /// Direct access to peers via IP address, why will be included on data propagation and leader election.
     #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
     pub candidate_peers: Vec<String>,
 
-    /// Url to the sentry project
-    #[arg(long = "sentry-url", env = "SENTRY_URL")]
-    pub sentry_url: Option<String>,
+    // Address for the GRPC Server
+    #[arg(long = "grpc-server-address", env = "GRPC_SERVER_ADDRESS", default_value = "0.0.0.0:3777")]
+    pub grpc_server_address: SocketAddr,
 
-    /// Url to the tracing collector (Opentelemetry over gRPC)
-    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
-    pub tracing_url: Option<String>,
-
-    // Address for the Tokio Console
-    #[arg(long = "tokio-console-address", env = "TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
-    pub tokio_console_address: SocketAddr,
-
-    // Address for the Prometheus Metrics Exporter
-    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
-    pub metrics_exporter_address: SocketAddr,
+    /// Prevents clap from breaking when passing `nocapture` options in tests.
+    #[arg(long = "nocapture")]
+    pub nocapture: bool,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -224,11 +236,8 @@ impl ExecutorConfig {
                         return;
                     }
 
-                    // enter span from another thread
-                    let span = task.span_id.map(|id| info_span!(parent: id, "executor::evm"));
-                    let _span_enter = span.as_ref().map(|span| span.enter());
-
                     // execute
+                    let _span_enter = task.span.enter();
                     let result = evm.execute(task.input);
                     if let Err(e) = task.response_tx.send(result) {
                         tracing::error!(reason = ?e, "failed to send evm execution result");
@@ -832,6 +841,11 @@ pub struct PermanentStorageConfig {
     /// Permamenent storage timeout when opening a connection (in millis).
     #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
     pub perm_storage_timeout: Duration,
+
+    #[cfg(feature = "rocks")]
+    /// RocksDB storage path prefix to execute multiple local Stratus instances.
+    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
+    pub rocks_path_prefix: Option<String>,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -852,7 +866,7 @@ impl PermanentStorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
             PermanentStorageKind::Postgres { ref url } => {
                 let config = PostgresPermanentStorageConfig {
                     url: url.to_owned(),
@@ -876,36 +890,6 @@ impl FromStr for PermanentStorageKind {
             "rocks" => Ok(Self::Rocks),
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: MetricsHistogramKind
-// -----------------------------------------------------------------------------
-
-/// See: <https://prometheus.io/docs/practices/histograms/>
-#[derive(DebugAsJson, Clone, Copy, Eq, PartialEq, serde::Serialize)]
-pub enum MetricsHistogramKind {
-    /// Quantiles are calculated on client-side based on recent data kept in-memory.
-    ///
-    /// Client defines the quantiles to calculate.
-    Summary,
-
-    /// Quantiles are calculated on server-side based on bucket counts.
-    ///
-    /// Cient defines buckets to group observations.
-    Histogram,
-}
-
-impl FromStr for MetricsHistogramKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s.to_lowercase().trim() {
-            "summary" => Ok(Self::Summary),
-            "histogram" => Ok(Self::Histogram),
-            s => Err(anyhow!("unknown metrics histogram kind: {}", s)),
         }
     }
 }

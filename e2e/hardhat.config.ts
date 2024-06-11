@@ -41,7 +41,7 @@ const config: HardhatUserConfig = {
             },
         },
         stratus: {
-            url: "http://localhost:3000",
+            url: "http://localhost:3000?app=e2e",
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,
             },
