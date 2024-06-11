@@ -57,16 +57,7 @@ const providerOptions: JsonRpcApiProviderOptions = {
     batchMaxCount: 1, // Do not unite the request in batches
 };
 
-export let ETHERJS = new JsonRpcProvider(providerUrl, undefined, providerOptions);
-
-export function updateProviderUrl(newUrl: string) {
-    providerUrl = newUrl;
-    ETHERJS = new JsonRpcProvider(providerUrl);
-}
-
-export function getProvider() {
-    return ETHERJS;
-}
+export const ETHERJS = new JsonRpcProvider(providerUrl, undefined, providerOptions);
 
 // Configure RPC logger if RPC_LOG env-var is configured.
 function log(event: any) {
@@ -417,7 +408,7 @@ export async function pollForTransaction(
         throw new Error("Transaction not found");
     }
     tx = await tx;
-    const txHash = (typeof tx === "string") ? tx : tx.hash;
+    const txHash = typeof tx === "string" ? tx : tx.hash;
     const [txReceipt] = await pollForTransactions([txHash], options);
     return txReceipt;
 }
