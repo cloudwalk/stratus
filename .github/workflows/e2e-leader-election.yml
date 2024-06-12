@@ -56,6 +56,9 @@ jobs:
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
       - name: Set up Just
         uses: extractions/setup-just@v2
 

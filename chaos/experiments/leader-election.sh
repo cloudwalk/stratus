@@ -223,7 +223,7 @@ run_test() {
 num_instances=3
 
 # Number of times to run the test
-n=2
+n=10
 
 # Build the project
 build_project
