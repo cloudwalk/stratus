@@ -47,12 +47,7 @@ where
 
         // init tracing
         runtime
-            .block_on(infra::init_tracing(
-                common.log_format,
-                common.opentelemetry_url.as_deref(),
-                common.sentry_url.as_deref(),
-                common.tokio_console_address,
-            ))
+            .block_on(infra::init_tracing(&common.tracing, common.sentry_url.as_deref(), common.tokio_console_address))
             .expect("failed to init tracing");
 
         // init metrics

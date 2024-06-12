@@ -1,5 +1,6 @@
 //! Tracing services.
 
+use std::collections::HashMap;
 use std::io::stdout;
 use std::io::IsTerminal;
 use std::net::SocketAddr;
@@ -9,11 +10,21 @@ use anyhow::anyhow;
 use chrono::Local;
 use console_subscriber::ConsoleLayer;
 use display_json::DebugAsJson;
+use itertools::Itertools;
+use opentelemetry::trace::Span;
+use opentelemetry::trace::Tracer;
 use opentelemetry::KeyValue;
+use opentelemetry_otlp::Protocol;
+use opentelemetry_otlp::SpanExporterBuilder;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
-use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::trace::Span as SdkSpan;
+use opentelemetry_sdk::trace::Tracer as SdkTracer;
+use opentelemetry_sdk::Resource as SdkResource;
+use tonic::metadata::MetadataKey;
+use tonic::metadata::MetadataMap;
+use tracing_opentelemetry::PreSampledTracer;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::layer::SubscriberExt;
@@ -21,23 +32,22 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
+use crate::config::TracingConfig;
 use crate::ext::binary_name;
 use crate::ext::named_spawn;
 
 /// Init application tracing.
-pub async fn init_tracing(
-    log_format: TracingLogFormat,
-    opentelemetry_url: Option<&str>,
-    sentry_url: Option<&str>,
-    tokio_console_address: SocketAddr,
-) -> anyhow::Result<()> {
+pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
     println!("creating tracing registry");
 
     // configure stdout log layer
     let enable_ansi = stdout().is_terminal();
 
-    println!("tracing registry: enabling console logs | format={} ansi={}", log_format, enable_ansi);
-    let stdout_layer = match log_format {
+    println!(
+        "tracing registry: enabling console logs | format={} ansi={}",
+        config.tracing_log_format, enable_ansi
+    );
+    let stdout_layer = match config.tracing_log_format {
         TracingLogFormat::Json => fmt::Layer::default()
             .json()
             .with_target(true)
@@ -50,7 +60,7 @@ pub async fn init_tracing(
             .with_thread_names(false)
             .with_target(false)
             .with_ansi(enable_ansi)
-            .with_timer(MinimalTimer)
+            .with_timer(TracingMinimalTimer)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
         TracingLogFormat::Normal => fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed(),
@@ -64,30 +74,28 @@ pub async fn init_tracing(
     };
 
     // configure opentelemetry layer
-    let opentelemetry_layer = match opentelemetry_url {
-        Some(url) => {
-            let service_name = format!("stratus-{}", binary_name());
-            println!("tracing registry: enabling opentelemetry exporter | url={} service={}", url, service_name);
-            let tracer_config = trace::config().with_resource(Resource::new(vec![KeyValue::new("service.name", service_name)]));
-            let tracer_exporter = opentelemetry_otlp::new_exporter().tonic().with_endpoint(url);
-
-            let tracer = opentelemetry_otlp::new_pipeline()
-                .tracing()
-                .with_exporter(tracer_exporter)
-                .with_trace_config(tracer_config)
-                .install_batch(runtime::Tokio)
-                .unwrap();
-
-            let layer = tracing_opentelemetry::layer()
-                .with_tracked_inactivity(false)
-                .with_tracer(tracer)
-                .with_filter(EnvFilter::from_default_env());
-            Some(layer)
-        }
+    let tracer1 = match &config.tracing_1_url {
+        Some(url) => Some(opentelemetry_tracer(1, url, config.tracing_1_protocol, &config.tracing_1_headers)),
         None => {
-            println!("tracing registry: skipping opentelemetry exporter");
+            println!("tracing registry: skipping opentelemetry exporter 1");
             None
         }
+    };
+    let tracer2 = match &config.tracing_2_url {
+        Some(url) => Some(opentelemetry_tracer(2, url, config.tracing_2_protocol, &config.tracing_2_headers)),
+        None => {
+            println!("tracing registry: skipping opentelemetry exporter 1");
+            None
+        }
+    };
+    let opentelemetry_layer = if let Some(tracer_1) = tracer1 {
+        let layer = tracing_opentelemetry::layer()
+            .with_tracked_inactivity(false)
+            .with_tracer(TracingMultiTracer { tracer1: tracer_1, tracer2 })
+            .with_filter(EnvFilter::from_default_env());
+        Some(layer)
+    } else {
+        None
     };
 
     // configure sentry layer
@@ -129,26 +137,92 @@ pub async fn init_tracing(
     }
 }
 
+fn opentelemetry_tracer(index: usize, url: &str, protocol: TracingProtocol, headers: &[String]) -> SdkTracer {
+    let service_name = format!("stratus-{}", binary_name());
+    println!(
+        "tracing registry: enabling opentelemetry exporter {} | url={} protocol={} headers={} service={}",
+        index,
+        url,
+        protocol,
+        headers.len(),
+        service_name
+    );
+
+    // configure headers
+    let headers = headers
+        .iter()
+        .map(|header| {
+            let mut parts = header.splitn(2, '=');
+            let key = parts.next().unwrap();
+            let value = parts.next().unwrap_or_default();
+            (key, value)
+        })
+        .collect_vec();
+
+    // configure tracer
+    let tracer_exporter: SpanExporterBuilder = match protocol {
+        TracingProtocol::Grpc => {
+            let mut protocol_metadata = MetadataMap::new();
+            for (key, value) in headers {
+                protocol_metadata.insert(MetadataKey::from_str(key).unwrap(), value.parse().unwrap());
+            }
+
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_protocol(Protocol::Grpc)
+                .with_endpoint(url)
+                .with_metadata(protocol_metadata)
+                .into()
+        }
+        TracingProtocol::HttpBinary | TracingProtocol::HttpJson => {
+            let mut protocol_headers = HashMap::new();
+            for (key, value) in headers {
+                protocol_headers.insert(key.to_owned(), value.to_owned());
+            }
+
+            opentelemetry_otlp::new_exporter()
+                .http()
+                .with_protocol(protocol.into())
+                .with_endpoint(url)
+                .with_headers(protocol_headers)
+                .into()
+        }
+    };
+
+    let tracer_config = trace::config().with_resource(SdkResource::new(vec![KeyValue::new("service.name", service_name)]));
+
+    opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(tracer_exporter)
+        .with_trace_config(tracer_config)
+        .install_batch(runtime::Tokio)
+        .unwrap()
+}
+
 // -----------------------------------------------------------------------------
-// Tracing types
+// Tracing config
 // -----------------------------------------------------------------------------
 
 /// Tracing event log format.
 #[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
 pub enum TracingLogFormat {
     /// Minimal format: Time (no date), level, and message.
+    #[serde(rename = "minimal")]
     #[strum(to_string = "minimal")]
     Minimal,
 
     /// Normal format: Default `tracing` crate configuration.
+    #[serde(rename = "normal")]
     #[strum(to_string = "normal")]
     Normal,
 
     /// Verbose format: Full datetime, level, thread, target, and message.
+    #[serde(rename = "verbose")]
     #[strum(to_string = "verbose")]
     Verbose,
 
     /// JSON format: Verbose information formatted as JSON.
+    #[serde(rename = "json")]
     #[strum(to_string = "json")]
     Json,
 }
@@ -167,9 +241,145 @@ impl FromStr for TracingLogFormat {
     }
 }
 
-struct MinimalTimer;
+#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
+pub enum TracingProtocol {
+    #[serde(rename = "grpc")]
+    #[strum(to_string = "grpc")]
+    Grpc,
 
-impl FormatTime for MinimalTimer {
+    #[serde(rename = "http-binary")]
+    #[strum(to_string = "http-binary")]
+    HttpBinary,
+
+    #[serde(rename = "http-json")]
+    #[strum(to_string = "http-json")]
+    HttpJson,
+}
+
+impl FromStr for TracingProtocol {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s.to_lowercase().trim() {
+            "grpc" => Ok(Self::Grpc),
+            "http-binary" => Ok(Self::HttpBinary),
+            "http-json" => Ok(Self::HttpJson),
+            s => Err(anyhow!("unknown tracing protocol: {}", s)),
+        }
+    }
+}
+
+impl From<TracingProtocol> for Protocol {
+    fn from(value: TracingProtocol) -> Self {
+        match value {
+            TracingProtocol::Grpc => Self::Grpc,
+            TracingProtocol::HttpBinary => Self::HttpBinary,
+            TracingProtocol::HttpJson => Self::HttpJson,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tracing services
+// -----------------------------------------------------------------------------
+
+struct TracingMultiTracer {
+    tracer1: SdkTracer,
+    tracer2: Option<SdkTracer>,
+}
+
+impl Tracer for TracingMultiTracer {
+    type Span = TracingMultiSpan;
+
+    fn build_with_context(&self, builder: opentelemetry::trace::SpanBuilder, parent_cx: &opentelemetry::Context) -> Self::Span {
+        let span2 = self.tracer2.as_ref().map(|t| t.build_with_context(builder.clone(), parent_cx));
+        let span1 = self.tracer1.build_with_context(builder, parent_cx);
+        TracingMultiSpan { span1, span2 }
+    }
+}
+
+impl PreSampledTracer for TracingMultiTracer {
+    fn sampled_context(&self, data: &mut tracing_opentelemetry::OtelData) -> opentelemetry::Context {
+        self.tracer1.sampled_context(data)
+    }
+
+    fn new_trace_id(&self) -> opentelemetry::trace::TraceId {
+        self.tracer1.new_trace_id()
+    }
+
+    fn new_span_id(&self) -> opentelemetry::trace::SpanId {
+        self.tracer1.new_span_id()
+    }
+}
+
+struct TracingMultiSpan {
+    span1: SdkSpan,
+    span2: Option<SdkSpan>,
+}
+
+impl Span for TracingMultiSpan {
+    fn add_event_with_timestamp<T>(&mut self, name: T, timestamp: std::time::SystemTime, attributes: Vec<KeyValue>)
+    where
+        T: Into<std::borrow::Cow<'static, str>>,
+    {
+        let name = name.into();
+        if let Some(span2) = &mut self.span2 {
+            span2.add_event_with_timestamp(name.clone(), timestamp, attributes.clone());
+        }
+        self.span1.add_event_with_timestamp(name, timestamp, attributes);
+    }
+
+    fn span_context(&self) -> &opentelemetry::trace::SpanContext {
+        self.span1.span_context()
+    }
+
+    fn is_recording(&self) -> bool {
+        self.span1.is_recording()
+    }
+
+    fn set_attribute(&mut self, attribute: KeyValue) {
+        if let Some(span2) = &mut self.span2 {
+            span2.set_attribute(attribute.clone());
+        }
+        self.span1.set_attribute(attribute);
+    }
+
+    fn set_status(&mut self, status: opentelemetry::trace::Status) {
+        if let Some(span2) = &mut self.span2 {
+            span2.set_status(status.clone());
+        }
+        self.span1.set_status(status);
+    }
+
+    fn update_name<T>(&mut self, new_name: T)
+    where
+        T: Into<std::borrow::Cow<'static, str>>,
+    {
+        let new_name = new_name.into();
+        if let Some(span2) = &mut self.span2 {
+            span2.update_name(new_name.clone());
+        }
+        self.span1.update_name(new_name);
+    }
+
+    fn add_link(&mut self, span_context: opentelemetry::trace::SpanContext, attributes: Vec<KeyValue>) {
+        if let Some(span2) = &mut self.span2 {
+            span2.add_link(span_context.clone(), attributes.clone());
+        }
+        self.span1.add_link(span_context, attributes);
+    }
+
+    fn end_with_timestamp(&mut self, timestamp: std::time::SystemTime) {
+        if let Some(span2) = &mut self.span2 {
+            span2.end_with_timestamp(timestamp);
+        }
+        self.span1.end_with_timestamp(timestamp);
+    }
+}
+
+struct TracingMinimalTimer;
+
+impl FormatTime for TracingMinimalTimer {
     fn format_time(&self, w: &mut fmt::format::Writer<'_>) -> std::fmt::Result {
         write!(w, "{}", Local::now().time().format("%H:%M:%S%.3f"))
     }

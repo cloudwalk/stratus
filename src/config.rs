@@ -48,6 +48,7 @@ use crate::ext::parse_duration;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::TracingLogFormat;
+use crate::infra::tracing::TracingProtocol;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 
@@ -82,6 +83,9 @@ pub struct CommonConfig {
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
     pub num_blocking_threads: usize,
 
+    #[clap(flatten)]
+    pub tracing: TracingConfig,
+
     /// Address where Prometheus metrics will be exposed.
     #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
     pub metrics_exporter_address: SocketAddr,
@@ -89,14 +93,6 @@ pub struct CommonConfig {
     // Address where Tokio Console GRPC server will be exposed.
     #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
     pub tokio_console_address: SocketAddr,
-
-    /// URL of the OpenTelemetry collector where tracing will be pushed.
-    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
-    pub opentelemetry_url: Option<String>,
-
-    /// How tracing events will be formatted.
-    #[arg(long = "log-format", env = "LOG_FORMAT", default_value = "normal")]
-    pub log_format: TracingLogFormat,
 
     /// Sentry URL where error events will be pushed.
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
@@ -145,6 +141,30 @@ impl CommonConfig {
             }
         }
     }
+}
+
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct TracingConfig {
+    #[arg(long = "tracing-log-format", env = "TRACING_LOG_FORMAT", default_value = "normal")]
+    pub tracing_log_format: TracingLogFormat,
+
+    #[arg(long = "tracing-protocol", env = "TRACING_PROTOCOL", default_value = "grpc")]
+    pub tracing_1_protocol: TracingProtocol,
+
+    #[arg(long = "tracing-url", env = "TRACING_URL")]
+    pub tracing_1_url: Option<String>,
+
+    #[arg(long = "tracing-headers", env = "TRACING_HEADERS", value_delimiter = ',')]
+    pub tracing_1_headers: Vec<String>,
+
+    #[arg(long = "tracing-protocol-2", env = "TRACING_PROTOCOL_2", default_value = "grpc")]
+    pub tracing_2_protocol: TracingProtocol,
+
+    #[arg(long = "tracing-url-2", env = "TRACING_URL_2")]
+    pub tracing_2_url: Option<String>,
+
+    #[arg(long = "tracing-headers-2", env = "TRACING_HEADERS_2", value_delimiter = ',')]
+    pub tracing_2_headers: Vec<String>,
 }
 
 // -----------------------------------------------------------------------------
