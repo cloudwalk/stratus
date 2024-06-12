@@ -1,3 +1,6 @@
+/// Holds the log entries that are stored in the Raft log.
+/// The log entries are either a BlockHeader or a TransactionExecution.
+/// The LogEntry struct is used to store the index and term of the log entry.
 use prost::Message;
 use serde::Deserialize;
 use serde::Serialize;

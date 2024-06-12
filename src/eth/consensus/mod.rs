@@ -1,5 +1,5 @@
-mod append_entries_storage;
 pub mod forward_to;
+mod log_entry;
 
 use std::collections::HashMap;
 #[cfg(feature = "kubernetes")]
