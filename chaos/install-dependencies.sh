@@ -21,7 +21,8 @@ chmod +x ~/.docker/cli-plugins/docker-buildx
 echo "Checking if Docker image is already built..."
 if ! docker images | grep -q local/run_with_importer_kind; then
     echo "Building Docker image..."
-    docker buildx inspect mybuilder > /dev/null 2>&1 || docker buildx create --name mybuilder --use
+    docker buildx inspect mybuilder > /dev/null 2>&1 || docker buildx create --use
+
     DOCKER_BUILDKIT=1 docker buildx build -t local/run_with_importer_kind -f ./docker/Dockerfile.run_with_importer_kind .
 else
     echo "Docker image already built."
