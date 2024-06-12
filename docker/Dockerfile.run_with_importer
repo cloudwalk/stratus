@@ -17,7 +17,7 @@ COPY Cargo.toml Cargo.lock /app/
 COPY .cargo /app/.cargo
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN mkdir src/bin/ && echo "fn main() {}" > src/bin/run_with_importer.rs
-RUN cargo build --release --bin run-with-importer --features metrics
+RUN cargo build --release --bin run-with-importer --features metrics,rocks,kubernetes
 RUN rm -r src
 
 # Build stage
@@ -37,18 +37,13 @@ COPY --from=deps /app/Cargo.lock /app/Cargo.lock
 COPY --from=deps /app/.cargo /app/.cargo
 
 # Copy the rest of the application code
-COPY src /app/src
 COPY static /app/static
 COPY .sqlx /app/.sqlx
 COPY build.rs /app/build.rs
 COPY config /app/config
 COPY proto /app/proto
+COPY src /app/src
 
-RUN cargo build --release --bin run-with-importer --features metrics
-
-ENV CARGO_PROFILE_RELEASE_DEBUG=1
-ENV LOG_FORMAT=json
-ENV NO_COLOR=1
 RUN cargo build --release --bin run-with-importer --features metrics,rocks,kubernetes
 
 # Runtime
