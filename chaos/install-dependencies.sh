@@ -19,16 +19,16 @@ curl -L https://github.com/docker/buildx/releases/download/v0.8.2/buildx-v0.8.2.
 chmod +x ~/.docker/cli-plugins/docker-buildx
 
 echo "Checking if Docker image is already built..."
-if ! docker images | grep -q local/run_with_importer_cached; then
+if ! docker images | grep -q local/run_with_importer_kind; then
     echo "Building Docker image..."
     docker buildx inspect mybuilder > /dev/null 2>&1 || docker buildx create --name mybuilder --use
-    DOCKER_BUILDKIT=1 docker buildx build -t local/run_with_importer_cached -f ./docker/Dockerfile.run_with_importer_cached .
+    DOCKER_BUILDKIT=1 docker buildx build -t local/run_with_importer_kind -f ./docker/Dockerfile.run_with_importer_kind .
 else
     echo "Docker image already built."
 fi
 
 echo "Loading Docker image into Kind..."
-kind load docker-image local/run_with_importer_cached --name local-testing
+kind load docker-image local/run_with_importer_kind --name local-testing
 
 echo "Deploying application..."
 kubectl apply -f chaos/local-deployment.yaml

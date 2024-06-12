@@ -40,5 +40,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
       - name: Run e2e tests
         run: just run-chaos-experiment leader-election
