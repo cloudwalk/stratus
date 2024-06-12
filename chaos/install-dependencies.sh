@@ -21,7 +21,8 @@ chmod +x ~/.docker/cli-plugins/docker-buildx
 echo "Checking if Docker image is already built..."
 if ! docker images | grep -q local/run_with_importer_cached; then
     echo "Building Docker image..."
-    docker build -t local/run_with_importer_cached -f ./docker/Dockerfile.run_with_importer_cached .
+    docker buildx inspect mybuilder > /dev/null 2>&1 || docker buildx create --name mybuilder --use
+    DOCKER_BUILDKIT=1 docker buildx build -t local/run_with_importer_cached -f ./docker/Dockerfile.run_with_importer_cached .
 else
     echo "Docker image already built."
 fi
