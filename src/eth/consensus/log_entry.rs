@@ -9,17 +9,15 @@ use super::append_entry::TransactionExecution as TE;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum LogEntryData {
     BlockHeader(BH),
     TransactionExecutions(Vec<TE>),
+    #[default]
     Empty,
 }
 
-impl Default for LogEntryData {
-    fn default() -> Self {
-        LogEntryData::Empty
-    }
-}
+
 
 #[derive(Debug, Clone, Default)]
 pub struct LogEntry {
@@ -35,11 +33,10 @@ impl Message for LogEntryData {
     {
         match self {
             LogEntryData::BlockHeader(header) => header.encode_raw(buf),
-            LogEntryData::TransactionExecutions(executions) => {
+            LogEntryData::TransactionExecutions(executions) =>
                 for execution in executions {
                     execution.encode_raw(buf);
-                }
-            },
+                },
             LogEntryData::Empty => {}
         }
     }
@@ -61,7 +58,7 @@ impl Message for LogEntryData {
                     execution.merge_field(tag, wire_type, buf, ctx.clone())?;
                 }
                 Ok(())
-            },
+            }
             LogEntryData::Empty => Ok(()),
         }
     }
@@ -69,9 +66,7 @@ impl Message for LogEntryData {
     fn encoded_len(&self) -> usize {
         match self {
             LogEntryData::BlockHeader(header) => header.encoded_len(),
-            LogEntryData::TransactionExecutions(executions) => {
-                executions.iter().map(|execution| execution.encoded_len()).sum()
-            },
+            LogEntryData::TransactionExecutions(executions) => executions.iter().map(|execution| execution.encoded_len()).sum(),
             LogEntryData::Empty => 0,
         }
     }
@@ -81,7 +76,7 @@ impl Message for LogEntryData {
             LogEntryData::BlockHeader(header) => header.clear(),
             LogEntryData::TransactionExecutions(executions) => {
                 executions.clear();
-            },
+            }
             LogEntryData::Empty => {}
         }
     }

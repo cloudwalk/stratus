@@ -1,9 +1,13 @@
-use anyhow::{Context, Result};
-use prost::Message;
-use rocksdb::{Options, DB};
 use std::path::Path;
 
-use super::log_entry::{LogEntry, LogEntryData};
+use anyhow::Context;
+use anyhow::Result;
+use prost::Message;
+use rocksdb::Options;
+use rocksdb::DB;
+
+use super::log_entry::LogEntry;
+
 
 pub struct AppendLogEntriesStorage {
     db: DB,
@@ -35,17 +39,16 @@ impl AppendLogEntriesStorage {
     }
 
     pub fn delete_entries_from(&self, start_index: u64) -> Result<()> {
-        let iter = self.db.iterator(rocksdb::IteratorMode::From(
-            start_index.to_be_bytes().as_ref(),
-            rocksdb::Direction::Forward,
-        ));
+        let iter = self
+            .db
+            .iterator(rocksdb::IteratorMode::From(start_index.to_be_bytes().as_ref(), rocksdb::Direction::Forward));
 
         for result in iter {
             match result {
                 Ok((key, _)) => {
                     self.db.delete(key).context("Failed to delete log entry")?;
                 }
-                Err(e) => return Err(e).context("Error iterating over log entries").into(),
+                Err(e) => return Err(e).context("Error iterating over log entries"),
             }
         }
         Ok(())
@@ -55,7 +58,7 @@ impl AppendLogEntriesStorage {
         let mut iter = self.db.iterator(rocksdb::IteratorMode::End);
         match iter.next() {
             Some(Ok((_, value))) => LogEntry::decode(&*value).map(Some).context("Failed to decode last log entry"),
-            Some(Err(e)) => Err(e).context("Error iterating to get last log entry").into(),
+            Some(Err(e)) => Err(e).context("Error iterating to get last log entry"),
             None => Ok(None),
         }
     }
@@ -68,7 +71,7 @@ impl AppendLogEntriesStorage {
                 let index = u64::from_be_bytes(<Vec<u8> as AsRef<[u8]>>::as_ref(&key_vec).try_into().context("Failed to convert key to u64")?);
                 Ok(index)
             }
-            Some(Err(e)) => Err(e).context("Error iterating to get last index").into(),
+            Some(Err(e)) => Err(e).context("Error iterating to get last index"),
             None => Ok(0),
         }
     }
@@ -83,8 +86,9 @@ impl AppendLogEntriesStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     #[derive(Default)]
     struct BlockHeader {

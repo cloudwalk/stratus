@@ -1,5 +1,5 @@
-pub mod forward_to;
 mod append_log_entries_storage;
+pub mod forward_to;
 mod log_entry;
 
 use std::collections::HashMap;
