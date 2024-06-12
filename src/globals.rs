@@ -34,12 +34,17 @@ where
     where
         T: clap::Parser + WithCommonConfig + Debug,
     {
-        // parse configuration
-        load_dotenv();
-        let config = T::parse();
+        // handle special environment variables
         if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
             println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
         }
+        if let Ok(value) = env::var("TRACING_COLLECTOR_URL") {
+            env::set_var("TRACING_URL", value);
+        }
+
+        // parse configuration
+        load_dotenv();
+        let config = T::parse();
         let common = config.common();
 
         // init tokio

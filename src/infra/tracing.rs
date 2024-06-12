@@ -175,8 +175,7 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
         }
     };
 
-    let tracer_config = trace::config()
-        .with_resource(SdkResource::new(vec![KeyValue::new("service.name", service_name)]));
+    let tracer_config = trace::config().with_resource(SdkResource::new(vec![KeyValue::new("service.name", service_name)]));
 
     opentelemetry_otlp::new_pipeline()
         .tracing()

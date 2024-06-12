@@ -148,14 +148,14 @@ pub struct TracingConfig {
     #[arg(long = "tracing-log-format", env = "TRACING_LOG_FORMAT", default_value = "normal")]
     pub tracing_log_format: TracingLogFormat,
 
-    #[arg(long = "tracing-protocol", env = "TRACING_PROTOCOL", default_value = "grpc")]
-    pub tracing_protocol: TracingProtocol,
-
-    #[arg(long = "tracing-url", env = "TRACING_URL")]
+    #[arg(long = "tracing-url", alias = "tracing-collector-url", env = "TRACING_URL")]
     pub tracing_url: Option<String>,
 
     #[arg(long = "tracing-headers", env = "TRACING_HEADERS", value_delimiter = ',')]
     pub tracing_headers: Vec<String>,
+
+    #[arg(long = "tracing-protocol", env = "TRACING_PROTOCOL", default_value = "grpc")]
+    pub tracing_protocol: TracingProtocol,
 }
 
 // -----------------------------------------------------------------------------
