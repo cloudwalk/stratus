@@ -1,0 +1,44 @@
+name: E2E Chaos
+
+on:
+  pull_request:
+    branches:
+      - '*'
+    paths-ignore:
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/docs-release.yml'
+      - '.github/workflows/outdated.yml'
+      - '.github/workflows/comment-tag-report.yml'
+      - '.github/workflows/pr-agent.yml'
+      - '.github/CODEOWNERS'
+      - 'config/**'
+      - 'README.md'
+      - 'LICENSE'
+      - 'CONTRIBUTING.md'
+      - 'utils/slack-notifiers/**'
+  workflow_dispatch:
+  push: # Rebuild cache policy
+    branches:
+      - 'main'
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+
+jobs:
+  e2e_chaos:
+    strategy:
+      fail-fast: false
+    name: E2E Chaos Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run e2e tests
+        run: just run-chaos-experiment leader-election

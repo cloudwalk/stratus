@@ -631,3 +631,13 @@ local-chaos-test:
     @echo "Leader polling and followers syncing simulated."
     @echo "Cleaning up..."
     just local-chaos-cleanup
+
+# Chaos Testing: Run chaos experiment by name using Kind
+run-chaos-experiment experiment="":
+    just local-chaos-setup
+    
+    echo "Executing experiment: {{ experiment }}"
+    ./chaos/experiments/{{ experiment }}.sh
+    
+    echo "Cleaning up..."
+    just local-chaos-cleanup
