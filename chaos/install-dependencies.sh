@@ -17,13 +17,11 @@ export KUBECONFIG=$(pwd)/kubeconfig.yaml
 mkdir -p ~/.docker/cli-plugins
 curl -L https://github.com/docker/buildx/releases/download/v0.8.2/buildx-v0.8.2.darwin-amd64 -o ~/.docker/cli-plugins/docker-buildx
 chmod +x ~/.docker/cli-plugins/docker-buildx
-export PATH=$PATH:~/.docker/cli-plugins
 
 echo "Checking if Docker image is already built..."
 if ! docker images | grep -q local/run_with_importer_kind; then
     echo "Building Docker image..."
-    docker buildx inspect mybuilder > /dev/null 2>&1 || docker buildx create --name mybuilder --use
-    DOCKER_BUILDKIT=1 docker buildx build -t local/run_with_importer_kind -f ./docker/Dockerfile.run_with_importer_kind .
+    docker build -t local/run_with_importer_kind -f ./docker/Dockerfile.run_with_importer_kind .
 else
     echo "Docker image already built."
 fi
