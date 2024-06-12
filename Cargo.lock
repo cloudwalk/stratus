@@ -5480,6 +5480,7 @@ dependencies = [
  "phf_codegen",
  "pin-project",
  "prost",
+ "prost-types",
  "quote",
  "raft",
  "rand",
