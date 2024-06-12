@@ -19,78 +19,57 @@ enum StatusCode {
     FOLLOWER_IN_CANDIDATE_STATE = 12; // Follower is in candidate state. Leader may need to step down.
     FOLLOWER_IN_LEADER_STATE = 13; // Follower believes it is the leader. Resolve split-brain scenario.
     ENTRY_ALREADY_EXISTS = 14; // Entry already exists. Verify log consistency.
-    RETRY_LATER = 15; // Follower requests retry later. Wait and retry the request.
 }
 
-// Transaction Execution message
-message Transaction {
-    string hash = 1;
-    string nonce = 2;
-    string blockHash = 3;
-    string blockNumber = 4;
-    string transactionIndex = 5;
-    string from = 6;
-    string to = 7;
-    string value = 8;
-    string gasPrice = 9;
-    string gas = 10;
-    string input = 11;
-    string v = 12;
-    string r = 13;
-    string s = 14;
-    string type = 15;
-    string chainId = 16;
-    string publicKey = 17;
-    string raw = 18;
-    string standardV = 19;
-}
-
-// Transaction Receipt message
-message Receipt {
-    string transactionHash = 1;
-    string transactionIndex = 2;
-    string blockHash = 3;
-    string blockNumber = 4;
-    string from = 5;
-    string to = 6;
-    string cumulativeGasUsed = 7;
-    string gasUsed = 8;
-    string contractAddress = 9;
-    repeated Log logs = 10;
-    string status = 11;
-    string logsBloom = 12;
-    string effectiveGasPrice = 13;
-}
 
 // Log message
 message Log {
     string address = 1;
     repeated string topics = 2;
     string data = 3;
-    string blockHash = 4;
-    string blockNumber = 5;
-    string transactionHash = 6;
-    string transactionIndex = 7;
-    string logIndex = 8;
-    string transactionLogIndex = 9;
-    bool removed = 10;
-}
-
-// Execution Result message
-message ExecutionResult {
-    int64 block_timestamp = 1;
-    bool receipt_applied = 2;
-    string result = 3;
-    string output = 4;
-    repeated Log logs = 5;
-    string gas = 6;
+    string logIndex = 4;
+    string transactionLogIndex = 5;
+    bool removed = 6;
 }
 
 // Transaction Execution message
 message TransactionExecution {
-    Transaction tx = 1;
-    Receipt receipt = 2;
-    ExecutionResult result = 3;
+    // Transaction details
+    string hash = 1;
+    string nonce = 2;
+    string value = 3;
+    string gasPrice = 4;
+    string input = 5;
+    string v = 6;
+    string r = 7;
+    string s = 8;
+    string type = 9;
+    string chainId = 10;
+    string publicKey = 11;
+    string raw = 12;
+    string standardV = 13;
+    string result = 14;
+    string output = 15;
+    string from = 16;
+    string to = 17;
+
+    // Block and transaction indexing
+    string blockHash = 18;
+    string blockNumber = 19;
+    string transactionHash = 20;
+    string transactionIndex = 21;
+
+    // Logs
+    repeated Log logs = 22;
+
+    // Gas details
+    string gas = 23;
+    string receiptCumulativeGasUsed = 24;
+    string receiptGasUsed = 25;
+    string receiptContractAddress = 26;
+    string receiptStatus = 27;
+    string receiptLogsBloom = 28;
+    string receiptEffectiveGasPrice = 29;
 }
 
 // Append Transaction Execution message

@@ -40,22 +40,27 @@ where
         if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
             println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
         }
+        let common = config.common();
 
         // init tokio
-        let runtime = config.common().init_runtime().expect("failed to init tokio runtime");
+        let runtime = common.init_runtime().expect("failed to init tokio runtime");
 
         // init tracing
         runtime
-            .block_on(infra::init_tracing(config.common().tracing_url.as_ref(), config.common().tokio_console_address))
+            .block_on(infra::init_tracing(
+                common.log_format,
+                common.opentelemetry_url.as_deref(),
+                common.sentry_url.as_deref(),
+                common.tokio_console_address,
+            ))
             .expect("failed to init tracing");
 
         // init metrics
         #[cfg(feature = "metrics")]
-        infra::init_metrics(config.common().metrics_exporter_address, config.common().metrics_histogram_kind).expect("failed to init metrics");
+        infra::init_metrics(common.metrics_exporter_address).expect("failed to init metrics");
 
         // init sentry
-        let _sentry_guard = config
-            .common()
+        let _sentry_guard = common
             .sentry_url
             .as_ref()
             .map(|sentry_url| infra::init_sentry(sentry_url).expect("failed to init sentry"));

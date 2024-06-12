@@ -5,22 +5,18 @@ use metrics::describe_gauge;
 use metrics::describe_histogram;
 use metrics::Label;
 
-use crate::ext::not;
+// -----------------------------------------------------------------------------
+// Metric
+// -----------------------------------------------------------------------------
 
 /// Metric definition.
 pub(super) struct Metric {
     pub(super) kind: &'static str,
     pub(super) name: &'static str,
     pub(super) description: &'static str,
-    pub(super) buckets: Vec<f64>,
 }
 
 impl Metric {
-    /// Checks if metric has custom buckets defined.
-    pub(super) fn has_custom_buckets(&self) -> bool {
-        not(self.buckets.is_empty())
-    }
-
     /// Register description with the provider.
     pub(super) fn register_description(&self) {
         match self.kind {
@@ -31,6 +27,10 @@ impl Metric {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// MetricLabelValue
+// -----------------------------------------------------------------------------
 
 /// Representation of a metric label value.
 ///

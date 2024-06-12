@@ -43,7 +43,7 @@ COPY build.rs /app/build.rs
 COPY config /app/config
 COPY proto /app/proto
 
-RUN cargo build --release --bin stratus --features metrics
+RUN cargo build --release --bin stratus --features metrics,kubernetes
 
 # Runtime stage
 FROM rust:1.75 as runtime

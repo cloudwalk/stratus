@@ -33,23 +33,25 @@ quote = "=1.0.36"
 rand = "=0.8.5"
 strum = "=0.26.2"
 thiserror = "=1.0.61"
-url = "=2.5.0"
+url = "=2.5.1"
 uuid = { version = "=1.8.0", features = ["v4", "fast-rng" ] }
 
 # async
-tokio = { version = "=1.37.0", features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { version = "=1.38.0", features = ["rt-multi-thread", "macros", "signal"] }
 tokio-util = "=0.7.11"
 
 # config
-clap = { version = "=4.5.4", features = ["derive", "env"] }
+clap = { version = "=4.5.7", features = ["derive", "env"] }
 dotenvy = "=0.15.7"
 
 # serialization
 bincode = { version = "=1.3.3", optional = true }
 display_json = "=0.2.1"
 prost = "=0.12.6"
+prost-types = "=0.12.6"
 serde = "=1.0.203"
 serde_json = "=1.0.117"
+serde_urlencoded = "=0.7.1"
 serde_with = "=3.8.1"
 
 # parallelism
@@ -68,7 +70,7 @@ rlp = "=0.5.2"
 triehash = "=0.8.4"
 
 # network
-jsonrpsee = { version = "=0.22.5", features = ["server", "client"] }
+jsonrpsee = { version = "=0.23.1", features = ["server", "client"] }
 k8s-openapi = { version = "=0.21.1", optional = true, features = ["v1_27"] }
 kube = { version = "=0.90.0", optional = true, features = ["runtime", "derive"] }
 raft = { version = "=0.7.0", optional = true }
@@ -78,15 +80,15 @@ tower = "=0.4.13"
 
 # observability
 console-subscriber = "=0.2.0"
-metrics = { version = "=0.21.1", optional = true }
-metrics-exporter-prometheus = { version = "=0.12.2", optional = true }
-opentelemetry = "=0.22.0"
-opentelemetry_sdk = { version = "=0.22.1", features = ["rt-tokio"] }
-opentelemetry-otlp = "=0.15.0"
-sentry = "=0.33.0"
-sentry-tracing = "=0.33.0"
+metrics = { version = "=0.23.0", optional = true }
+metrics-exporter-prometheus = { version = "=0.15.0", optional = true }
+opentelemetry = "=0.23.0"
+opentelemetry_sdk = { version = "=0.23.0", features = ["rt-tokio"] }
+opentelemetry-otlp = "=0.16.0"
+sentry = "=0.34.0"
+sentry-tracing = "=0.34.0"
 tracing = { version = "=0.1.40", features = ["attributes"] }
-tracing-opentelemetry = "=0.23.0"
+tracing-opentelemetry = "=0.24.0"
 tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
 
 # storage
@@ -108,10 +110,10 @@ petgraph = "=0.6.5"
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=8.0.0", features = ["asm-keccak"]}
+revm = { version = "=9.0.0", features = ["asm-keccak"]}
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=8.0.0" }
+revm = { version = "=9.0.0" }
 
 # ------------------------------------------------------------------------------
 # Patches
@@ -173,7 +175,7 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing", "rocks", "kubernetes"]
+default = ["metrics", "tracing", "rocks"]
 
 # Application is running in develoment mode.
 dev  = []

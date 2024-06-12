@@ -39,7 +39,7 @@ export let ETHERJS = new JsonRpcProvider(
 export function updateProviderUrl(providerName: string) {
     switch (providerName) {
         case 'stratus':
-            providerUrl = 'http://localhost:3000';
+            providerUrl = 'http://localhost:3000?app=e2e';
             break;
         case 'hardhat':
             providerUrl = 'http://localhost:8545';
@@ -186,4 +186,26 @@ export async function sendAndGetFullResponse(method: string, params: any[] = [])
 export async function send(method: string, params: any[] = []): Promise<any> {
     const response = await sendAndGetFullResponse(method, params);
     return response.data.result;
+}
+
+// Sends an RPC request to the blockchain with retry logic, returning its result field.
+export async function sendWithRetry(methodName: string, params: any[], maxAttempts = 5, delay = 2000) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const result = await send(methodName, params);
+            if (result !== null) {
+                return result;
+            }
+            if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        } catch (error) {
+            if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                throw error;
+            }
+        }
+    }
+    throw new Error(`Failed to get a non-null response from ${methodName} after ${maxAttempts} attempts.`);
 }
