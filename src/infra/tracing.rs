@@ -11,20 +11,16 @@ use chrono::Local;
 use console_subscriber::ConsoleLayer;
 use display_json::DebugAsJson;
 use itertools::Itertools;
-use opentelemetry::trace::Span;
-use opentelemetry::trace::Tracer;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::Protocol;
 use opentelemetry_otlp::SpanExporterBuilder;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
-use opentelemetry_sdk::trace::Span as SdkSpan;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
 use opentelemetry_sdk::Resource as SdkResource;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
-use tracing_opentelemetry::PreSampledTracer;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::layer::SubscriberExt;
@@ -74,28 +70,19 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
     };
 
     // configure opentelemetry layer
-    let tracer1 = match &config.tracing_1_url {
-        Some(url) => Some(opentelemetry_tracer(1, url, config.tracing_1_protocol, &config.tracing_1_headers)),
+    let opentelemetry_layer = match &config.tracing_url {
+        Some(url) => {
+            let tracer = opentelemetry_tracer(url, config.tracing_protocol, &config.tracing_headers);
+            let layer = tracing_opentelemetry::layer()
+                .with_tracked_inactivity(false)
+                .with_tracer(tracer)
+                .with_filter(EnvFilter::from_default_env());
+            Some(layer)
+        }
         None => {
-            println!("tracing registry: skipping opentelemetry exporter 1");
+            println!("tracing registry: skipping opentelemetry exporter");
             None
         }
-    };
-    let tracer2 = match &config.tracing_2_url {
-        Some(url) => Some(opentelemetry_tracer(2, url, config.tracing_2_protocol, &config.tracing_2_headers)),
-        None => {
-            println!("tracing registry: skipping opentelemetry exporter 1");
-            None
-        }
-    };
-    let opentelemetry_layer = if let Some(tracer_1) = tracer1 {
-        let layer = tracing_opentelemetry::layer()
-            .with_tracked_inactivity(false)
-            .with_tracer(TracingMultiTracer { tracer1: tracer_1, tracer2 })
-            .with_filter(EnvFilter::from_default_env());
-        Some(layer)
-    } else {
-        None
     };
 
     // configure sentry layer
@@ -137,11 +124,10 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
     }
 }
 
-fn opentelemetry_tracer(index: usize, url: &str, protocol: TracingProtocol, headers: &[String]) -> SdkTracer {
+fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]) -> SdkTracer {
     let service_name = format!("stratus-{}", binary_name());
     println!(
-        "tracing registry: enabling opentelemetry exporter {} | url={} protocol={} headers={} service={}",
-        index,
+        "tracing registry: enabling opentelemetry exporter | url={} protocol={} headers={} service={}",
         url,
         protocol,
         headers.len(),
@@ -189,7 +175,8 @@ fn opentelemetry_tracer(index: usize, url: &str, protocol: TracingProtocol, head
         }
     };
 
-    let tracer_config = trace::config().with_resource(SdkResource::new(vec![KeyValue::new("service.name", service_name)]));
+    let tracer_config = trace::config()
+        .with_resource(SdkResource::new(vec![KeyValue::new("service.name", service_name)]));
 
     opentelemetry_otlp::new_pipeline()
         .tracing()
@@ -282,100 +269,6 @@ impl From<TracingProtocol> for Protocol {
 // -----------------------------------------------------------------------------
 // Tracing services
 // -----------------------------------------------------------------------------
-
-struct TracingMultiTracer {
-    tracer1: SdkTracer,
-    tracer2: Option<SdkTracer>,
-}
-
-impl Tracer for TracingMultiTracer {
-    type Span = TracingMultiSpan;
-
-    fn build_with_context(&self, builder: opentelemetry::trace::SpanBuilder, parent_cx: &opentelemetry::Context) -> Self::Span {
-        let span2 = self.tracer2.as_ref().map(|t| t.build_with_context(builder.clone(), parent_cx));
-        let span1 = self.tracer1.build_with_context(builder, parent_cx);
-        TracingMultiSpan { span1, span2 }
-    }
-}
-
-impl PreSampledTracer for TracingMultiTracer {
-    fn sampled_context(&self, data: &mut tracing_opentelemetry::OtelData) -> opentelemetry::Context {
-        self.tracer1.sampled_context(data)
-    }
-
-    fn new_trace_id(&self) -> opentelemetry::trace::TraceId {
-        self.tracer1.new_trace_id()
-    }
-
-    fn new_span_id(&self) -> opentelemetry::trace::SpanId {
-        self.tracer1.new_span_id()
-    }
-}
-
-struct TracingMultiSpan {
-    span1: SdkSpan,
-    span2: Option<SdkSpan>,
-}
-
-impl Span for TracingMultiSpan {
-    fn add_event_with_timestamp<T>(&mut self, name: T, timestamp: std::time::SystemTime, attributes: Vec<KeyValue>)
-    where
-        T: Into<std::borrow::Cow<'static, str>>,
-    {
-        let name = name.into();
-        if let Some(span2) = &mut self.span2 {
-            span2.add_event_with_timestamp(name.clone(), timestamp, attributes.clone());
-        }
-        self.span1.add_event_with_timestamp(name, timestamp, attributes);
-    }
-
-    fn span_context(&self) -> &opentelemetry::trace::SpanContext {
-        self.span1.span_context()
-    }
-
-    fn is_recording(&self) -> bool {
-        self.span1.is_recording()
-    }
-
-    fn set_attribute(&mut self, attribute: KeyValue) {
-        if let Some(span2) = &mut self.span2 {
-            span2.set_attribute(attribute.clone());
-        }
-        self.span1.set_attribute(attribute);
-    }
-
-    fn set_status(&mut self, status: opentelemetry::trace::Status) {
-        if let Some(span2) = &mut self.span2 {
-            span2.set_status(status.clone());
-        }
-        self.span1.set_status(status);
-    }
-
-    fn update_name<T>(&mut self, new_name: T)
-    where
-        T: Into<std::borrow::Cow<'static, str>>,
-    {
-        let new_name = new_name.into();
-        if let Some(span2) = &mut self.span2 {
-            span2.update_name(new_name.clone());
-        }
-        self.span1.update_name(new_name);
-    }
-
-    fn add_link(&mut self, span_context: opentelemetry::trace::SpanContext, attributes: Vec<KeyValue>) {
-        if let Some(span2) = &mut self.span2 {
-            span2.add_link(span_context.clone(), attributes.clone());
-        }
-        self.span1.add_link(span_context, attributes);
-    }
-
-    fn end_with_timestamp(&mut self, timestamp: std::time::SystemTime) {
-        if let Some(span2) = &mut self.span2 {
-            span2.end_with_timestamp(timestamp);
-        }
-        self.span1.end_with_timestamp(timestamp);
-    }
-}
 
 struct TracingMinimalTimer;
 

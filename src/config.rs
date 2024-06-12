@@ -149,22 +149,13 @@ pub struct TracingConfig {
     pub tracing_log_format: TracingLogFormat,
 
     #[arg(long = "tracing-protocol", env = "TRACING_PROTOCOL", default_value = "grpc")]
-    pub tracing_1_protocol: TracingProtocol,
+    pub tracing_protocol: TracingProtocol,
 
     #[arg(long = "tracing-url", env = "TRACING_URL")]
-    pub tracing_1_url: Option<String>,
+    pub tracing_url: Option<String>,
 
     #[arg(long = "tracing-headers", env = "TRACING_HEADERS", value_delimiter = ',')]
-    pub tracing_1_headers: Vec<String>,
-
-    #[arg(long = "tracing-protocol-2", env = "TRACING_PROTOCOL_2", default_value = "grpc")]
-    pub tracing_2_protocol: TracingProtocol,
-
-    #[arg(long = "tracing-url-2", env = "TRACING_URL_2")]
-    pub tracing_2_url: Option<String>,
-
-    #[arg(long = "tracing-headers-2", env = "TRACING_HEADERS_2", value_delimiter = ',')]
-    pub tracing_2_headers: Vec<String>,
+    pub tracing_headers: Vec<String>,
 }
 
 // -----------------------------------------------------------------------------
