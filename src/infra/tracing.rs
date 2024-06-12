@@ -17,6 +17,7 @@ use opentelemetry_otlp::SpanExporterBuilder;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
+use opentelemetry_sdk::trace::BatchConfigBuilder;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
 use opentelemetry_sdk::Resource as SdkResource;
 use tonic::metadata::MetadataKey;
@@ -177,10 +178,13 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
 
     let tracer_config = trace::config().with_resource(SdkResource::new(vec![KeyValue::new("service.name", service_name)]));
 
+    // configure pipeline
+    let batch_config = BatchConfigBuilder::default().with_max_queue_size(u16::MAX as usize).build();
     opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(tracer_exporter)
         .with_trace_config(tracer_config)
+        .with_batch_config(batch_config)
         .install_batch(runtime::Tokio)
         .unwrap()
 }
