@@ -7,7 +7,6 @@ macro_rules! metrics {
         $(
             $description:literal
             $kind:ident $name:ident{ $($label:ident),* }
-            $buckets:expr
         ),+
     ) => {
         // Generate function to get metric definition.
@@ -25,7 +24,6 @@ macro_rules! metrics {
                             kind: stringify!($kind),
                             name: stringify!([<stratus_ $name>]),
                             description: stringify!($description),
-                            buckets: $buckets.to_vec()
                         },
                     )+
                 ]
@@ -55,7 +53,8 @@ macro_rules! metrics_impl_fn_inc {
                         )*
                     ]
                 );
-                metrics::counter!(stringify!([<stratus_$name>]), n, labels);
+                let counter = metrics::counter!(stringify!([<stratus_$name>]), labels);
+                counter.increment(n);
             }
         }
 
@@ -70,7 +69,8 @@ macro_rules! metrics_impl_fn_inc {
                         )*
                     ]
                 );
-                metrics::counter!(stringify!([<stratus_$name>]), 1, labels);
+                let counter = metrics::counter!(stringify!([<stratus_$name>]), labels);
+                counter.increment(1);
             }
         }
     };
@@ -86,7 +86,8 @@ macro_rules! metrics_impl_fn_inc {
                         )*
                     ]
                 );
-                metrics::histogram!(stringify!([<stratus_$name>]), n as f64, labels);
+                let hist = metrics::histogram!(stringify!([<stratus_$name>]), labels);
+                hist.record(n as f64)
             }
         }
     };
@@ -102,7 +103,8 @@ macro_rules! metrics_impl_fn_inc {
                         )*
                     ]
                 );
-                metrics::histogram!(stringify!([<stratus_$name>]), duration, labels);
+                let hist = metrics::histogram!(stringify!([<stratus_$name>]), labels);
+                hist.record(duration);
             }
         }
     };
@@ -118,7 +120,8 @@ macro_rules! metrics_impl_fn_inc {
                         )*
                     ]
                 );
-                metrics::gauge!(stringify!([<stratus_$name>]), n as f64, labels);
+                let gauge = metrics::gauge!(stringify!([<stratus_$name>]), labels);
+                gauge.set(n as f64);
             }
         }
     };
