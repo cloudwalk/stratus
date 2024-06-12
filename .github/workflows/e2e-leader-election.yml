@@ -40,8 +40,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Just CLI
+      - name: Set up Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: stable-release
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Just
         uses: extractions/setup-just@v2
+
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
 
       - name: Run e2e tests
         run: just run-chaos-experiment leader-election
