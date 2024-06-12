@@ -57,7 +57,7 @@ where
 
         // init metrics
         #[cfg(feature = "metrics")]
-        infra::init_metrics(common.metrics_exporter_address, common.metrics_histogram_kind).expect("failed to init metrics");
+        infra::init_metrics(common.metrics_exporter_address).expect("failed to init metrics");
 
         // init sentry
         let _sentry_guard = common
