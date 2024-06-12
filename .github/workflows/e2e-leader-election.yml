@@ -1,4 +1,4 @@
-name: E2E Chaos
+name: E2E Leader Election
 
 on:
   pull_request:
@@ -25,10 +25,10 @@ on:
       - 'Cargo.toml'
 
 jobs:
-  e2e_chaos:
+  e2e_leader_election:
     strategy:
       fail-fast: false
-    name: E2E Chaos Test
+    name: E2E Leader Election Test
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
