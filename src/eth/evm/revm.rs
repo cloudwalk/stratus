@@ -16,7 +16,6 @@ use itertools::Itertools;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
-use revm::primitives::CreateScheme;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
@@ -83,7 +82,7 @@ impl Revm {
         });
 
         // handler custom instructions
-        let instructions = handler.take_instruction_table().unwrap();
+        let instructions = handler.take_instruction_table();
         handler.set_instruction_table(instructions);
 
         // configure revm
@@ -130,7 +129,7 @@ impl Evm for Revm {
         tx_env.caller = input.from.into();
         tx_env.transact_to = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
-            None => TransactTo::Create(CreateScheme::Create),
+            None => TransactTo::Create,
         };
         tx_env.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
         tx_env.gas_price = input.gas_price.into();

@@ -1,6 +1,7 @@
 use sentry::ClientInitGuard;
 
 use crate::ext::not;
+use crate::infra::build_info;
 
 pub fn init_sentry(url: &str) -> anyhow::Result<ClientInitGuard> {
     tracing::info!(%url, "creating sentry exporter");
@@ -8,7 +9,7 @@ pub fn init_sentry(url: &str) -> anyhow::Result<ClientInitGuard> {
     let guard = sentry::init((
         url,
         sentry::ClientOptions {
-            release: sentry::release_name!(),
+            release: Some(build_info::service_name_with_version().into()),
             ..Default::default()
         },
     ));

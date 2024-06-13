@@ -48,6 +48,7 @@ use crate::eth::Consensus;
 use crate::eth::Executor;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
+use crate::infra::build_info;
 use crate::infra::tracing::warn_task_cancellation;
 use crate::GlobalState;
 
@@ -102,7 +103,8 @@ pub async fn serve_rpc(
         .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
         .layer(ProxyGetRequestLayer::new("/readiness", "stratus_readiness").unwrap())
-        .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap());
+        .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap())
+        .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap());
 
     // serve module
     let server = Server::builder()
@@ -147,6 +149,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_startup", stratus_startup)?;
     module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_async_method("stratus_liveness", stratus_liveness)?;
+    module.register_async_method("stratus_version", stratus_version)?;
 
     // blockchain
     module.register_async_method("net_version", net_version)?;
@@ -261,6 +264,10 @@ async fn stratus_liveness(_: Params<'_>, _: Arc<RpcContext>, _: Extensions) -> a
     } else {
         Err(RpcError::Response(rpc_internal_error("Service Unhealthy".to_string())))
     }
+}
+
+async fn stratus_version(_: Params<'_>, _: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(build_info::as_json())
 }
 
 // -----------------------------------------------------------------------------

@@ -35,18 +35,6 @@ pub fn not(value: bool) -> bool {
     !value
 }
 
-/// Gets the current binary basename.
-pub fn binary_name() -> String {
-    let binary = std::env::current_exe().unwrap();
-    let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
-
-    if binary_basename.starts_with("test_") {
-        "tests".to_string()
-    } else {
-        binary_basename
-    }
-}
-
 // -----------------------------------------------------------------------------
 // From / TryFrom
 // -----------------------------------------------------------------------------
@@ -192,15 +180,21 @@ macro_rules! channel_read_impl {
 
 /// Extensions for `tracing::Span`.
 pub trait SpanExt {
+    #[cfg(feature = "tracing")]
     /// Applies the provided function to the current span.
     fn with<F>(fill: F)
     where
         F: Fn(Span),
     {
-        if cfg!(tracing) {
-            let span = Span::current();
-            fill(span);
-        }
+        let span = Span::current();
+        fill(span);
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    fn with<F>(_: F)
+    where
+        F: Fn(Span),
+    {
     }
 
     /// Records a value using `ToString` implementation.

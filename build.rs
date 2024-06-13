@@ -9,9 +9,19 @@ use nom::character::complete::hex_digit1;
 use nom::combinator::rest;
 use nom::sequence::separated_pair;
 use nom::IResult;
+use vergen::EmitBuilder;
 
 fn main() {
-    tonic_build::compile_protos("proto/append_entry.proto").unwrap();
+    print_build_directives();
+    generate_build_info();
+    generate_proto_structs();
+    generate_signatures_structs();
+}
+
+// -----------------------------------------------------------------------------
+// Directives
+// -----------------------------------------------------------------------------
+fn print_build_directives() {
     // any code change
     println!("cargo:rerun-if-changed=src/");
     // used in signatures codegen
@@ -20,21 +30,44 @@ fn main() {
     println!("cargo:rerun-if-changed=tests/");
     // retrigger database compile-time checks
     println!("cargo:rerun-if-changed=.sqlx/");
-
-    update_signature_file();
 }
 
 // -----------------------------------------------------------------------------
-// Solidity signatures
+// Code generation: Proto files
+// -----------------------------------------------------------------------------
+fn generate_proto_structs() {
+    tonic_build::compile_protos("proto/append_entry.proto").unwrap();
+}
+
+// -----------------------------------------------------------------------------
+// Code generation: Build Info
+// -----------------------------------------------------------------------------
+fn generate_build_info() {
+    if let Err(e) = EmitBuilder::builder()
+        .build_timestamp()
+        .git_branch()
+        .git_describe(false, true, None)
+        .git_sha(true)
+        .cargo_debug()
+        .cargo_features()
+        .rustc_semver()
+        .rustc_channel()
+        .rustc_host_triple()
+        .emit()
+    {
+        panic!("failed to emit build information | reason={e:?}");
+    };
+}
+
+// -----------------------------------------------------------------------------
+// Code generation: Solidity signatures
 // -----------------------------------------------------------------------------
 
-fn update_signature_file() {
+fn generate_signatures_structs() {
     let signatures_file_content = generate_signature_maps_file();
-
     let signature_file_path = out_dir().join("signatures.rs");
-
-    if let Err(err) = fs::write(&signature_file_path, signatures_file_content) {
-        panic!("failed to write to file {signature_file_path:?}: reason={err:?}");
+    if let Err(e) = fs::write(&signature_file_path, signatures_file_content) {
+        panic!("failed to write to file {signature_file_path:?} | reason={e:?}");
     }
 }
 

@@ -1,6 +1,7 @@
 //! Shared infrastructure.
 
 pub mod blockchain_client;
+pub mod build_info;
 pub mod docker;
 #[cfg(feature = "metrics")]
 pub mod metrics;
