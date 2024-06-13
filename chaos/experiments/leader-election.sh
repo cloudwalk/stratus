@@ -23,12 +23,12 @@ start_instance() {
     echo $!
 }
 
-# Function to check liveness of an instance
-check_liveness() {
+# Function to check readiness of an instance
+check_readiness() {
     local port=$1
     curl -s http://0.0.0.0:$port \
         --header "content-type: application/json" \
-        --data '{"jsonrpc":"2.0","method":"stratus_liveness","params":[],"id":1}' | jq '.result'
+        --data '{"jsonrpc":"2.0","method":"stratus_readiness","params":[],"id":1}' | jq '.result'
 }
 
 # Function to check if an instance is the leader
@@ -66,15 +66,6 @@ run_test() {
         "0.0.0.0:3003 0.0.0.0:3780 tmp_rocks_3003 instance_3003.log 3003 http://0.0.0.0:3001;3778,http://0.0.0.0:3002;3779 0.0.0.0:6671 0.0.0.0:9003"
     )
 
-    # Kill dangling instances if exist
-    for instance in "${instances[@]}"; do
-        IFS=' ' read -r -a params <<< "$instance"
-        killport "${params[4]}"
-        killport "${params[1]##*:}"
-        killport "${params[6]##*:}"
-        killport "${params[7]##*:}"
-    done
-
     # Start instances
     echo "Starting 3 instances..."
     pids=()
@@ -94,7 +85,7 @@ run_test() {
         all_ready=true
         for i in "${!ports[@]}"; do
             if [ "${readiness[$i]}" != true ]; then
-                response=$(check_liveness "${ports[$i]}")
+                response=$(check_readiness "${ports[$i]}")
                 if [ "$response" = "true" ]; then
                     readiness[$i]=true
                     echo "Instance on port ${ports[$i]} is ready."
@@ -176,7 +167,7 @@ run_test() {
         all_ready=true
         for i in "${!ports[@]}"; do
             if [ "${readiness[$i]}" != true ]; then
-                response=$(check_liveness "${ports[$i]}")
+                response=$(check_readiness "${ports[$i]}")
                 if [ "$response" = "true" ]; then
                     readiness[$i]=true
                     echo "Instance on port ${ports[$i]} is ready."
