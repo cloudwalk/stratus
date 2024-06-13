@@ -474,7 +474,7 @@ alias e2e-contracts := contracts-test
 
 # Contracts: Remove all the cloned repositories
 contracts-remove:
-    cd e2e-contracts && ./remove-contracts.sh
+    cd e2e/cloudwalk-contracts && ./remove-contracts.sh
 
 # Contracts: Start Stratus and run contracts test
 contracts-test-stratus *args="":
