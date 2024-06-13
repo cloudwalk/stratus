@@ -560,8 +560,7 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let header: BlockHeader = (&block.header).into();
-        let transaction_hashes = vec![]; // Replace with actual transaction hashes
+        let header: BlockHeader = block.header.to_append_entry_block_header(Vec::new());
 
         let request = Request::new(AppendBlockCommitRequest {
             term: 0,
@@ -569,7 +568,6 @@ impl Consensus {
             prev_log_term: 0,
             header: Some(header),
             leader_id: self.my_address.to_string(),
-            transaction_hashes,
         });
 
         let response = peer.client.append_block_commit(request).await?;

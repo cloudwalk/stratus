@@ -109,7 +109,7 @@ message BlockHeader {
     string state_root = 16;
     string total_difficulty = 17;
     string nonce = 18;
-    repeated string transactionHashes = 19;
+    repeated string transaction_hashes = 19;
 }
 
 // Append Block Commit message
