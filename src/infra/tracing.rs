@@ -28,6 +28,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
+use ulid::Ulid;
 
 use crate::config::TracingConfig;
 use crate::ext::named_spawn;
@@ -283,6 +284,11 @@ impl FormatTime for TracingMinimalTimer {
 // -----------------------------------------------------------------------------
 // Tracing functions
 // -----------------------------------------------------------------------------
+
+/// Creates a new unique correlation ID.
+pub fn new_cid() -> String {
+    Ulid::new().to_string()
+}
 
 /// Emits an info message that a task was spawned to backgroud.
 #[track_caller]
