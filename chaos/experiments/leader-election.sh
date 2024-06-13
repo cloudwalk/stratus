@@ -19,7 +19,7 @@ start_instance() {
         --grpc-server-address=$grpc_address \
         --rocks-path-prefix=$rocks_path_prefix \
         --tokio-console-address=$tokio_console_address \
-        --metrics-exporter-address=$metrics_exporter_address &
+        --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
     echo $!
 }
 
