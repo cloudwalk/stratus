@@ -70,3 +70,7 @@ jobs:
 
       - name: Run e2e tests
         run: just run-chaos-experiment leader-election
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0 
+          RUST_LOG: off 
+          RELEASE: 1

@@ -52,21 +52,6 @@ find_leader() {
     echo "${leaders[@]}"
 }
 
-# Function to check the leader status and handle errors
-check_leader_status() {
-    local leader_ports=("$@")
-    if [ ${#leader_ports[@]} -gt 1 ]; then
-        # Error: More than one leader found
-        return 1
-    elif [ ${#leader_ports[@]} -eq 0 ]; then
-        # Error: No leader found
-        return 1
-    else
-        echo "Leader found on port ${leader_ports[0]}"
-        return 0
-    fi
-}
-
 # Function to remove rocks-path directory
 remove_rocks_path() {
     local rocks_path=$1
@@ -134,8 +119,12 @@ run_test() {
         fi
 
         leader_ports=($(find_leader "${ports[@]}"))
-        if check_leader_status "${leader_ports[@]}"; then
+        if [ ${#leader_ports[@]} -gt 1 ]; then
+            echo "Error: More than one leader found: ${leader_ports[*]}"
+            exit 1
+        elif [ ${#leader_ports[@]} -eq 1 ]; then
             leader_port=${leader_ports[0]}
+            echo "Leader found on port $leader_port"
             break
         else
             sleep 1
@@ -212,7 +201,12 @@ run_test() {
         fi
 
         leader_ports=($(find_leader "${ports[@]}"))
-        if check_leader_status "${leader_ports[@]}"; then
+        if [ ${#leader_ports[@]} -gt 1 ]; then
+            echo "Error: More than one leader found: ${leader_ports[*]}"
+            exit 1
+        elif [ ${#leader_ports[@]} -eq 1 ]; then
+            leader_port=${leader_ports[0]}
+            echo "Leader found on port $leader_port"
             break
         else
             sleep 1
