@@ -56,7 +56,7 @@ pub struct EvmTask {
 impl EvmTask {
     pub fn new(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
         Self {
-            span: info_span!("evm::task"),
+            span: Span::current(),
             input,
             response_tx,
         }
@@ -355,7 +355,6 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
-    #[tracing::instrument(name = "executor::evm", skip_all)]
     async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
         self.evm_tx.send(EvmTask::new(evm_input, execution_tx))?;

@@ -34,12 +34,17 @@ where
     where
         T: clap::Parser + WithCommonConfig + Debug,
     {
-        // handle special environment variables
-        if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
-            println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
-        }
+        // translate renamed environment variables because clap does not support multiple aliases for env-vars
         if let Ok(value) = env::var("TRACING_COLLECTOR_URL") {
             env::set_var("TRACING_URL", value);
+        }
+        if let Ok(value) = env::var("LOG_FORMAT") {
+            env::set_var("TRACING_LOG_FORMAT", value);
+        }
+
+        // TODO: remove when PostgreSQL is removed
+        if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
+            println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
         }
 
         // parse configuration

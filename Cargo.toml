@@ -38,6 +38,7 @@ thiserror = "=1.0.61"
 sugars = "=3.0.1"
 url = "=2.5.1"
 uuid = { version = "=1.8.0", features = ["v4", "fast-rng" ] }
+ulid = "=1.1.2"
 
 # async
 tokio = { version = "=1.38.0", features = ["rt-multi-thread", "macros", "signal"] }

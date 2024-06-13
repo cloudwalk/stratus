@@ -26,14 +26,14 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 RUN rm -rf src
 
 # Copy the actual source code
+COPY build.rs /app/build.rs
 COPY src /app/src
 COPY static /app/static
+COPY config /app/config
 COPY .sqlx /app/.sqlx
-COPY build.rs /app/build.rs
+COPY .cargo .cargo
 COPY Cargo.toml /app/Cargo.toml
 COPY Cargo.lock /app/Cargo.lock
-COPY .cargo .cargo
-COPY config /app/config
 
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json

@@ -17,7 +17,7 @@ test() {
     cd repos/$repo
     git restore .
     git apply ../../patches/$repo.patch || true
-    cp ../../../e2e/hardhat.config.ts .
+    cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
 
     # test
