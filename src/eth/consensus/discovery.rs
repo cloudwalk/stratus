@@ -1,3 +1,8 @@
+/// This module is responsible for discovering peers in the network.
+/// It will attempt to discover peers from the Kubernetes API and from the environment variables, if kubernetes feature flag is enabled.
+/// It will then attempt to connect to the candidate peers and add them to the consensus module.
+/// It will also remove any peers that are no longer available.
+/// It also spawn a new task to handle the block propagation to the new peer.
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
