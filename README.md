@@ -30,7 +30,7 @@ Then simply run:
 RELEASE=1 just run
 ```
 
-If you want to use OpenTelemery use the flag `--tracing-collector-url <url>` and pass
+If you want to use OpenTelemery use the flag `--tracing-url <url>` and pass
 the url of your OpenTelemetry collector of choice. Jaeger is included in the compose
 file, its collector url is `http://localhost:4317` and the ui can be accessed at
 `localhost:16686` on your browser.

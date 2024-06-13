@@ -43,20 +43,19 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
-use crate::ext::binary_name;
 use crate::ext::parse_duration;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics::MetricsHistogramKind;
+use crate::infra::build_info;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::TracingLogFormat;
+use crate::infra::tracing::TracingProtocol;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
     let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
-    let env_filename = format!("config/{}.env.{}", binary_name(), env);
+    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
 
     println!("reading env file | filename={}", env_filename);
     if let Err(e) = dotenvy::from_filename(env_filename) {
@@ -84,26 +83,16 @@ pub struct CommonConfig {
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
     pub num_blocking_threads: usize,
 
+    #[clap(flatten)]
+    pub tracing: TracingConfig,
+
     /// Address where Prometheus metrics will be exposed.
     #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
     pub metrics_exporter_address: SocketAddr,
 
-    #[cfg(feature = "metrics")]
-    /// Metrics histograms will be collected using summaries or histograms (buckets)?
-    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
-    pub metrics_histogram_kind: MetricsHistogramKind,
-
     // Address where Tokio Console GRPC server will be exposed.
     #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
     pub tokio_console_address: SocketAddr,
-
-    /// URL of the OpenTelemetry collector where tracing will be pushed.
-    #[arg(long = "tracing-collector-url", env = "TRACING_COLLECTOR_URL")]
-    pub opentelemetry_url: Option<String>,
-
-    /// How tracing events will be formatted.
-    #[arg(long = "log-format", env = "LOG_FORMAT", default_value = "normal")]
-    pub log_format: TracingLogFormat,
 
     /// Sentry URL where error events will be pushed.
     #[arg(long = "sentry-url", env = "SENTRY_URL")]
@@ -152,6 +141,21 @@ impl CommonConfig {
             }
         }
     }
+}
+
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct TracingConfig {
+    #[arg(long = "tracing-log-format", env = "TRACING_LOG_FORMAT", default_value = "normal")]
+    pub tracing_log_format: TracingLogFormat,
+
+    #[arg(long = "tracing-url", alias = "tracing-collector-url", env = "TRACING_URL")]
+    pub tracing_url: Option<String>,
+
+    #[arg(long = "tracing-headers", env = "TRACING_HEADERS", value_delimiter = ',')]
+    pub tracing_headers: Vec<String>,
+
+    #[arg(long = "tracing-protocol", env = "TRACING_PROTOCOL", default_value = "grpc")]
+    pub tracing_protocol: TracingProtocol,
 }
 
 // -----------------------------------------------------------------------------

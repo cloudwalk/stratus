@@ -17,6 +17,11 @@ use jsonrpsee::server::middleware::rpc::RpcServiceT;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
+use tracing::field;
+use tracing::info_span;
+use tracing::instrument::Instrumented;
+use tracing::Instrument;
+use tracing::Span;
 
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -25,9 +30,11 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::RpcClientApp;
+use crate::ext::SpanExt;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::tracing::new_cid;
 
 // -----------------------------------------------------------------------------
 // Global metrics
@@ -45,23 +52,32 @@ pub struct RpcMiddleware {
 }
 
 impl<'a> RpcServiceT<'a> for RpcMiddleware {
-    type Future = RpcResponse<'a>;
+    type Future = Instrumented<RpcResponse<'a>>;
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
+        // track request
+        let span = info_span!("rpc::request", cid = %new_cid(), client = field::Empty, method = field::Empty, function = field::Empty);
+        let enter = span.enter();
+
         // extract request data
-        let app = extract_client_app(&request);
+        let client = extract_client_app(&request);
         let method = request.method_name();
         let function = match method {
             "eth_call" | "eth_estimateGas" => extract_call_function(request.params()),
             "eth_sendRawTransaction" => extract_transaction_function(request.params()),
             _ => None,
         };
+        Span::with(|s| {
+            s.rec_str("client", &client);
+            s.rec_str("method", &method);
+            s.rec_opt("function", &function);
+        });
 
         // trace request
         tracing::info!(
-            %app,
+            client = %client,
             id = %request.id,
-            %method,
+            method = %method,
             function = %function.clone().unwrap_or_default(),
             params = ?request.params(),
             "rpc request"
@@ -71,18 +87,20 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         #[cfg(feature = "metrics")]
         {
             let active = ACTIVE_REQUESTS.fetch_add(1, Ordering::Relaxed) + 1;
-            metrics::set_rpc_requests_active(active, &app, method, function.clone());
-            metrics::inc_rpc_requests_started(&app, method, function.clone());
+            metrics::set_rpc_requests_active(active, &client, method, function.clone());
+            metrics::inc_rpc_requests_started(&client, method, function.clone());
         }
 
+        drop(enter);
         RpcResponse {
-            app,
+            client,
             id: request.id.to_string(),
             method: method.to_string(),
             function,
             future_response: self.service.call(request),
             start: Instant::now(),
         }
+        .instrument(span)
     }
 }
 
@@ -96,10 +114,13 @@ pub struct RpcResponse<'a> {
     #[pin]
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 
-    app: RpcClientApp,
+    // request metadata
+    client: RpcClientApp,
     id: String,
     method: String,
     function: Option<SoliditySignature>,
+
+    // request services
     start: Instant,
 }
 
@@ -119,7 +140,7 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                app = %proj.app,
+                client = %proj.client,
                 id = %proj.id,
                 method = %proj.method,
                 function = %proj.function.clone().unwrap_or_default(),
@@ -133,7 +154,7 @@ impl<'a> Future for RpcResponse<'a> {
             #[cfg(feature = "metrics")]
             {
                 let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
-                metrics::set_rpc_requests_active(active, &*proj.app, proj.method.clone(), proj.function.clone());
+                metrics::set_rpc_requests_active(active, &*proj.client, proj.method.clone(), proj.function.clone());
 
                 let mut rpc_result = "error";
                 if response_success {
@@ -142,7 +163,7 @@ impl<'a> Future for RpcResponse<'a> {
 
                 metrics::inc_rpc_requests_finished(
                     elapsed,
-                    &*proj.app,
+                    &*proj.client,
                     proj.method.clone(),
                     proj.function.clone(),
                     rpc_result,
