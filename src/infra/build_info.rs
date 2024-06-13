@@ -10,12 +10,14 @@ pub const CARGO_FEATURES: &str = env!("VERGEN_CARGO_FEATURES");
 
 pub const GIT_COMMIT: &str = env!("VERGEN_GIT_SHA");
 pub const GIT_BRANCH: &str = env!("VERGEN_GIT_BRANCH");
+pub const GIT_DESCRIBE: &str = env!("VERGEN_GIT_DESCRIBE");
 
 pub const RUSTC_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
 pub const RUSTC_CHANNEL: &str = env!("VERGEN_RUSTC_CHANNEL");
 pub const RUSTC_TARGET: &str = env!("VERGEN_RUSTC_HOST_TRIPLE");
 
-const VERSION: &str = const_format::formatcp!("{}::{}", GIT_BRANCH, GIT_COMMIT);
+const VERSION_WITH_BRANCH: &str = const_format::formatcp!("{}::{}", GIT_BRANCH, GIT_COMMIT);
+const VERSION_WITH_DESCRIBE: &str = const_format::formatcp!("{}::{}", GIT_DESCRIBE, GIT_COMMIT);
 
 /// Returns the current service name.
 ///
@@ -43,7 +45,11 @@ pub fn binary_name() -> String {
 
 /// Returns the version derived from the build information.
 pub fn version() -> &'static str {
-    VERSION
+    if GIT_BRANCH == "HEAD" {
+        VERSION_WITH_DESCRIBE
+    } else {
+        VERSION_WITH_BRANCH
+    }
 }
 
 /// Returns build info as JSON.
@@ -59,6 +65,7 @@ pub fn as_json() -> serde_json::Value {
             "cargo_features": CARGO_FEATURES,
             "git_commit": GIT_COMMIT,
             "git_branch": GIT_BRANCH,
+            "git_describe": GIT_DESCRIBE,
             "rustc_version": RUSTC_VERSION,
             "rustc_channel": RUSTC_CHANNEL,
             "rustc_target": RUSTC_TARGET

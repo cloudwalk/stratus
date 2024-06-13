@@ -46,6 +46,7 @@ fn generate_build_info() {
     if let Err(e) = EmitBuilder::builder()
         .build_timestamp()
         .git_branch()
+        .git_describe(false, true, None)
         .git_sha(true)
         .cargo_debug()
         .cargo_features()
