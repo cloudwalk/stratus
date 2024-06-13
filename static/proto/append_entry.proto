@@ -6,23 +6,22 @@ package append_entry;
 
 // Enum to represent status codes
 enum StatusCode {
-    OK = 0; // Request was processed successfully. No further action needed.
-    ERROR = 1; // General error. Investigate the cause.
-    NOT_LEADER = 2; // Node is not the current leader. Retry with the correct leader.
-    LEADER_CHANGED = 3; // Leadership has changed. Re-evaluate the leader and retry.
-    LOG_MISMATCH = 4; // Log mismatch. Adjust prevLogIndex and prevLogTerm, then resend entries.
-    TERM_MISMATCH = 5; // Term mismatch. Leader’s term outdated, step down and initiate a new election.
-    RETRY = 6; // Temporary issue. Wait and retry the request.
-    APPEND_SUCCESS = 7; // Entry appended successfully. Update commit index.
-    APPEND_FAILURE_GENERAL = 8; // General failure. Retry or investigate.
-    TERM_OUTDATED = 9; // Leader’s term outdated. Leader should step down.
-    STORAGE_ERROR = 10; // Persistent storage error. Handle the error and retry.
-    LEADER_COMMIT_INDEX_ADVANCED = 11; // Leader’s commit index advanced. Follower needs to catch up.
-    FOLLOWER_IN_CANDIDATE_STATE = 12; // Follower is in candidate state. Leader may need to step down.
-    FOLLOWER_IN_LEADER_STATE = 13; // Follower believes it is the leader. Resolve split-brain scenario.
-    ENTRY_ALREADY_EXISTS = 14; // Entry already exists. Verify log consistency.
+    OK = 0;
+    ERROR = 1;
+    NOT_LEADER = 2;
+    LEADER_CHANGED = 3;
+    LOG_MISMATCH = 4;
+    TERM_MISMATCH = 5;
+    RETRY = 6;
+    APPEND_SUCCESS = 7;
+    APPEND_FAILURE_GENERAL = 8;
+    TERM_OUTDATED = 9;
+    STORAGE_ERROR = 10;
+    LEADER_COMMIT_INDEX_ADVANCED = 11;
+    FOLLOWER_IN_CANDIDATE_STATE = 12;
+    FOLLOWER_IN_LEADER_STATE = 13;
+    ENTRY_ALREADY_EXISTS = 14;
 }
-
 
 // Log message
 message Log {
@@ -34,8 +33,8 @@ message Log {
     bool removed = 6;
 }
 
-// Transaction Execution message
-message TransactionExecution {
+// Transaction Execution Entry message
+message TransactionExecutionEntry {
     // Transaction details
     string hash = 1;
     string nonce = 2;
@@ -74,13 +73,13 @@ message TransactionExecution {
     string receiptEffectiveGasPrice = 29;
 }
 
-// Append Transaction Execution message
+// Append Transaction Execution Entry message
 message AppendTransactionExecutionsRequest {
     string leader_id = 1;
     uint64 term = 2;
     uint64 prevLogIndex = 3;
     uint64 prevLogTerm = 4;
-    repeated TransactionExecution executions = 5;
+    repeated TransactionExecutionEntry executions = 5;
 }
 
 message AppendTransactionExecutionsResponse {
@@ -89,8 +88,8 @@ message AppendTransactionExecutionsResponse {
     uint64 last_committed_block_number = 3;
 }
 
-// Block Header message
-message BlockHeader {
+// Block Entry message
+message BlockEntry {
     uint64 number = 1;
     string hash = 2;
     string transactions_root = 3;
@@ -112,13 +111,13 @@ message BlockHeader {
     repeated string transaction_hashes = 19;
 }
 
-// Append Block Commit message
+// Append Block Commit Entry message
 message AppendBlockCommitRequest {
     string leader_id = 1;
     uint64 term = 2;
     uint64 prevLogIndex = 3;
     uint64 prevLogTerm = 4;
-    BlockHeader header = 5;
+    BlockEntry block_entry = 5;
 }
 
 message AppendBlockCommitResponse {
