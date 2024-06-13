@@ -12,23 +12,15 @@ start_instance() {
     local tokio_console_address=$6
     local metrics_exporter_address=$7
 
-    RUST_LOG=info cargo run --features=metrics,rocks,dev --bin stratus -- \
+    RUST_LOG=error cargo run --features=metrics,rocks,dev --bin stratus -- \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
         -a=$address \
         --grpc-server-address=$grpc_address \
         --rocks-path-prefix=$rocks_path_prefix \
         --tokio-console-address=$tokio_console_address \
-        --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
+        --metrics-exporter-address=$metrics_exporter_address &
     echo $!
-}
-
-# Function to check startup of an instance
-check_startup() {
-    local port=$1
-    curl -s http://0.0.0.0:$port \
-        --header "content-type: application/json" \
-        --data '{"jsonrpc":"2.0","method":"stratus_startup","params":[],"id":1}' | jq '.result'
 }
 
 # Function to check if an instance is the leader
