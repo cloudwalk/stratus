@@ -5634,6 +5634,7 @@ dependencies = [
  "sqlx",
  "stringreader",
  "strum",
+ "tempfile",
  "testcontainers",
  "testcontainers-modules",
  "thiserror",

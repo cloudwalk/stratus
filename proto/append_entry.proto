@@ -1,3 +1,5 @@
+//WARNING changing anything on this file essentially breaks production
+
 syntax = "proto3";
 
 package append_entry;

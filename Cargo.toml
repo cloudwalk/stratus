@@ -130,6 +130,7 @@ console-subscriber = { git = "https://github.com/tokio-rs/console.git", rev = "8
 binary_macros = "=1.0.0"
 fancy-duration = "=0.9.2"
 stringreader = "=0.1.1"
+tempfile = "3.3.0"
 
 # ------------------------------------------------------------------------------
 # Build dependencies

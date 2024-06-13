@@ -1,65 +1,118 @@
 /// Holds the log entries that are stored in the Raft log.
 /// The log entries are either a BlockHeader or a TransactionExecution.
 /// The LogEntry struct is used to store the index and term of the log entry.
+use prost::bytes;
 use prost::Message;
-use serde::Deserialize;
-use serde::Serialize;
 
 use super::append_entry::BlockHeader as BH;
 use super::append_entry::TransactionExecution as TE;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, Debug, Clone)]
-enum LogEntryData {
+#[derive(Debug, Clone, Default)]
+pub enum LogEntryData {
     BlockHeader(BH),
-    TransactionExecution(TE),
+    TransactionExecutions(Vec<TE>),
+    #[default]
+    Empty,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct LogEntry {
-    index: u64,
-    term: u64,
-    data: LogEntryData,
+#[derive(Debug, Clone, Default)]
+pub struct LogEntry {
+    pub index: u64,
+    pub term: u64,
+    pub data: LogEntryData,
 }
 
-// Implement Serialize and Deserialize for BH
-impl Serialize for BH {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+impl Message for LogEntryData {
+    fn encode_raw<B>(&self, buf: &mut B)
     where
-        S: serde::Serializer,
+        B: bytes::BufMut,
     {
-        let bytes = self.encode_to_vec();
-        serializer.serialize_bytes(&bytes)
+        match self {
+            LogEntryData::BlockHeader(header) => header.encode_raw(buf),
+            LogEntryData::TransactionExecutions(executions) =>
+                for execution in executions {
+                    execution.encode_raw(buf);
+                },
+            LogEntryData::Empty => {}
+        }
+    }
+
+    fn merge_field<B>(
+        &mut self,
+        tag: u32,
+        wire_type: prost::encoding::WireType,
+        buf: &mut B,
+        ctx: prost::encoding::DecodeContext,
+    ) -> Result<(), prost::DecodeError>
+    where
+        B: bytes::Buf,
+    {
+        match self {
+            LogEntryData::BlockHeader(header) => header.merge_field(tag, wire_type, buf, ctx),
+            LogEntryData::TransactionExecutions(executions) => {
+                for execution in executions {
+                    execution.merge_field(tag, wire_type, buf, ctx.clone())?;
+                }
+                Ok(())
+            }
+            LogEntryData::Empty => Ok(()),
+        }
+    }
+
+    fn encoded_len(&self) -> usize {
+        match self {
+            LogEntryData::BlockHeader(header) => header.encoded_len(),
+            LogEntryData::TransactionExecutions(executions) => executions.iter().map(|execution| execution.encoded_len()).sum(),
+            LogEntryData::Empty => 0,
+        }
+    }
+
+    fn clear(&mut self) {
+        match self {
+            LogEntryData::BlockHeader(header) => header.clear(),
+            LogEntryData::TransactionExecutions(executions) => {
+                executions.clear();
+            }
+            LogEntryData::Empty => {}
+        }
     }
 }
 
-impl<'de> Deserialize<'de> for BH {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+impl Message for LogEntry {
+    fn encode_raw<B>(&self, buf: &mut B)
     where
-        D: serde::Deserializer<'de>,
+        B: bytes::BufMut,
     {
-        let bytes: Vec<u8> = serde::Deserialize::deserialize(deserializer)?;
-        BH::decode(&*bytes).map_err(serde::de::Error::custom)
+        prost::encoding::uint64::encode(1, &self.index, buf);
+        prost::encoding::uint64::encode(2, &self.term, buf);
+        self.data.encode_raw(buf);
     }
-}
 
-// Implement Serialize and Deserialize for TE
-impl Serialize for TE {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn merge_field<B>(
+        &mut self,
+        tag: u32,
+        wire_type: prost::encoding::WireType,
+        buf: &mut B,
+        ctx: prost::encoding::DecodeContext,
+    ) -> Result<(), prost::DecodeError>
     where
-        S: serde::Serializer,
+        B: bytes::Buf,
     {
-        let bytes = self.encode_to_vec();
-        serializer.serialize_bytes(&bytes)
+        match tag {
+            1 => prost::encoding::uint64::merge(wire_type, &mut self.index, buf, ctx),
+            2 => prost::encoding::uint64::merge(wire_type, &mut self.term, buf, ctx),
+            _ => self.data.merge_field(tag, wire_type, buf, ctx),
+        }
     }
-}
 
-impl<'de> Deserialize<'de> for TE {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes: Vec<u8> = serde::Deserialize::deserialize(deserializer)?;
-        TE::decode(&*bytes).map_err(serde::de::Error::custom)
+    fn encoded_len(&self) -> usize {
+        prost::encoding::uint64::encoded_len(1, &self.index) + prost::encoding::uint64::encoded_len(2, &self.term) + self.data.encoded_len()
+    }
+
+    fn clear(&mut self) {
+        self.index = 0;
+        self.term = 0;
+        self.data.clear();
     }
 }
