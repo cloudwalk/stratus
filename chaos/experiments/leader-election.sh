@@ -23,12 +23,12 @@ start_instance() {
     echo $!
 }
 
-# Function to check readiness of an instance
-check_readiness() {
+# Function to check startup of an instance
+check_startup() {
     local port=$1
     curl -s http://0.0.0.0:$port \
         --header "content-type: application/json" \
-        --data '{"jsonrpc":"2.0","method":"stratus_readiness","params":[],"id":1}' | jq '.result'
+        --data '{"jsonrpc":"2.0","method":"stratus_startup","params":[],"id":1}' | jq '.result'
 }
 
 # Function to check if an instance is the leader
@@ -71,23 +71,23 @@ run_test() {
     pids=()
     ports=()
     rocks_paths=()
-    readiness=()
+    startup=()
     for instance in "${instances[@]}"; do
         IFS=' ' read -r -a params <<< "$instance"
         pids+=($(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"))
         ports+=("${params[4]}")
         rocks_paths+=("${params[2]}")
-        readiness+=(false)
+        startup+=(false)
     done
 
     all_ready=false
     while [ "$all_ready" != true ]; do
         all_ready=true
         for i in "${!ports[@]}"; do
-            if [ "${readiness[$i]}" != true ]; then
-                response=$(check_readiness "${ports[$i]}")
+            if [ "${startup[$i]}" != true ]; then
+                response=$(check_startup "${ports[$i]}")
                 if [ "$response" = "true" ]; then
-                    readiness[$i]=true
+                    startup[$i]=true
                     echo "Instance on port ${ports[$i]} is ready."
                 else
                     all_ready=false
@@ -157,7 +157,7 @@ run_test() {
             new_pid=$(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}")
             pids+=("$new_pid")
             ports+=("${params[4]}")
-            readiness+=(false)
+            startup+=(false)
             break
         fi
     done
@@ -166,10 +166,10 @@ run_test() {
     while [ "$all_ready" != true ]; do
         all_ready=true
         for i in "${!ports[@]}"; do
-            if [ "${readiness[$i]}" != true ]; then
-                response=$(check_readiness "${ports[$i]}")
+            if [ "${startup[$i]}" != true ]; then
+                response=$(check_startup "${ports[$i]}")
                 if [ "$response" = "true" ]; then
-                    readiness[$i]=true
+                    startup[$i]=true
                     echo "Instance on port ${ports[$i]} is ready."
                 else
                     all_ready=false
