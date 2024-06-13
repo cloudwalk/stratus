@@ -77,6 +77,8 @@ run_test() {
         IFS=' ' read -r -a params <<< "$instance"
         kill_process_on_port "${params[4]}"
         kill_process_on_port "${params[1]##*:}"
+        kill_process_on_port "${params[6]##*:}"
+        kill_process_on_port "${params[7]##*:}"
     done
 
     # Start instances
@@ -238,7 +240,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=5
+n=10
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
