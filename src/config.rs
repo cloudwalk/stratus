@@ -43,8 +43,8 @@ use crate::eth::Consensus;
 use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
-use crate::ext::binary_name;
 use crate::ext::parse_duration;
+use crate::infra::build_info;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::TracingLogFormat;
@@ -55,7 +55,7 @@ use crate::GlobalState;
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
     let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
-    let env_filename = format!("config/{}.env.{}", binary_name(), env);
+    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
 
     println!("reading env file | filename={}", env_filename);
     if let Err(e) = dotenvy::from_filename(env_filename) {

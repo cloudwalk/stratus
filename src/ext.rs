@@ -35,18 +35,6 @@ pub fn not(value: bool) -> bool {
     !value
 }
 
-/// Gets the current binary basename.
-pub fn binary_name() -> String {
-    let binary = std::env::current_exe().unwrap();
-    let binary_basename = binary.file_name().unwrap().to_str().unwrap().to_lowercase();
-
-    if binary_basename.starts_with("test_") {
-        "tests".to_string()
-    } else {
-        binary_basename
-    }
-}
-
 // -----------------------------------------------------------------------------
 // From / TryFrom
 // -----------------------------------------------------------------------------
