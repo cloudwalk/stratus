@@ -635,7 +635,7 @@ local-chaos-test:
 # Chaos Testing: Run chaos experiment
 run-chaos-experiment experiment="":
     echo "Building Stratus"
-    cargo build --features=metrics,rocks,dev --bin stratus
+    just build || exit 1
 
     echo "Executing experiment: {{ experiment }}"
     ./chaos/experiments/{{ experiment }}.sh

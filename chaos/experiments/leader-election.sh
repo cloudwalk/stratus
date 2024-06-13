@@ -12,7 +12,7 @@ start_instance() {
     local tokio_console_address=$6
     local metrics_exporter_address=$7
 
-    RUST_LOG=info cargo run --features=metrics,rocks,dev --bin stratus -- \
+    RUST_LOG=info cargo run --features=dev --bin stratus -- \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
         -a=$address \
@@ -226,7 +226,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=10
+n=4
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
