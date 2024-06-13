@@ -19,18 +19,21 @@ e2e/cache
 e2e/.tool-versions
 flamegraph.svg
 
-# E2E (Solidity contracts)
-e2e-contracts/repos
-e2e-contracts/integration/contracts/*.flattened.sol
-e2e-contracts/integration/cache
-e2e-contracts/integration/typechain-types
-e2e-contracts/integration/artifacts
-e2e-contracts/integration/.openzeppelin
-e2e-contracts/.tool-versions
-e2e-contracts/integration/.tool-versions
+# E2E (CloudWalk contracts)
+e2e/cloudwalk-contracts/repos
+e2e/cloudwalk-contracts/integration/contracts/*.flattened.sol
+e2e/cloudwalk-contracts/integration/cache
+e2e/cloudwalk-contracts/integration/typechain-types
+e2e/cloudwalk-contracts/integration/artifacts
+e2e/cloudwalk-contracts/integration/.openzeppelin
+e2e/cloudwalk-contracts/.tool-versions
+e2e/cloudwalk-contracts/integration/.tool-versions
 
 # E2E (NodeJS)
 node_modules/
+
+# E2E (Relayer)
+e2e_logs/
 
 # Build
 /target
