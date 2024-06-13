@@ -392,11 +392,11 @@ e2e-relayer-external-up:
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     # Install npm and start hardhat node in the e2e directory
-    if [ -d e2e-contracts ]; then
+    if [ -d e2e/cloudwalk-contracts ]; then
         (
-            cd e2e-contracts/integration
+            cd e2e/cloudwalk-contracts/integration
             npm install
-            BLOCK_MODE=1s npx hardhat node > ../../e2e_logs/hardhat.log &
+            BLOCK_MODE=1s npx hardhat node > ../../../e2e_logs/hardhat.log &
         )
     fi
 
@@ -407,9 +407,9 @@ e2e-relayer-external-up:
     # Start Relayer External binary
     cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
     
-    if [ -d e2e-contracts ]; then
+    if [ -d e2e/cloudwalk-contracts ]; then
     (
-        cd e2e-contracts/integration
+        cd e2e/cloudwalk-contracts/integration
         npx hardhat test test/*.test.ts --network stratus
         if [ $? -ne 0 ]; then
             echo "Hardhat tests failed"
@@ -449,7 +449,7 @@ e2e-relayer-external-down:
     rm -rf data/mismatched_transactions/*
 
     # Delete zeppelin directory
-    rm -rf ./e2e-contracts/integration/.openzeppelin
+    rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
@@ -457,40 +457,24 @@ e2e-relayer-external-down:
 
 # Contracts: Clone Solidity repositories
 contracts-clone *args="":
-    cd e2e-contracts && ./clone-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./clone-contracts.sh {{ args }}
 
 # Contracts: Compile selected Solidity contracts
 contracts-compile:
-    cd e2e-contracts && ./compile-contracts.sh
+    cd e2e/cloudwalk-contracts && ./compile-contracts.sh
 
 # Contracts: Flatten solidity contracts for integration test
 contracts-flatten:
-    cd e2e-contracts && ./flatten-contracts.sh
+    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh
 
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test *args="":
-    cd e2e-contracts && ./test-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./test-contracts.sh {{ args }}
 alias e2e-contracts := contracts-test
-
-# Contracts: Run BRLCToken contract tests
-contracts-test-brlc-token:
-    cd e2e-contracts && ./test-contracts.sh -t
-
-# Contracts: Run BRLCPeriphery contract tests
-contracts-test-brlc-periphery:
-    cd e2e-contracts && ./test-contracts.sh -p
-
-# Contracts: Run BRLCMultisig contract tests
-contracts-test-brlc-multisig:
-    cd e2e-contracts && ./test-contracts.sh -m
-
-# Contracts: Run CompoundPeriphery contract tests
-contracts-test-brlc-compound:
-    cd e2e-contracts && ./test-contracts.sh -c
 
 # Contracts: Remove all the cloned repositories
 contracts-remove:
-    cd e2e-contracts && ./remove-contracts.sh
+    cd e2e/cloudwalk-contracts && ./remove-contracts.sh
 
 # Contracts: Start Stratus and run contracts test
 contracts-test-stratus *args="":
@@ -557,30 +541,16 @@ contracts-test-stratus-rocks *args="":
 
     exit $result_code
 
-# Contracts: run contract integration tests
-contracts-test-int:
-    #!/bin/bash
-    cd e2e-contracts && ./flatten-contracts.sh
-    [ -d integration ] && cd integration
-    [ ! -f hardhat.config.ts ] && { cp ../../e2e/hardhat.config.ts .; }
-    [ ! -f tsconfig.json ] && { cp ../../e2e/tsconfig.json .; }
-    if [ ! -d node_modules ]; then
-        echo "Installing node modules"
-        npm --silent install hardhat@2.21.0 ethers@6.11.1 @openzeppelin/hardhat-upgrades @openzeppelin/contracts-upgradeable @nomicfoundation/hardhat-ethers @nomicfoundation/hardhat-toolbox @nomicfoundation/hardhat-ethers
-        command -v ts-node >/dev/null 2>&1 || { npm install --silent -g ts-node; }
-    fi
-    npx hardhat test
-    exit $?
-
 # Contracts: Run tests and generate coverage info. Use --html to open in browser.
 contracts-coverage *args="":
-    cd e2e-contracts && ./coverage-contracts.sh {{args}}
+    cd e2e/cloudwalk-contracts && ./coverage-contracts.sh {{args}}
 
 # Contracts: Erase coverage info
 contracts-coverage-erase:
     #!/bin/bash
-    cd e2e-contracts/repos
-    rm -rf */coverage
+    cd e2e/cloudwalk-contracts/repos || exit 1
+    echo "Erasing coverage info..."
+    rm -rf ./*/coverage && echo "Coverage info erased."
 
 # Chaos Testing: Set up and run local Kubernetes cluster and deploy locally the application
 local-chaos-setup:
