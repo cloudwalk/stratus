@@ -12,7 +12,7 @@ start_instance() {
     local tokio_console_address=$6
     local metrics_exporter_address=$7
 
-    RUST_LOG=info cargo run --features=dev --bin stratus -- \
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
         -a=$address \
