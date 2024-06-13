@@ -461,7 +461,7 @@ contracts-clone *args="":
 
 # Contracts: Compile selected Solidity contracts
 contracts-compile:
-    cd e2e-contracts && ./compile-contracts.sh
+    cd e2e/cloudwalk-contracts && ./compile-contracts.sh
 
 # Contracts: Flatten solidity contracts for integration test
 contracts-flatten:
