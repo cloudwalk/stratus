@@ -548,8 +548,9 @@ contracts-coverage *args="":
 # Contracts: Erase coverage info
 contracts-coverage-erase:
     #!/bin/bash
-    cd e2e/cloudwalk-contracts/repos
-    rm -rf */coverage
+    cd e2e/cloudwalk-contracts/repos || exit 1
+    echo "Erasing coverage info..."
+    rm -rf ./*/coverage && echo "Coverage info erased."
 
 # Chaos Testing: Set up and run local Kubernetes cluster and deploy locally the application
 local-chaos-setup:
