@@ -17,6 +17,7 @@ RUN apt-get install -y libclang-dev cmake protobuf-compiler
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json
 ENV NO_COLOR=1
+
 RUN cargo build --release --bin run-with-importer --features metrics,rocks,kubernetes
 
 # Runtime
