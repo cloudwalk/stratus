@@ -392,11 +392,11 @@ e2e-relayer-external-up:
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     # Install npm and start hardhat node in the e2e directory
-    if [ -d e2e-contracts ]; then
+    if [ -d e2e/cloudwalk-contracts ]; then
         (
-            cd e2e-contracts/integration
+            cd e2e/cloudwalk-contracts/integration
             npm install
-            BLOCK_MODE=1s npx hardhat node > ../../e2e_logs/hardhat.log &
+            BLOCK_MODE=1s npx hardhat node > ../../../e2e_logs/hardhat.log &
         )
     fi
 
@@ -407,9 +407,9 @@ e2e-relayer-external-up:
     # Start Relayer External binary
     cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
     
-    if [ -d e2e-contracts ]; then
+    if [ -d e2e/cloudwalk-contracts ]; then
     (
-        cd e2e-contracts/integration
+        cd e2e/cloudwalk-contracts/integration
         npx hardhat test test/*.test.ts --network stratus
         if [ $? -ne 0 ]; then
             echo "Hardhat tests failed"
@@ -449,7 +449,7 @@ e2e-relayer-external-down:
     rm -rf data/mismatched_transactions/*
 
     # Delete zeppelin directory
-    rm -rf ./e2e-contracts/integration/.openzeppelin
+    rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
 # ------------------------------------------------------------------------------
 # Contracts tasks
