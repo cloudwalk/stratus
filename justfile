@@ -472,22 +472,6 @@ contracts-test *args="":
     cd e2e-contracts && ./test-contracts.sh {{ args }}
 alias e2e-contracts := contracts-test
 
-# Contracts: Run BRLCToken contract tests
-contracts-test-brlc-token:
-    cd e2e-contracts && ./test-contracts.sh -t
-
-# Contracts: Run BRLCPeriphery contract tests
-contracts-test-brlc-periphery:
-    cd e2e-contracts && ./test-contracts.sh -p
-
-# Contracts: Run BRLCMultisig contract tests
-contracts-test-brlc-multisig:
-    cd e2e-contracts && ./test-contracts.sh -m
-
-# Contracts: Run CompoundPeriphery contract tests
-contracts-test-brlc-compound:
-    cd e2e-contracts && ./test-contracts.sh -c
-
 # Contracts: Remove all the cloned repositories
 contracts-remove:
     cd e2e-contracts && ./remove-contracts.sh
