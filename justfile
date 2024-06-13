@@ -457,7 +457,7 @@ e2e-relayer-external-down:
 
 # Contracts: Clone Solidity repositories
 contracts-clone *args="":
-    cd e2e-contracts && ./clone-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./clone-contracts.sh {{ args }}
 
 # Contracts: Compile selected Solidity contracts
 contracts-compile:
