@@ -93,9 +93,6 @@ impl ExternalRelayer {
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(block.transactions);
 
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         if let Err(err) = self.relay_dag(dag).await {
             if let RelayError::CompareTimeout(_) = err {
                 // This retries the entire block, but we could be retrying only each specific transaction that failed.
@@ -124,9 +121,6 @@ impl ExternalRelayer {
             .await?;
         }
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_relay_dag(start.elapsed());
-
         Ok(Some(block_number))
     }
 
@@ -134,6 +128,9 @@ impl ExternalRelayer {
     /// to ensure the nonce was incremented. In case of a mismatch it returns an error describing what mismatched.
     #[tracing::instrument(name = "external_relayer::compare_receipt", skip_all, fields(hash))]
     async fn compare_receipt(&self, stratus_receipt: ExternalReceipt, substrate_pending_transaction: PendingTransaction<'_>) -> anyhow::Result<(), RelayError> {
+        #[cfg(feature = "metrics")]
+        let start_metric = metrics::now();
+
         let tx_hash: Hash = stratus_receipt.0.transaction_hash.into();
         tracing::info!(?tx_hash, "comparing receipts");
 
@@ -142,10 +139,10 @@ impl ExternalRelayer {
 
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
-        loop {
+        let _res = loop {
             let Ok(receipt) = timeout(Duration::from_secs(30), substrate_receipt).await else {
                 tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
-                return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+                break Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
             };
 
             match receipt {
@@ -154,16 +151,16 @@ impl ExternalRelayer {
                         let err_string = compare_error.to_string();
                         let error = log_and_err!("transaction mismatch!").context(err_string.clone());
                         self.save_mismatch(stratus_receipt, substrate_receipt, &err_string).await;
-                        return error.map_err(RelayError::Mismatch);
+                        break error.map_err(RelayError::Mismatch);
                     } else {
-                        return Ok(());
+                        break Ok(());
                     },
                 Ok(None) =>
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
                         tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
-                        return Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+                        break Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
                     },
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
@@ -171,7 +168,12 @@ impl ExternalRelayer {
             }
             substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
             traced_sleep(Duration::from_millis(50), SleepReason::SyncData).await;
-        }
+        };
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_compare_receipts(start_metric.elapsed());
+
+        _res
     }
 
     /// Save a transaction mismatch to postgres, if it fails, save it to a file.
@@ -280,6 +282,9 @@ impl ExternalRelayer {
     /// on the `mismatches` table in pgsql, or in ./data as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         tracing::debug!("relaying transactions");
 
         let mut results = vec![];
@@ -292,16 +297,21 @@ impl ExternalRelayer {
             .into_iter()
             .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
 
-        if join_all(futures)
+        let _res = if join_all(futures)
             .await
             .into_iter()
             .filter_map(Result::err)
             .any(|err| matches!(err, RelayError::CompareTimeout(_)))
         {
             return Err(RelayError::CompareTimeout(anyhow!("some comparisons timed out, should retry them.")));
-        }
+        } else {
+            Ok(())
+        };
 
-        Ok(())
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_dag(start.elapsed());
+
+        _res
     }
 }
 
