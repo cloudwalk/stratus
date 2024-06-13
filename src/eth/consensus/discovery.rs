@@ -4,13 +4,14 @@
 /// It will also remove any peers that are no longer available.
 /// It also spawn a new task to handle the block propagation to the new peer.
 use std::sync::Arc;
+
 use tokio::sync::Mutex;
 
-use super::Consensus;
-use super::PeerAddress;
-use super::Peer;
-use super::Role;
 use super::AppendEntryServiceClient;
+use super::Consensus;
+use super::Peer;
+use super::PeerAddress;
+use super::Role;
 use crate::ext::named_spawn;
 
 #[tracing::instrument(skip_all)]
