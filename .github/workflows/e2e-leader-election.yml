@@ -26,8 +26,6 @@ on:
 
 jobs:
   e2e_leader_election:
-    strategy:
-      fail-fast: false
     name: E2E Leader Election Test
     runs-on: ubuntu-latest
     timeout-minutes: 45
