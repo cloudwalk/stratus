@@ -5,27 +5,26 @@
 /// It also spawn a new task to handle the block propagation to the new peer.
 use std::sync::Arc;
 
+#[cfg(feature = "kubernetes")]
+use k8s_openapi::api::core::v1::Pod;
+#[cfg(feature = "kubernetes")]
+use kube::Api;
+#[cfg(feature = "kubernetes")]
+use kube::Client;
 use tokio::sync::Mutex;
 
+#[cfg(feature = "kubernetes")]
+use super::sleep;
 use super::AppendEntryServiceClient;
 use super::Consensus;
+#[cfg(feature = "kubernetes")]
+use super::Duration;
+#[cfg(feature = "kubernetes")]
+use super::GlobalState;
 use super::Peer;
 use super::PeerAddress;
 use super::Role;
 use crate::ext::named_spawn;
-
-#[cfg(feature = "kubernetes")]
-use kube::Api;
-#[cfg(feature = "kubernetes")]
-use k8s_openapi::api::core::v1::Pod;
-#[cfg(feature = "kubernetes")]
-use kube::Client;
-#[cfg(feature = "kubernetes")]
-use super::Duration;
-#[cfg(feature = "kubernetes")]
-use super::sleep;
-#[cfg(feature = "kubernetes")]
-use super::GlobalState;
 
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
