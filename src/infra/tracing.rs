@@ -27,6 +27,8 @@ use serde::ser::SerializeStruct;
 use serde::Serialize;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
+use tracing::span;
+use tracing::span::Attributes;
 use tracing::Event;
 use tracing::Subscriber;
 use tracing_serde::fields::AsMap;
@@ -53,16 +55,20 @@ use crate::infra::build_info;
 pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
     println!("creating tracing registry");
 
+    // configure tracing context layer
+
+    println!("tracing registry: enabling tracing context recorder");
+    let tracing_context_layer = TracingContextLayer.with_filter(EnvFilter::from_default_env());
+
     // configure stdout log layer
     let enable_ansi = stdout().is_terminal();
-
     println!(
         "tracing registry: enabling console logs | format={} ansi={}",
         config.tracing_log_format, enable_ansi
     );
     let stdout_layer = match config.tracing_log_format {
         TracingLogFormat::Json => fmt::Layer::default()
-            .event_format(TracingJsonFormatter)
+            .event_format(JsonFormatter)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
         TracingLogFormat::Minimal => fmt::Layer::default()
@@ -70,7 +76,7 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
             .with_thread_names(false)
             .with_target(false)
             .with_ansi(enable_ansi)
-            .with_timer(TracingMinimalTimer)
+            .with_timer(MinimalTimer)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
         TracingLogFormat::Normal => fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed(),
@@ -123,6 +129,7 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
 
     // init registry
     let result = tracing_subscriber::registry()
+        .with(tracing_context_layer)
         .with(stdout_layer)
         .with(opentelemetry_layer)
         .with(sentry_layer)
@@ -282,25 +289,106 @@ impl From<TracingProtocol> for Protocol {
 }
 
 // -----------------------------------------------------------------------------
+// Tracing service: Span field recorder
+// -----------------------------------------------------------------------------
+struct TracingContextLayer;
+
+impl<S> Layer<S> for TracingContextLayer
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: tracing_subscriber::layer::Context<'_, S>) {
+        let Some(span) = ctx.span(id) else { return };
+        span.extensions_mut().insert(ContextFields::new(attrs.field_map()));
+    }
+
+    fn on_record(&self, id: &span::Id, values: &span::Record<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
+        let Some(span) = ctx.span(id) else { return };
+        let mut ext = span.extensions_mut();
+        let Some(map) = ext.get_mut::<ContextFields>() else {
+            tracing::error!(
+                reason = %"tracing context-fields are missing from span when they were expected to exist",
+                span_id = ?span.id(),
+                span_name = %span.name(),
+                "failed to get tracing context-fields"
+            );
+            return;
+        };
+        if let Err(e) = map.record(values.field_map()) {
+            tracing::error!(reason = e, span_id = ?span.id(), span_name = %span.name(), "failed to record span fields to current context-fields");
+        }
+    }
+}
+
+struct ContextFields(serde_json::Value);
+
+impl ContextFields {
+    fn new(fields: SerializeFieldMap<'_, Attributes>) -> Self {
+        let fields = serde_json::to_value(fields).expect_infallible();
+        Self(fields)
+    }
+
+    fn record(&mut self, fields: SerializeFieldMap<'_, span::Record>) -> Result<(), &'static str> {
+        let mut new_fields = serde_json::to_value(fields).expect_infallible();
+        let Some(new_fields) = new_fields.as_object_mut() else {
+            return Err("new fields are not json object when they were expected to be");
+        };
+
+        let Some(current_fields) = self.0.as_object_mut() else {
+            return Err("current fields are not json object when they were expected to be");
+        };
+
+        // TODO: remove cloning
+        for new_field in new_fields {
+            current_fields.insert(new_field.0.to_owned(), new_field.1.to_owned());
+        }
+
+        Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Tracing service: - Json Formatter
 // -----------------------------------------------------------------------------
 
-struct TracingJsonFormatter;
+struct JsonFormatter;
 
-impl<S> FormatEvent<S, DefaultFields> for TracingJsonFormatter
+impl<S> FormatEvent<S, DefaultFields> for JsonFormatter
 where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
 {
     fn format_event(&self, ctx: &fmt::FmtContext<'_, S, DefaultFields>, mut writer: fmt::format::Writer<'_>, event: &tracing::Event<'_>) -> std::fmt::Result {
         let meta = event.metadata();
 
+        // parse spans
         let context = match ctx.lookup_current() {
             Some(span) => {
-                let root_span = span.scope().from_root().next().expect("root span should exist because span exists");
+                let mut span_iterator = span.scope().peekable();
 
+                let mut root_span = None;
+                while let Some(span) = span_iterator.next() {
+                    match span.extensions().get::<ContextFields>() {
+                        Some(context_fields) => {}
+                        None => {
+                            tracing::error!(
+                                reason = %"tracing context-fields are missing from span when they were expected to exist",
+                                span_id = ?span.id(),
+                                span_name = %span.name(),
+                                "failed to get tracing context-fields"
+                            );
+                        }
+                    }
+
+                    // track root span
+                    if span_iterator.peek().is_none() {
+                        root_span = Some(span);
+                    }
+                }
+
+                // genrate context
                 let context = JsonEntryContext {
-                    root_span_id: root_span.id().into_u64(),
-                    root_span_name: root_span.name(),
+                    root_span_id: root_span.as_ref().map(|s| s.id().into_u64()).unwrap_or(0),
+                    root_span_name: root_span.as_ref().map(|s| s.name()).unwrap_or(""),
                     span_id: span.id().into_u64(),
                     span_name: span.name(),
                 };
@@ -309,6 +397,7 @@ where
             None => None,
         };
 
+        // parse metadata and event
         let log = JsonEntry {
             timestamp: Utc::now(),
             level: meta.level().as_serde(),
@@ -345,12 +434,8 @@ impl<'a> Serialize for JsonEntry<'a> {
         state.serialize_field("threadName", self.thread.name().unwrap_or_default())?;
         state.serialize_field("fields", &self.fields)?;
         match &self.context {
-            Some(context) => {
-                state.serialize_field("context", context)?;
-            }
-            None => {
-                state.skip_field("context")?;
-            }
+            Some(context) => state.serialize_field("context", context)?,
+            None => state.skip_field("context")?,
         }
         state.end()
     }
@@ -380,9 +465,9 @@ impl<'a> Serialize for JsonEntryContext<'a> {
 // -----------------------------------------------------------------------------
 // Tracing service: - Minimal Timer
 // -----------------------------------------------------------------------------
-struct TracingMinimalTimer;
+struct MinimalTimer;
 
-impl FormatTime for TracingMinimalTimer {
+impl FormatTime for MinimalTimer {
     fn format_time(&self, w: &mut fmt::format::Writer<'_>) -> std::fmt::Result {
         write!(w, "{}", Local::now().time().format("%H:%M:%S%.3f"))
     }
