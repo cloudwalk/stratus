@@ -71,36 +71,12 @@ run_test() {
     pids=()
     ports=()
     rocks_paths=()
-    startup=()
     for instance in "${instances[@]}"; do
         IFS=' ' read -r -a params <<< "$instance"
         pids+=($(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"))
         ports+=("${params[4]}")
         rocks_paths+=("${params[2]}")
-        startup+=(false)
     done
-
-    all_ready=false
-    while [ "$all_ready" != true ]; do
-        all_ready=true
-        for i in "${!ports[@]}"; do
-            if [ "${startup[$i]}" != true ]; then
-                response=$(check_startup "${ports[$i]}")
-                if [ "$response" = "true" ]; then
-                    startup[$i]=true
-                    echo "Instance on port ${ports[$i]} is ready."
-                else
-                    all_ready=false
-                fi
-            fi
-        done
-        if [ "$all_ready" != true ]; then
-            echo "Waiting for all instances to be ready..."
-            sleep 5
-        fi
-    done
-
-    echo "All instances are ready. Waiting for leader election"
 
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=60
@@ -157,32 +133,9 @@ run_test() {
             new_pid=$(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}")
             pids+=("$new_pid")
             ports+=("${params[4]}")
-            startup+=(false)
             break
         fi
     done
-
-    all_ready=false
-    while [ "$all_ready" != true ]; do
-        all_ready=true
-        for i in "${!ports[@]}"; do
-            if [ "${startup[$i]}" != true ]; then
-                response=$(check_startup "${ports[$i]}")
-                if [ "$response" = "true" ]; then
-                    startup[$i]=true
-                    echo "Instance on port ${ports[$i]} is ready."
-                else
-                    all_ready=false
-                fi
-            fi
-        done
-        if [ "$all_ready" != true ]; then
-            echo "Waiting for all instances to be ready..."
-            sleep 5
-        fi
-    done
-
-    echo "All instances are ready after restart. Waiting for new leader election."
 
     # Maximum timeout duration in seconds for new leader election
     max_timeout=60
