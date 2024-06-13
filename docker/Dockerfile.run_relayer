@@ -10,7 +10,7 @@ COPY Cargo.toml /app/Cargo.toml
 COPY Cargo.lock /app/Cargo.lock
 COPY .cargo .cargo
 COPY config /app/config
-COPY proto /app/static/proto
+COPY static/proto /app/static/proto
 
 RUN apt update
 RUN apt-get install -y libclang-dev cmake protobuf-compiler
