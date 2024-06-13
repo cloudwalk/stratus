@@ -136,7 +136,7 @@ run_test() {
 
         if [ $elapsed_time -ge $initial_leader_timeout ]; then
             echo "Timeout reached without finding an initial leader."
-            break
+            exit 1
         fi
 
         leader_ports=($(find_leader "${ports[@]}"))
@@ -214,7 +214,7 @@ run_test() {
 
         if [ $elapsed_time -ge $max_timeout ]; then
             echo "Timeout reached without finding a new leader."
-            break # Exit the loop due to timeout
+            exit 1
         fi
 
         leader_ports=($(find_leader "${ports[@]}"))
