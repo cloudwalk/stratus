@@ -23,12 +23,6 @@ start_instance() {
     echo $!
 }
 
-kill_process_on_port() {
-    local port=$1
-    # Find processes listening on the port and kill them
-    lsof -ti tcp:"$port" | xargs kill -9 2>/dev/null
-}
-
 # Function to check liveness of an instance
 check_liveness() {
     local port=$1
@@ -75,10 +69,10 @@ run_test() {
     # Kill dangling instances if exist
     for instance in "${instances[@]}"; do
         IFS=' ' read -r -a params <<< "$instance"
-        kill_process_on_port "${params[4]}"
-        kill_process_on_port "${params[1]##*:}"
-        kill_process_on_port "${params[6]##*:}"
-        kill_process_on_port "${params[7]##*:}"
+        killport "${params[4]}"
+        killport "${params[1]##*:}"
+        killport "${params[6]##*:}"
+        killport "${params[7]##*:}"
     done
 
     # Start instances
