@@ -5,9 +5,12 @@ use std::io::stdout;
 use std::io::IsTerminal;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::thread::Thread;
 
 use anyhow::anyhow;
+use chrono::DateTime;
 use chrono::Local;
+use chrono::Utc;
 use console_subscriber::ConsoleLayer;
 use display_json::DebugAsJson;
 use itertools::Itertools;
@@ -20,11 +23,22 @@ use opentelemetry_sdk::trace;
 use opentelemetry_sdk::trace::BatchConfigBuilder;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
 use opentelemetry_sdk::Resource as SdkResource;
+use serde::ser::SerializeStruct;
+use serde::Serialize;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
+use tracing::Event;
+use tracing::Subscriber;
+use tracing_serde::fields::AsMap;
+use tracing_serde::fields::SerializeFieldMap;
+use tracing_serde::AsSerde;
+use tracing_serde::SerializeLevel;
 use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::format::DefaultFields;
 use tracing_subscriber::fmt::time::FormatTime;
+use tracing_subscriber::fmt::FormatEvent;
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
@@ -32,6 +46,7 @@ use ulid::Ulid;
 
 use crate::config::TracingConfig;
 use crate::ext::named_spawn;
+use crate::ext::ResultExt;
 use crate::infra::build_info;
 
 /// Init application tracing.
@@ -47,10 +62,7 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
     );
     let stdout_layer = match config.tracing_log_format {
         TracingLogFormat::Json => fmt::Layer::default()
-            .json()
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_thread_names(true)
+            .event_format(TracingJsonFormatter)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
         TracingLogFormat::Minimal => fmt::Layer::default()
@@ -270,9 +282,104 @@ impl From<TracingProtocol> for Protocol {
 }
 
 // -----------------------------------------------------------------------------
-// Tracing services
+// Tracing service: - Json Formatter
 // -----------------------------------------------------------------------------
 
+struct TracingJsonFormatter;
+
+impl<S> FormatEvent<S, DefaultFields> for TracingJsonFormatter
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+{
+    fn format_event(&self, ctx: &fmt::FmtContext<'_, S, DefaultFields>, mut writer: fmt::format::Writer<'_>, event: &tracing::Event<'_>) -> std::fmt::Result {
+        let meta = event.metadata();
+
+        let context = match ctx.lookup_current() {
+            Some(span) => {
+                let root_span = span.scope().from_root().next().expect("root span should exist because span exists");
+
+                let context = JsonEntryContext {
+                    root_span_id: root_span.id().into_u64(),
+                    root_span_name: root_span.name(),
+                    span_id: span.id().into_u64(),
+                    span_name: span.name(),
+                };
+                Some(context)
+            }
+            None => None,
+        };
+
+        let log = JsonEntry {
+            timestamp: Utc::now(),
+            level: meta.level().as_serde(),
+            target: meta.target(),
+            thread: std::thread::current(),
+            fields: event.field_map(),
+            context,
+        };
+
+        writeln!(writer, "{}", serde_json::to_string(&log).expect_infallible())
+    }
+}
+
+#[derive(derive_new::new)]
+struct JsonEntry<'a> {
+    timestamp: DateTime<Utc>,
+    level: SerializeLevel<'a>,
+    target: &'a str,
+    thread: Thread,
+    fields: SerializeFieldMap<'a, Event<'a>>,
+    context: Option<JsonEntryContext<'a>>,
+}
+
+impl<'a> Serialize for JsonEntry<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("JsonEntry", 7)?;
+        state.serialize_field("timestamp", &self.timestamp)?;
+        state.serialize_field("level", &self.level)?;
+        state.serialize_field("target", self.target)?;
+        state.serialize_field("threadId", &format!("{:?}", self.thread.id()))?;
+        state.serialize_field("threadName", self.thread.name().unwrap_or_default())?;
+        state.serialize_field("fields", &self.fields)?;
+        match &self.context {
+            Some(context) => {
+                state.serialize_field("context", context)?;
+            }
+            None => {
+                state.skip_field("context")?;
+            }
+        }
+        state.end()
+    }
+}
+
+struct JsonEntryContext<'a> {
+    root_span_id: u64,
+    root_span_name: &'a str,
+    span_id: u64,
+    span_name: &'a str,
+}
+
+impl<'a> Serialize for JsonEntryContext<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("JsonEntryContext", 4)?;
+        state.serialize_field("root_span_id", &self.root_span_id)?;
+        state.serialize_field("root_span_name", &self.root_span_name)?;
+        state.serialize_field("span_id", &self.span_id)?;
+        state.serialize_field("span_name", &self.span_name)?;
+        state.end()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tracing service: - Minimal Timer
+// -----------------------------------------------------------------------------
 struct TracingMinimalTimer;
 
 impl FormatTime for TracingMinimalTimer {
