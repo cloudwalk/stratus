@@ -8,7 +8,6 @@ use rocksdb::DB;
 
 use super::log_entry::LogEntry;
 
-
 pub struct AppendLogEntriesStorage {
     db: DB,
 }
@@ -89,6 +88,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::eth::consensus::log_entry::LogEntryData;
 
     #[derive(Default)]
     struct BlockHeader {

@@ -8,16 +8,13 @@ use super::append_entry::BlockHeader as BH;
 use super::append_entry::TransactionExecution as TE;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum LogEntryData {
     BlockHeader(BH),
     TransactionExecutions(Vec<TE>),
     #[default]
     Empty,
 }
-
-
 
 #[derive(Debug, Clone, Default)]
 pub struct LogEntry {
