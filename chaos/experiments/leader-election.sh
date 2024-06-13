@@ -12,15 +12,23 @@ start_instance() {
     local tokio_console_address=$6
     local metrics_exporter_address=$7
 
-    RUST_LOG=error cargo run --features=metrics,rocks,dev --bin stratus -- \
+    RUST_LOG=info cargo run --features=metrics,rocks,dev --bin stratus -- \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
         -a=$address \
         --grpc-server-address=$grpc_address \
         --rocks-path-prefix=$rocks_path_prefix \
         --tokio-console-address=$tokio_console_address \
-        --metrics-exporter-address=$metrics_exporter_address &
+        --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
     echo $!
+}
+
+# Function to check liveness of an instance
+check_liveness() {
+    local port=$1
+    curl -s http://0.0.0.0:$port \
+        --header "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"stratus_liveness","params":[],"id":1}' | jq '.result'
 }
 
 # Function to check if an instance is the leader
@@ -58,17 +66,42 @@ run_test() {
         "0.0.0.0:3003 0.0.0.0:3780 tmp_rocks_3003 instance_3003.log 3003 http://0.0.0.0:3001;3778,http://0.0.0.0:3002;3779 0.0.0.0:6671 0.0.0.0:9003"
     )
 
+
     # Start instances
     echo "Starting 3 instances..."
     pids=()
     ports=()
     rocks_paths=()
+    liveness=()
     for instance in "${instances[@]}"; do
         IFS=' ' read -r -a params <<< "$instance"
         pids+=($(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"))
         ports+=("${params[4]}")
         rocks_paths+=("${params[2]}")
+        liveness+=(false)
     done
+
+    all_ready=false
+    while [ "$all_ready" != true ]; do
+        all_ready=true
+        for i in "${!ports[@]}"; do
+            if [ "${liveness[$i]}" != true ]; then
+                response=$(check_liveness "${ports[$i]}")
+                if [ "$response" = "true" ]; then
+                    liveness[$i]=true
+                    echo "Instance on port ${ports[$i]} is ready."
+                else
+                    all_ready=false
+                fi
+            fi
+        done
+        if [ "$all_ready" != true ]; then
+            echo "Waiting for all instances to be ready..."
+            sleep 5
+        fi
+    done
+
+    echo "All instances are ready. Waiting for leader election"
 
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=60
@@ -125,9 +158,32 @@ run_test() {
             new_pid=$(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}")
             pids+=("$new_pid")
             ports+=("${params[4]}")
+            liveness+=(false)
             break
         fi
     done
+
+    all_ready=false
+    while [ "$all_ready" != true ]; do
+        all_ready=true
+        for i in "${!ports[@]}"; do
+            if [ "${liveness[$i]}" != true ]; then
+                response=$(check_liveness "${ports[$i]}")
+                if [ "$response" = "true" ]; then
+                    liveness[$i]=true
+                    echo "Instance on port ${ports[$i]} is ready."
+                else
+                    all_ready=false
+                fi
+            fi
+        done
+        if [ "$all_ready" != true ]; then
+            echo "Waiting for all instances to be ready..."
+            sleep 5
+        fi
+    done
+
+    echo "All instances are ready after restart. Waiting for new leader election."
 
     # Maximum timeout duration in seconds for new leader election
     max_timeout=60

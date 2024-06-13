@@ -632,10 +632,10 @@ local-chaos-test:
     @echo "Cleaning up..."
     just local-chaos-cleanup
 
-# Chaos Testing: Run chaos experiment by name using Kind
-run-chaos-experiment experiment="":
+# 
+run-leader-election-test:
     echo "Building Stratus"
     just build || exit 1
 
-    echo "Executing experiment: {{ experiment }}"
-    ./chaos/experiments/{{ experiment }}.sh
+    echo "Executing leader election test"
+    ./chaos/experiments/leader-election.sh
