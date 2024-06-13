@@ -18,7 +18,7 @@ compile_contract() {
     solc --base-path repos/$repo/contracts --include-path repos/$repo/node_modules --hashes --optimize -o repos/$repo/target --overwrite repos/$repo/contracts/$contract.sol
 
     # copy from target folder to tests
-    cp repos/$repo/target/$contract.signatures ../static/contracts/
+    cp repos/$repo/target/$contract.signatures ../../static/contracts/
 }
 
 # ------------------------------------------------------------------------------

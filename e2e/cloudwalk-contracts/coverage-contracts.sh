@@ -20,6 +20,10 @@ coverage() {
     log "Generating coverage: $repo"
 
     # Enter the repository folder
+    if [ ! -d repos/$repo ]; then
+        log "Repository not found: $repo. Is it cloned?"
+        return
+    fi
     cd repos/$repo
     
     npx hardhat coverage

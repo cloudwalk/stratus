@@ -28,10 +28,11 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
+use ulid::Ulid;
 
 use crate::config::TracingConfig;
-use crate::ext::binary_name;
 use crate::ext::named_spawn;
+use crate::infra::build_info;
 
 /// Init application tracing.
 pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
@@ -126,13 +127,12 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
 }
 
 fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]) -> SdkTracer {
-    let service_name = format!("stratus-{}", binary_name());
     println!(
         "tracing registry: enabling opentelemetry exporter | url={} protocol={} headers={} service={}",
         url,
         protocol,
         headers.len(),
-        service_name
+        build_info::service_name()
     );
 
     // configure headers
@@ -176,7 +176,7 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
         }
     };
 
-    let tracer_config = trace::config().with_resource(SdkResource::new(vec![KeyValue::new("service.name", service_name)]));
+    let tracer_config = trace::config().with_resource(SdkResource::new(vec![KeyValue::new("service.name", build_info::service_name())]));
 
     // configure pipeline
     let batch_config = BatchConfigBuilder::default().with_max_queue_size(u16::MAX as usize).build();
@@ -284,6 +284,11 @@ impl FormatTime for TracingMinimalTimer {
 // -----------------------------------------------------------------------------
 // Tracing functions
 // -----------------------------------------------------------------------------
+
+/// Creates a new unique correlation ID.
+pub fn new_cid() -> String {
+    Ulid::new().to_string()
+}
 
 /// Emits an info message that a task was spawned to backgroud.
 #[track_caller]
