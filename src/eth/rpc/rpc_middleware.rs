@@ -17,6 +17,11 @@ use jsonrpsee::server::middleware::rpc::RpcServiceT;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
+use tracing::field;
+use tracing::info_span;
+use tracing::instrument::Instrumented;
+use tracing::Instrument;
+use tracing::Span;
 
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -25,9 +30,11 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::RpcClientApp;
+use crate::ext::SpanExt;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::tracing::new_cid;
 
 // -----------------------------------------------------------------------------
 // Global metrics
@@ -45,9 +52,13 @@ pub struct RpcMiddleware {
 }
 
 impl<'a> RpcServiceT<'a> for RpcMiddleware {
-    type Future = RpcResponse<'a>;
+    type Future = Instrumented<RpcResponse<'a>>;
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
+        // track request
+        let span = info_span!("rpc::request", cid = %new_cid(), client = field::Empty, method = field::Empty, function = field::Empty);
+        let enter = span.enter();
+
         // extract request data
         let client = extract_client_app(&request);
         let method = request.method_name();
@@ -56,12 +67,17 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "eth_sendRawTransaction" => extract_transaction_function(request.params()),
             _ => None,
         };
+        Span::with(|s| {
+            s.rec_str("client", &client);
+            s.rec_str("method", &method);
+            s.rec_opt("function", &function);
+        });
 
         // trace request
         tracing::info!(
-            %client,
+            client = %client,
             id = %request.id,
-            %method,
+            method = %method,
             function = %function.clone().unwrap_or_default(),
             params = ?request.params(),
             "rpc request"
@@ -75,6 +91,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             metrics::inc_rpc_requests_started(&client, method, function.clone());
         }
 
+        drop(enter);
         RpcResponse {
             client,
             id: request.id.to_string(),
@@ -83,6 +100,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             future_response: self.service.call(request),
             start: Instant::now(),
         }
+        .instrument(span)
     }
 }
 
@@ -96,10 +114,13 @@ pub struct RpcResponse<'a> {
     #[pin]
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 
+    // request metadata
     client: RpcClientApp,
     id: String,
     method: String,
     function: Option<SoliditySignature>,
+
+    // request services
     start: Instant,
 }
 
