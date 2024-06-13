@@ -5,7 +5,7 @@ set -e
 # Function to build the project
 build_project() {
     echo "Building the project..."
-    cargo build --release --bin run-with-importer --features metrics,rocks,dev
+    cargo build --release --bin stratus --features metrics,rocks,dev
 }
 
 # Function to start an instance
@@ -15,8 +15,17 @@ start_instance() {
     local rocks_path_prefix=$3
     local log_file=$4
     local candidate_peers=$5
+    local tokio_console_address=$6
+    local metrics_exporter_address=$7
 
-    RUST_LOG=info cargo run --features=metrics,rocks,dev --bin run-with-importer -- --enable-test-accounts --candidate-peers="$candidate_peers" -a=$address --grpc-server-address=$grpc_address --rocks-path-prefix=$rocks_path_prefix > $log_file 2>&1 &
+    RUST_LOG=info cargo run --features=metrics,rocks,dev --bin stratus -- \
+        --enable-test-accounts \
+        --candidate-peers="$candidate_peers" \
+        -a=$address \
+        --grpc-server-address=$grpc_address \
+        --rocks-path-prefix=$rocks_path_prefix \
+        --tokio-console-address=$tokio_console_address \
+        --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
     echo $!
 }
 
@@ -72,6 +81,8 @@ run_test() {
     for ((i=1; i<=num_instances; i++)); do
         local port=$((3000 + i))
         local grpc_port=$((3777 + i))
+        local tokio_console_port=$((4000 + i))
+        local metrics_exporter_port=$((5000 + i))
         local tmp_dir="tmp_rocks_$port"
         local log_file="instance_$port.log"
 
@@ -86,7 +97,7 @@ run_test() {
             fi
         done
 
-        instances+=("0.0.0.0:$port 0.0.0.0:$grpc_port $tmp_dir $log_file $port $candidate_peers")
+        instances+=("0.0.0.0:$port 0.0.0.0:$grpc_port $tmp_dir $log_file $port $candidate_peers 0.0.0.0:$tokio_console_port 0.0.0.0:$metrics_exporter_port")
     done
 
     # Start instances
@@ -97,7 +108,7 @@ run_test() {
     readiness=()
     for instance in "${instances[@]}"; do
         IFS=' ' read -r -a params <<< "$instance"
-        pids+=($(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}"))
+        pids+=($(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"))
         ports+=("${params[4]}")
         rocks_paths+=("${params[2]}")
         readiness+=(false)
@@ -148,7 +159,7 @@ run_test() {
         for instance in "${instances[@]}"; do
             IFS=' ' read -r -a params <<< "$instance"
             if [ "${params[4]}" -eq "$leader_port" ]; then
-                new_pid=$(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}")
+                new_pid=$(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}")
                 pids+=("$new_pid")
                 ports+=("${params[4]}")
                 readiness+=(false)
