@@ -23,6 +23,12 @@ start_instance() {
     echo $!
 }
 
+kill_process_on_port() {
+    local port=$1
+    # Find processes listening on the port and kill them
+    lsof -ti tcp:"$port" | xargs kill -9 2>/dev/null
+}
+
 # Function to check liveness of an instance
 check_liveness() {
     local port=$1
@@ -65,6 +71,13 @@ run_test() {
         "0.0.0.0:3002 0.0.0.0:3779 tmp_rocks_3002 instance_3002.log 3002 http://0.0.0.0:3001;3778,http://0.0.0.0:3003;3780 0.0.0.0:6670 0.0.0.0:9002"
         "0.0.0.0:3003 0.0.0.0:3780 tmp_rocks_3003 instance_3003.log 3003 http://0.0.0.0:3001;3778,http://0.0.0.0:3002;3779 0.0.0.0:6671 0.0.0.0:9003"
     )
+
+    # Kill dangling instances if exist
+    for instance in "${instances[@]}"; do
+        IFS=' ' read -r -a params <<< "$instance"
+        kill_process_on_port "${params[4]}"
+        kill_process_on_port "${params[1]##*:}"
+    done
 
     # Start instances
     echo "Starting 3 instances..."
