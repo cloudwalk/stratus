@@ -634,5 +634,8 @@ local-chaos-test:
 
 # Chaos Testing: Run chaos experiment by name using Kind
 run-chaos-experiment experiment="":
+    echo "Building Stratus"
+    just build || exit 1
+
     echo "Executing experiment: {{ experiment }}"
     ./chaos/experiments/{{ experiment }}.sh

@@ -2,12 +2,6 @@
 
 set -e
 
-# Function to build the project
-build_project() {
-    echo "Building the project..."
-    cargo build --release --bin stratus --features metrics,rocks,dev
-}
-
 # Function to start an instance
 start_instance() {
     local address=$1
@@ -238,9 +232,6 @@ run_test() {
 
 # Number of times to run the test
 n=5
-
-# Build the project
-build_project
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
