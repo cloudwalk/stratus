@@ -632,7 +632,7 @@ local-chaos-test:
     @echo "Cleaning up..."
     just local-chaos-cleanup
 
-# Chaos Testing: Run chaos experiment by name using Kind
+# Chaos Testing: Run chaos experiment
 run-chaos-experiment experiment="":
     echo "Building Stratus"
     cargo build --features=metrics,rocks,dev --bin stratus
