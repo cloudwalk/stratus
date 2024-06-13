@@ -469,7 +469,7 @@ contracts-flatten:
 
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test *args="":
-    cd e2e-contracts && ./test-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./test-contracts.sh {{ args }}
 alias e2e-contracts := contracts-test
 
 # Contracts: Remove all the cloned repositories
