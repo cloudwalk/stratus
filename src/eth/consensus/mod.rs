@@ -1,3 +1,4 @@
+#[cfg(feature = "rocks")]
 #[allow(dead_code)]
 mod append_log_entries_storage;
 pub mod forward_to;
