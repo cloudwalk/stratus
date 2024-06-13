@@ -14,6 +14,19 @@ use super::PeerAddress;
 use super::Role;
 use crate::ext::named_spawn;
 
+#[cfg(feature = "kubernetes")]
+use kube::Api;
+#[cfg(feature = "kubernetes")]
+use k8s_openapi::api::core::v1::Pod;
+#[cfg(feature = "kubernetes")]
+use kube::Client;
+#[cfg(feature = "kubernetes")]
+use super::Duration;
+#[cfg(feature = "kubernetes")]
+use super::sleep;
+#[cfg(feature = "kubernetes")]
+use super::GlobalState;
+
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
     let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
@@ -24,7 +37,7 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
         let max_attempts = 100;
 
         while attempts < max_attempts {
-            match Self::discover_peers_kubernetes(Arc::clone(&consensus)).await {
+            match discover_peers_kubernetes(Arc::clone(&consensus)).await {
                 Ok(k8s_peers) => {
                     new_peers.extend(k8s_peers);
                     tracing::info!("discovered {} peers from kubernetes", new_peers.len());
@@ -137,14 +150,14 @@ async fn discover_peers_kubernetes(consensus: Arc<Consensus>) -> Result<Vec<(Pee
     let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
     let client = Client::try_default().await?;
-    let pods: Api<Pod> = Api::namespaced(client, &Self::current_namespace().unwrap_or("default".to_string()));
+    let pods: Api<Pod> = Api::namespaced(client, &super::Consensus::current_namespace().unwrap_or("default".to_string()));
 
-    let lp = ListParams::default().labels("app=stratus-api");
+    let lp = super::ListParams::default().labels("app=stratus-api");
     let pod_list = pods.list(&lp).await?;
 
     for p in pod_list.items {
         if let Some(pod_name) = p.metadata.name {
-            if pod_name != Self::current_node().unwrap() {
+            if pod_name != super::Consensus::current_node().unwrap() {
                 if let Some(pod_ip) = p.status.and_then(|status| status.pod_ip) {
                     let address = pod_ip;
                     let jsonrpc_port = consensus.my_address.jsonrpc_port;
