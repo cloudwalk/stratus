@@ -93,9 +93,6 @@ impl ExternalRelayer {
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(block.transactions);
 
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         if let Err(err) = self.relay_dag(dag).await {
             if let RelayError::CompareTimeout(_) = err {
                 // This retries the entire block, but we could be retrying only each specific transaction that failed.
@@ -123,9 +120,6 @@ impl ExternalRelayer {
             .execute(&self.pool)
             .await?;
         }
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_relay_dag(start.elapsed());
 
         Ok(Some(block_number))
     }
@@ -288,6 +282,9 @@ impl ExternalRelayer {
     /// on the `mismatches` table in pgsql, or in ./data as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         tracing::debug!("relaying transactions");
 
         let mut results = vec![];
@@ -300,16 +297,21 @@ impl ExternalRelayer {
             .into_iter()
             .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
 
-        if join_all(futures)
+        let _res = if join_all(futures)
             .await
             .into_iter()
             .filter_map(Result::err)
             .any(|err| matches!(err, RelayError::CompareTimeout(_)))
         {
             return Err(RelayError::CompareTimeout(anyhow!("some comparisons timed out, should retry them.")));
-        }
+        } else {
+            Ok(())
+        };
 
-        Ok(())
+        #[cfg(feature = "metrics")]
+        metrics::inc_relay_dag(start.elapsed());
+
+        _res
     }
 }
 
