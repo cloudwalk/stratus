@@ -36,7 +36,7 @@ check_leader() {
     local grpc_address=$1
 
     # Send the gRPC request using grpcurl
-    response=$(grpcurl -import-path proto -proto append_entry.proto -plaintext -d '{"term": 0, "prevLogIndex": 0, "prevLogTerm": 0, "header": {"number": 1, "timestamp": 0}, "leader_id": ""}' $grpc_address append_entry.AppendEntryService/AppendBlockCommit)
+    response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{"term": 0, "prevLogIndex": 0, "prevLogTerm": 0, "header": {"number": 1, "timestamp": 0}, "leader_id": ""}' $grpc_address append_entry.AppendEntryService/AppendBlockCommit)
     echo $response
 
     # Check if the response status indicates success
