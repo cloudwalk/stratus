@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -11,7 +10,6 @@ use futures::future::join_all;
 use super::rocks_state::RocksStorageState;
 use super::types::AddressRocksdb;
 use super::types::SlotIndexRocksdb;
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -22,9 +20,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
@@ -62,14 +58,6 @@ impl RocksPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for RocksPermanentStorage {
-    fn kind(&self) -> PermanentStorageKind {
-        PermanentStorageKind::Rocks
-    }
-
-    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -94,33 +82,6 @@ impl PermanentStorage for RocksPermanentStorage {
     async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %index, ?point_in_time, "reading slot");
         Ok(self.state.read_slot(address, index, point_in_time))
-    }
-
-    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
-        tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
-
-        match point_in_time {
-            StoragePointInTime::Present => {
-                let keys = indexes.iter().cloned().map(|idx| ((*address).into(), idx.into()));
-                Ok(self
-                    .state
-                    .account_slots
-                    .multi_get(keys)?
-                    .into_iter()
-                    .map(|((_, idx), value)| (idx.into(), value.into()))
-                    .collect())
-            }
-            StoragePointInTime::Past(number) => {
-                let keys = indexes.iter().cloned().map(|idx| ((*address).into(), idx.into(), (*number).into()));
-                Ok(self
-                    .state
-                    .account_slots_history
-                    .multi_get(keys)?
-                    .into_iter()
-                    .map(|((_, idx, _), value)| (idx.into(), value.into()))
-                    .collect())
-            }
-        }
     }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {

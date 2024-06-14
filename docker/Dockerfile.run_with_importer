@@ -2,15 +2,14 @@
 FROM rust:1.75 as builder
 
 WORKDIR /app
+COPY build.rs /app/build.rs
 COPY src /app/src
 COPY static /app/static
+COPY config /app/config
 COPY .sqlx /app/.sqlx
-COPY build.rs /app/build.rs
+COPY .cargo .cargo
 COPY Cargo.toml /app/Cargo.toml
 COPY Cargo.lock /app/Cargo.lock
-COPY .cargo .cargo
-COPY config /app/config
-COPY proto /app/proto
 
 RUN apt update
 RUN apt-get install -y libclang-dev cmake protobuf-compiler
@@ -18,6 +17,7 @@ RUN apt-get install -y libclang-dev cmake protobuf-compiler
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json
 ENV NO_COLOR=1
+
 RUN cargo build --release --bin run-with-importer --features metrics,rocks,kubernetes
 
 # Runtime

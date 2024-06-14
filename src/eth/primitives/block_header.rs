@@ -1,12 +1,3 @@
-//! Block Header Module
-//!
-//! The Block Header module defines the structure of a block's header in
-//! Ethereum's blockchain. A block header contains crucial data like the block
-//! number, a unique hash identifying the block, details about transactions
-//! included in the block, gas usage information, and logs bloom filters. These
-//! elements are essential for blockchain verification and consensus mechanisms,
-//! as well as for navigating and interpreting the blockchain.
-
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
@@ -79,6 +70,30 @@ impl BlockHeader {
             state_root: HASH_EMPTY_TRIE,
             total_difficulty: Difficulty::default(),
             nonce: MinerNonce::default(),
+        }
+    }
+
+    pub fn to_append_entry_block_header(&self, transaction_hashes: Vec<String>) -> append_entry::BlockEntry {
+        append_entry::BlockEntry {
+            number: self.number.into(),
+            hash: self.hash.to_string(),
+            transactions_root: self.transactions_root.to_string(),
+            gas_used: self.gas_used.to_string(),
+            gas_limit: self.gas_limit.to_string(),
+            bloom: self.bloom.to_string(),
+            timestamp: self.timestamp.as_u64(),
+            parent_hash: self.parent_hash.to_string(),
+            author: self.author.to_string(),
+            extra_data: self.extra_data.clone().0,
+            miner: self.miner.to_string(),
+            difficulty: self.difficulty.to_string(),
+            receipts_root: self.receipts_root.to_string(),
+            uncle_hash: self.uncle_hash.to_string(),
+            size: self.size.into(),
+            state_root: self.state_root.to_string(),
+            total_difficulty: self.total_difficulty.to_string(),
+            nonce: self.nonce.to_string(),
+            transaction_hashes,
         }
     }
 }
@@ -160,31 +175,6 @@ where
                                  // withdrawals_root: todo!(),
                                  // withdrawals: todo!(),
                                  // other: todo!(),
-        }
-    }
-}
-
-impl From<&BlockHeader> for append_entry::BlockHeader {
-    fn from(block_header: &BlockHeader) -> Self {
-        append_entry::BlockHeader {
-            number: block_header.number.into(),
-            hash: block_header.hash.to_string(),
-            transactions_root: block_header.transactions_root.to_string(),
-            gas_used: block_header.gas_used.to_string(),
-            gas_limit: block_header.gas_limit.to_string(),
-            bloom: block_header.bloom.to_string(),
-            timestamp: block_header.timestamp.as_u64(),
-            parent_hash: block_header.parent_hash.to_string(),
-            author: block_header.author.to_string(),
-            extra_data: block_header.extra_data.clone().0,
-            miner: block_header.miner.to_string(),
-            difficulty: block_header.difficulty.to_string(),
-            receipts_root: block_header.receipts_root.to_string(),
-            uncle_hash: block_header.uncle_hash.to_string(),
-            size: block_header.size.into(),
-            state_root: block_header.state_root.to_string(),
-            total_difficulty: block_header.total_difficulty.to_string(),
-            nonce: block_header.nonce.to_string(),
         }
     }
 }
