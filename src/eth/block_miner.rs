@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use tracing::Span;
 
 use super::Consensus;
+use crate::eth::consensus::ExternalEntry;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -248,7 +249,7 @@ impl BlockMiner {
         }
 
         if let Some(consensus) = &self.consensus {
-            consensus.sender.send(block.clone()).await?;
+            consensus.sender.send(ExternalEntry::Block(block.clone())).await?;
         }
 
         // persist block
