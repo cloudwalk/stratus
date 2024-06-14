@@ -64,7 +64,9 @@ use append_entry::BlockEntry;
 use append_entry::RequestVoteRequest;
 use append_entry::RequestVoteResponse;
 use append_entry::StatusCode;
+use append_entry::TransactionExecutionEntry;
 
+use self::log_entry::LogEntryData;
 use super::primitives::TransactionInput;
 use crate::config::RunWithImporterConfig;
 use crate::eth::primitives::Block;
@@ -147,21 +149,22 @@ struct Peer {
     match_index: u64,
     next_index: u64,
     role: Role,
-    receiver: Arc<Mutex<broadcast::Receiver<Block>>>,
+    receiver: Arc<Mutex<broadcast::Receiver<LogEntryData>>>,
 }
 
 type PeerTuple = (Peer, JoinHandle<()>);
 
 pub struct Consensus {
     pub sender: Sender<Block>,                      //receives blocks
-    broadcast_sender: broadcast::Sender<Block>,     //propagates the blocks
+    broadcast_sender: broadcast::Sender<LogEntryData>,     //propagates the blocks
     importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
-    last_arrived_block_number: AtomicU64,
+    last_arrived_block_number: AtomicU64, //FIXME this should be replaced by the index on our appendEntry log
+    transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
     role: RwLock<Role>,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
@@ -193,6 +196,7 @@ impl Consensus {
             current_term: AtomicU64::new(0),
             voted_for: Mutex::new(None),
             last_arrived_block_number,
+            transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
             role: RwLock::new(Role::Follower),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1200..1500)), // Adjust as needed
@@ -203,6 +207,7 @@ impl Consensus {
         let consensus = Arc::new(consensus);
 
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
+        Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
         Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
         Self::initialize_server(Arc::clone(&consensus));
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
@@ -371,20 +376,40 @@ impl Consensus {
         });
     }
 
-    fn initialize_append_entries_channel(consensus: Arc<Consensus>, receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
+    fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
         //TODO add data to consensus-log-transactions
-        //TODO at the begining of temp-storage, load the consensus-log-transactions so the index becomes clear
-        //TODO use gRPC instead of jsonrpc
-        //FIXME for now, this has no colateral efects, but it will have in the future
         //TODO rediscover followers on comunication error
-        named_spawn("consensus::sender", async move {
+        named_spawn("consensus::transaction_execution_queue", async move {
+            //XXX FIXME deal with the scenario where a transactionHash arrives after the block, in this case before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
+            let interval = Duration::from_millis(40);
+            //TODO maybe check if I'm currently the leader?
             loop {
-                let mut receiver_lock = receiver.lock().await;
-                if let Some(data) = receiver_lock.recv().await {
-                    if consensus.is_leader().await {
-                        tracing::info!(number = data.header.number.as_u64(), "received block to send to followers");
+                tokio::time::sleep(interval).await;
 
-                        if consensus.broadcast_sender.send(data).is_err() {
+                let mut queue = consensus.transaction_execution_queue.lock().await;
+                if !queue.is_empty() {
+                    let executions = queue.drain(..).collect::<Vec<_>>();
+                    drop(queue);
+
+                    //XXX FIXME TODO HACK consensus.process_transaction_executions(executions).await;
+                }
+            }
+        });
+    }
+
+    fn initialize_append_entries_channel(consensus: Arc<Consensus>, block_receiver: Arc<Mutex<mpsc::Receiver<Block>>>) {
+        named_spawn("consensus::block_sender", async move {
+            loop {
+                let mut receiver_lock = block_receiver.lock().await;
+                if let Some(block) = receiver_lock.recv().await {
+                    if consensus.is_leader().await {
+                        tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
+
+                        //TODO save block to appendEntries log
+                        //TODO before saving check if all transaction_hashes are already in the log
+
+                        let block_entry = LogEntryData::BlockEntryData(block.header.to_append_entry_block_header(Vec::new()));
+                        if consensus.broadcast_sender.send(block_entry).is_err() {
                             tracing::error!("failed to broadcast block");
                         }
                     }
@@ -529,44 +554,56 @@ impl Consensus {
     }
 
     async fn handle_peer_block_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
-        let mut block_queue: Vec<Block> = Vec::new();
+        let mut log_entry_queue: Vec<LogEntryData> = Vec::new();
         loop {
             let mut receiver_lock = peer.receiver.lock().await;
             match receiver_lock.recv().await {
-                Ok(block) => {
-                    block_queue.push(block.clone());
+                Ok(log_entry) => {
+                    log_entry_queue.push(log_entry.clone());
                 }
                 Err(e) => {
                     tracing::warn!("Error receiving block for peer {:?}: {:?}", peer.client, e);
                 }
             }
             drop(receiver_lock); // Drop the immutable borrow before making a mutable borrow
-            while let Some(block) = block_queue.first() {
-                match consensus.append_block_to_peer(&mut peer, block).await {
-                    Ok(_) => {
-                        block_queue.remove(0); // Remove the successfully sent block from the queue
-                        tracing::info!("successfully appended block to peer: {:?}", peer.client);
+
+            while let Some(log_entry) = log_entry_queue.first() {
+                match log_entry {
+                    LogEntryData::BlockEntryData(block) => {
+                        tracing::info!("sending block to peer: {:?}", peer.client);
+                        match consensus.append_block_to_peer(&mut peer, block).await {
+                            Ok(_) => {
+                                log_entry_queue.remove(0); // Remove the successfully sent block from the queue
+                                tracing::info!("successfully appended block to peer: {:?}", peer.client);
+                            }
+                            Err(e) => {
+                                tracing::warn!("failed to append block to peer {:?}: {:?}", peer.client, e);
+                                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                            }
+                        }
                     }
-                    Err(e) => {
-                        tracing::warn!("failed to append block to peer {:?}: {:?}", peer.client, e);
-                        traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                    LogEntryData::TransactionExecutionEntriesData(transaction_executions) => {
+                        tracing::info!("sending transaction to peer: {:?}", peer.client);
+                    }
+                    LogEntryData::EmptyData => {
+                        tracing::warn!("empty log entry received");
+                        log_entry_queue.remove(0); // Remove the empty log entry from the queue
+                        continue;
                     }
                 }
             }
         }
     }
 
-    async fn append_block_to_peer(&self, peer: &mut Peer, block: &Block) -> Result<(), anyhow::Error> {
+    async fn append_block_to_peer(&self, peer: &mut Peer, block_entry: &BlockEntry) -> Result<(), anyhow::Error> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-
-        let block_entry: BlockEntry = block.header.to_append_entry_block_header(Vec::new());
 
         let request = Request::new(AppendBlockCommitRequest {
             term: 0,
             prev_log_index: 0,
             prev_log_term: 0,
-            block_entry: Some(block_entry),
+            block_entry: Some(block_entry.clone()),
             leader_id: self.my_address.to_string(),
         });
 
