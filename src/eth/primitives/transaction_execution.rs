@@ -1,5 +1,6 @@
 use display_json::DebugAsJson;
 
+use crate::eth::consensus::append_entry;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalReceipt;
@@ -60,6 +61,55 @@ impl TransactionExecution {
         match self {
             Self::Local(LocalTransactionExecution { result, .. }) => &result.execution,
             Self::External(ExternalTransactionExecution { result, .. }) => &result.execution,
+        }
+    }
+
+    pub fn to_append_entry_transaction(&self) -> append_entry::TransactionExecutionEntry {
+        fn u256_to_bytes(u: ethereum_types::U256) -> Vec<u8> {
+            let mut bytes = [0u8; 32];
+            u.to_big_endian(&mut bytes);
+            bytes.to_vec()
+        }
+
+        match self {
+            Self::External(ExternalTransactionExecution { tx, receipt, result }) => append_entry::TransactionExecutionEntry {
+                hash: tx.hash.to_string(),
+                nonce: tx.nonce.as_u64(),
+                value: u256_to_bytes(tx.value),
+                gas_price: tx.gas_price.map_or(vec![], u256_to_bytes),
+                input: tx.input.to_vec(),
+                v: tx.v.as_u64(),
+                r: u256_to_bytes(tx.r),
+                s: u256_to_bytes(tx.s),
+                chain_id: tx.chain_id.unwrap_or_default().as_u64(),
+                result: result.execution.output.to_vec(),
+                output: result.execution.output.to_vec(),
+                from: tx.from.to_string(),
+                to: tx.to.unwrap_or_default().to_string(),
+                block_hash: receipt.block_hash().to_string(),
+                block_number: receipt.block_number().as_u64(),
+                transaction_index: receipt.transaction_index.as_u64(),
+                logs: receipt
+                    .logs
+                    .iter()
+                    .map(|log| append_entry::Log {
+                        address: log.address.to_string(),
+                        topics: log.topics.iter().map(|topic| topic.to_string()).collect(),
+                        data: log.data.to_vec(),
+                        log_index: log.log_index.unwrap_or_default().as_u64(),
+                        transaction_log_index: log.transaction_log_index.unwrap_or_default().as_u64(),
+                        removed: log.removed.unwrap_or(false),
+                    })
+                    .collect(),
+                gas: u256_to_bytes(tx.gas),
+                receipt_cumulative_gas_used: u256_to_bytes(receipt.cumulative_gas_used),
+                receipt_gas_used: receipt.gas_used.map_or(vec![], u256_to_bytes),
+                receipt_contract_address: receipt.contract_address.map_or(vec![], |addr| addr.as_bytes().to_vec()),
+                receipt_status: receipt.status.unwrap_or_default().as_u32(),
+                receipt_logs_bloom: receipt.logs_bloom.as_bytes().to_vec(),
+                receipt_effective_gas_price: receipt.effective_gas_price.map_or(vec![], u256_to_bytes),
+            },
+            _ => panic!("Only ExternalTransactionExecution is supported"),
         }
     }
 }

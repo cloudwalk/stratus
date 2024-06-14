@@ -159,8 +159,6 @@ impl AccountRocksdb {
             balance: self.balance.clone().into(),
             bytecode: self.bytecode.clone().map_into(),
             code_hash: KECCAK_EMPTY.into(),
-            static_slot_indexes: None,  // TODO: is it necessary for RocksDB?
-            mapping_slot_indexes: None, // TODO: is it necessary for RocksDB?
         }
     }
 }

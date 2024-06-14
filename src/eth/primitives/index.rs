@@ -1,22 +1,7 @@
-//! Index Module
-//!
-//! Responsible for representing transaction or log indexes within a block.
-//! Indexes are essential for referencing specific transactions or logs in a
-//! block, enabling efficient retrieval and referencing of these items. This
-//! module includes functionality to handle conversions and representations of
-//! indexes, aligning with Ethereum's blockchain data structure needs.
-
 use std::num::TryFromIntError;
-use std::str::FromStr;
 
 use ethereum_types::U256;
 use ethereum_types::U64;
-use sqlx::database::HasArguments;
-use sqlx::database::HasValueRef;
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use sqlx::postgres::PgHasArrayType;
-use sqlx::types::BigDecimal;
 
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
@@ -49,43 +34,6 @@ gen_newtype_try_from!(self = Index, other = U256, i64);
 impl From<U64> for Index {
     fn from(value: U64) -> Self {
         Index(value.as_u64())
-    }
-}
-
-impl TryFrom<BigDecimal> for Index {
-    type Error = anyhow::Error;
-
-    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
-        let value_str = value.to_string();
-        Ok(Index(u64::from_str(&value_str)?))
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Index {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.try_into()?)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for Index {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Index {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        BigDecimal::from(self.0).encode(buf)
-    }
-}
-
-impl PgHasArrayType for Index {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }
 

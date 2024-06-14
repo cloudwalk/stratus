@@ -25,49 +25,37 @@ enum StatusCode {
 message Log {
     string address = 1;
     repeated string topics = 2;
-    string data = 3;
-    string logIndex = 4;
-    string transactionLogIndex = 5;
+    bytes data = 3;
+    uint64 log_index = 4;
+    uint64 transaction_log_index = 5;
     bool removed = 6;
 }
 
 message TransactionExecutionEntry {
-    // Transaction details
     string hash = 1;
-    string nonce = 2;
-    string value = 3;
-    string gasPrice = 4;
-    string input = 5;
-    string v = 6;
-    string r = 7;
-    string s = 8;
-    string type = 9;
-    string chainId = 10;
-    string publicKey = 11;
-    string raw = 12;
-    string standardV = 13;
-    string result = 14;
-    string output = 15;
-    string from = 16;
-    string to = 17;
-
-    // Block and transaction indexing
-    string blockHash = 18;
-    string blockNumber = 19;
-    string transactionHash = 20;
-    string transactionIndex = 21;
-
-    // Logs
-    repeated Log logs = 22;
-
-    // Gas details
-    string gas = 23;
-    string receiptCumulativeGasUsed = 24;
-    string receiptGasUsed = 25;
-    string receiptContractAddress = 26;
-    string receiptStatus = 27;
-    string receiptLogsBloom = 28;
-    string receiptEffectiveGasPrice = 29;
+    uint64 nonce = 2;
+    bytes value = 3;
+    bytes gas_price = 4;
+    bytes input = 5;
+    uint64 v = 6;
+    bytes r = 7;
+    bytes s = 8;
+    uint64 chain_id = 9;
+    bytes result = 10;
+    bytes output = 11;
+    string from = 12;
+    string to = 13;
+    string block_hash = 14;
+    uint64 block_number = 15;
+    uint64 transaction_index = 16;
+    repeated Log logs = 17;
+    bytes gas = 18;
+    bytes receipt_cumulative_gas_used = 19;
+    bytes receipt_gas_used = 20;
+    bytes receipt_contract_address = 21;
+    uint32 receipt_status = 22;
+    bytes receipt_logs_bloom = 23;
+    bytes receipt_effective_gas_price = 24;
 }
 
 message AppendTransactionExecutionsRequest {
@@ -84,6 +72,7 @@ message AppendTransactionExecutionsResponse {
     uint64 last_committed_block_number = 3;
 }
 
+//TODO use eth friendly types
 message BlockEntry {
     uint64 number = 1;
     string hash = 2;
