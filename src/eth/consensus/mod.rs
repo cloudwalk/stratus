@@ -155,6 +155,7 @@ struct Peer {
 
 type PeerTuple = (Peer, JoinHandle<()>);
 
+#[allow(clippy::large_enum_variant)]
 pub enum ExternalEntry {
     Block(Block),
     TransactionExecution(TransactionExecution),
