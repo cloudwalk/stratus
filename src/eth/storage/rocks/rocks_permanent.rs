@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -6,7 +5,6 @@ use std::sync::atomic::Ordering;
 use async_trait::async_trait;
 
 use super::rocks_state::RocksStorageState;
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -17,9 +15,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
@@ -70,14 +66,6 @@ impl RocksPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for RocksPermanentStorage {
-    fn kind(&self) -> PermanentStorageKind {
-        PermanentStorageKind::Rocks
-    }
-
-    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -104,10 +92,6 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(self.state.read_slot(address, index, point_in_time))
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
-        tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
-        self.state.read_slots(address, indexes, point_in_time)
-    }
 
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         Ok(self.state.read_block(selection))

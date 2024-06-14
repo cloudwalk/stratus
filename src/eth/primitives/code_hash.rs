@@ -4,9 +4,6 @@ use fake::Dummy;
 use fake::Faker;
 use revm::primitives::FixedBytes;
 use revm::primitives::KECCAK_EMPTY;
-use sqlx::database::HasValueRef;
-use sqlx::error::BoxDynError;
-use sqlx::postgres::PgHasArrayType;
 
 use crate::eth::primitives::Bytes;
 use crate::gen_newtype_from;
@@ -70,40 +67,5 @@ impl From<Vec<u8>> for CodeHash {
     fn from(value: Vec<u8>) -> Self {
         let value: &[u8; 32] = value.as_slice().try_into().unwrap();
         CodeHash::new(value.into())
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for CodeHash {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for CodeHash {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for CodeHash {
-    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull
-    where
-        Self: Sized,
-    {
-        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
-    }
-
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull {
-        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
-    }
-}
-
-impl PgHasArrayType for CodeHash {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <&[u8; 32] as PgHasArrayType>::array_type_info()
     }
 }

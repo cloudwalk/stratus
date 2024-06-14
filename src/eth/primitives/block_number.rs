@@ -1,12 +1,3 @@
-//! Block Number Module
-//!
-//! The Block Number module manages the numerical identification of blocks in
-//! the Ethereum blockchain. Each block is assigned a unique, sequential number
-//! for easy reference and tracking within the blockchain. This module provides
-//! functionality for manipulating and comparing block numbers, essential for
-//! operations like validating blockchain continuity and retrieving specific
-//! blocks.
-
 use std::num::TryFromIntError;
 use std::ops::Add;
 use std::ops::AddAssign;

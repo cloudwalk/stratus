@@ -42,9 +42,6 @@ metrics! {
     "Time to execute storage read_slot operation."
     histogram_duration storage_read_slot{found_at, point_in_time, success},
 
-    "Time to execute storage read_slot operation."
-    histogram_duration storage_read_slots{point_in_time, success},
-
     "Time to execute storage read_mined_transaction operation."
     histogram_duration storage_read_mined_transaction{success}
 }
@@ -111,9 +108,6 @@ metrics! {
     "Number of slot reads when importing an external block."
     histogram_counter executor_external_block_slot_reads{},
 
-    "Number of slot reads cached when importing an external block."
-    histogram_counter executor_external_block_slot_reads_cached{},
-
     "Time to execute a transaction received with eth_sendRawTransaction."
     histogram_duration executor_transact{success, function},
 
@@ -137,10 +131,7 @@ metrics! {
     histogram_counter evm_execution_account_reads{},
 
     "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{},
-
-    "Number of slots read cached in a single EVM execution."
-    histogram_counter evm_execution_slot_reads_cached{}
+    histogram_counter evm_execution_slot_reads{}
 }
 
 metrics! {

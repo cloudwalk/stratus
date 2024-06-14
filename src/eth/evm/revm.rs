@@ -6,8 +6,6 @@
 //! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
 
 use std::cmp::min;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -33,7 +31,6 @@ use crate::eth::evm::Evm;
 use crate::eth::evm::EvmConfig;
 use crate::eth::evm::EvmError;
 use crate::eth::evm::EvmInput;
-use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -46,7 +43,6 @@ use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotAccess;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -163,8 +159,6 @@ impl Evm for Revm {
         {
             metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
             metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
-            metrics::inc_evm_execution_slot_reads(session_metrics.slot_reads);
-            metrics::inc_evm_execution_slot_reads_cached(session_metrics.slot_reads_cached);
         }
 
         execution.map(|execution| EvmExecutionResult {
@@ -184,16 +178,13 @@ struct RevmSession {
     storage: Arc<StratusStorage>,
 
     /// EVM global configuraiton directives,
-    config: EvmConfig,
+    _config: EvmConfig,
 
     /// Input passed to EVM to execute the transaction.
     input: EvmInput,
 
     /// Changes made to the storage during the execution of the transaction.
     storage_changes: ExecutionChanges,
-
-    /// Slots cached during account load.
-    account_slots_cache: HashMap<Address, HashMap<SlotIndex, Slot>>,
 
     /// Metrics collected during EVM execution.
     metrics: ExecutionMetrics,
@@ -204,11 +195,10 @@ impl RevmSession {
     pub fn new(storage: Arc<StratusStorage>, config: EvmConfig) -> Self {
         Self {
             storage,
-            config,
+            _config: config,
             input: Default::default(),
             storage_changes: Default::default(),
             metrics: Default::default(),
-            account_slots_cache: Default::default(),
         }
     }
 
@@ -216,7 +206,6 @@ impl RevmSession {
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
         self.storage_changes = Default::default();
-        self.account_slots_cache.clear();
         self.metrics = Default::default();
     }
 }
@@ -236,15 +225,6 @@ impl Database for RevmSession {
         if let Some(ref to_address) = self.input.to {
             if &address == to_address && not(account.is_contract()) && not(self.input.data.is_empty()) {
                 tracing::warn!(%address, "evm to_account does not have bytecode");
-            }
-        }
-
-        // prefetch slots
-        if self.config.prefetch_slots {
-            let slot_indexes = account.slot_indexes(self.input.possible_slot_keys());
-            let slots = handle.block_on(self.storage.read_slots(&address, &slot_indexes, &self.input.point_in_time))?;
-            for slot in slots {
-                self.account_slots_cache.entry(address).or_default().insert(slot.index, slot);
             }
         }
 
@@ -272,25 +252,8 @@ impl Database for RevmSession {
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
 
-        // load slot from storage or (cache and storage)
-        let slot = match self.config.prefetch_slots {
-            // try cache
-            true => {
-                let cached_slot = self.account_slots_cache.get(&address).and_then(|slot_cache| slot_cache.get(&index));
-                match cached_slot {
-                    // not found, query storage
-                    None => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
-
-                    // cached
-                    Some(slot) => {
-                        self.metrics.slot_reads_cached += 1;
-                        *slot
-                    }
-                }
-            }
-            // ignore cache
-            false => handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?,
-        };
+        // load slot from storage
+        let slot = handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
 
         // track original value, except if ignored address
         if not(address.is_ignored()) {
@@ -378,7 +341,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
 
         // parse revm types to stratus primitives
-        let mut account: Account = (revm_address, revm_account.info).into();
+        let account: Account = (revm_address, revm_account.info).into();
         let account_modified_slots: Vec<Slot> = revm_account
             .storage
             .into_iter()
@@ -390,16 +353,6 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
 
         // handle account created (contracts) or touched (everything else)
         if account_created {
-            // parse bytecode slots
-            let slot_indexes: HashSet<SlotAccess> = match account.bytecode {
-                Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone()),
-                _ => HashSet::new(),
-            };
-            for index in slot_indexes {
-                account.add_bytecode_slot_index(index);
-            }
-
-            // track account
             let account_changes = ExecutionAccountChanges::from_modified_values(account, account_modified_slots);
             execution_changes.insert(account_changes.address, account_changes);
         } else if account_touched {

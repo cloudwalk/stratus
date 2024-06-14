@@ -166,8 +166,6 @@ impl Executor {
         {
             metrics::inc_executor_external_block(start.elapsed());
             metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
-            metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
-            metrics::inc_executor_external_block_slot_reads_cached(block_metrics.slot_reads_cached);
         }
 
         Ok(())

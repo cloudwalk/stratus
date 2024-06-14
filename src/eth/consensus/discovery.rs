@@ -95,7 +95,7 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
         let peer_clone = peer.clone();
 
         let handle = named_spawn("consensus::propagate", async move {
-            super::Consensus::handle_peer_block_propagation(peer_clone, consensus_clone).await;
+            super::Consensus::handle_peer_propagation(peer_clone, consensus_clone).await;
         });
 
         tracing::info!("consensus module adding new peer: {}", address.address);

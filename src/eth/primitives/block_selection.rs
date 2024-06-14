@@ -1,13 +1,3 @@
-//! Block Selection Module
-//!
-//! This module offers mechanisms for selecting specific blocks from the
-//! Ethereum blockchain. It allows for the retrieval of blocks based on
-//! different criteria, such as the most recent block (`Latest`), the earliest
-//! block in the chain (`Earliest`), a block by its hash (`Hash`), or a block
-//! by its number (`Number`). This flexibility is crucial in various blockchain
-//! operations, including querying block information and validating chain
-//! integrity.
-
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 

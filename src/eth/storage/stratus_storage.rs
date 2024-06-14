@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use tracing::Span;
 
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -18,14 +17,12 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
-use crate::ext::not;
 use crate::ext::SpanExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -53,18 +50,6 @@ impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
-    }
-
-    pub async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        self.perm.allocate_evm_thread_resources().await?;
-        Ok(())
-    }
-
-    // -------------------------------------------------------------------------
-    // Metadata
-    // -------------------------------------------------------------------------
-    pub fn perm_kind(&self) -> PermanentStorageKind {
-        self.perm.kind()
     }
 
     // -------------------------------------------------------------------------
@@ -306,45 +291,6 @@ impl StratusStorage {
                 Ok(Slot::new_empty(*index))
             }
         }
-    }
-
-    #[tracing::instrument(name = "storage::read_slots", skip_all)]
-    pub async fn read_slots(&self, address: &Address, slot_indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let mut slots = Vec::with_capacity(slot_indexes.len());
-        let mut perm_indexes = SlotIndexes::with_capacity(slot_indexes.len());
-
-        // read from temp only if present
-        if point_in_time.is_present() {
-            for index in slot_indexes.iter() {
-                match self.temp.read_slot(address, index).await? {
-                    Some(slot) => {
-                        slots.push(slot);
-                    }
-                    None => {
-                        perm_indexes.insert(*index);
-                    }
-                }
-            }
-        }
-
-        // read missing slots from permanent storage
-        if not(perm_indexes.is_empty()) {
-            let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
-            for index in perm_indexes.0.into_iter() {
-                match perm_slots.remove(&index) {
-                    Some(value) => slots.push(Slot { index, value }),
-                    None => slots.push(Slot::new_empty(index)),
-                }
-            }
-        }
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_slots(start.elapsed(), point_in_time, true);
-
-        Ok(slots)
     }
 
     #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
