@@ -77,7 +77,7 @@ impl<'a> PendingTransaction<'a> {
             state: PendingTxState::InitialDelay(delay),
             provider,
             tx_hash,
-            interval: Box::new(interval(Duration::from_secs(1))),
+            interval: Box::new(interval(Duration::from_millis(10))),
             retries_remaining: 3,
         }
     }
