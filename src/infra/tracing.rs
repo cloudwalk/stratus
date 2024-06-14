@@ -49,7 +49,6 @@ use ulid::Ulid;
 
 use crate::config::TracingConfig;
 use crate::ext::named_spawn;
-use crate::ext::not;
 use crate::ext::ResultExt;
 use crate::infra::build_info;
 
@@ -352,20 +351,16 @@ where
                 let mut root_span = None;
                 let mut merged_span_context = HashMap::new();
 
-                // iterate span hierarchy
-                let mut span_iterator = span.scope().peekable();
-                while let Some(span) = span_iterator.next() {
+                for (span_index, span) in span.scope().from_root().enumerate() {
                     // merge span data into a single context
                     if let Some(span_fields) = span.extensions().get::<SpanFields>().and_then(|fields| fields.as_object()) {
                         for (field_key, field_value) in span_fields {
-                            if not(merged_span_context.contains_key(field_key)) {
-                                merged_span_context.insert(field_key.to_owned(), field_value.to_owned());
-                            }
+                            merged_span_context.insert(field_key.to_owned(), field_value.to_owned());
                         }
                     }
 
                     // track root span
-                    if span_iterator.peek().is_none() {
+                    if span_index == 0 {
                         root_span = Some(span);
                     }
                 }
