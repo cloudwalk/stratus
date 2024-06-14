@@ -684,43 +684,32 @@ impl AppendEntryService for AppendEntryServiceImpl {
         tracing::info!(number = block_entry.number, "appending new block");
 
         let consensus = self.consensus.lock().await;
-
-        if consensus.is_leader().await {
-            // If the current instance is a leader, check the term and index
-            let current_term: u64 = consensus.current_term.load(Ordering::SeqCst);
-
-            //TODO currently the block number is the index, but it should be a separate index for the execution AND the block
-            let last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
-
-            if request_inner.term > current_term && request_inner.prev_log_index > last_arrived_block_number {
-                tracing::info!("Current instance is stepping down as a leader since a higher term and index is found in the append entry request.");
-                *consensus.role.write().await = Role::Follower;
-                consensus.current_term.store(request_inner.term, Ordering::SeqCst);
-            }
-
-            return Err(Status::new(
-                (StatusCode::LeaderChanged as i32).into(),
-                "Leader changed or instance is the leader with no higher term or index".to_string(),
-            ));
-        }
-
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
-        if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
-            #[cfg(feature = "metrics")]
-            {
-                metrics::set_append_entries_block_number_diff(diff);
+        if consensus.is_leader().await {
+            let current_term = consensus.current_term.load(Ordering::SeqCst);
+            let request_block_number = block_entry.number;
+
+            if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
+                #[cfg(feature = "metrics")]
+                {
+                    metrics::set_append_entries_block_number_diff(diff);
+                }
+            } else if (request_inner.term > current_term && request_block_number > last_last_arrived_block_number) {
+                tracing::info!("stepping down as leader due to higher term and block number");
+                *consensus.role.write().await = Role::Follower;
+                consensus.current_term.store(request_inner.term, Ordering::SeqCst);
+                
+                tracing::error!(
+                    "leader is behind follower: arrived_block: {}, block_entry: {}",
+                    last_last_arrived_block_number,
+                    block_entry.number
+                );
+                return Err(Status::new(
+                    (StatusCode::EntryAlreadyExists as i32).into(),
+                    "Leader is behind follower and should step down".to_string(),
+                ));
             }
-        } else {
-            tracing::error!(
-                "leader is behind follower: arrived_block: {}, block_entry: {}",
-                last_last_arrived_block_number,
-                block_entry.number
-            );
-            return Err(Status::new(
-                (StatusCode::EntryAlreadyExists as i32).into(),
-                "Leader is behind follower and should step down".to_string(),
-            ));
         }
 
         consensus.reset_heartbeat_signal.notify_waiters();
@@ -728,6 +717,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
+
         tracing::info!(
             last_last_arrived_block_number = last_last_arrived_block_number,
             new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
