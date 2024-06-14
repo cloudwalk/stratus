@@ -30,7 +30,16 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     .await; // for now, we force None to initiate with the current node being the leader
 
     // start rpc server
-    serve_rpc(storage, executor, miner, consensus, config.address, config.executor.chain_id.into()).await?;
+    serve_rpc(
+        storage,
+        executor,
+        miner,
+        consensus,
+        config.address,
+        config.executor.chain_id.into(),
+        config.max_connections,
+    )
+    .await?;
 
     Ok(())
 }
