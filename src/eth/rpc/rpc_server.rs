@@ -447,7 +447,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: E
             Ok(hash) => Ok(hex_data(hash)),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to forward transaction");
-                Err(RpcError::Response(rpc_internal_error(hex_data(e.to_string()))))
+                Err(RpcError::Response(rpc_internal_error(e.to_string())))
             }
         };
     }
