@@ -1,14 +1,13 @@
 use core::fmt;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
+use std::sync::mpsc;
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Context;
 use futures::future::join_all;
 use itertools::Itertools;
-use tokio::sync::mpsc;
-use tokio::task;
 use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
@@ -55,7 +54,7 @@ pub struct RocksStorageState {
 
 impl RocksStorageState {
     pub fn new(rocks_path_prefix: Option<String>) -> Self {
-        let (tx, rx) = mpsc::channel::<()>(1);
+        let (tx, rx) = mpsc::channel();
 
         //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
 
@@ -91,7 +90,7 @@ impl RocksStorageState {
         let logs = Arc::<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>::clone(&self.logs);
 
         named_spawn("storage::backup_trigger", async move {
-            while rx.recv().await.is_some() {
+            while rx.recv().is_ok() {
                 let accounts_clone = Arc::clone(&accounts);
                 let accounts_history_clone = Arc::clone(&accounts_history);
                 let account_slots_clone = Arc::clone(&account_slots);
@@ -138,7 +137,7 @@ impl RocksStorageState {
         Ok((u64::from(block_number)).into())
     }
 
-    pub async fn sync_data(&self) -> anyhow::Result<()> {
+    pub fn sync_data(&self) -> anyhow::Result<()> {
         tracing::info!("starting sync_data");
         tracing::info!("account_block_number {:?}", self.accounts.get_current_block_number());
         tracing::info!("slots_block_number {:?}", self.account_slots.get_current_block_number());
@@ -200,7 +199,7 @@ impl RocksStorageState {
                         std::cmp::min(self.logs.get_index_block_number(), self.transactions.get_index_block_number()),
                     );
                 }
-                self.reset_at(BlockNumber::from(min_block_number)).await?;
+                self.reset_at(BlockNumber::from(min_block_number))?;
             }
         }
 
@@ -209,12 +208,12 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    pub fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let tasks = vec![
             {
                 let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
                 let block_number_clone = block_number;
-                task::spawn_blocking(move || {
+                named_spawn_blocking("rocks::delete_blocks_by_hash", move || {
                     for (block_num, block_hash_vec) in self_blocks_by_hash_clone.indexed_iter_end() {
                         if block_num <= block_number_clone.as_u64() {
                             break;
@@ -234,7 +233,7 @@ impl RocksStorageState {
             {
                 let self_blocks_by_number_clone = Arc::clone(&self.blocks_by_number);
                 let block_number_clone = block_number;
-                task::spawn_blocking(move || {
+                named_spawn_blocking("rocks::delete_block_by_number", move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
                     for (num, _) in blocks_by_number {
                         if num <= block_number_clone.into() {
@@ -251,7 +250,7 @@ impl RocksStorageState {
             {
                 let self_transactions_clone = Arc::clone(&self.transactions);
                 let block_number_clone = block_number;
-                task::spawn_blocking(move || {
+                named_spawn_blocking("rocks::delete_transactions", move || {
                     let transactions = self_transactions_clone.indexed_iter_end();
                     for (index_block_number, hash_vec) in transactions {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -271,7 +270,7 @@ impl RocksStorageState {
             {
                 let self_logs_clone = Arc::clone(&self.logs);
                 let block_number_clone = block_number;
-                task::spawn_blocking(move || {
+                named_spawn_blocking("rocks::delete_logs", move || {
                     let logs = self_logs_clone.indexed_iter_end();
                     for (index_block_number, logs_vec) in logs {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -291,7 +290,7 @@ impl RocksStorageState {
             {
                 let self_accounts_history_clone = Arc::clone(&self.accounts_history);
                 let block_number_clone = block_number;
-                task::spawn_blocking(move || {
+                named_spawn_blocking("rocks::delete_accounts_history", move || {
                     let accounts_history = self_accounts_history_clone.indexed_iter_end();
                     for (index_block_number, accounts_history_vec) in accounts_history {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -311,7 +310,7 @@ impl RocksStorageState {
             {
                 let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
                 let block_number_clone = block_number;
-                task::spawn_blocking(move || {
+                named_spawn_blocking("rocks::delete_slots_history", move || {
                     let account_slots_history = self_account_slots_history_clone.indexed_iter_end();
                     for (index_block_number, account_slots_history_vec) in account_slots_history {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -331,14 +330,14 @@ impl RocksStorageState {
         ];
 
         // Wait for all tasks to complete using join_all
-        let _ = join_all(tasks).await;
+        let _ = join_all(tasks);
 
         // Clear current states
         let _ = self.accounts.clear();
         let _ = self.account_slots.clear();
 
         // Spawn task for handling accounts
-        let accounts_task = task::spawn_blocking({
+        let accounts_task = named_spawn_blocking("rocks::update_accounts", {
             let self_accounts_history_clone = Arc::clone(&self.accounts_history);
             let self_accounts_clone = Arc::clone(&self.accounts);
             let block_number_clone = block_number;
@@ -365,7 +364,7 @@ impl RocksStorageState {
         });
 
         // Spawn task for handling slots
-        let slots_task = task::spawn_blocking({
+        let slots_task = named_spawn_blocking("rocks::update_slots", {
             let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
             let self_account_slots_clone = Arc::clone(&self.account_slots);
             let block_number_clone = block_number;
@@ -392,7 +391,7 @@ impl RocksStorageState {
             }
         });
 
-        let _ = join_all(vec![accounts_task, slots_task]).await;
+        let _ = join_all(vec![accounts_task, slots_task]);
 
         info!(
             "All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.",

@@ -37,11 +37,11 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub async fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
+    pub fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
         tracing::info!("creating rocksdb storage");
 
         let state = RocksStorageState::new(rocks_path_prefix);
-        state.sync_data().await?;
+        state.sync_data()?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
@@ -62,11 +62,11 @@ impl PermanentStorage for RocksPermanentStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
     }
@@ -75,30 +75,30 @@ impl PermanentStorage for RocksPermanentStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         Ok(self.state.read_account(address, point_in_time))
     }
 
-    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %index, ?point_in_time, "reading slot");
         Ok(self.state.read_slot(address, index, point_in_time))
     }
 
-    async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         Ok(self.state.read_block(selection))
     }
 
-    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
         self.state.read_transaction(hash)
     }
 
-    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
         self.state.read_logs(filter)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    fn save_block(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
             self.state.export_metrics();
@@ -157,15 +157,15 @@ impl PermanentStorage for RocksPermanentStorage {
 
         // for every multiple of TRANSACTION_LOOP_THRESHOLD transactions, send a Backup signal
         if previous_count % TRANSACTION_LOOP_THRESHOLD > current_count % TRANSACTION_LOOP_THRESHOLD {
-            self.state.backup_trigger.send(()).await.unwrap();
+            self.state.backup_trigger.send(()).unwrap();
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 
-        join_all(futures).await;
+        join_all(futures);
         Ok(())
     }
 
-    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
         for account in accounts {
@@ -177,7 +177,7 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(())
     }
 
-    async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
@@ -188,14 +188,14 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         });
 
-        self.state.reset_at(block_number).await
+        self.state.reset_at(block_number)
     }
 
-    async fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+    fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
         todo!()
     }
 
-    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+    fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
         let address: AddressRocksdb = (*address).into();
         Ok(self
             .state
