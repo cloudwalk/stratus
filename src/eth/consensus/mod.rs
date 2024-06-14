@@ -688,6 +688,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
         if consensus.is_leader().await {
             // If the current instance is a leader, check the term and index
             let current_term: u64 = consensus.current_term.load(Ordering::SeqCst);
+
+            //TODO currently the block number is the index, but it should be a separate index for the execution AND the block
             let last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
             if request_inner.term > current_term && request_inner.prev_log_index > last_arrived_block_number {
@@ -695,7 +697,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 *consensus.role.write().await = Role::Follower;
                 consensus.current_term.store(request_inner.term, Ordering::SeqCst);
             }
-            
+
             return Err(Status::new(
                 (StatusCode::LeaderChanged as i32).into(),
                 "Leader changed or instance is the leader with no higher term or index".to_string(),
