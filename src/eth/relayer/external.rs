@@ -17,6 +17,7 @@ use crate::config::ExternalRelayerClientConfig;
 use crate::config::ExternalRelayerServerConfig;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
@@ -339,12 +340,20 @@ impl ExternalRelayerClient {
     /// Insert the block into the relayer_blocks table on pgsql to be processed by the relayer. Returns Err if
     /// the insertion fails.
     #[tracing::instrument(name = "external_relayer_client::send_to_relayer", skip_all, fields(block_number))]
-    pub async fn send_to_relayer(&self, block: Block) -> anyhow::Result<()> {
+    pub async fn send_to_relayer(&self, mut block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
         let block_number = block.header.number;
         tracing::info!(?block_number, "sending block to relayer");
+
+        // strip bytecode
+        for tx in block.transactions.iter_mut() {
+            for (_, change) in tx.execution.changes.iter_mut() {
+                change.bytecode = ExecutionValueChange::default();
+            }
+        }
+
         let block_json = serde_json::to_value(block)?;
         // fill span
         Span::with(|s| s.rec_str("block_number", &block_number));
