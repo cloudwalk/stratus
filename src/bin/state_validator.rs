@@ -24,7 +24,7 @@ async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {
 
     let mut futures = JoinSet::new();
     loop {
-        let current_block = storage.read_mined_block_number().await?;
+        let current_block = storage.read_mined_block_number()?;
         if current_block - latest_compared_block >= interval && futures.len() < config.concurrent_tasks as usize {
             let future = validate_state(
                 config.method.clone(),
@@ -77,7 +77,7 @@ async fn validate_state_rpc(
         }
         n => n,
     };
-    let slots = storage.read_slots_sample(start, end, max_sample_size, seed).await?;
+    let slots = storage.read_slots_sample(start, end, max_sample_size, seed)?;
     for sampled_slot in slots {
         let expected_value = chain
             .fetch_storage_at(

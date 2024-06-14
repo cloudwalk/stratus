@@ -306,7 +306,7 @@ impl MinerConfig {
 
         // enable genesis block
         if self.enable_genesis {
-            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
                 miner.commit(Block::genesis()).await?;
@@ -318,11 +318,11 @@ impl MinerConfig {
         if self.enable_test_accounts {
             let test_accounts = test_accounts();
             tracing::info!(accounts = ?test_accounts, "enabling test accounts");
-            storage.save_accounts(test_accounts).await?;
+            storage.save_accounts(test_accounts)?;
         }
 
         // set block number
-        storage.set_active_block_number_as_next_if_not_set().await?;
+        storage.set_active_block_number_as_next_if_not_set()?;
 
         // enable interval miner
         if miner.mode().is_interval() {
@@ -856,7 +856,7 @@ impl PermanentStorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone())?),
         };
         Ok(perm)
     }

@@ -200,7 +200,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 #[cfg(feature = "dev")]
 async fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    ctx.storage.reset(number).await?;
+    ctx.storage.reset(number)?;
     Ok(serde_json::to_value(number).expect_infallible())
 }
 
@@ -216,7 +216,7 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, 
     use crate::log_and_err;
 
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    let latest = ctx.storage.read_block(&BlockSelection::Latest).await?;
+    let latest = ctx.storage.read_block(&BlockSelection::Latest)?;
     match latest {
         Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
         None => return log_and_err!("reading latest block returned None")?,
@@ -227,7 +227,8 @@ async fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, 
 #[cfg(feature = "dev")]
 async fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, address) = next_rpc_param::<Address>(params.sequence())?;
-    Ok(serde_json::to_value(ctx.storage.read_all_slots(&address).await?).expect_infallible())
+    let slots = ctx.storage.read_all_slots(&address)?;
+    Ok(serde_json::to_value(slots).expect_infallible())
 }
 
 // -----------------------------------------------------------------------------
@@ -299,7 +300,7 @@ async fn eth_gas_price(_: Params<'_>, _: Arc<RpcContext>, _: Extensions) -> Stri
 
 #[tracing::instrument(name = "rpc::eth_blockNumber", skip_all)]
 async fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let number = ctx.storage.read_mined_block_number().await?;
+    let number = ctx.storage.read_mined_block_number()?;
     Ok(serde_json::to_value(number).expect_infallible())
 }
 
@@ -326,7 +327,7 @@ async fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>, _: 
     });
 
     // execute
-    let block = ctx.storage.read_block(&block_selection).await?;
+    let block = ctx.storage.read_block(&block_selection)?;
 
     Span::with(|s| {
         s.record("found", block.is_some());
@@ -358,7 +359,7 @@ async fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, _
 
     Span::with(|s| s.rec_str("hash", &hash));
 
-    let mined = ctx.storage.read_mined_transaction(&hash).await?;
+    let mined = ctx.storage.read_mined_transaction(&hash)?;
     Span::with(|s| {
         s.record("found", mined.is_some());
     });
@@ -374,7 +375,7 @@ async fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, _
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     Span::with(|s| s.rec_str("hash", &hash));
 
-    let mined = ctx.storage.read_mined_transaction(&hash).await?;
+    let mined = ctx.storage.read_mined_transaction(&hash)?;
     Span::with(|s| {
         s.record("found", mined.is_some());
     });
@@ -414,7 +415,7 @@ async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> an
         s.rec_opt("to", &call.to);
     });
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
     match ctx.executor.local_call(call, point_in_time).await {
         // success or failure, does not matter
         Ok(result) => Ok(hex_data(result.output)),
@@ -475,9 +476,9 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: E
 #[tracing::instrument(name = "rpc::eth_getLogs", skip_all)]
 async fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, filter_input) = next_rpc_param::<LogFilterInput>(params.sequence())?;
-    let filter = filter_input.parse(&ctx.storage).await?;
+    let filter = filter_input.parse(&ctx.storage)?;
 
-    let logs = ctx.storage.read_logs(&filter).await?;
+    let logs = ctx.storage.read_logs(&filter)?;
     Ok(JsonValue::Array(logs.into_iter().map(|x| x.to_json_rpc_log()).collect()))
 }
 
@@ -499,8 +500,8 @@ async fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, _: 
         s.rec_str("address", &address);
     });
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
-    let account = ctx.storage.read_account(&address, &point_in_time).await?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let account = ctx.storage.read_account(&address, &point_in_time)?;
     Ok(hex_num(account.nonce))
 }
 
@@ -513,8 +514,8 @@ async fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions
         s.rec_str("address", &address);
     });
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
-    let account = ctx.storage.read_account(&address, &point_in_time).await?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let account = ctx.storage.read_account(&address, &point_in_time)?;
 
     Ok(hex_num(account.balance))
 }
@@ -528,8 +529,8 @@ async fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -
         s.rec_str("address", &address);
     });
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
-    let account = ctx.storage.read_account(&address, &point_in_time).await?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let account = ctx.storage.read_account(&address, &point_in_time)?;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_null))
 }
@@ -552,7 +553,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
-            let filter = filter.parse(&ctx.storage).await?;
+            let filter = filter.parse(&ctx.storage)?;
             ctx.subs.add_logs(pending.accept().await?, filter).await;
         }
 
@@ -582,8 +583,8 @@ async fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensi
         s.rec_str("index", &index);
     });
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection).await?;
-    let slot = ctx.storage.read_slot(&address, &index, &point_in_time).await?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let slot = ctx.storage.read_slot(&address, &index, &point_in_time)?;
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))

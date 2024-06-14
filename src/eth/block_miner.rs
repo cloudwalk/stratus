@@ -99,7 +99,7 @@ impl BlockMiner {
 
         // save execution to temporary storage
         let tx_hash = tx_execution.hash();
-        self.storage.save_execution(tx_execution.clone()).await?;
+        self.storage.save_execution(tx_execution.clone())?;
 
         //TODO implement full gRPC for tx execution: if let Some(consensus) = &self.consensus {
         //TODO implement full gRPC for tx execution:     let execution = format!("{:?}", tx_execution.clone());
@@ -134,7 +134,7 @@ impl BlockMiner {
     pub async fn mine_external(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external block");
 
-        let block = self.storage.finish_block().await?;
+        let block = self.storage.finish_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -168,7 +168,7 @@ impl BlockMiner {
     pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external mixed block");
 
-        let block = self.storage.finish_block().await?;
+        let block = self.storage.finish_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -206,7 +206,7 @@ impl BlockMiner {
     pub async fn mine_local(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining local block");
 
-        let block = self.storage.finish_block().await?;
+        let block = self.storage.finish_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -253,8 +253,8 @@ impl BlockMiner {
         }
 
         // persist block
-        self.storage.save_block(block).await?;
-        self.storage.set_mined_block_number(block_number).await?;
+        self.storage.save_block(block)?;
+        self.storage.set_mined_block_number(block_number)?;
 
         // notify
         for log in block_logs {

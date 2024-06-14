@@ -4,15 +4,15 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
+use std::sync::RwLockWriteGuard;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-use tokio::sync::RwLock;
-use tokio::sync::RwLockReadGuard;
-use tokio::sync::RwLockWriteGuard;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -62,13 +62,13 @@ impl InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     /// Locks inner state for reading.
-    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
-        self.state.read().await
+    fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
+        self.state.read().unwrap()
     }
 
     /// Locks inner state for writing.
-    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
-        self.state.write().await
+    fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
+        self.state.write().unwrap()
     }
 
     // -------------------------------------------------------------------------
@@ -111,8 +111,8 @@ impl InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     /// Clears in-memory state.
-    pub async fn clear(&self) {
-        let mut state = self.lock_write().await;
+    pub fn clear(&self) {
+        let mut state = self.lock_write();
         state.accounts.clear();
         state.transactions.clear();
         state.blocks_by_hash.clear();
@@ -137,12 +137,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading mined block number");
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         tracing::debug!(%number, "setting mined block number");
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
@@ -152,10 +152,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
-        let state = self.lock_read().await;
+        let state = self.lock_read();
 
         match state.accounts.get(address) {
             Some(inmemory_account) => {
@@ -171,10 +171,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %index, ?point_in_time, "reading slot in permanent");
 
-        let state = self.lock_read().await;
+        let state = self.lock_read();
         let Some(account) = state.accounts.get(address) else {
             tracing::trace!(%address, "account not found in permanent");
             return Ok(Default::default());
@@ -194,8 +194,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        let state = self.lock_read().await;
+    fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        let state = self.lock_read();
 
         let Some(account) = state.accounts.get(address) else {
             tracing::trace!(%address, "account not found in permanent");
@@ -205,10 +205,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(account.slots.clone().into_values().map(|slot| slot.get_current()).collect())
     }
 
-    async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
-        let state_lock = self.lock_read().await;
+        let state_lock = self.lock_read();
         let block = match selection {
             BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
             BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
@@ -227,9 +227,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let state_lock = self.lock_read().await;
+        let state_lock = self.lock_read();
 
         match state_lock.transactions.get(hash) {
             Some(transaction) => {
@@ -243,9 +243,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
-        let state_lock = self.lock_read().await;
+        let state_lock = self.lock_read();
 
         let logs = state_lock
             .logs
@@ -261,8 +261,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        let mut state = self.lock_write().await;
+    fn save_block(&self, block: Block) -> anyhow::Result<()> {
+        let mut state = self.lock_write();
 
         // save block
         tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
@@ -320,10 +320,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
-        let mut state = self.lock_write().await;
+        let mut state = self.lock_write();
         for account in accounts {
             state
                 .accounts
@@ -332,7 +332,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
@@ -344,7 +344,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         });
 
         // remove blocks
-        let mut state = self.lock_write().await;
+        let mut state = self.lock_write();
         state.blocks_by_hash.retain(|_, b| b.number() <= block_number);
         state.blocks_by_number.retain(|_, b| b.number() <= block_number);
 
@@ -360,8 +360,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        let state = self.lock_read().await;
+    fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        let state = self.lock_read();
 
         let samples = state
             .accounts
