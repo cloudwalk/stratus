@@ -225,10 +225,6 @@ impl ExecutorConfig {
             t.spawn(move || {
                 // init services
                 let _tokio_guard = evm_tokio.enter();
-                if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
-                    let message = GlobalState::shutdown_from("evm-init", "failed to allocate evm storage resources");
-                    tracing::error!(reason = ?e, %message);
-                }
                 let mut evm = Revm::new(evm_storage, evm_config);
 
                 // keep executing transactions until the channel is closed

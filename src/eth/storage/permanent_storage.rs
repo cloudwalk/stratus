@@ -19,13 +19,6 @@ use crate::eth::primitives::TransactionMined;
 #[async_trait]
 pub trait PermanentStorage: Send + Sync {
     // -------------------------------------------------------------------------
-    // Initialization
-    // -------------------------------------------------------------------------
-
-    /// Allows storage to allocate thread-local resources for EVM execution.
-    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()>;
-
-    // -------------------------------------------------------------------------
     // Metadata
     // -------------------------------------------------------------------------
 
