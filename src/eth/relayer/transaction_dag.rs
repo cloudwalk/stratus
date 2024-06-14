@@ -33,14 +33,33 @@ impl TransactionDag {
     /// follows that $TransactionIndex(v_1) < TransactionIndex(v_2)$. Thus by induction and the transitive property of inequality
     /// $TransactionIndex(v_1) < TransactionIndex(v_n)$, and therefore there cannot be an edge going from $v_n$ to $v_1$. □
     ///
-    /// Possible issues: this accounts for writes but not for reads, a transaction that reads a certain
-    ///     slot but does not modify it would possibly be impacted by a transaction that does, meaning they
-    ///     have a dependency that is not addressed here. Also there is a dependency between contract deployments
-    ///     and contract calls that is not taken into consideration yet.
+    /// Possible issues: There is a dependency between contract deployments and contract calls that is not taken into consideration.
     #[tracing::instrument(skip_all)]
     pub fn new(block_transactions: Vec<TransactionMined>) -> Self {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+
+        let slot_writes: HashSet<(Address, SlotIndex)> = block_transactions
+            .iter()
+            .flat_map(|tx| {
+                tx.execution.changes.iter().flat_map(|(address, change)| {
+                    change
+                        .slots
+                        .iter()
+                        .filter_map(|(idx, slot_change)| slot_change.is_modified().then_some((*address, *idx)))
+                })
+            })
+            .collect();
+
+        let balance_writes: HashSet<Address> = block_transactions
+            .iter()
+            .flat_map(|tx| {
+                tx.execution
+                    .changes
+                    .iter()
+                    .filter_map(|(address, change)| change.balance.is_modified().then_some(*address))
+            })
+            .collect();
 
         let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
@@ -50,14 +69,16 @@ impl TransactionDag {
         for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
             let tx_idx = tx.transaction_index;
             for (address, change) in &tx.execution.changes {
-                for (idx, slot_change) in &change.slots {
-                    if slot_change.is_modified() {
-                        slot_conflicts.entry(tx_idx).or_default().insert((*address, *idx));
+                for idx in change.slots.keys() {
+                    let slot = (*address, *idx);
+                    if slot_writes.contains(&slot) {
+                        slot_conflicts.entry(tx_idx).or_default().insert(slot);
                     }
                 }
 
-                if change.balance.is_modified() {
-                    balance_conflicts.entry(tx_idx).or_default().insert(*address);
+                let addr = *address;
+                if balance_writes.contains(&addr) {
+                    balance_conflicts.entry(tx_idx).or_default().insert(addr);
                 }
             }
             let node_idx = dag.add_node(tx);
@@ -86,6 +107,7 @@ impl TransactionDag {
                 let tx2_from = dag.node_weight(tx2_node_index).unwrap().input.signer;
 
                 if tx1_from != tx2_from && !set1.is_disjoint(set2) {
+                    tracing::info!(?tx1, ?tx2, "adding edge");
                     dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
                 }
             }
