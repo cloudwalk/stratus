@@ -19,8 +19,8 @@ pub mod rocks_test {
             let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
 
             let rocks_path_prefix: Option<String> = Some(String::new());
-            let rocks = RocksPermanentStorage::new(rocks_path_prefix).await.unwrap();
-            rocks.save_accounts(accounts).await.unwrap();
+            let rocks = RocksPermanentStorage::new(rocks_path_prefix).unwrap();
+            rocks.save_accounts(accounts).unwrap();
             rocks.state.write_slots(slots, BlockNumber::ZERO);
 
             common::execute_test("RocksDB", &global_services.config, &docker, rocks, block, receipts).await;
