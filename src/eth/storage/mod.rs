@@ -1,6 +1,5 @@
 //! Ethereum / EVM storage.
 
-mod csv;
 mod external_rpc_storage;
 mod inmemory;
 mod permanent_storage;
@@ -12,7 +11,6 @@ mod storage_error;
 mod stratus_storage;
 mod temporary_storage;
 
-pub use csv::CsvExporter;
 pub use external_rpc_storage::ExternalRpcStorage;
 pub use inmemory::InMemoryPermanentStorage;
 pub use inmemory::InMemoryPermanentStorageState;
