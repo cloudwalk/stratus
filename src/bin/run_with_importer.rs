@@ -54,6 +54,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
             Arc::clone(&consensus),
             config.address,
             config.executor.chain_id.into(),
+            config.max_connections,
         )
         .await;
         GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");

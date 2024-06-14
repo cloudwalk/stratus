@@ -66,6 +66,7 @@ pub async fn serve_rpc(
     // config
     address: SocketAddr,
     chain_id: ChainId,
+    max_connections: u32,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
     tracing::info!("creating {}", TASK_NAME);
@@ -111,6 +112,7 @@ pub async fn serve_rpc(
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
         .set_id_provider(RandomStringIdProvider::new(8))
+        .max_connections(max_connections)
         .build(address)
         .await?;
 
