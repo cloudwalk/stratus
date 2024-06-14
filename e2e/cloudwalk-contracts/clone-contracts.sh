@@ -87,7 +87,7 @@ done
 log "Cloning or updating repositories"
 
 if [ "$token" == 1 ]; then
-    clone brlc-token 0858ec4
+    clone brlc-token 80bdba3
 fi
 
 if [ "$pix" == 1 ]; then

@@ -19,13 +19,26 @@ export function defineBlockMiningIntervalInMs(blockMintingModeTitle?: string): n
 
 const config: HardhatUserConfig = {
     solidity: {
-        version: "0.8.16",
-        settings: {
-            optimizer: {
-                enabled: true,
-                runs: 1000,
+        compilers: [
+            {
+                version: "0.8.16",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                        runs: 1000,
+                    },
+                },
             },
-        },
+            {
+                version: "0.8.24",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                        runs: 1000,
+                    },
+                },
+            },
+        ]
     },
     networks: {
         hardhat: {

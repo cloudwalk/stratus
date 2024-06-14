@@ -26,7 +26,7 @@ compile_contract() {
 # ------------------------------------------------------------------------------
 
 # configure tools
-asdf local solidity 0.8.16 || echo "asdf, solidity plugin or solidity version not found"
+asdf local solidity 0.8.24 || echo "asdf, solidity plugin or solidity version not found"
 
 # execute
 compile_contract brlc-token          BRLCToken

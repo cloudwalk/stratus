@@ -74,7 +74,7 @@ jobs:
         run: just contracts-clone --token
 
       - name: Flatten BRLCToken contract
-        run: just contracts-flatten
+        run: just contracts-flatten --token
 
       - name: Run e2e tests
         run: just e2e-relayer-external-up
