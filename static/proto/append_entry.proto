@@ -109,6 +109,7 @@ message BlockHeader {
     string state_root = 16;
     string total_difficulty = 17;
     string nonce = 18;
+    repeated string transaction_hashes = 19;
 }
 
 // Append Block Commit message
@@ -118,7 +119,6 @@ message AppendBlockCommitRequest {
     uint64 prevLogIndex = 3;
     uint64 prevLogTerm = 4;
     BlockHeader header = 5;
-    repeated string transactionHashes = 6;
 }
 
 message AppendBlockCommitResponse {
