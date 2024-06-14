@@ -42,11 +42,6 @@ where
             env::set_var("TRACING_LOG_FORMAT", value);
         }
 
-        // TODO: remove when PostgreSQL is removed
-        if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
-            println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
-        }
-
         // parse configuration
         load_dotenv();
         let config = T::parse();

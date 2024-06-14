@@ -87,28 +87,6 @@ db-compile:
     SQLX_OFFLINE=true cargo sqlx prepare --database-url {{ database_url }} -- --all-targets
 alias sqlx := db-compile
 
-# Database: Load CSV data produced by importer-offline
-db-load-csv:
-    echo "" > data/psql.txt
-
-    echo "truncate accounts;"            >> data/psql.txt
-    echo "truncate historical_nonces;"   >> data/psql.txt
-    echo "truncate historical_balances;" >> data/psql.txt
-    echo "truncate historical_slots;"    >> data/psql.txt
-    echo "truncate blocks;"              >> data/psql.txt
-    echo "truncate transactions;"        >> data/psql.txt
-    echo "truncate logs;"                >> data/psql.txt
-
-    ls -tr1 data/accounts-*.csv            | xargs -I{} printf "\\\\copy accounts            from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/historical_nonces-*.csv   | xargs -I{} printf "\\\\copy historical_nonces   from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/historical_balances-*.csv | xargs -I{} printf "\\\\copy historical_balances from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/historical_slots-*.csv    | xargs -I{} printf "\\\\copy historical_slots    from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/blocks-*.csv              | xargs -I{} printf "\\\\copy blocks              from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/transactions-*.csv        | xargs -I{} printf "\\\\copy transactions        from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/logs-*.csv                | xargs -I{} printf "\\\\copy logs                from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-
-    cat data/psql.txt | pgcli -h localhost -u postgres -d stratus --less-chatty
-
 # ------------------------------------------------------------------------------
 # Additional binaries
 # ------------------------------------------------------------------------------
@@ -406,7 +384,7 @@ e2e-relayer-external-up:
 
     # Start Relayer External binary
     cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
-    
+
     if [ -d e2e/cloudwalk-contracts ]; then
     (
         cd e2e/cloudwalk-contracts/integration

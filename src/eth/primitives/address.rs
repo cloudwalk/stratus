@@ -1,14 +1,3 @@
-//! Address Module
-//!
-//! This module handles Ethereum addresses, a fundamental component for
-//! identifying accounts and contracts within the Ethereum network. The address
-//! is a 20-byte identifier derived from the public key of an account and is
-//! crucial for transactions and smart contract interactions. Key functionalities
-//! include generating new addresses, determining special addresses like the zero
-//! address (often used to represent non-specific or null addresses in smart
-//! contracts) and the coinbase address (which is crucial in mining processes
-//! for receiving block rewards).
-
 use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;

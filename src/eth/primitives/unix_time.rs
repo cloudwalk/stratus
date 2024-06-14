@@ -1,11 +1,3 @@
-//! Unix Time Module
-//!
-//! Manages Unix time representation in the Ethereum ecosystem. Unix time, the
-//! number of seconds since January 1, 1970, is used for timestamping blocks
-//! and transactions in Ethereum. This module provides functionalities to
-//! handle Unix time conversions and interactions, aligning with Ethereum's
-//! time-based mechanisms and requirements.
-
 use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::str::FromStr;
@@ -15,9 +7,6 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::U256 as RevmU256;
-use sqlx::database::HasValueRef;
-use sqlx::error::BoxDynError;
-use sqlx::types::BigDecimal;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
@@ -85,32 +74,6 @@ impl From<u64> for UnixTime {
 impl From<U256> for UnixTime {
     fn from(value: U256) -> Self {
         value.low_u64().into()
-    }
-}
-
-impl TryFrom<BigDecimal> for UnixTime {
-    type Error = anyhow::Error;
-    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
-        let value_str = value.to_string();
-
-        Ok(UnixTime(u64::from_str(&value_str)?))
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Conversions: sqlx -> Self
-// -----------------------------------------------------------------------------
-
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for UnixTime {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.try_into()?)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for UnixTime {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
 

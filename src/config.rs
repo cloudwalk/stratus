@@ -31,8 +31,6 @@ use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
-use crate::eth::storage::PostgresPermanentStorage;
-use crate::eth::storage::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StratusStorage;
@@ -215,7 +213,6 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: matches!(storage.perm_kind(), PermanentStorageKind::Postgres { .. }),
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
@@ -228,10 +225,6 @@ impl ExecutorConfig {
             t.spawn(move || {
                 // init services
                 let _tokio_guard = evm_tokio.enter();
-                if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
-                    let message = GlobalState::shutdown_from("evm-init", "failed to allocate evm storage resources");
-                    tracing::error!(reason = ?e, %message);
-                }
                 let mut evm = Revm::new(evm_storage, evm_config);
 
                 // keep executing transactions until the channel is closed
@@ -519,10 +512,6 @@ pub struct ImporterOfflineConfig {
     /// Number of blocks by database fetch.
     #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
     pub blocks_by_fetch: usize,
-
-    /// Write data to CSV file instead of permanent storage.
-    #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
-    pub export_csv: bool,
 
     /// Export selected blocks to fixtures snapshots to be used in tests.
     #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
@@ -838,14 +827,6 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
-    /// Permamenent storage number of parallel open connections.
-    #[arg(long = "perm-storage-connections", env = "PERM_STORAGE_CONNECTIONS")]
-    pub perm_storage_connections: u32,
-
-    /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
-    pub perm_storage_timeout: Duration,
-
     #[cfg(feature = "rocks")]
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
@@ -857,9 +838,6 @@ pub enum PermanentStorageKind {
     InMemory,
     #[cfg(feature = "rocks")]
     Rocks,
-    Postgres {
-        url: String,
-    },
 }
 
 impl PermanentStorageConfig {
@@ -871,14 +849,6 @@ impl PermanentStorageConfig {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
-            PermanentStorageKind::Postgres { ref url } => {
-                let config = PostgresPermanentStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.perm_storage_connections,
-                    acquire_timeout: self.perm_storage_timeout,
-                };
-                Arc::new(PostgresPermanentStorage::new(config).await?)
-            }
         };
         Ok(perm)
     }
@@ -892,7 +862,6 @@ impl FromStr for PermanentStorageKind {
             "inmemory" => Ok(Self::InMemory),
             #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }
