@@ -146,8 +146,7 @@ impl ExternalRelayer {
             };
 
             match receipt {
-                Ok(Some(substrate_receipt)) =>
-                {
+                Ok(Some(substrate_receipt)) => {
                     let _ = stratus_tx.execution.apply_receipt(&substrate_receipt);
                     if let Err(compare_error) = stratus_tx.execution.compare_with_receipt(&substrate_receipt) {
                         let err_string = compare_error.to_string();
@@ -156,7 +155,8 @@ impl ExternalRelayer {
                         break error.map_err(RelayError::Mismatch);
                     } else {
                         break Ok(());
-                    }},
+                    }
+                }
                 Ok(None) =>
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
