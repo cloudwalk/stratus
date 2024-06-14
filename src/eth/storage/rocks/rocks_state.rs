@@ -35,7 +35,6 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::types::AccountRocksdb;
@@ -608,6 +607,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
+    use crate::eth::primitives::SlotValue;
 
     #[test]
     fn test_rocks_multi_get() {
@@ -631,7 +631,7 @@ mod tests {
             .collect();
 
         let keys: Vec<SlotIndex> = slots.keys().cloned().chain(extra_keys).collect();
-        let result = account_slots.multi_get(keys).expect("this should not fail");
+        let result = account_slots._multi_get(keys).expect("this should not fail");
 
         assert_eq!(result.len(), slots.keys().len());
         for (idx, value) in result {

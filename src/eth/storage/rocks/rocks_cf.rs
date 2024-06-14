@@ -76,7 +76,7 @@ where
         bincode::deserialize(&value_bytes).ok()
     }
 
-    pub fn multi_get<I>(&self, keys: I) -> anyhow::Result<Vec<(K, V)>>
+    pub fn _multi_get<I>(&self, keys: I) -> anyhow::Result<Vec<(K, V)>>
     where
         I: IntoIterator<Item = K> + Clone,
     {

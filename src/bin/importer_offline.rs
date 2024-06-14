@@ -11,10 +11,9 @@
 use std::cmp::min;
 use std::fs;
 use std::sync::Arc;
+use std::thread;
 
 use anyhow::anyhow;
-use anyhow::Context;
-use futures::join;
 use futures::try_join;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -29,13 +28,14 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
-use stratus::ext::named_spawn;
 use stratus::ext::ResultExt;
+use stratus::infra::tracing::info_task_spawn;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
+use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
