@@ -10,6 +10,7 @@ use std::time::Duration;
 use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
+use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
@@ -52,10 +53,23 @@ use crate::GlobalState;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
-    let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
-    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
+    // parse env manually because this is executed before clap
+    let env = match std::env::var("ENV") {
+        Ok(env) => Environment::from_str(env.as_str()),
+        Err(_) => Ok(Environment::Local),
+    };
+    let env = match env {
+        Ok(env) => env,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
 
+    // load .env file
+    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
     println!("reading env file | filename={}", env_filename);
+
     if let Err(e) = dotenvy::from_filename(env_filename) {
         println!("env file error: {e}");
     }
@@ -73,6 +87,10 @@ pub trait WithCommonConfig {
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
+    /// Environment where the application is running.
+    #[arg(long = "env", env = "ENV", default_value = "local")]
+    pub env: Environment,
+
     /// Number of threads to execute global async tasks.
     #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
     pub num_async_threads: usize,
@@ -782,6 +800,35 @@ pub struct ExternalRelayerConfig {
 impl WithCommonConfig for ExternalRelayerConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Enum: Env
+// -----------------------------------------------------------------------------
+#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
+pub enum Environment {
+    #[strum(to_string = "local")]
+    Local,
+
+    #[strum(to_string = "staging")]
+    Staging,
+
+    #[strum(to_string = "production")]
+    Production,
+}
+
+impl FromStr for Environment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        let s = s.trim().to_lowercase();
+        match s.as_ref() {
+            "local" => Ok(Self::Local),
+            "staging" | "test" => Ok(Self::Staging),
+            "production" | "prod" => Ok(Self::Production),
+            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
+        }
     }
 }
 
