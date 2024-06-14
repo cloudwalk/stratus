@@ -657,6 +657,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         tracing::info!(number = block_entry.number, "appending new block");
 
         let consensus = self.consensus.lock().await;
+
+        if consensus.is_leader().await {
+            tracing::warn!("Attempt to append block commit by the leader");
+            return Err(Status::new(
+                (StatusCode::LeaderChanged as i32).into(),
+                "Instance is the leader".to_string(),
+            ));
+        }
+
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
         if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
@@ -681,7 +690,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
-
         tracing::info!(
             last_last_arrived_block_number = last_last_arrived_block_number,
             new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
