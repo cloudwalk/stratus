@@ -347,7 +347,7 @@ impl ExternalRelayerClient {
         let block_number = block.header.number;
         tracing::info!(?block_number, "sending block to relayer");
 
-        // strip unmodified bytecode
+        // strip bytecode
         for tx in block.transactions.iter_mut() {
             for (_, change) in tx.execution.changes.iter_mut() {
                 change.bytecode = ExecutionValueChange::default();
