@@ -31,8 +31,6 @@ use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
-use crate::eth::storage::PostgresPermanentStorage;
-use crate::eth::storage::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StratusStorage;
@@ -215,7 +213,7 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: matches!(storage.perm_kind(), PermanentStorageKind::Postgres { .. }),
+                prefetch_slots: false,
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
@@ -838,14 +836,6 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
-    /// Permamenent storage number of parallel open connections.
-    #[arg(long = "perm-storage-connections", env = "PERM_STORAGE_CONNECTIONS")]
-    pub perm_storage_connections: u32,
-
-    /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
-    pub perm_storage_timeout: Duration,
-
     #[cfg(feature = "rocks")]
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
@@ -857,9 +847,6 @@ pub enum PermanentStorageKind {
     InMemory,
     #[cfg(feature = "rocks")]
     Rocks,
-    Postgres {
-        url: String,
-    },
 }
 
 impl PermanentStorageConfig {
@@ -871,14 +858,6 @@ impl PermanentStorageConfig {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
-            PermanentStorageKind::Postgres { ref url } => {
-                let config = PostgresPermanentStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.perm_storage_connections,
-                    acquire_timeout: self.perm_storage_timeout,
-                };
-                Arc::new(PostgresPermanentStorage::new(config).await?)
-            }
         };
         Ok(perm)
     }
@@ -892,7 +871,6 @@ impl FromStr for PermanentStorageKind {
             "inmemory" => Ok(Self::InMemory),
             #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }
