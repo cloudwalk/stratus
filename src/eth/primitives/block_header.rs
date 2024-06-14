@@ -82,8 +82,8 @@ impl BlockHeader {
         }
     }
 
-    pub fn to_append_entry_block_header(&self, transaction_hashes: Vec<String>) -> append_entry::BlockHeader {
-        append_entry::BlockHeader {
+    pub fn to_append_entry_block_header(&self, transaction_hashes: Vec<String>) -> append_entry::BlockEntry {
+        append_entry::BlockEntry {
             number: self.number.into(),
             hash: self.hash.to_string(),
             transactions_root: self.transactions_root.to_string(),

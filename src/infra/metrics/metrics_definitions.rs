@@ -208,6 +208,9 @@ metrics! {
     "Time to run ExternalRelayer::relay_dag."
     histogram_duration relay_dag{},
 
+    "Time to run ExternalRelayer::compare_receipts."
+    histogram_duration compare_receipts{},
+
     "Number of execution mismatches."
     histogram_duration save_mismatch{},
 
