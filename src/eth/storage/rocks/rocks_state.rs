@@ -3,13 +3,12 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::thread;
+use std::thread::JoinHandle;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use futures::future::join_all;
 use itertools::Itertools;
-use tokio::runtime::Handle;
-use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
 
@@ -210,11 +209,11 @@ impl RocksStorageState {
     }
 
     pub fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        let tasks = vec![
+        let threads = vec![
             {
                 let self_blocks_by_hash_clone = Arc::clone(&self.blocks_by_hash);
                 let block_number_clone = block_number;
-                named_spawn_blocking("rocks::delete_blocks_by_hash", move || {
+                thread::spawn(move || {
                     for (block_num, block_hash_vec) in self_blocks_by_hash_clone.indexed_iter_end() {
                         if block_num <= block_number_clone.as_u64() {
                             break;
@@ -234,7 +233,7 @@ impl RocksStorageState {
             {
                 let self_blocks_by_number_clone = Arc::clone(&self.blocks_by_number);
                 let block_number_clone = block_number;
-                named_spawn_blocking("rocks::delete_block_by_number", move || {
+                thread::spawn(move || {
                     let blocks_by_number = self_blocks_by_number_clone.iter_end();
                     for (num, _) in blocks_by_number {
                         if num <= block_number_clone.into() {
@@ -251,7 +250,7 @@ impl RocksStorageState {
             {
                 let self_transactions_clone = Arc::clone(&self.transactions);
                 let block_number_clone = block_number;
-                named_spawn_blocking("rocks::delete_transactions", move || {
+                thread::spawn(move || {
                     let transactions = self_transactions_clone.indexed_iter_end();
                     for (index_block_number, hash_vec) in transactions {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -271,7 +270,7 @@ impl RocksStorageState {
             {
                 let self_logs_clone = Arc::clone(&self.logs);
                 let block_number_clone = block_number;
-                named_spawn_blocking("rocks::delete_logs", move || {
+                thread::spawn(move || {
                     let logs = self_logs_clone.indexed_iter_end();
                     for (index_block_number, logs_vec) in logs {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -291,7 +290,7 @@ impl RocksStorageState {
             {
                 let self_accounts_history_clone = Arc::clone(&self.accounts_history);
                 let block_number_clone = block_number;
-                named_spawn_blocking("rocks::delete_accounts_history", move || {
+                thread::spawn(move || {
                     let accounts_history = self_accounts_history_clone.indexed_iter_end();
                     for (index_block_number, accounts_history_vec) in accounts_history {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -311,7 +310,7 @@ impl RocksStorageState {
             {
                 let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
                 let block_number_clone = block_number;
-                named_spawn_blocking("rocks::delete_slots_history", move || {
+                thread::spawn(move || {
                     let account_slots_history = self_account_slots_history_clone.indexed_iter_end();
                     for (index_block_number, account_slots_history_vec) in account_slots_history {
                         if index_block_number <= block_number_clone.as_u64() {
@@ -330,15 +329,17 @@ impl RocksStorageState {
             },
         ];
 
-        // Wait for all tasks to complete using join_all
-        let _ = Handle::current().block_on(join_all(tasks));
+        // Wait for all tasks
+        for thread in threads {
+            let _ = thread.join();
+        }
 
         // Clear current states
         let _ = self.accounts.clear();
         let _ = self.account_slots.clear();
 
         // Spawn task for handling accounts
-        let accounts_task = named_spawn_blocking("rocks::update_accounts", {
+        let accounts_task = thread::spawn({
             let self_accounts_history_clone = Arc::clone(&self.accounts_history);
             let self_accounts_clone = Arc::clone(&self.accounts);
             let block_number_clone = block_number;
@@ -365,7 +366,7 @@ impl RocksStorageState {
         });
 
         // Spawn task for handling slots
-        let slots_task = named_spawn_blocking("rocks::update_slots", {
+        let slots_task = thread::spawn({
             let self_account_slots_history_clone = Arc::clone(&self.account_slots_history);
             let self_account_slots_clone = Arc::clone(&self.account_slots);
             let block_number_clone = block_number;
@@ -392,7 +393,8 @@ impl RocksStorageState {
             }
         });
 
-        let _ = Handle::current().block_on(join_all(vec![accounts_task, slots_task]));
+        let _ = accounts_task.join();
+        let _ = slots_task.join();
 
         info!(
             "All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.",
@@ -420,7 +422,7 @@ impl RocksStorageState {
         let mut account_changes = Vec::new();
         let mut account_history_changes = Vec::new();
 
-        let account_changes_future = tokio::task::spawn_blocking(move || {
+        let account_changes_future = thread::spawn(move || {
             for change in changes_clone_for_accounts {
                 if change.is_changed() {
                     let address: AddressRocksdb = change.address.into();
@@ -447,7 +449,7 @@ impl RocksStorageState {
         let mut slot_changes = Vec::new();
         let mut slot_history_changes = Vec::new();
 
-        let slot_changes_future = tokio::task::spawn_blocking(move || {
+        let slot_changes_future = thread::spawn(move || {
             for change in changes_clone_for_slots {
                 let address: AddressRocksdb = change.address.into();
                 for (slot_index, slot_change) in change.slots.clone() {

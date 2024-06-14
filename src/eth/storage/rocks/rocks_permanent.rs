@@ -2,11 +2,10 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::thread;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use futures::future::join_all;
-use tokio::runtime::Handle;
 
 use super::rocks_state::RocksStorageState;
 use super::types::AddressRocksdb;
@@ -117,14 +116,14 @@ impl PermanentStorage for RocksPermanentStorage {
         }
 
         // save block
-        let mut futures = Vec::with_capacity(9);
+        let mut threads = Vec::with_capacity(9);
         let block_number = block.number();
         let txs_rocks = Arc::clone(&self.state.transactions);
         let logs_rocks = Arc::clone(&self.state.logs);
-        futures.push(tokio::task::spawn_blocking(move || {
+        threads.push(thread::spawn(move || {
             txs_rocks.insert_batch_indexed(txs_batch, block_number.as_u64());
         }));
-        futures.push(tokio::task::spawn_blocking(move || {
+        threads.push(thread::spawn(move || {
             logs_rocks.insert_batch_indexed(logs_batch, block_number.as_u64());
         }));
 
@@ -138,14 +137,14 @@ impl PermanentStorage for RocksPermanentStorage {
             transaction.execution.changes.retain(|_, change| change.bytecode.clone().is_modified());
         }
         let block_hash_clone = block_hash;
-        futures.push(tokio::task::spawn_blocking(move || {
+        threads.push(thread::spawn(move || {
             blocks_by_number.insert(block_number.into(), block_without_changes.into());
         }));
-        futures.push(tokio::task::spawn_blocking(move || {
+        threads.push(thread::spawn(move || {
             blocks_by_hash.insert_batch_indexed(vec![(block_hash_clone.into(), block_number.into())], block_number.as_u64());
         }));
 
-        futures.append(
+        threads.append(
             &mut self
                 .state
                 .update_state_with_execution_changes(&account_changes, block_number)
@@ -162,7 +161,10 @@ impl PermanentStorage for RocksPermanentStorage {
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 
-        let _ = Handle::current().block_on(join_all(futures));
+        for thread in threads {
+            let _ = thread.join();
+        }
+
         Ok(())
     }
 
