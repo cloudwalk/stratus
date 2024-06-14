@@ -442,8 +442,8 @@ contracts-compile:
     cd e2e/cloudwalk-contracts && ./compile-contracts.sh
 
 # Contracts: Flatten solidity contracts for integration test
-contracts-flatten:
-    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh
+contracts-flatten *args="":
+    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh {{ args }}
 
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test *args="":
