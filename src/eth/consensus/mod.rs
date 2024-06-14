@@ -686,10 +686,19 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
 
         if consensus.is_leader().await {
-            tracing::warn!("Attempt to append block commit by the leader");
+            // If the current instance is a leader, check the term and index
+            let current_term: u64 = consensus.current_term.load(Ordering::SeqCst);
+            let last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
+
+            if request_inner.term > current_term && request_inner.prev_log_index > last_arrived_block_number {
+                tracing::info!("Current instance is stepping down as a leader since a higher term and index is found in the append entry request.");
+                *consensus.role.write().await = Role::Follower;
+                consensus.current_term.store(request_inner.term, Ordering::SeqCst);
+            }
+            
             return Err(Status::new(
                 (StatusCode::LeaderChanged as i32).into(),
-                "Instance is the leader".to_string(),
+                "Leader changed or instance is the leader with no higher term or index".to_string(),
             ));
         }
 
@@ -772,6 +781,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }))
     }
 }
+
 
 #[cfg(test)]
 mod tests {
