@@ -35,8 +35,6 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::types::AccountRocksdb;
@@ -347,29 +345,6 @@ impl RocksStorageState {
                     }
                 }
                 None
-            }
-        }
-    }
-
-    pub fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
-        match point_in_time {
-            StoragePointInTime::Present => {
-                let keys = indexes.iter().cloned().map(|idx| ((*address).into(), idx.into()));
-                Ok(self
-                    .account_slots
-                    .multi_get(keys)?
-                    .into_iter()
-                    .map(|((_, idx), value)| (idx.into(), value.into()))
-                    .collect())
-            }
-            StoragePointInTime::Past(number) => {
-                let keys = indexes.iter().cloned().map(|idx| ((*address).into(), idx.into(), (*number).into()));
-                Ok(self
-                    .account_slots_history
-                    .multi_get(keys)?
-                    .into_iter()
-                    .map(|((_, idx, _), value)| (idx.into(), value.into()))
-                    .collect())
             }
         }
     }
