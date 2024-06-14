@@ -1,5 +1,5 @@
 /// Holds the log entries that are stored in the Raft log.
-/// The log entries are either a BlockEntryData or a TransactionExecution.
+/// The log entries are either a BlockEntry or a TransactionExecution.
 /// The LogEntry struct is used to store the index and term of the log entry.
 use prost::bytes;
 use prost::Message;
@@ -10,8 +10,8 @@ use super::append_entry::TransactionExecutionEntry;
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Default)]
 pub enum LogEntryData {
-    BlockEntryData(BlockEntry),
-    TransactionExecutionEntriesData(Vec<TransactionExecutionEntry>),
+    BlockEntry(BlockEntry),
+    TransactionExecutionEntries(Vec<TransactionExecutionEntry>),
     #[default]
     EmptyData,
 }
@@ -29,8 +29,8 @@ impl Message for LogEntryData {
         B: bytes::BufMut,
     {
         match self {
-            LogEntryData::BlockEntryData(header) => header.encode_raw(buf),
-            LogEntryData::TransactionExecutionEntriesData(executions) =>
+            LogEntryData::BlockEntry(header) => header.encode_raw(buf),
+            LogEntryData::TransactionExecutionEntries(executions) =>
                 for execution in executions {
                     execution.encode_raw(buf);
                 },
@@ -49,8 +49,8 @@ impl Message for LogEntryData {
         B: bytes::Buf,
     {
         match self {
-            LogEntryData::BlockEntryData(header) => header.merge_field(tag, wire_type, buf, ctx),
-            LogEntryData::TransactionExecutionEntriesData(executions) => {
+            LogEntryData::BlockEntry(header) => header.merge_field(tag, wire_type, buf, ctx),
+            LogEntryData::TransactionExecutionEntries(executions) => {
                 for execution in executions {
                     execution.merge_field(tag, wire_type, buf, ctx.clone())?;
                 }
@@ -62,16 +62,16 @@ impl Message for LogEntryData {
 
     fn encoded_len(&self) -> usize {
         match self {
-            LogEntryData::BlockEntryData(header) => header.encoded_len(),
-            LogEntryData::TransactionExecutionEntriesData(executions) => executions.iter().map(|execution| execution.encoded_len()).sum(),
+            LogEntryData::BlockEntry(header) => header.encoded_len(),
+            LogEntryData::TransactionExecutionEntries(executions) => executions.iter().map(|execution| execution.encoded_len()).sum(),
             LogEntryData::EmptyData => 0,
         }
     }
 
     fn clear(&mut self) {
         match self {
-            LogEntryData::BlockEntryData(header) => header.clear(),
-            LogEntryData::TransactionExecutionEntriesData(executions) => {
+            LogEntryData::BlockEntry(header) => header.clear(),
+            LogEntryData::TransactionExecutionEntries(executions) => {
                 executions.clear();
             }
             LogEntryData::EmptyData => {}

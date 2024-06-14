@@ -155,9 +155,9 @@ struct Peer {
 type PeerTuple = (Peer, JoinHandle<()>);
 
 pub struct Consensus {
-    pub sender: Sender<Block>,                      //receives blocks
-    broadcast_sender: broadcast::Sender<LogEntryData>,     //propagates the blocks
-    importer_config: Option<RunWithImporterConfig>, //HACK this is used with sync online only
+    pub sender: Sender<Block>,                         //receives blocks
+    broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
+    importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
@@ -386,7 +386,7 @@ impl Consensus {
                         //TODO save block to appendEntries log
                         //TODO before saving check if all transaction_hashes are already in the log
 
-                        let block_entry = LogEntryData::BlockEntryData(block.header.to_append_entry_block_header(Vec::new()));
+                        let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
                         if consensus.broadcast_sender.send(block_entry).is_err() {
                             tracing::error!("failed to broadcast block");
                         }
@@ -548,7 +548,7 @@ impl Consensus {
 
             while let Some(log_entry) = log_entry_queue.first() {
                 match log_entry {
-                    LogEntryData::BlockEntryData(block) => {
+                    LogEntryData::BlockEntry(block) => {
                         tracing::info!("sending block to peer: {:?}", peer.client);
                         match consensus.append_block_to_peer(&mut peer, block).await {
                             Ok(_) => {
@@ -561,7 +561,7 @@ impl Consensus {
                             }
                         }
                     }
-                    LogEntryData::TransactionExecutionEntriesData(transaction_executions) => {
+                    LogEntryData::TransactionExecutionEntries(transaction_executions) => {
                         tracing::info!("adding transaction executions to queue");
                         let mut queue = consensus.transaction_execution_queue.lock().await;
                         queue.extend(transaction_executions.clone());
@@ -586,13 +586,12 @@ impl Consensus {
         });
 
         match peer.client.append_transaction_executions(request).await {
-            Ok(response) => {
+            Ok(response) =>
                 if response.into_inner().status == StatusCode::AppendSuccess as i32 {
                     tracing::info!("Successfully appended transaction executions to peer: {:?}", peer.client);
                 } else {
                     tracing::warn!("Failed to append transaction executions to peer: {:?}", peer.client);
-                }
-            }
+                },
             Err(e) => {
                 tracing::warn!("Error appending transaction executions to peer {:?}: {:?}", peer.client, e);
             }
