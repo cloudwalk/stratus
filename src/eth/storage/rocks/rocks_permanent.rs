@@ -92,7 +92,6 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(self.state.read_slot(address, index, point_in_time))
     }
 
-
     async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         Ok(self.state.read_block(selection))
     }
