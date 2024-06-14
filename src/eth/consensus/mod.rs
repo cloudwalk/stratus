@@ -686,16 +686,18 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
+        if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
+            #[cfg(feature = "metrics")]
+            {
+                metrics::set_append_entries_block_number_diff(diff);
+            }
+        }
+
         if consensus.is_leader().await {
             let current_term = consensus.current_term.load(Ordering::SeqCst);
             let request_block_number = block_entry.number;
 
-            if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
-                #[cfg(feature = "metrics")]
-                {
-                    metrics::set_append_entries_block_number_diff(diff);
-                }
-            } else if (request_inner.term > current_term && request_block_number > last_last_arrived_block_number) {
+            if (request_inner.term > current_term && request_block_number > last_last_arrived_block_number) {
                 tracing::info!("stepping down as leader due to higher term and block number");
                 *consensus.role.write().await = Role::Follower;
                 consensus.current_term.store(request_inner.term, Ordering::SeqCst);
