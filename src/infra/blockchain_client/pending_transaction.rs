@@ -78,7 +78,7 @@ impl<'a> PendingTransaction<'a> {
             provider,
             tx_hash,
             interval: Box::new(interval(Duration::from_millis(10))),
-            retries_remaining: 3,
+            retries_remaining: 100,
         }
     }
 }
