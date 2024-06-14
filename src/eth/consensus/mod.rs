@@ -707,7 +707,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     block_entry.number
                 );
                 return Err(Status::new(
-                    (StatusCode::LeaderChanged as i32).into(),
+                    (StatusCode::EntryAlreadyExists as i32).into(),
                     "Leader is behind follower and should step down".to_string(),
                 ));
             }
