@@ -7,7 +7,4 @@ pub struct ExecutionMetrics {
 
     /// Number of slot reads during EVM execution.
     pub slot_reads: usize,
-
-    /// Number of slot reads during EVM execution that were cached with prefetch.
-    pub slot_reads_cached: usize,
 }

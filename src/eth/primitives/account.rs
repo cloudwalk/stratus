@@ -9,17 +9,13 @@
 //! contract accounts.
 
 use display_json::DebugAsJson;
-use itertools::Itertools;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
-use crate::eth::evm::EvmInputSlotKeys;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::SlotAccess;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
 
@@ -42,12 +38,6 @@ pub struct Account {
 
     /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
     pub code_hash: CodeHash,
-
-    /// Slots indexes that are accessed statically.
-    pub static_slot_indexes: Option<SlotIndexes>,
-
-    /// Slots indexes that are accessed using the mapping hash algorithm.
-    pub mapping_slot_indexes: Option<SlotIndexes>,
 }
 
 impl Account {
@@ -64,8 +54,6 @@ impl Account {
             balance,
             bytecode: None,
             code_hash: CodeHash::default(),
-            static_slot_indexes: None,
-            mapping_slot_indexes: None,
         }
     }
 
@@ -83,39 +71,6 @@ impl Account {
             None => false,
         }
     }
-
-    /// Compute slot indexes to be accessed for a give input.
-    pub fn slot_indexes(&self, input_keys: EvmInputSlotKeys) -> SlotIndexes {
-        let mut slot_indexes = SlotIndexes::new();
-
-        // calculate static indexes
-        if let Some(ref indexes) = self.static_slot_indexes {
-            slot_indexes.extend(indexes.0.clone());
-        }
-
-        // calculate mapping indexes
-        if let Some(ref indexes) = self.mapping_slot_indexes {
-            for (base_slot_index, input_key) in indexes.iter().cartesian_product(input_keys.into_iter()) {
-                let mapping_slot_index = base_slot_index.to_mapping_index(input_key);
-                slot_indexes.insert(mapping_slot_index);
-            }
-        }
-
-        slot_indexes
-    }
-
-    /// Adds a bytecode slot index according to its type.
-    pub fn add_bytecode_slot_index(&mut self, index: SlotAccess) {
-        match index {
-            SlotAccess::Static(index) => {
-                self.static_slot_indexes.get_or_insert_with(SlotIndexes::new).insert(index);
-            }
-            SlotAccess::Mapping(index) => {
-                self.mapping_slot_indexes.get_or_insert_with(SlotIndexes::new).insert(index);
-            }
-            _ => {}
-        }
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -131,8 +86,6 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             balance: info.balance.into(),
             bytecode: info.code.map_into(),
             code_hash: info.code_hash.into(),
-            static_slot_indexes: None,
-            mapping_slot_indexes: None,
         }
     }
 }
