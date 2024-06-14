@@ -204,12 +204,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
             if let Some(Some(bytecode)) = change.bytecode.take_ref() {
                 account.info.bytecode = Some(bytecode.clone());
             }
-            if let Some(indexes) = change.static_slot_indexes.take_ref() {
-                account.info.static_slot_indexes.clone_from(indexes);
-            }
-            if let Some(indexes) = change.mapping_slot_indexes.take_ref() {
-                account.info.mapping_slot_indexes.clone_from(indexes);
-            }
 
             // slots
             for slot in change.slots.values() {
@@ -285,8 +279,6 @@ fn read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Addr
             nonce: info.nonce,
             bytecode: info.bytecode,
             code_hash: info.code_hash,
-            static_slot_indexes: info.static_slot_indexes,
-            mapping_slot_indexes: info.mapping_slot_indexes,
         };
 
         tracing::trace!(%address, ?account, "account found");

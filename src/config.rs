@@ -213,7 +213,6 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: false,
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();

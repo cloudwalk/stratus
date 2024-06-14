@@ -29,9 +29,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
@@ -205,20 +203,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
-        tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
-
-        let mut slots = HashMap::with_capacity(indexes.len());
-        for index in indexes.iter() {
-            let slot = self.read_slot(address, index, point_in_time).await?;
-            if let Some(slot) = slot {
-                slots.insert(slot.index, slot.value);
-            }
-        }
-
-        Ok(slots)
-    }
-
     async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
         let state = self.lock_read().await;
 
@@ -326,12 +310,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
             if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
                 account.bytecode.push(block_number, Some(bytecode));
             }
-            if let Some(indexes) = changes.static_slot_indexes.take_modified() {
-                account.static_slot_indexes.push(block_number, indexes);
-            }
-            if let Some(indexes) = changes.mapping_slot_indexes.take_modified() {
-                account.mapping_slot_indexes.push(block_number, indexes);
-            }
 
             // slots
             for (_, slot) in changes.slots {
@@ -436,8 +414,6 @@ pub struct InMemoryPermanentAccount {
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
     pub code_hash: InMemoryHistory<CodeHash>,
-    pub static_slot_indexes: InMemoryHistory<Option<SlotIndexes>>,
-    pub mapping_slot_indexes: InMemoryHistory<Option<SlotIndexes>>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
@@ -455,8 +431,6 @@ impl InMemoryPermanentAccount {
             nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
             bytecode: InMemoryHistory::new_at_zero(None),
             code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
-            static_slot_indexes: InMemoryHistory::new_at_zero(None),
-            mapping_slot_indexes: InMemoryHistory::new_at_zero(None),
             slots: Default::default(),
         }
     }
@@ -467,8 +441,6 @@ impl InMemoryPermanentAccount {
         self.balance = self.balance.reset_at(block_number).expect("never empty");
         self.nonce = self.nonce.reset_at(block_number).expect("never empty");
         self.bytecode = self.bytecode.reset_at(block_number).expect("never empty");
-        self.static_slot_indexes.reset_at(block_number).expect("never empty");
-        self.mapping_slot_indexes.reset_at(block_number).expect("never empty");
 
         // SAFETY: not ok to unwrap because slot value does not start at block 0
         let mut new_slots = HashMap::with_capacity(self.slots.len());
@@ -493,8 +465,6 @@ impl InMemoryPermanentAccount {
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
             code_hash: self.code_hash.get_at_point(point_in_time).unwrap_or_default(),
-            static_slot_indexes: self.static_slot_indexes.get_at_point(point_in_time).unwrap_or_default(),
-            mapping_slot_indexes: self.mapping_slot_indexes.get_at_point(point_in_time).unwrap_or_default(),
         }
     }
 }
