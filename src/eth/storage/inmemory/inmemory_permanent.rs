@@ -14,7 +14,6 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 use tokio::sync::RwLockWriteGuard;
 
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -134,10 +133,6 @@ impl Default for InMemoryPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for InMemoryPermanentStorage {
-    fn kind(&self) -> PermanentStorageKind {
-        PermanentStorageKind::InMemory
-    }
-
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
