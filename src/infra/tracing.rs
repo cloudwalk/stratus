@@ -25,6 +25,7 @@ use opentelemetry_sdk::trace::Tracer as SdkTracer;
 use opentelemetry_sdk::Resource as SdkResource;
 use serde::ser::SerializeStruct;
 use serde::Serialize;
+use serde_json::Value as JsonValue;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
 use tracing::span;
@@ -48,6 +49,7 @@ use ulid::Ulid;
 
 use crate::config::TracingConfig;
 use crate::ext::named_spawn;
+use crate::ext::not;
 use crate::ext::ResultExt;
 use crate::infra::build_info;
 
@@ -299,51 +301,35 @@ where
 {
     fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: tracing_subscriber::layer::Context<'_, S>) {
         let Some(span) = ctx.span(id) else { return };
-        span.extensions_mut().insert(ContextFields::new(attrs.field_map()));
+        span.extensions_mut().insert(SpanFields::new(attrs.field_map()));
     }
 
     fn on_record(&self, id: &span::Id, values: &span::Record<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
         let Some(span) = ctx.span(id) else { return };
-        let mut ext = span.extensions_mut();
-        let Some(map) = ext.get_mut::<ContextFields>() else {
-            tracing::error!(
-                reason = %"tracing context-fields are missing from span when they were expected to exist",
-                span_id = ?span.id(),
-                span_name = %span.name(),
-                "failed to get tracing context-fields"
-            );
-            return;
-        };
-        if let Err(e) = map.record(values.field_map()) {
-            tracing::error!(reason = e, span_id = ?span.id(), span_name = %span.name(), "failed to record span fields to current context-fields");
+        let mut extensions = span.extensions_mut();
+        if let Some(map) = extensions.get_mut::<SpanFields>() {
+            map.record(values.field_map());
         }
     }
 }
 
-struct ContextFields(serde_json::Value);
+#[derive(derive_more::Deref, derive_more::DerefMut)]
+struct SpanFields(#[deref] JsonValue);
 
-impl ContextFields {
+impl SpanFields {
     fn new(fields: SerializeFieldMap<'_, Attributes>) -> Self {
         let fields = serde_json::to_value(fields).expect_infallible();
         Self(fields)
     }
 
-    fn record(&mut self, fields: SerializeFieldMap<'_, span::Record>) -> Result<(), &'static str> {
+    fn record(&mut self, fields: SerializeFieldMap<'_, span::Record>) {
         let mut new_fields = serde_json::to_value(fields).expect_infallible();
-        let Some(new_fields) = new_fields.as_object_mut() else {
-            return Err("new fields are not json object when they were expected to be");
-        };
+        let Some(new_fields) = new_fields.as_object_mut() else { return };
 
-        let Some(current_fields) = self.0.as_object_mut() else {
-            return Err("current fields are not json object when they were expected to be");
-        };
-
-        // TODO: remove cloning
-        for new_field in new_fields {
-            current_fields.insert(new_field.0.to_owned(), new_field.1.to_owned());
+        let Some(current_fields) = self.as_object_mut() else { return };
+        for (new_field_key, new_field_value) in new_fields.into_iter() {
+            current_fields.insert(new_field_key.to_owned(), new_field_value.to_owned());
         }
-
-        Ok(())
     }
 }
 
@@ -363,19 +349,18 @@ where
         // parse spans
         let context = match ctx.lookup_current() {
             Some(span) => {
-                let mut span_iterator = span.scope().peekable();
-
                 let mut root_span = None;
+                let mut merged_span_context = HashMap::new();
+
+                // iterate span hierarchy
+                let mut span_iterator = span.scope().peekable();
                 while let Some(span) = span_iterator.next() {
-                    match span.extensions().get::<ContextFields>() {
-                        Some(context_fields) => {}
-                        None => {
-                            tracing::error!(
-                                reason = %"tracing context-fields are missing from span when they were expected to exist",
-                                span_id = ?span.id(),
-                                span_name = %span.name(),
-                                "failed to get tracing context-fields"
-                            );
+                    // merge span data into a single context
+                    if let Some(span_fields) = span.extensions().get::<SpanFields>().and_then(|fields| fields.as_object()) {
+                        for (field_key, field_value) in span_fields {
+                            if not(merged_span_context.contains_key(field_key)) {
+                                merged_span_context.insert(field_key.to_owned(), field_value.to_owned());
+                            }
                         }
                     }
 
@@ -385,12 +370,13 @@ where
                     }
                 }
 
-                // genrate context
-                let context = JsonEntryContext {
+                // generate context field
+                let context = TracingLogContextField {
                     root_span_id: root_span.as_ref().map(|s| s.id().into_u64()).unwrap_or(0),
                     root_span_name: root_span.as_ref().map(|s| s.name()).unwrap_or(""),
                     span_id: span.id().into_u64(),
                     span_name: span.name(),
+                    context: merged_span_context,
                 };
                 Some(context)
             }
@@ -398,7 +384,7 @@ where
         };
 
         // parse metadata and event
-        let log = JsonEntry {
+        let log = TracingLog {
             timestamp: Utc::now(),
             level: meta.level().as_serde(),
             target: meta.target(),
@@ -412,21 +398,21 @@ where
 }
 
 #[derive(derive_new::new)]
-struct JsonEntry<'a> {
+struct TracingLog<'a> {
     timestamp: DateTime<Utc>,
     level: SerializeLevel<'a>,
     target: &'a str,
     thread: Thread,
     fields: SerializeFieldMap<'a, Event<'a>>,
-    context: Option<JsonEntryContext<'a>>,
+    context: Option<TracingLogContextField<'a>>,
 }
 
-impl<'a> Serialize for JsonEntry<'a> {
+impl<'a> Serialize for TracingLog<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("JsonEntry", 7)?;
+        let mut state = serializer.serialize_struct("TracingLog", 7)?;
         state.serialize_field("timestamp", &self.timestamp)?;
         state.serialize_field("level", &self.level)?;
         state.serialize_field("target", self.target)?;
@@ -441,25 +427,14 @@ impl<'a> Serialize for JsonEntry<'a> {
     }
 }
 
-struct JsonEntryContext<'a> {
+#[derive(serde::Serialize)]
+struct TracingLogContextField<'a> {
     root_span_id: u64,
     root_span_name: &'a str,
     span_id: u64,
     span_name: &'a str,
-}
-
-impl<'a> Serialize for JsonEntryContext<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("JsonEntryContext", 4)?;
-        state.serialize_field("root_span_id", &self.root_span_id)?;
-        state.serialize_field("root_span_name", &self.root_span_name)?;
-        state.serialize_field("span_id", &self.span_id)?;
-        state.serialize_field("span_name", &self.span_name)?;
-        state.end()
-    }
+    #[serde(flatten)]
+    context: HashMap<String, JsonValue>,
 }
 
 // -----------------------------------------------------------------------------
