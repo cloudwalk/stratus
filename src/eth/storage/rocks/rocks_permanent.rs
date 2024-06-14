@@ -10,7 +10,6 @@ use futures::future::join_all;
 use super::rocks_state::RocksStorageState;
 use super::types::AddressRocksdb;
 use super::types::SlotIndexRocksdb;
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -59,10 +58,6 @@ impl RocksPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for RocksPermanentStorage {
-    fn kind(&self) -> PermanentStorageKind {
-        PermanentStorageKind::Rocks
-    }
-
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------

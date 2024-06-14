@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use tracing::Span;
 
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -51,13 +50,6 @@ impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
-    }
-
-    // -------------------------------------------------------------------------
-    // Metadata
-    // -------------------------------------------------------------------------
-    pub fn perm_kind(&self) -> PermanentStorageKind {
-        self.perm.kind()
     }
 
     // -------------------------------------------------------------------------
