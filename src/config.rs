@@ -241,7 +241,7 @@ impl ExecutorConfig {
                     }
 
                     // execute
-                    let _span_enter = task.span.enter();
+                    let _enter = task.span.enter();
                     let result = evm.execute(task.input);
                     if let Err(e) = task.response_tx.send(result) {
                         tracing::error!(reason = ?e, "failed to send evm execution result");

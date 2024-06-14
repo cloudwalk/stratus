@@ -347,40 +347,36 @@ where
         let meta = event.metadata();
 
         // parse spans
-        let context = match ctx.lookup_current() {
-            Some(span) => {
-                let mut root_span = None;
-                let mut merged_span_context = HashMap::new();
+        let context = ctx.lookup_current().map(|span| {
+            let mut root_span = None;
+            let mut merged_span_context = HashMap::new();
 
-                let mut span_iterator = span.scope().peekable();
-                while let Some(span) = span_iterator.next() {
-                    // merge span data into a single context
-                    if let Some(span_fields) = span.extensions().get::<SpanFields>().and_then(|fields| fields.as_object()) {
-                        for (field_key, field_value) in span_fields {
-                            if not(merged_span_context.contains_key(field_key)) {
-                                merged_span_context.insert(field_key.to_owned(), field_value.to_owned());
-                            }
+            let mut span_iterator = span.scope().peekable();
+            while let Some(span) = span_iterator.next() {
+                // merge span data into a single context
+                if let Some(span_fields) = span.extensions().get::<SpanFields>().and_then(|fields| fields.as_object()) {
+                    for (field_key, field_value) in span_fields {
+                        if not(merged_span_context.contains_key(field_key)) {
+                            merged_span_context.insert(field_key.to_owned(), field_value.to_owned());
                         }
-                    }
-
-                    // track root span
-                    if span_iterator.peek().is_none() {
-                        root_span = Some(span);
                     }
                 }
 
-                // generate context field
-                let context = TracingLogContextField {
-                    root_span_id: root_span.as_ref().map(|s| s.id().into_u64()).unwrap_or(0),
-                    root_span_name: root_span.as_ref().map(|s| s.name()).unwrap_or(""),
-                    span_id: span.id().into_u64(),
-                    span_name: span.name(),
-                    context: merged_span_context,
-                };
-                Some(context)
+                // track root span
+                if span_iterator.peek().is_none() {
+                    root_span = Some(span);
+                }
             }
-            None => None,
-        };
+
+            // generate context field
+            TracingLogContextField {
+                root_span_id: root_span.as_ref().map(|s| s.id().into_u64()).unwrap_or(0),
+                root_span_name: root_span.as_ref().map(|s| s.name()).unwrap_or(""),
+                span_id: span.id().into_u64(),
+                span_name: span.name(),
+                context: merged_span_context,
+            }
+        });
 
         // parse metadata and event
         let log = TracingLog {
