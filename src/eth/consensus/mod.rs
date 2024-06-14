@@ -697,8 +697,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             let current_term = consensus.current_term.load(Ordering::SeqCst);
             let request_block_number = block_entry.number;
 
-            if (request_inner.term > current_term && request_block_number > last_last_arrived_block_number) {
-                tracing::info!("stepping down as leader due to higher term and block number");
+            if request_inner.term > current_term && request_block_number > last_last_arrived_block_number {
                 *consensus.role.write().await = Role::Follower;
                 consensus.current_term.store(request_inner.term, Ordering::SeqCst);
                 
@@ -708,7 +707,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     block_entry.number
                 );
                 return Err(Status::new(
-                    (StatusCode::EntryAlreadyExists as i32).into(),
+                    (StatusCode::LeaderChanged as i32).into(),
                     "Leader is behind follower and should step down".to_string(),
                 ));
             }
