@@ -60,7 +60,7 @@ use append_entry::AppendBlockCommitRequest;
 use append_entry::AppendBlockCommitResponse;
 use append_entry::AppendTransactionExecutionsRequest;
 use append_entry::AppendTransactionExecutionsResponse;
-use append_entry::BlockHeader;
+use append_entry::BlockEntry;
 use append_entry::RequestVoteRequest;
 use append_entry::RequestVoteResponse;
 use append_entry::StatusCode;
@@ -560,13 +560,13 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let header: BlockHeader = block.header.to_append_entry_block_header(Vec::new());
+        let block_entry: BlockEntry = block.header.to_append_entry_block_header(Vec::new());
 
         let request = Request::new(AppendBlockCommitRequest {
             term: 0,
             prev_log_index: 0,
             prev_log_term: 0,
-            header: Some(header),
+            block_entry: Some(block_entry),
             leader_id: self.my_address.to_string(),
         });
 
@@ -610,25 +610,25 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
     async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
         let request_inner = request.into_inner();
-        let Some(header) = request_inner.header else {
-            return Err(Status::invalid_argument("empty block header"));
+        let Some(block_entry) = request_inner.block_entry else {
+            return Err(Status::invalid_argument("empty block entry"));
         };
 
-        tracing::info!(number = header.number, "appending new block");
+        tracing::info!(number = block_entry.number, "appending new block");
 
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
-        if let Some(diff) = last_last_arrived_block_number.checked_sub(header.number) {
+        if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
             #[cfg(feature = "metrics")]
             {
                 metrics::set_append_entries_block_number_diff(diff);
             }
         } else {
             tracing::error!(
-                "leader is behind follower: arrived_block: {}, header_block: {}",
+                "leader is behind follower: arrived_block: {}, block_entry: {}",
                 last_last_arrived_block_number,
-                header.number
+                block_entry.number
             );
             return Err(Status::new(
                 (StatusCode::EntryAlreadyExists as i32).into(),
@@ -640,7 +640,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
         }
-        consensus.last_arrived_block_number.store(header.number, Ordering::SeqCst);
+        consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
 
         tracing::info!(
             last_last_arrived_block_number = last_last_arrived_block_number,

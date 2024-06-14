@@ -4,8 +4,8 @@
 use prost::bytes;
 use prost::Message;
 
-use super::append_entry::BlockHeader as BH;
-use super::append_entry::TransactionExecution as TE;
+use super::append_entry::BlockEntry as BH;
+use super::append_entry::TransactionExecutionEntry as TE;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Default)]
