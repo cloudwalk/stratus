@@ -14,7 +14,7 @@ default-run = "stratus"
 anyhow = "=1.0.86"
 async-trait = "=0.1.80"
 byte-unit = "=5.1.4"
-chrono = "=0.4.38"
+chrono = { version = "=0.4.38", features = ["serde"] }
 const_format = "=0.2.32"
 const-hex = "=1.12.0"
 csv = "=1.3.0"
@@ -91,6 +91,7 @@ sentry-tracing = "=0.34.0"
 tracing = { version = "=0.1.40", features = ["attributes"] }
 tracing-opentelemetry = "=0.24.0"
 tracing-subscriber = { version = "=0.3.18", features = ["env-filter", "json"] }
+tracing-serde = "=0.1.3"
 
 # storage
 rocksdb = { version = "=0.22.0", features = ["multi-threaded-cf"], optional = true }
@@ -121,7 +122,6 @@ revm = { version = "=9.0.0" }
 # ------------------------------------------------------------------------------
 [patch.crates-io]
 console-subscriber = { git = "https://github.com/tokio-rs/console.git", rev = "852a977bab71d0f6ae47c6c5c1c20b8679c9e576" }
-
 
 # ------------------------------------------------------------------------------
 # Dev dependencies
