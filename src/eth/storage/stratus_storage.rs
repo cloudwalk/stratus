@@ -53,11 +53,6 @@ impl StratusStorage {
         Self { temp, perm }
     }
 
-    pub async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        self.perm.allocate_evm_thread_resources().await?;
-        Ok(())
-    }
-
     // -------------------------------------------------------------------------
     // Metadata
     // -------------------------------------------------------------------------

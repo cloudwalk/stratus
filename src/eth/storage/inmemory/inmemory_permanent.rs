@@ -138,10 +138,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         PermanentStorageKind::InMemory
     }
 
-    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
