@@ -159,8 +159,6 @@ mod tests {
             balance: ExecutionValueChange::default(),
             bytecode: ExecutionValueChange::default(),
             code_hash: CodeHash::default(),
-            static_slot_indexes: ExecutionValueChange::default(),
-            mapping_slot_indexes: ExecutionValueChange::default(),
             slots: changed_slots_inidices
                 .into_iter()
                 .map(|index| (index, ExecutionValueChange::from_modified(Slot { index, value: 0.into() })))
