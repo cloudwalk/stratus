@@ -54,7 +54,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
-        None => storage.read_block_number_to_resume_import().await?,
+        None => storage.read_block_number_to_resume_import()?,
     };
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
@@ -66,7 +66,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
-    storage.save_accounts(initial_accounts.clone()).await?;
+    storage.save_accounts(initial_accounts.clone())?;
 
     // execute thread: external rpc storage loader
     let storage_thread = thread::Builder::new().name("storage-loader".into());

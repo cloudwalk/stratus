@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::join_all;
+use tokio::runtime::Handle;
 
 use super::rocks_state::RocksStorageState;
 use super::types::AddressRocksdb;
@@ -161,7 +162,7 @@ impl PermanentStorage for RocksPermanentStorage {
             TRANSACTIONS_COUNT.store(0, Ordering::Relaxed);
         }
 
-        join_all(futures);
+        let _ = Handle::current().block_on(join_all(futures));
         Ok(())
     }
 

@@ -24,7 +24,6 @@ use revm::primitives::U256;
 use revm::Database;
 use revm::Evm as RevmEvm;
 use revm::Handler;
-use tokio::runtime::Handle;
 
 use crate::eth::evm::evm::EvmExecutionResult;
 use crate::eth::evm::Evm;
@@ -215,11 +214,10 @@ impl Database for RevmSession {
 
     fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
         self.metrics.account_reads += 1;
-        let handle = Handle::current();
 
         // retrieve account
         let address: Address = revm_address.into();
-        let account = handle.block_on(self.storage.read_account(&address, &self.input.point_in_time))?;
+        let account = self.storage.read_account(&address, &self.input.point_in_time)?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
@@ -246,14 +244,13 @@ impl Database for RevmSession {
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
         self.metrics.slot_reads += 1;
-        let handle = Handle::current();
 
         // convert slot
         let address: Address = revm_address.into();
         let index: SlotIndex = revm_index.into();
 
         // load slot from storage
-        let slot = handle.block_on(self.storage.read_slot(&address, &index, &self.input.point_in_time))?;
+        let slot = self.storage.read_slot(&address, &index, &self.input.point_in_time)?;
 
         // track original value, except if ignored address
         if not(address.is_ignored()) {

@@ -8,6 +8,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use futures::future::join_all;
 use itertools::Itertools;
+use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 use tracing::info;
 use tracing::warn;
@@ -77,7 +78,7 @@ impl RocksStorageState {
         state
     }
 
-    pub fn listen_for_backup_trigger(&self, mut rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
+    pub fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
         tracing::info!("creating backup trigger listener");
         let accounts = Arc::<RocksDb<AddressRocksdb, AccountRocksdb>>::clone(&self.accounts);
         let accounts_history = Arc::<RocksDb<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>>::clone(&self.accounts_history);
@@ -330,7 +331,7 @@ impl RocksStorageState {
         ];
 
         // Wait for all tasks to complete using join_all
-        let _ = join_all(tasks);
+        let _ = Handle::current().block_on(join_all(tasks));
 
         // Clear current states
         let _ = self.accounts.clear();
@@ -391,7 +392,7 @@ impl RocksStorageState {
             }
         });
 
-        let _ = join_all(vec![accounts_task, slots_task]);
+        let _ = Handle::current().block_on(join_all(vec![accounts_task, slots_task]));
 
         info!(
             "All reset tasks have been completed or encountered errors. The system is now aligned to block number {}.",
