@@ -1,23 +1,8 @@
-//! Chain ID Module
-//!
-//! The Chain ID module provides a unique identifier for different Ethereum
-//! networks, such as Mainnet, Ropsten, or Rinkeby. This identifier is crucial
-//! in transaction signing to prevent replay attacks across different networks.
-//! The module enables the specification and verification of the network for
-//! which a particular transaction is intended.
-
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::database::HasArguments;
-use sqlx::database::HasValueRef;
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use sqlx::postgres::PgHasArrayType;
-use sqlx::types::BigDecimal;
-use sqlx::Decode;
 
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
@@ -55,15 +40,6 @@ impl TryFrom<U256> for ChainId {
     }
 }
 
-impl TryFrom<BigDecimal> for ChainId {
-    type Error = anyhow::Error;
-    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
-        let value_str = value.to_string();
-
-        Ok(ChainId(U64::from_str_radix(&value_str, 10)?))
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
@@ -76,41 +52,5 @@ impl From<ChainId> for u64 {
 impl From<ChainId> for U256 {
     fn from(value: ChainId) -> Self {
         value.0.as_u64().into()
-    }
-}
-
-impl TryFrom<ChainId> for BigDecimal {
-    type Error = anyhow::Error;
-    fn try_from(value: ChainId) -> Result<Self, Self::Error> {
-        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from(value.0.as_u64()))
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for ChainId {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.try_into()?)
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ChainId {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        BigDecimal::from(self.0.as_u64()).encode(buf)
-    }
-}
-
-impl PgHasArrayType for ChainId {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <BigDecimal as PgHasArrayType>::array_type_info()
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for ChainId {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
     }
 }
