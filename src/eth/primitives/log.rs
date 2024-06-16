@@ -1,11 +1,3 @@
-//! Log Module
-//!
-//! Handles Ethereum log entries, which are key components of Ethereum's event
-//! system. Logs are emitted by smart contracts and are crucial for tracking
-//! contract events. This module defines the structure of logs, including the
-//! emitting address, topics, and additional data. It also provides conversion
-//! functions to translate between internal and external log representations.
-
 use ethers_core::types::Log as EthersLog;
 use revm::primitives::Log as RevmLog;
 

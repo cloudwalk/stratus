@@ -4,7 +4,6 @@ syntax = "proto3";
 
 package append_entry;
 
-// Enum to represent status codes
 enum StatusCode {
     OK = 0; // Request was processed successfully. No further action needed.
     ERROR = 1; // General error. Investigate the cause.
@@ -23,64 +22,48 @@ enum StatusCode {
     ENTRY_ALREADY_EXISTS = 14; // Entry already exists. Verify log consistency.
 }
 
-
-// Log message
 message Log {
     string address = 1;
     repeated string topics = 2;
-    string data = 3;
-    string logIndex = 4;
-    string transactionLogIndex = 5;
+    bytes data = 3;
+    uint64 log_index = 4;
+    uint64 transaction_log_index = 5;
     bool removed = 6;
 }
 
-// Transaction Execution message
-message TransactionExecution {
-    // Transaction details
+message TransactionExecutionEntry {
     string hash = 1;
-    string nonce = 2;
-    string value = 3;
-    string gasPrice = 4;
-    string input = 5;
-    string v = 6;
-    string r = 7;
-    string s = 8;
-    string type = 9;
-    string chainId = 10;
-    string publicKey = 11;
-    string raw = 12;
-    string standardV = 13;
-    string result = 14;
-    string output = 15;
-    string from = 16;
-    string to = 17;
-
-    // Block and transaction indexing
-    string blockHash = 18;
-    string blockNumber = 19;
-    string transactionHash = 20;
-    string transactionIndex = 21;
-
-    // Logs
-    repeated Log logs = 22;
-
-    // Gas details
-    string gas = 23;
-    string receiptCumulativeGasUsed = 24;
-    string receiptGasUsed = 25;
-    string receiptContractAddress = 26;
-    string receiptStatus = 27;
-    string receiptLogsBloom = 28;
-    string receiptEffectiveGasPrice = 29;
+    uint64 nonce = 2;
+    bytes value = 3;
+    bytes gas_price = 4;
+    bytes input = 5;
+    uint64 v = 6;
+    bytes r = 7;
+    bytes s = 8;
+    uint64 chain_id = 9;
+    bytes result = 10;
+    bytes output = 11;
+    string from = 12;
+    string to = 13;
+    string block_hash = 14;
+    uint64 block_number = 15;
+    uint64 transaction_index = 16;
+    repeated Log logs = 17;
+    bytes gas = 18;
+    bytes receipt_cumulative_gas_used = 19;
+    bytes receipt_gas_used = 20;
+    bytes receipt_contract_address = 21;
+    uint32 receipt_status = 22;
+    bytes receipt_logs_bloom = 23;
+    bytes receipt_effective_gas_price = 24;
 }
 
-// Append Transaction Execution message
 message AppendTransactionExecutionsRequest {
     string leader_id = 1;
     uint64 term = 2;
     uint64 prevLogIndex = 3;
     uint64 prevLogTerm = 4;
-    repeated TransactionExecution executions = 5;
+    repeated TransactionExecutionEntry executions = 5;
 }
 
 message AppendTransactionExecutionsResponse {
@@ -89,8 +72,8 @@ message AppendTransactionExecutionsResponse {
     uint64 last_committed_block_number = 3;
 }
 
-// Block Header message
-message BlockHeader {
+//TODO use eth friendly types
+message BlockEntry {
     uint64 number = 1;
     string hash = 2;
     string transactions_root = 3;
@@ -112,13 +95,12 @@ message BlockHeader {
     repeated string transaction_hashes = 19;
 }
 
-// Append Block Commit message
 message AppendBlockCommitRequest {
     string leader_id = 1;
     uint64 term = 2;
     uint64 prevLogIndex = 3;
     uint64 prevLogTerm = 4;
-    BlockHeader header = 5;
+    BlockEntry block_entry = 5;
 }
 
 message AppendBlockCommitResponse {
@@ -127,7 +109,6 @@ message AppendBlockCommitResponse {
     uint64 last_committed_block_number = 3;
 }
 
-// Request Vote message
 message RequestVoteRequest {
     uint64 term = 1;
     string candidate_id = 2;
@@ -140,7 +121,6 @@ message RequestVoteResponse {
     bool vote_granted = 2;
 }
 
-// Service definition
 service AppendEntryService {
     rpc AppendTransactionExecutions (AppendTransactionExecutionsRequest) returns (AppendTransactionExecutionsResponse);
     rpc AppendBlockCommit (AppendBlockCommitRequest) returns (AppendBlockCommitResponse);

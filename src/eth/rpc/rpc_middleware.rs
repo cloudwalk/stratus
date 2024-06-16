@@ -56,7 +56,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // track request
-        let span = info_span!("rpc::request", cid = %new_cid(), client = field::Empty, method = field::Empty, function = field::Empty);
+        let span = info_span!("rpc::request", cid = %new_cid(), request_client = field::Empty, request_id = field::Empty, request_method = field::Empty, request_function = field::Empty);
         let enter = span.enter();
 
         // extract request data
@@ -68,18 +68,19 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             _ => None,
         };
         Span::with(|s| {
-            s.rec_str("client", &client);
-            s.rec_str("method", &method);
-            s.rec_opt("function", &function);
+            s.rec_str("request_id", &request.id);
+            s.rec_str("request_client", &client);
+            s.rec_str("request_method", &method);
+            s.rec_opt("request_function", &function);
         });
 
         // trace request
         tracing::info!(
-            client = %client,
-            id = %request.id,
-            method = %method,
-            function = %function.clone().unwrap_or_default(),
-            params = ?request.params(),
+            request_client = %client,
+            request_id = %request.id,
+            request_method = %method,
+            request_function = %function.clone().unwrap_or_default(),
+            request_params = ?request.params(),
             "rpc request"
         );
 
@@ -140,13 +141,13 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                client = %proj.client,
-                id = %proj.id,
-                method = %proj.method,
-                function = %proj.function.clone().unwrap_or_default(),
-                duration_us = %elapsed.as_micros(),
-                success = %response_success,
-                result = %response_result,
+                request_client = %proj.client,
+                request_id = %proj.id,
+                request_method = %proj.method,
+                request_function = %proj.function.clone().unwrap_or_default(),
+                request_duration_us = %elapsed.as_micros(),
+                request_success = %response_success,
+                request_result = %response_result,
                 "rpc response"
             );
 

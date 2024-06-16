@@ -46,23 +46,23 @@ pub struct LogFilterInput {
 
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
-    pub async fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter> {
+    pub fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter> {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
-                let from_to = storage.translate_to_point_in_time(&BlockSelection::Hash(hash)).await?;
+                let from_to = storage.translate_to_point_in_time(&BlockSelection::Hash(hash))?;
                 (from_to, from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest)).await?;
-                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockSelection::Latest)).await?;
+                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest))?;
+                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockSelection::Latest))?;
                 (from, to)
             }
         };
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Present => storage.read_mined_block_number().await?,
+            StoragePointInTime::Present => storage.read_mined_block_number()?,
             StoragePointInTime::Past(number) => number,
         };
         let to = match to {

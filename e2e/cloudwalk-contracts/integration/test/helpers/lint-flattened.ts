@@ -10,7 +10,7 @@ async function removeLinesContainingString(filePath: string, searchString: strin
 
   const newLines: string[] = [];
   newLines.push('// SPDX-License-Identifier: MIT');
-  newLines.push('pragma solidity 0.8.16;');
+  newLines.push('pragma solidity 0.8.24;');
 
   for await (const line of rl) {
     if (searchStrings.every(searchString => !line.includes(searchString))) {
