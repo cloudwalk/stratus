@@ -107,8 +107,8 @@ impl Executor {
 
         // track active block number
         let storage = &self.storage;
-        storage.set_active_external_block(block.clone()).await?;
-        storage.set_active_block_number(block.number()).await?;
+        storage.set_active_external_block(block.clone())?;
+        storage.set_active_block_number(block.number())?;
 
         // determine how to execute each transaction
         let tx_routes = route_transactions(&block.transactions, receipts)?;
@@ -132,7 +132,7 @@ impl Executor {
                 ParallelExecutionRoute::Parallel(..) => {
                     match parallel_executions.next().await.unwrap() {
                         // success: check conflicts
-                        Ok(tx) => match storage.check_conflicts(&tx.result.execution).await? {
+                        Ok(tx) => match storage.check_conflicts(&tx.result.execution)? {
                             // no conflict: proceeed
                             None => tx,
                             // conflict: reexecute
@@ -166,8 +166,6 @@ impl Executor {
         {
             metrics::inc_executor_external_block(start.elapsed());
             metrics::inc_executor_external_block_account_reads(block_metrics.account_reads);
-            metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
-            metrics::inc_executor_external_block_slot_reads_cached(block_metrics.slot_reads_cached);
         }
 
         Ok(())
@@ -205,7 +203,7 @@ impl Executor {
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         if receipt.is_failure() {
-            let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present).await?;
+            let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Present)?;
             let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block)?;
             let evm_result = EvmExecutionResult {
                 execution,

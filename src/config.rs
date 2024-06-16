@@ -10,6 +10,7 @@ use std::time::Duration;
 use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
+use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
@@ -31,8 +32,6 @@ use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
-use crate::eth::storage::PostgresPermanentStorage;
-use crate::eth::storage::PostgresPermanentStorageConfig;
 #[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StratusStorage;
@@ -54,10 +53,23 @@ use crate::GlobalState;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
-    let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
-    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
+    // parse env manually because this is executed before clap
+    let env = match std::env::var("ENV") {
+        Ok(env) => Environment::from_str(env.as_str()),
+        Err(_) => Ok(Environment::Local),
+    };
+    let env = match env {
+        Ok(env) => env,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
 
+    // load .env file
+    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
     println!("reading env file | filename={}", env_filename);
+
     if let Err(e) = dotenvy::from_filename(env_filename) {
         println!("env file error: {e}");
     }
@@ -75,6 +87,10 @@ pub trait WithCommonConfig {
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
+    /// Environment where the application is running.
+    #[arg(long = "env", env = "ENV", default_value = "local")]
+    pub env: Environment,
+
     /// Number of threads to execute global async tasks.
     #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
     pub num_async_threads: usize,
@@ -215,7 +231,6 @@ impl ExecutorConfig {
             // create evm resources
             let evm_config = EvmConfig {
                 chain_id: self.chain_id.into(),
-                prefetch_slots: matches!(storage.perm_kind(), PermanentStorageKind::Postgres { .. }),
             };
             let evm_storage = Arc::clone(&storage);
             let evm_tokio = Handle::current();
@@ -228,10 +243,6 @@ impl ExecutorConfig {
             t.spawn(move || {
                 // init services
                 let _tokio_guard = evm_tokio.enter();
-                if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
-                    let message = GlobalState::shutdown_from("evm-init", "failed to allocate evm storage resources");
-                    tracing::error!(reason = ?e, %message);
-                }
                 let mut evm = Revm::new(evm_storage, evm_config);
 
                 // keep executing transactions until the channel is closed
@@ -313,7 +324,7 @@ impl MinerConfig {
 
         // enable genesis block
         if self.enable_genesis {
-            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
                 miner.commit(Block::genesis()).await?;
@@ -325,11 +336,11 @@ impl MinerConfig {
         if self.enable_test_accounts {
             let test_accounts = test_accounts();
             tracing::info!(accounts = ?test_accounts, "enabling test accounts");
-            storage.save_accounts(test_accounts).await?;
+            storage.save_accounts(test_accounts)?;
         }
 
         // set block number
-        storage.set_active_block_number_as_next_if_not_set().await?;
+        storage.set_active_block_number_as_next_if_not_set()?;
 
         // enable interval miner
         if miner.mode().is_interval() {
@@ -430,6 +441,10 @@ pub struct StratusConfig {
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
 
+    /// JSON-RPC max active connections
+    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    pub max_connections: u32,
+
     #[clap(flatten)]
     pub storage: StratusStorageConfig,
 
@@ -520,10 +535,6 @@ pub struct ImporterOfflineConfig {
     #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
     pub blocks_by_fetch: usize,
 
-    /// Write data to CSV file instead of permanent storage.
-    #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
-    pub export_csv: bool,
-
     /// Export selected blocks to fixtures snapshots to be used in tests.
     #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
     pub export_snapshot: Vec<u64>,
@@ -607,6 +618,10 @@ pub struct RunWithImporterConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    /// JSON-RPC max active connections
+    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    pub max_connections: u32,
 
     #[arg(long = "leader_node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
@@ -789,6 +804,35 @@ impl WithCommonConfig for ExternalRelayerConfig {
 }
 
 // -----------------------------------------------------------------------------
+// Enum: Env
+// -----------------------------------------------------------------------------
+#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
+pub enum Environment {
+    #[strum(to_string = "local")]
+    Local,
+
+    #[strum(to_string = "staging")]
+    Staging,
+
+    #[strum(to_string = "production")]
+    Production,
+}
+
+impl FromStr for Environment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        let s = s.trim().to_lowercase();
+        match s.as_ref() {
+            "local" => Ok(Self::Local),
+            "staging" | "test" => Ok(Self::Staging),
+            "production" | "prod" => Ok(Self::Production),
+            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Enum: TemporaryStorageConfig
 // -----------------------------------------------------------------------------
 
@@ -838,14 +882,6 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
-    /// Permamenent storage number of parallel open connections.
-    #[arg(long = "perm-storage-connections", env = "PERM_STORAGE_CONNECTIONS")]
-    pub perm_storage_connections: u32,
-
-    /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "perm-storage-timeout", value_parser=parse_duration, env = "PERM_STORAGE_TIMEOUT")]
-    pub perm_storage_timeout: Duration,
-
     #[cfg(feature = "rocks")]
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
@@ -857,9 +893,6 @@ pub enum PermanentStorageKind {
     InMemory,
     #[cfg(feature = "rocks")]
     Rocks,
-    Postgres {
-        url: String,
-    },
 }
 
 impl PermanentStorageConfig {
@@ -870,15 +903,7 @@ impl PermanentStorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
-            PermanentStorageKind::Postgres { ref url } => {
-                let config = PostgresPermanentStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.perm_storage_connections,
-                    acquire_timeout: self.perm_storage_timeout,
-                };
-                Arc::new(PostgresPermanentStorage::new(config).await?)
-            }
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone())?),
         };
         Ok(perm)
     }
@@ -892,7 +917,6 @@ impl FromStr for PermanentStorageKind {
             "inmemory" => Ok(Self::InMemory),
             #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }

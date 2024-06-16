@@ -42,11 +42,6 @@ where
             env::set_var("TRACING_LOG_FORMAT", value);
         }
 
-        // TODO: remove when PostgreSQL is removed
-        if env::var("PERM_STORAGE_CONNECTIONS").is_ok_and(|value| value == "1") {
-            println!("WARNING: env var PERM_STORAGE_CONNECTIONS is set to 1, if it cause connection problems, try increasing it");
-        }
-
         // parse configuration
         load_dotenv();
         let config = T::parse();
@@ -68,7 +63,7 @@ where
         let _sentry_guard = common
             .sentry_url
             .as_ref()
-            .map(|sentry_url| infra::init_sentry(sentry_url).expect("failed to init sentry"));
+            .map(|sentry_url| infra::init_sentry(sentry_url, common.env).expect("failed to init sentry"));
 
         // init signal handler
         runtime.block_on(spawn_signal_handler()).expect("failed to init signal handlers");

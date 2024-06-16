@@ -1,11 +1,3 @@
-//! Transaction Execution Module
-//!
-//! Handles the details and results of executing transactions in the Ethereum
-//! Virtual Machine (EVM). This module defines structures to represent
-//! transaction outcomes, including status, gas usage, logs, and state changes.
-//! It is vital for interpreting the results of transaction execution and
-//! applying changes to the Ethereum state.
-
 use std::collections::HashMap;
 use std::fmt::Debug;
 

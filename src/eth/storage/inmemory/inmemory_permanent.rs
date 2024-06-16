@@ -4,17 +4,16 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
+use std::sync::RwLockWriteGuard;
 
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-use tokio::sync::RwLock;
-use tokio::sync::RwLockReadGuard;
-use tokio::sync::RwLockWriteGuard;
 
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -29,9 +28,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
@@ -65,13 +62,13 @@ impl InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     /// Locks inner state for reading.
-    async fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
-        self.state.read().await
+    fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
+        self.state.read().unwrap()
     }
 
     /// Locks inner state for writing.
-    async fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
-        self.state.write().await
+    fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
+        self.state.write().unwrap()
     }
 
     // -------------------------------------------------------------------------
@@ -114,8 +111,8 @@ impl InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     /// Clears in-memory state.
-    pub async fn clear(&self) {
-        let mut state = self.lock_write().await;
+    pub fn clear(&self) {
+        let mut state = self.lock_write();
         state.accounts.clear();
         state.transactions.clear();
         state.blocks_by_hash.clear();
@@ -136,24 +133,16 @@ impl Default for InMemoryPermanentStorage {
 
 #[async_trait]
 impl PermanentStorage for InMemoryPermanentStorage {
-    fn kind(&self) -> PermanentStorageKind {
-        PermanentStorageKind::InMemory
-    }
-
-    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
 
-    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("reading mined block number");
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         tracing::debug!(%number, "setting mined block number");
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
@@ -163,10 +152,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // State operations
     // ------------------------------------------------------------------------
 
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
 
-        let state = self.lock_read().await;
+        let state = self.lock_read();
 
         match state.accounts.get(address) {
             Some(inmemory_account) => {
@@ -182,10 +171,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %index, ?point_in_time, "reading slot in permanent");
 
-        let state = self.lock_read().await;
+        let state = self.lock_read();
         let Some(account) = state.accounts.get(address) else {
             tracing::trace!(%address, "account not found in permanent");
             return Ok(Default::default());
@@ -205,22 +194,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>> {
-        tracing::debug!(%address, indexes_len = %indexes.len(), "reading slots");
-
-        let mut slots = HashMap::with_capacity(indexes.len());
-        for index in indexes.iter() {
-            let slot = self.read_slot(address, index, point_in_time).await?;
-            if let Some(slot) = slot {
-                slots.insert(slot.index, slot.value);
-            }
-        }
-
-        Ok(slots)
-    }
-
-    async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        let state = self.lock_read().await;
+    fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        let state = self.lock_read();
 
         let Some(account) = state.accounts.get(address) else {
             tracing::trace!(%address, "account not found in permanent");
@@ -230,10 +205,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(account.slots.clone().into_values().map(|slot| slot.get_current()).collect())
     }
 
-    async fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
-        let state_lock = self.lock_read().await;
+        let state_lock = self.lock_read();
         let block = match selection {
             BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
             BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
@@ -252,9 +227,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         tracing::debug!(%hash, "reading transaction");
-        let state_lock = self.lock_read().await;
+        let state_lock = self.lock_read();
 
         match state_lock.transactions.get(hash) {
             Some(transaction) => {
@@ -268,9 +243,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         tracing::debug!(?filter, "reading logs");
-        let state_lock = self.lock_read().await;
+        let state_lock = self.lock_read();
 
         let logs = state_lock
             .logs
@@ -286,8 +261,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(logs)
     }
 
-    async fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        let mut state = self.lock_write().await;
+    fn save_block(&self, block: Block) -> anyhow::Result<()> {
+        let mut state = self.lock_write();
 
         // save block
         tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
@@ -326,12 +301,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
             if let Some(Some(bytecode)) = changes.bytecode.take_modified() {
                 account.bytecode.push(block_number, Some(bytecode));
             }
-            if let Some(indexes) = changes.static_slot_indexes.take_modified() {
-                account.static_slot_indexes.push(block_number, indexes);
-            }
-            if let Some(indexes) = changes.mapping_slot_indexes.take_modified() {
-                account.mapping_slot_indexes.push(block_number, indexes);
-            }
 
             // slots
             for (_, slot) in changes.slots {
@@ -351,10 +320,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         tracing::debug!(?accounts, "saving initial accounts");
 
-        let mut state = self.lock_write().await;
+        let mut state = self.lock_write();
         for account in accounts {
             state
                 .accounts
@@ -363,7 +332,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         // reset block number
         let block_number_u64: u64 = block_number.into();
         let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
@@ -375,7 +344,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         });
 
         // remove blocks
-        let mut state = self.lock_write().await;
+        let mut state = self.lock_write();
         state.blocks_by_hash.retain(|_, b| b.number() <= block_number);
         state.blocks_by_number.retain(|_, b| b.number() <= block_number);
 
@@ -391,8 +360,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        let state = self.lock_read().await;
+    fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        let state = self.lock_read();
 
         let samples = state
             .accounts
@@ -436,8 +405,6 @@ pub struct InMemoryPermanentAccount {
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
     pub code_hash: InMemoryHistory<CodeHash>,
-    pub static_slot_indexes: InMemoryHistory<Option<SlotIndexes>>,
-    pub mapping_slot_indexes: InMemoryHistory<Option<SlotIndexes>>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
 }
 
@@ -455,8 +422,6 @@ impl InMemoryPermanentAccount {
             nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
             bytecode: InMemoryHistory::new_at_zero(None),
             code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
-            static_slot_indexes: InMemoryHistory::new_at_zero(None),
-            mapping_slot_indexes: InMemoryHistory::new_at_zero(None),
             slots: Default::default(),
         }
     }
@@ -467,8 +432,6 @@ impl InMemoryPermanentAccount {
         self.balance = self.balance.reset_at(block_number).expect("never empty");
         self.nonce = self.nonce.reset_at(block_number).expect("never empty");
         self.bytecode = self.bytecode.reset_at(block_number).expect("never empty");
-        self.static_slot_indexes.reset_at(block_number).expect("never empty");
-        self.mapping_slot_indexes.reset_at(block_number).expect("never empty");
 
         // SAFETY: not ok to unwrap because slot value does not start at block 0
         let mut new_slots = HashMap::with_capacity(self.slots.len());
@@ -493,8 +456,6 @@ impl InMemoryPermanentAccount {
             nonce: self.nonce.get_at_point(point_in_time).unwrap_or_default(),
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
             code_hash: self.code_hash.get_at_point(point_in_time).unwrap_or_default(),
-            static_slot_indexes: self.static_slot_indexes.get_at_point(point_in_time).unwrap_or_default(),
-            mapping_slot_indexes: self.mapping_slot_indexes.get_at_point(point_in_time).unwrap_or_default(),
         }
     }
 }

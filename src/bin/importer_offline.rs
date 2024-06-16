@@ -14,10 +14,8 @@ use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
-use stratus::eth::storage::CsvExporter;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
-use stratus::eth::storage::StratusStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::ResultExt;
@@ -33,12 +31,6 @@ use tokio::time::Instant;
 
 /// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
-
-/// Number of blocks processed in memory before data is flushed to temporary storage and CSV files.
-const FLUSH_INTERVAL_IN_BLOCKS: u64 = 100;
-
-/// The maximum amount of blocks in each CSV chunk file.
-const CSV_CHUNKING_BLOCKS_INTERVAL: u64 = 2_000_000;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
@@ -62,27 +54,19 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
-        None => storage.read_block_number_to_resume_import().await?,
+        None => storage.read_block_number_to_resume_import()?,
     };
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
         None => block_number_to_stop(&rpc_storage).await?,
     };
 
-    // init csv
-    let mut csv = if config.export_csv { Some(CsvExporter::new(block_start)?) } else { None };
-
     // init shared data between importer and external rpc storage loader
     let (backlog_tx, backlog_rx) = mpsc::channel::<BacklogTask>(BACKLOG_SIZE);
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
-    storage.save_accounts(initial_accounts.clone()).await?;
-    if let Some(ref mut csv) = csv {
-        if csv.is_accounts_empty() {
-            csv.export_initial_accounts(initial_accounts.clone())?;
-        }
-    }
+    storage.save_accounts(initial_accounts.clone())?;
 
     // execute thread: external rpc storage loader
     let storage_thread = thread::Builder::new().name("storage-loader".into());
@@ -115,7 +99,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let block_importer_thread = importer_thread
         .spawn(move || {
             let _tokio_guard = importer_tokio.enter();
-            let result = importer_tokio.block_on(execute_block_importer(executor, miner, storage, csv, backlog_rx, block_snapshots));
+            let result = importer_tokio.block_on(execute_block_importer(executor, miner, backlog_rx, block_snapshots));
             if let Err(e) = result {
                 tracing::error!(reason = ?e, "block-importer failed");
             }
@@ -140,8 +124,6 @@ async fn execute_block_importer(
     // services
     executor: Arc<Executor>,
     miner: Arc<BlockMiner>,
-    storage: Arc<StratusStorage>,
-    mut csv: Option<CsvExporter>,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
     blocks_to_export_snapshot: Vec<BlockNumber>,
@@ -165,14 +147,13 @@ async fn execute_block_importer(
         let block_start = blocks.first().unwrap().number();
         let block_end = blocks.last().unwrap().number();
         let blocks_len = blocks.len();
-        let block_last_index = blocks.len() - 1;
         let receipts = ExternalReceipts::from(receipts);
 
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "reexecuting (and importing) blocks");
         let mut transaction_count = 0;
         let instant_before_execution = Instant::now();
 
-        for (block_index, block) in blocks.into_iter().enumerate() {
+        for block in blocks.into_iter() {
             if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return Ok(());
             }
@@ -181,19 +162,12 @@ async fn execute_block_importer(
             executor.external_block(&block, &receipts).await?;
             transaction_count += block.transactions.len();
 
-            // mine block
+            // mine and save block
             let mined_block = miner.mine_external().await?;
-
-            // export snapshot for tests
             if blocks_to_export_snapshot.contains(&mined_block.number()) {
                 export_snapshot(&block, &receipts, &mined_block)?;
             }
-
-            // export to csv OR permanent storage
-            match &mut csv {
-                Some(csv) => import_external_to_csv(&storage, csv, mined_block.clone(), block_index, block_last_index).await?,
-                None => miner.commit(mined_block.clone()).await?,
-            }
+            miner.commit(mined_block.clone()).await?;
         }
 
         let duration = instant_before_execution.elapsed();
@@ -312,45 +286,6 @@ fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalR
         format!("{}/snapshot.json", dir),
         serde_json::to_string_pretty(&state_snapshot).expect_infallible(),
     )?;
-
-    Ok(())
-}
-
-// -----------------------------------------------------------------------------
-// Csv exporter
-// -----------------------------------------------------------------------------
-async fn import_external_to_csv(
-    // services
-    storage: &StratusStorage,
-    csv: &mut CsvExporter,
-    // data
-    block: Block,
-    block_index: usize,
-    block_last_index: usize,
-) -> anyhow::Result<()> {
-    // export block to csv
-    let block_number = block.number();
-    csv.add_block(block)?;
-
-    let is_last_block = block_index == block_last_index;
-    let is_chunk_interval_end = block_number.as_u64() % CSV_CHUNKING_BLOCKS_INTERVAL == 0;
-    let is_flush_interval_end = block_number.as_u64() % FLUSH_INTERVAL_IN_BLOCKS == 0;
-
-    // check if should flush
-    let should_chunk_csv_files = is_chunk_interval_end;
-    let should_flush = is_flush_interval_end || is_last_block || should_chunk_csv_files;
-
-    // flush
-    if should_flush {
-        csv.flush()?;
-        storage.flush().await?;
-    }
-
-    // chunk
-    if should_chunk_csv_files {
-        tracing::info!("Chunk ended at block number {block_number}, starting next CSV chunks for the next block");
-        csv.finish_current_chunks(block_number)?;
-    }
 
     Ok(())
 }

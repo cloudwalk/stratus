@@ -87,28 +87,6 @@ db-compile:
     SQLX_OFFLINE=true cargo sqlx prepare --database-url {{ database_url }} -- --all-targets
 alias sqlx := db-compile
 
-# Database: Load CSV data produced by importer-offline
-db-load-csv:
-    echo "" > data/psql.txt
-
-    echo "truncate accounts;"            >> data/psql.txt
-    echo "truncate historical_nonces;"   >> data/psql.txt
-    echo "truncate historical_balances;" >> data/psql.txt
-    echo "truncate historical_slots;"    >> data/psql.txt
-    echo "truncate blocks;"              >> data/psql.txt
-    echo "truncate transactions;"        >> data/psql.txt
-    echo "truncate logs;"                >> data/psql.txt
-
-    ls -tr1 data/accounts-*.csv            | xargs -I{} printf "\\\\copy accounts            from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/historical_nonces-*.csv   | xargs -I{} printf "\\\\copy historical_nonces   from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/historical_balances-*.csv | xargs -I{} printf "\\\\copy historical_balances from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/historical_slots-*.csv    | xargs -I{} printf "\\\\copy historical_slots    from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/blocks-*.csv              | xargs -I{} printf "\\\\copy blocks              from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/transactions-*.csv        | xargs -I{} printf "\\\\copy transactions        from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-    ls -tr1 data/logs-*.csv                | xargs -I{} printf "\\\\copy logs                from '$(pwd)/%s' delimiter E'\\\\t' csv header;\n" "{}" >> data/psql.txt
-
-    cat data/psql.txt | pgcli -h localhost -u postgres -d stratus --less-chatty
-
 # ------------------------------------------------------------------------------
 # Additional binaries
 # ------------------------------------------------------------------------------
@@ -242,40 +220,6 @@ e2e-stratus-rocks block-mode="automine" test="":
     killport 3000
     exit $result_code
 
-# E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-postgres block-mode="automine" test="":
-    #!/bin/bash
-    if [ -d e2e ]; then
-        cd e2e
-    fi
-
-    echo "-> Starting Postgres"
-    docker compose down
-    docker compose up -d || exit 1
-
-    echo "-> Waiting Postgres to start"
-    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
-
-    echo "-> Starting Stratus"
-    just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage {{ database_url }} > stratus.log &
-
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
-
-    echo "-> Running E2E tests"
-    just e2e stratus {{block-mode}} {{test}}
-    result_code=$?
-
-    echo "-> Killing Stratus"
-    killport 3000
-
-    echo "-> Killing Postgres"
-    docker compose down
-
-    echo "** -> Stratus log accessible in ./stratus.log **"
-    exit $result_code
-
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus:
     #!/bin/bash
@@ -406,7 +350,7 @@ e2e-relayer-external-up:
 
     # Start Relayer External binary
     cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
-    
+
     if [ -d e2e/cloudwalk-contracts ]; then
     (
         cd e2e/cloudwalk-contracts/integration
@@ -464,8 +408,8 @@ contracts-compile:
     cd e2e/cloudwalk-contracts && ./compile-contracts.sh
 
 # Contracts: Flatten solidity contracts for integration test
-contracts-flatten:
-    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh
+contracts-flatten *args="":
+    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh {{ args }}
 
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test *args="":
@@ -492,35 +436,6 @@ contracts-test-stratus *args="":
 
     echo "-> Killing Stratus"
     killport 3000
-    exit $result_code
-
-# Contracts: Start Stratus with Postgres and run contracts test
-contracts-test-stratus-postgres *args="":
-    #!/bin/bash
-    echo "-> Starting Postgres"
-    docker compose down
-    docker compose up -d || exit 1
-
-    echo "-> Waiting Postgres to start"
-    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
-
-    echo "-> Starting Stratus"
-    just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage {{ database_url }} > stratus.log &
-
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
-
-    echo "-> Running E2E tests"
-    just e2e-contracts {{ args }}
-    result_code=$?
-
-    echo "-> Killing Stratus"
-    killport 3000
-
-    echo "-> Killing Postgres"
-    docker compose down
-
     exit $result_code
 
 contracts-test-stratus-rocks *args="":
