@@ -100,10 +100,9 @@ impl BlockMiner {
         let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone()).await?;
 
-        //TODO implement full gRPC for tx execution: if let Some(consensus) = &self.consensus {
-        //TODO implement full gRPC for tx execution:     let execution = format!("{:?}", tx_execution.clone());
-        //TODO implement full gRPC for tx execution:     consensus.sender.send(execution).await.unwrap();
-        //TODO implement full gRPC for tx execution: }
+        if let Some(consensus) = &self.consensus {
+            consensus.sender.send(ExternalEntry::TransactionExecution(tx_execution.clone())).await?;
+        }
 
         // decide what to do based on mining mode
         match self.mode {
