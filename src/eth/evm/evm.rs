@@ -9,7 +9,6 @@
 use std::borrow::Cow;
 
 use display_json::DebugAsJson;
-use itertools::Itertools;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -58,16 +57,11 @@ pub trait Evm {
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult>;
 }
 
-pub type EvmInputSlotKeys = Vec<Vec<u8>>;
-
 /// EVM configuration.
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub struct EvmConfig {
     /// Chain ID of the EVM.
     pub chain_id: ChainId,
-
-    /// Should try to predict and prefetch slots before executing transactions?
-    pub prefetch_slots: bool,
 }
 
 /// EVM input data. Usually derived from a transaction or call.
@@ -204,28 +198,5 @@ impl EvmInput {
                 None => None,
             },
         })
-    }
-
-    /// Calculates all possible 32 byte keys that can be used to access storage slots.
-    ///
-    /// Possible inputs are:
-    /// * Sender address.
-    /// * Receiver address (unlikely).
-    /// * Every 32 bytes of the data field.
-    pub fn possible_slot_keys(&self) -> EvmInputSlotKeys {
-        let mut inputs = vec![];
-
-        // from
-        inputs.push(self.from.as_bytes().to_vec());
-
-        // to
-        if let Some(ref to) = self.to {
-            inputs.push(to.as_bytes().to_vec());
-        }
-
-        // data
-        inputs.extend(self.data.0.rchunks_exact(32).map(|chunk| chunk.to_vec()).unique().collect_vec());
-
-        inputs
     }
 }

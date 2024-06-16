@@ -26,16 +26,14 @@ use stratus::GlobalServices;
 mod m {
     pub use const_format::formatcp;
     pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
-    pub use stratus::infra::metrics::METRIC_EVM_EXECUTION_SLOT_READS_CACHED;
     pub use stratus::infra::metrics::METRIC_EXECUTOR_EXTERNAL_BLOCK;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
     pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
-    pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOTS;
     pub use stratus::infra::metrics::METRIC_STORAGE_SAVE_BLOCK;
 }
 
 #[cfg(feature = "metrics")]
-const METRIC_QUERIES: [&str; 48] = [
+const METRIC_QUERIES: [&str; 45] = [
     // Executor
     "* Executor",
     m::formatcp!("{}_sum", m::METRIC_EXECUTOR_EXTERNAL_BLOCK),
@@ -64,14 +62,11 @@ const METRIC_QUERIES: [&str; 48] = [
     m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
     "* SLOTS (count)",
-    m::formatcp!("{}_sum{{}}", m::METRIC_EVM_EXECUTION_SLOT_READS_CACHED),
-    m::formatcp!("{}_count{{}}", m::METRIC_STORAGE_READ_SLOTS),
     m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
     "* SLOTS (cumulative)",
-    m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOTS),
     m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
     m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
@@ -106,7 +101,6 @@ pub fn init_config_and_data(
     let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
     global_services.config.executor.chain_id = 2009;
     global_services.config.executor.num_evms = 8;
-    global_services.config.storage.perm_storage.perm_storage_connections = 9;
 
     // init block data
     let block_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/block.json", block_number)).unwrap();
@@ -186,7 +180,7 @@ pub async fn execute_test(
             let value: &str = result.get("value").unwrap().as_array().unwrap().last().unwrap().as_str().unwrap();
             let value: f64 = value.parse().unwrap();
 
-            if query.contains("_count") || query.contains("_cached") {
+            if query.contains("_count") {
                 println!("{:<70} = {}", query, value);
             } else {
                 let secs = Duration::from_secs_f64(value);

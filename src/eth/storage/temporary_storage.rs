@@ -19,44 +19,44 @@ pub trait TemporaryStorage: Send + Sync {
     // -------------------------------------------------------------------------
 
     /// Sets the block number activelly being mined.
-    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+    fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
     // Reads the block number activelly being mined.
-    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
+    fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
 
     // -------------------------------------------------------------------------
     // Block and executions
     // -------------------------------------------------------------------------
 
     /// Sets the external block being re-executed.
-    async fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
+    fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
 
     /// Saves an re-executed transaction to the active mined block.
-    async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
+    fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
 
     /// Finishes the mining of the active block and starts a new block.
-    async fn finish_block(&self) -> anyhow::Result<PendingBlock>;
+    fn finish_block(&self) -> anyhow::Result<PendingBlock>;
 
     // -------------------------------------------------------------------------
     // Accounts and slots
     // -------------------------------------------------------------------------
 
     /// Checks if an execution conflicts with current storage state.
-    async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>>;
+    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
 
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
 
     /// Resets to default empty state.
-    async fn reset(&self) -> anyhow::Result<()>;
+    fn reset(&self) -> anyhow::Result<()>;
 
     /// If necessary, flushes temporary state to durable storage.
-    async fn flush(&self) -> anyhow::Result<()>;
+    fn flush(&self) -> anyhow::Result<()>;
 }

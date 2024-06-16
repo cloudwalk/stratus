@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use tracing::Span;
 
-use crate::config::PermanentStorageKind;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -18,14 +17,12 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
-use crate::ext::not;
 use crate::ext::SpanExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -55,41 +52,29 @@ impl StratusStorage {
         Self { temp, perm }
     }
 
-    pub async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        self.perm.allocate_evm_thread_resources().await?;
-        Ok(())
-    }
-
-    // -------------------------------------------------------------------------
-    // Metadata
-    // -------------------------------------------------------------------------
-    pub fn perm_kind(&self) -> PermanentStorageKind {
-        self.perm.kind()
-    }
-
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
 
     #[tracing::instrument(name = "storage::read_block_number_to_resume_import", skip_all)]
-    pub async fn read_block_number_to_resume_import(&self) -> anyhow::Result<BlockNumber> {
+    pub fn read_block_number_to_resume_import(&self) -> anyhow::Result<BlockNumber> {
         // if does not have the zero block present, should resume from zero
-        let zero = self.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+        let zero = self.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
         if zero.is_none() {
             tracing::info!(number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
             return Ok(BlockNumber::ZERO);
         }
 
         // try to resume from active block number
-        let active_number = self.read_active_block_number().await?;
+        let active_number = self.read_active_block_number()?;
         if let Some(active_number) = active_number {
             tracing::info!(number = %active_number, reason = %"set in storage", "resume from ACTIVE");
             return Ok(active_number);
         }
 
         // fallback to last mined block number
-        let mined_number = self.read_mined_block_number().await?;
-        let mined_block = self.read_block(&BlockSelection::Number(mined_number)).await?;
+        let mined_number = self.read_mined_block_number()?;
+        let mined_block = self.read_block(&BlockSelection::Number(mined_number))?;
         match mined_block {
             Some(_) => {
                 tracing::info!(number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
@@ -103,35 +88,35 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_active_block_number", skip_all)]
-    pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+    pub fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.read_active_block_number().await;
+            let result = self.temp.read_active_block_number();
             metrics::inc_storage_read_active_block_number(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.read_active_block_number().await
+        self.temp.read_active_block_number()
     }
 
     #[tracing::instrument(name = "storage::read_mined_block_number", skip_all)]
-    pub async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+    pub fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.read_mined_block_number().await;
+            let result = self.perm.read_mined_block_number();
             metrics::inc_storage_read_mined_block_number(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.read_mined_block_number().await
+        self.perm.read_mined_block_number()
     }
 
     #[tracing::instrument(name = "storage::set_active_block_number", skip_all, fields(number))]
-    pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    pub fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         Span::with(|s| {
             s.rec_str("number", &number);
         });
@@ -139,69 +124,69 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.set_active_block_number(number).await;
+            let result = self.temp.set_active_block_number(number);
             metrics::inc_storage_set_active_block_number(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.set_active_block_number(number).await
+        self.temp.set_active_block_number(number)
     }
 
     #[tracing::instrument(name = "storage::set_active_block_number_as_next", skip_all)]
-    pub async fn set_active_block_number_as_next(&self) -> anyhow::Result<()> {
-        let last_mined_block = self.read_mined_block_number().await?;
-        self.set_active_block_number(last_mined_block.next()).await?;
+    pub fn set_active_block_number_as_next(&self) -> anyhow::Result<()> {
+        let last_mined_block = self.read_mined_block_number()?;
+        self.set_active_block_number(last_mined_block.next())?;
         Ok(())
     }
 
-    pub async fn set_active_block_number_as_next_if_not_set(&self) -> anyhow::Result<()> {
-        let active_block = self.read_active_block_number().await?;
+    pub fn set_active_block_number_as_next_if_not_set(&self) -> anyhow::Result<()> {
+        let active_block = self.read_active_block_number()?;
         if active_block.is_none() {
-            self.set_active_block_number_as_next().await?;
+            self.set_active_block_number_as_next()?;
         }
         Ok(())
     }
 
     #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(number))]
-    pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    pub fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         Span::with(|s| s.rec_str("number", &number));
 
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.set_mined_block_number(number).await;
+            let result = self.perm.set_mined_block_number(number);
             metrics::inc_storage_set_mined_block_number(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.set_mined_block_number(number).await
+        self.perm.set_mined_block_number(number)
     }
 
     // -------------------------------------------------------------------------
     // Accounts and slots
     // -------------------------------------------------------------------------
 
-    pub async fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+    pub fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.set_active_external_block(block).await;
+            let result = self.temp.set_active_external_block(block);
             metrics::inc_storage_set_active_external_block(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.set_active_external_block(block).await
+        self.temp.set_active_external_block(block)
     }
 
     #[tracing::instrument(name = "storage::save_accounts", skip_all)]
-    pub async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    pub fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         // keep only accounts that does not exist in permanent storage
         let mut missing_accounts = Vec::new();
         for account in accounts {
-            let perm_account = self.perm.read_account(&account.address, &StoragePointInTime::Present).await?;
+            let perm_account = self.perm.read_account(&account.address, &StoragePointInTime::Present)?;
             if perm_account.is_none() {
                 missing_accounts.push(account);
             }
@@ -210,31 +195,31 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.save_accounts(missing_accounts).await;
+            let result = self.perm.save_accounts(missing_accounts);
             metrics::inc_storage_save_accounts(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.save_accounts(missing_accounts).await
+        self.perm.save_accounts(missing_accounts)
     }
 
     #[tracing::instrument(name = "storage::check_conflicts", skip_all)]
-    pub async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+    pub fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.check_conflicts(execution).await;
+            let result = self.temp.check_conflicts(execution);
             metrics::inc_storage_check_conflicts(start.elapsed(), result.is_ok(), result.as_ref().is_ok_and(|conflicts| conflicts.is_some()));
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.check_conflicts(execution).await
+        self.temp.check_conflicts(execution)
     }
 
     #[tracing::instrument(name = "storage::read_account", skip_all, fields(address, point_in_time))]
-    pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
         Span::with(|s| {
             s.rec_str("address", address);
             s.rec_str("point_in_time", point_in_time);
@@ -245,7 +230,7 @@ impl StratusStorage {
 
         // read from temp only if present
         if point_in_time.is_present() {
-            if let Some(account) = self.temp.read_account(address).await? {
+            if let Some(account) = self.temp.read_account(address)? {
                 tracing::debug!(%address, "account found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_account(start.elapsed(), label::TEMP, point_in_time, true);
@@ -254,7 +239,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
-        match self.perm.read_account(address, point_in_time).await? {
+        match self.perm.read_account(address, point_in_time)? {
             Some(account) => {
                 tracing::debug!(%address, "account found in permanent storage");
                 #[cfg(feature = "metrics")]
@@ -271,7 +256,7 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_slot", skip_all, fields(address, index, point_in_time))]
-    pub async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
         Span::with(|s| {
             s.rec_str("address", address);
             s.rec_str("index", index);
@@ -283,7 +268,7 @@ impl StratusStorage {
 
         // read from temp only if present
         if point_in_time.is_present() {
-            if let Some(slot) = self.temp.read_slot(address, index).await? {
+            if let Some(slot) = self.temp.read_slot(address, index)? {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_slot(start.elapsed(), label::TEMP, point_in_time, true);
@@ -292,7 +277,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
-        match self.perm.read_slot(address, index, point_in_time).await? {
+        match self.perm.read_slot(address, index, point_in_time)? {
             Some(slot) => {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
                 #[cfg(feature = "metrics")]
@@ -308,48 +293,9 @@ impl StratusStorage {
         }
     }
 
-    #[tracing::instrument(name = "storage::read_slots", skip_all)]
-    pub async fn read_slots(&self, address: &Address, slot_indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let mut slots = Vec::with_capacity(slot_indexes.len());
-        let mut perm_indexes = SlotIndexes::with_capacity(slot_indexes.len());
-
-        // read from temp only if present
-        if point_in_time.is_present() {
-            for index in slot_indexes.iter() {
-                match self.temp.read_slot(address, index).await? {
-                    Some(slot) => {
-                        slots.push(slot);
-                    }
-                    None => {
-                        perm_indexes.insert(*index);
-                    }
-                }
-            }
-        }
-
-        // read missing slots from permanent storage
-        if not(perm_indexes.is_empty()) {
-            let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
-            for index in perm_indexes.0.into_iter() {
-                match perm_slots.remove(&index) {
-                    Some(value) => slots.push(Slot { index, value }),
-                    None => slots.push(Slot::new_empty(index)),
-                }
-            }
-        }
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_slots(start.elapsed(), point_in_time, true);
-
-        Ok(slots)
-    }
-
     #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
-    pub async fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        self.perm.read_all_slots(address).await
+    pub fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        self.perm.read_all_slots(address)
     }
 
     // -------------------------------------------------------------------------
@@ -357,7 +303,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[tracing::instrument(name = "storage::save_execution", skip_all, fields(hash))]
-    pub async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+    pub fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         Span::with(|s| {
             s.rec_str("hash", &tx.hash());
         });
@@ -365,27 +311,27 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.save_execution(tx).await;
+            let result = self.temp.save_execution(tx);
             metrics::inc_storage_save_execution(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.temp.save_execution(tx).await
+        self.temp.save_execution(tx)
     }
 
     #[tracing::instrument(name = "storage::finish_block", skip_all, fields(number))]
-    pub async fn finish_block(&self) -> anyhow::Result<PendingBlock> {
+    pub fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         #[cfg(feature = "metrics")]
         let result = {
             let start = metrics::now();
-            let result = self.temp.finish_block().await;
+            let result = self.temp.finish_block();
             metrics::inc_storage_finish_block(start.elapsed(), result.is_ok());
             result
         };
 
         #[cfg(not(feature = "metrics"))]
-        let result = self.temp.finish_block().await;
+        let result = self.temp.finish_block();
 
         if let Ok(ref block) = result {
             Span::with(|s| s.rec_str("number", &block.number));
@@ -395,63 +341,63 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
-    pub async fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
         Span::with(|s| s.rec_str("number", &block.number()));
 
         #[cfg(feature = "metrics")]
         {
             let (start, label_size_by_tx, label_size_by_gas) = (metrics::now(), block.label_size_by_transactions(), block.label_size_by_gas());
-            let result = self.perm.save_block(block).await;
+            let result = self.perm.save_block(block);
             metrics::inc_storage_save_block(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.save_block(block).await
+        self.perm.save_block(block)
     }
 
     #[tracing::instrument(name = "storage::read_block", skip_all)]
-    pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    pub fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.read_block(block_selection).await;
+            let result = self.perm.read_block(block_selection);
             metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.read_block(block_selection).await
+        self.perm.read_block(block_selection)
     }
 
     #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
-    pub async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    pub fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         Span::with(|s| s.rec_str("hash", hash));
 
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.read_mined_transaction(hash).await;
+            let result = self.perm.read_mined_transaction(hash);
             metrics::inc_storage_read_mined_transaction(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.read_mined_transaction(hash).await
+        self.perm.read_mined_transaction(hash)
     }
 
     #[tracing::instrument(name = "storage::read_logs", skip_all)]
-    pub async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.read_logs(filter).await;
+            let result = self.perm.read_logs(filter);
             metrics::inc_storage_read_logs(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.read_logs(filter).await
+        self.perm.read_logs(filter)
     }
 
     // -------------------------------------------------------------------------
@@ -459,44 +405,44 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[tracing::instrument(name = "storage::flush", skip_all)]
-    pub async fn flush(&self) -> anyhow::Result<()> {
+    pub fn flush(&self) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.temp.flush().await;
+            let result = self.temp.flush();
             metrics::inc_storage_flush(start.elapsed(), label::TEMP, result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
         {
-            self.temp.flush().await?;
+            self.temp.flush()?;
             Ok(())
         }
     }
 
     #[tracing::instrument(name = "storage::reset", skip_all)]
-    pub async fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+    pub fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.reset_at(number).await;
+            let result = self.perm.reset_at(number);
             metrics::inc_storage_reset(start.elapsed(), label::PERM, result.is_ok());
 
             let start = metrics::now();
-            let result = self.temp.reset().await;
+            let result = self.temp.reset();
             metrics::inc_storage_reset(start.elapsed(), label::TEMP, result.is_ok());
 
-            self.set_active_block_number_as_next().await?;
+            self.set_active_block_number_as_next()?;
 
             Ok(())
         }
 
         #[cfg(not(feature = "metrics"))]
         {
-            self.perm.reset_at(number).await?;
-            self.temp.reset().await?;
-            self.set_active_block_number_as_next().await?;
+            self.perm.reset_at(number)?;
+            self.temp.reset()?;
+            self.set_active_block_number_as_next()?;
             Ok(())
         }
     }
@@ -506,18 +452,18 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block selection to a specific storage point-in-time indicator.
-    pub async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
+    pub fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
             BlockSelection::Number(number) => {
-                let current_block = self.perm.read_mined_block_number().await?;
+                let current_block = self.perm.read_mined_block_number()?;
                 if number <= &current_block {
                     Ok(StoragePointInTime::Past(*number))
                 } else {
                     Ok(StoragePointInTime::Past(current_block))
                 }
             }
-            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection).await? {
+            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection)? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
                 None => Err(anyhow!(
                     "failed to select block because it is greater than current block number or block hash is invalid"
@@ -526,7 +472,7 @@ impl StratusStorage {
         }
     }
 
-    pub async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        self.perm.read_slots_sample(start, end, max_samples, seed).await
+    pub fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        self.perm.read_slots_sample(start, end, max_samples, seed)
     }
 }
