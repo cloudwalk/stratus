@@ -530,14 +530,10 @@ impl Consensus {
         Err(anyhow!("Leader not found"))
     }
 
+    // XXX this is a temporary solution to get the leader node
+    // later we want the leader to GENERATE blocks
+    // and even later we want this sync to be replaced by a gossip protocol or raft
     pub async fn get_chain_url(&self) -> Option<(String, Option<String>)> {
-        if self.is_follower().await {
-            if let Ok(leader_address) = self.leader_address().await {
-                return Some((leader_address.full_jsonrpc_address(), None));
-            }
-            //TODO use peer discovery to discover the leader
-        }
-
         match self.importer_config.clone() {
             Some(importer_config) => Some((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
             None => None,
