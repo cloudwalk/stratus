@@ -659,22 +659,22 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
-        if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
-            #[cfg(feature = "metrics")]
-            {
-                metrics::set_append_entries_block_number_diff(diff);
-            }
-        } else {
-            tracing::error!(
-                "leader is behind follower: arrived_block: {}, block_entry: {}",
-                last_last_arrived_block_number,
-                block_entry.number
-            );
-            return Err(Status::new(
-                (StatusCode::EntryAlreadyExists as i32).into(),
-                "Leader is behind follower and should step down".to_string(),
-            ));
-        }
+        //XXX if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
+        //XXX     #[cfg(feature = "metrics")]
+        //XXX     {
+        //XXX         metrics::set_append_entries_block_number_diff(diff);
+        //XXX     }
+        //XXX } else {
+        //XXX     tracing::error!(
+        //XXX         "leader is behind follower: stored_block: {}, arrived_entry: {}",
+        //XXX         last_last_arrived_block_number,
+        //XXX         block_entry.number
+        //XXX     );
+        //XXX     return Err(Status::new(
+        //XXX         (StatusCode::EntryAlreadyExists as i32).into(),
+        //XXX         "Leader is behind follower and should step down".to_string(),
+        //XXX     ));
+        //XXX }
 
         consensus.reset_heartbeat_signal.notify_waiters();
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
