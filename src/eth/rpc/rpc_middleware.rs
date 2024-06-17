@@ -178,8 +178,11 @@ struct RpcResponseIdentifiers {
 
 impl Drop for RpcResponseIdentifiers {
     fn drop(&mut self) {
-        let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
-        metrics::set_rpc_requests_active(active, &self.client, self.method.clone(), self.function.clone());
+        #[cfg(feature = "metrics")]
+        {
+            let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
+            metrics::set_rpc_requests_active(active, &self.client, self.method.clone(), self.function.clone());
+        }
     }
 }
 
