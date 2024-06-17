@@ -695,15 +695,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
         let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
-            tracing::error!(
-                "leader is behind follower: arrived_block: {}, block_entry: {}",
-                last_last_arrived_block_number,
-                block_entry.number
-            );
-            return Err(Status::new(
-                (StatusCode::EntryAlreadyExists as i32).into(),
-                "leader is behind follower and should step down".to_string(),
-            ));
+            //TODO FIXME move this code back when we have propagation: tracing::error!(
+            //TODO FIXME move this code back when we have propagation:     "leader is behind follower: arrived_block: {}, block_entry: {}",
+            //TODO FIXME move this code back when we have propagation:     last_last_arrived_block_number,
+            //TODO FIXME move this code back when we have propagation:     block_entry.number
+            //TODO FIXME move this code back when we have propagation: );
+            //TODO FIXME move this code back when we have propagation: return Err(Status::new(
+            //TODO FIXME move this code back when we have propagation:     (StatusCode::EntryAlreadyExists as i32).into(),
+            //TODO FIXME move this code back when we have propagation:     "leader is behind follower and should step down".to_string(),
+            //TODO FIXME move this code back when we have propagation: ));
         };
 
         #[cfg(feature = "metrics")]
