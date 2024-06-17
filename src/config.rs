@@ -3,6 +3,8 @@
 use std::cmp::max;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -141,12 +143,31 @@ impl CommonConfig {
             self.num_async_threads, self.num_blocking_threads
         );
 
+        let num_async_threads = self.num_async_threads;
+        let num_blocking_threads = self.num_blocking_threads;
         let result = Builder::new_multi_thread()
             .enable_all()
-            .thread_name("tokio")
-            .worker_threads(self.num_async_threads)
-            .max_blocking_threads(self.num_blocking_threads)
+            .worker_threads(num_async_threads)
+            .max_blocking_threads(num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
+            .thread_name_fn(move || {
+                // Tokio first create all async threads, then all blocking threads.
+                // Threads are not expected to die because Tokio catches panics and blocking threads are configured to never die.
+                // If one of these premises are not true anymore, this will possibly categorize threads wrongly.
+
+                static ASYNC_ID: AtomicUsize = AtomicUsize::new(1);
+                static BLOCKING_ID: AtomicUsize = AtomicUsize::new(1);
+
+                // identify async threads
+                let async_id = ASYNC_ID.fetch_add(1, Ordering::SeqCst);
+                if async_id <= num_async_threads {
+                    return format!("tokio-async-{}", async_id);
+                }
+
+                // identify blocking threads
+                let blocking_id = BLOCKING_ID.fetch_add(1, Ordering::SeqCst);
+                format!("tokio-blocking-{}", blocking_id)
+            })
             .build();
 
         match result {
