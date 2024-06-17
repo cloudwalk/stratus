@@ -148,13 +148,13 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus health check
     module.register_method("stratus_startup", stratus_startup)?;
-    module.register_async_method("stratus_readiness", stratus_readiness)?;
+    module.register_method("stratus_readiness", stratus_readiness)?;
     module.register_method("stratus_liveness", stratus_liveness)?;
     module.register_method("stratus_version", stratus_version)?;
 
     // blockchain
     module.register_method("net_version", net_version)?;
-    module.register_async_method("net_listening", net_listening)?;
+    module.register_method("net_listening", net_listening)?;
     module.register_method("eth_chainId", eth_chain_id)?;
     module.register_method("web3_clientVersion", web3_client_version)?;
 
@@ -235,16 +235,12 @@ fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions)
 // Status
 // -----------------------------------------------------------------------------
 
-async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    stratus_readiness(params, arc, ext).await
-}
-
 fn stratus_startup(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
     Ok(json!(true))
 }
 
-async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let should_serve = context.consensus.should_serve().await;
+fn stratus_readiness(_: Params<'_>, context: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    let should_serve = context.consensus.should_serve();
     tracing::info!("stratus_readiness: {}", should_serve);
 
     if should_serve {
@@ -269,6 +265,10 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
 // -----------------------------------------------------------------------------
 // Blockchain
 // -----------------------------------------------------------------------------
+
+fn net_listening(params: Params<'_>, arc: &RpcContext, ext: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    stratus_readiness(params, arc, ext)
+}
 
 #[tracing::instrument(name = "rpc::net_version", skip_all)]
 fn net_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> String {
