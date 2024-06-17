@@ -206,7 +206,7 @@ impl Consensus {
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
             role: RwLock::new(Role::Follower),
-            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(1200..1500)), // Adjust as needed
+            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(250..350)), // Adjust as needed
             my_address: my_address.clone(),
             grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
@@ -664,13 +664,14 @@ impl AppendEntryService for AppendEntryServiceImpl {
     ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
         let executions = request.into_inner().executions;
         //TODO Process the transaction executions here
-        for execution in executions {
-            println!("Received transaction execution: {:?}", execution);
-        }
+        tracing::info!(executions = executions.len(), "appending executions");
+
+        let consensus = self.consensus.lock().await;
+        consensus.reset_heartbeat_signal.notify_waiters();
 
         Ok(Response::new(AppendTransactionExecutionsResponse {
             status: StatusCode::AppendSuccess as i32,
-            message: "Transaction Executions appended successfully".into(),
+            message: "transaction Executions appended successfully".into(),
             last_committed_block_number: 0,
         }))
     }
