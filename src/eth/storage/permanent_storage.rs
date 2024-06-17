@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -15,7 +13,6 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 
 /// Permanent (committed) storage operations
-#[async_trait]
 pub trait PermanentStorage: Send + Sync {
     // -------------------------------------------------------------------------
     // Block number

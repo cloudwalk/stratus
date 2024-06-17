@@ -8,7 +8,6 @@ use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 
-use async_trait::async_trait;
 use indexmap::IndexMap;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
@@ -131,7 +130,6 @@ impl Default for InMemoryPermanentStorage {
     }
 }
 
-#[async_trait]
 impl PermanentStorage for InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
     // Block number operations
