@@ -110,7 +110,7 @@ pub async fn run_importer_online(
 ) -> anyhow::Result<()> {
     let _timer = DropTimer::start("importer-online::run_importer_online");
 
-    let number = storage.read_block_number_to_resume_import().await?;
+    let number = storage.read_block_number_to_resume_import()?;
 
     let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
 

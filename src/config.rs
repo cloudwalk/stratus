@@ -10,6 +10,7 @@ use std::time::Duration;
 use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
+use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
@@ -52,10 +53,23 @@ use crate::GlobalState;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
-    let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
-    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
+    // parse env manually because this is executed before clap
+    let env = match std::env::var("ENV") {
+        Ok(env) => Environment::from_str(env.as_str()),
+        Err(_) => Ok(Environment::Local),
+    };
+    let env = match env {
+        Ok(env) => env,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
 
+    // load .env file
+    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
     println!("reading env file | filename={}", env_filename);
+
     if let Err(e) = dotenvy::from_filename(env_filename) {
         println!("env file error: {e}");
     }
@@ -73,6 +87,10 @@ pub trait WithCommonConfig {
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
+    /// Environment where the application is running.
+    #[arg(long = "env", env = "ENV", default_value = "local")]
+    pub env: Environment,
+
     /// Number of threads to execute global async tasks.
     #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
     pub num_async_threads: usize,
@@ -306,7 +324,7 @@ impl MinerConfig {
 
         // enable genesis block
         if self.enable_genesis {
-            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
+            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
                 miner.commit(Block::genesis()).await?;
@@ -318,11 +336,11 @@ impl MinerConfig {
         if self.enable_test_accounts {
             let test_accounts = test_accounts();
             tracing::info!(accounts = ?test_accounts, "enabling test accounts");
-            storage.save_accounts(test_accounts).await?;
+            storage.save_accounts(test_accounts)?;
         }
 
         // set block number
-        storage.set_active_block_number_as_next_if_not_set().await?;
+        storage.set_active_block_number_as_next_if_not_set()?;
 
         // enable interval miner
         if miner.mode().is_interval() {
@@ -422,6 +440,10 @@ pub struct StratusConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    /// JSON-RPC max active connections
+    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    pub max_connections: u32,
 
     #[clap(flatten)]
     pub storage: StratusStorageConfig,
@@ -596,6 +618,10 @@ pub struct RunWithImporterConfig {
     /// JSON-RPC binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
     pub address: SocketAddr,
+
+    /// JSON-RPC max active connections
+    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    pub max_connections: u32,
 
     #[arg(long = "leader_node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
@@ -778,6 +804,35 @@ impl WithCommonConfig for ExternalRelayerConfig {
 }
 
 // -----------------------------------------------------------------------------
+// Enum: Env
+// -----------------------------------------------------------------------------
+#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
+pub enum Environment {
+    #[strum(to_string = "local")]
+    Local,
+
+    #[strum(to_string = "staging")]
+    Staging,
+
+    #[strum(to_string = "production")]
+    Production,
+}
+
+impl FromStr for Environment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        let s = s.trim().to_lowercase();
+        match s.as_ref() {
+            "local" => Ok(Self::Local),
+            "staging" | "test" => Ok(Self::Staging),
+            "production" | "prod" => Ok(Self::Production),
+            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Enum: TemporaryStorageConfig
 // -----------------------------------------------------------------------------
 
@@ -848,7 +903,7 @@ impl PermanentStorageConfig {
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone()).await?),
+            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone())?),
         };
         Ok(perm)
     }

@@ -1,14 +1,14 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
+use std::sync::RwLock;
+use std::sync::RwLockReadGuard;
+use std::sync::RwLockWriteGuard;
 
 use anyhow::Context;
 use anyhow::Ok;
 use async_trait::async_trait;
 use nonempty::NonEmpty;
-use tokio::sync::RwLock;
-use tokio::sync::RwLockReadGuard;
-use tokio::sync::RwLockWriteGuard;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -40,13 +40,13 @@ impl InMemoryTemporaryStorage {
     }
 
     /// Locks inner state for reading.
-    pub async fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
-        self.states.read().await
+    pub fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
+        self.states.read().unwrap()
     }
 
     /// Locks inner state for writing.
-    pub async fn lock_write(&self) -> RwLockWriteGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
-        self.states.write().await
+    pub fn lock_write(&self) -> RwLockWriteGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
+        self.states.write().unwrap()
     }
 }
 
@@ -119,15 +119,15 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         tracing::debug!(%address, "reading account");
-        let states = self.lock_read().await;
+        let states = self.lock_read();
         Ok(read_account(&states, address))
     }
 
-    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
         tracing::debug!(%address, %index, "reading slot in temporary");
-        let states = self.lock_read().await;
+        let states = self.lock_read();
         Ok(read_slot(&states, address, index))
     }
 
@@ -135,10 +135,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         tracing::debug!(%number, "setting active block number");
 
-        let mut states = self.lock_write().await;
+        let mut states = self.lock_write();
         match states.head.block.as_mut() {
             Some(block) => block.number = number,
             None => {
@@ -148,10 +148,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+    fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         tracing::debug!("reading active block number");
 
-        let states = self.lock_read().await;
+        let states = self.lock_read();
         match &states.head.block {
             Some(block) => Ok(Some(block.number)),
             None => Ok(None),
@@ -162,10 +162,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // External block
     // -------------------------------------------------------------------------
 
-    async fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+    fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
         tracing::debug!(number = %block.number(), "setting reexecuted external block");
 
-        let mut states = self.lock_write().await;
+        let mut states = self.lock_write();
         states.head.require_active_block_mut()?.external_block = Some(block);
         Ok(())
     }
@@ -174,11 +174,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Executions
     // -------------------------------------------------------------------------
 
-    async fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+    fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         tracing::debug!(hash = %tx.hash(), "saving execution");
 
         // check conflicts
-        let mut states = self.lock_write().await;
+        let mut states = self.lock_write();
         if let Some(conflicts) = check_conflicts(&states, tx.execution()) {
             return Err(StorageError::Conflict(conflicts)).context("execution conflicts with current state");
         }
@@ -223,17 +223,17 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // General state
     // -------------------------------------------------------------------------
 
-    async fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
         tracing::debug!("checking conflicts");
-        let states = self.lock_read().await;
+        let states = self.lock_read();
         Ok(check_conflicts(&states, execution))
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
-    async fn finish_block(&self) -> anyhow::Result<PendingBlock> {
+    fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         tracing::debug!("finishing active block");
 
-        let mut states = self.lock_write().await;
+        let mut states = self.lock_write();
         let finished_block = states.head.require_active_block()?.clone();
 
         // remove last state if reached limit
@@ -248,16 +248,16 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(finished_block)
     }
 
-    async fn reset(&self) -> anyhow::Result<()> {
+    fn reset(&self) -> anyhow::Result<()> {
         tracing::debug!("reseting temporary storage");
 
-        let mut state = self.lock_write().await;
+        let mut state = self.lock_write();
         state.tail.clear();
         state.head.reset();
         Ok(())
     }
 
-    async fn flush(&self) -> anyhow::Result<()> {
+    fn flush(&self) -> anyhow::Result<()> {
         Ok(())
     }
 }

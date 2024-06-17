@@ -497,7 +497,7 @@ impl Consensus {
             return false;
         }
 
-        let storage_block_number: u64 = self.storage.read_mined_block_number().await.unwrap_or(BlockNumber::from(0)).into();
+        let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or(BlockNumber::from(0)).into();
 
         tracing::info!(
             "last arrived block number: {}, storage block number: {}",

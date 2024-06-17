@@ -63,7 +63,7 @@ where
         let _sentry_guard = common
             .sentry_url
             .as_ref()
-            .map(|sentry_url| infra::init_sentry(sentry_url).expect("failed to init sentry"));
+            .map(|sentry_url| infra::init_sentry(sentry_url, common.env).expect("failed to init sentry"));
 
         // init signal handler
         runtime.block_on(spawn_signal_handler()).expect("failed to init signal handlers");
