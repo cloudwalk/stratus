@@ -694,12 +694,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
-        if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
-            #[cfg(feature = "metrics")]
-            {
-                metrics::set_append_entries_block_number_diff(diff);
-            }
-        } else {
+        let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
             tracing::error!(
                 "leader is behind follower: arrived_block: {}, block_entry: {}",
                 last_last_arrived_block_number,
@@ -709,7 +704,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 (StatusCode::EntryAlreadyExists as i32).into(),
                 "leader is behind follower and should step down".to_string(),
             ));
-        }
+        };
+
+        #[cfg(feature = "metrics")]
+        metrics::set_append_entries_block_number_diff(diff);
 
         consensus.reset_heartbeat_signal.notify_waiters();
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
