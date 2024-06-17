@@ -2,6 +2,7 @@
 FROM rust:1.75 as builder
 
 WORKDIR /app
+COPY .git /app/.git
 COPY build.rs /app/build.rs
 COPY src /app/src
 COPY static /app/static
