@@ -757,6 +757,14 @@ impl AppendEntryService for AppendEntryServiceImpl {
             *consensus.role.write().await = Role::Follower;
         }
 
+        if consensus.is_leader().await {
+            tracing::info!("I am the leader, so I will not vote in this election");
+            return Ok(Response::new(RequestVoteResponse {
+                term: request.term,
+                vote_granted: false,
+            }));
+        }
+
         let mut voted_for = consensus.voted_for.lock().await;
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
         if voted_for.is_none() {

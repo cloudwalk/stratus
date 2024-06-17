@@ -67,7 +67,7 @@ jobs:
           cargo install wait-service || true
 
       - name: Run e2e tests
-        run: just run-chaos-experiment leader-election
+        run: just run-chaos-experiment leader-election-working-with-bugs
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
           RUST_LOG: off 

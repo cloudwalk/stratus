@@ -144,6 +144,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_async_method("evm_mine", evm_mine)?;
         module.register_async_method("debug_setHead", debug_set_head)?;
         module.register_async_method("debug_readAllSlotsFromAccount", debug_read_all_slots)?;
+        module.register_async_method("consensus_isLeader", consensus_is_leader)?;
     }
 
     // stratus health check
@@ -229,6 +230,12 @@ async fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Exten
     let (_, address) = next_rpc_param::<Address>(params.sequence())?;
     let slots = ctx.storage.read_all_slots(&address)?;
     Ok(serde_json::to_value(slots).expect_infallible())
+}
+
+#[cfg(feature = "dev")]
+async fn consensus_is_leader(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    let is_leader = ctx.consensus.is_leader().await;
+    Ok(json!(is_leader))
 }
 
 // -----------------------------------------------------------------------------
