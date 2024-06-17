@@ -7,7 +7,6 @@ use std::sync::RwLockWriteGuard;
 
 use anyhow::Context;
 use anyhow::Ok;
-use async_trait::async_trait;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::Account;
@@ -113,7 +112,6 @@ impl InMemoryTemporaryAccount {
     }
 }
 
-#[async_trait]
 impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
     // Accounts and Slots
