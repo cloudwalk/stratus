@@ -1,9 +1,11 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
 use ethers_core::types::Transaction;
 use futures::future::join_all;
+use itertools::Itertools;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
@@ -31,13 +33,16 @@ use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
+type MismatchedBlocks = HashSet<BlockNumber>;
+type TimedoutBlocks = HashSet<BlockNumber>;
+
 #[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum RelayError {
-    #[error("Transaction Mismatch: {0}")]
-    Mismatch(anyhow::Error),
+    #[error("Transaction Mismatch: {1}")]
+    Mismatch(BlockNumber, anyhow::Error),
 
-    #[error("Compare Timeout: {0}")]
-    CompareTimeout(anyhow::Error),
+    #[error("Compare Timeout: {1}")]
+    CompareTimeout(BlockNumber, anyhow::Error),
 }
 
 pub struct ExternalRelayer {
@@ -65,64 +70,76 @@ impl ExternalRelayer {
         })
     }
 
+    fn combine_transactions(blocks: Vec<Block>) -> Vec<TransactionMined> {
+        blocks.into_iter().flat_map(|block| block.transactions).collect()
+    }
+
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all, fields(block_number))]
-    pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
-        let Some(row) = sqlx::query!(
-            r#"UPDATE relayer_blocks
+    pub async fn relay_blocks(&self) -> anyhow::Result<Vec<BlockNumber>> {
+        let block_rows = sqlx::query!(
+            r#"
+            WITH cte AS (
+                SELECT number
+                FROM relayer_blocks
+                WHERE finished = false
+                ORDER BY number ASC
+                LIMIT 20
+            )
+            UPDATE relayer_blocks r
                 SET started = true
-                WHERE number = (
-                    SELECT MIN(number)
-                    FROM relayer_blocks
-                    WHERE finished = false
-                )
-                RETURNING payload"#
+                FROM cte
+                WHERE r.number = cte.number
+                RETURNING r.number, r.payload"#
         )
-        .fetch_optional(&self.pool)
-        .await?
-        else {
-            return Ok(None);
-        };
-        let block: Block = row.payload.try_into()?;
-        let block_number = block.header.number;
+        .fetch_all(&self.pool)
+        .await?;
 
-        tracing::info!(?block_number, "relaying block");
-
-        // fill span
-        Span::with(|s| s.rec_str("block_number", &block_number));
+        let block_numbers: HashSet<BlockNumber> = block_rows.iter().map(|row| row.number.into()).collect();
+        let blocks: Vec<Block> = block_rows
+            .into_iter()
+            .sorted_by_key(|row| row.number)
+            .map(|row| row.payload.try_into())
+            .collect::<Result<_, _>>()?;
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
-        let dag = TransactionDag::new(block.transactions);
+        let dag = TransactionDag::new(Self::combine_transactions(blocks));
+        let (mismatched_blocks, timedout_blocks) = self.relay_dag(dag).await;
 
-        if let Err(err) = self.relay_dag(dag).await {
-            if let RelayError::CompareTimeout(_) = err {
-                // This retries the entire block, but we could be retrying only each specific transaction that failed.
-                // This is mostly a non-issue (except performance-wise)
-                return Err(anyhow!("some receipt comparisons timed out, will retry next"));
-            }
+        let non_ok_blocks: HashSet<BlockNumber> = mismatched_blocks.union(&timedout_blocks).cloned().collect();
 
-            tracing::warn!(?block_number, ?err, "some transactions mismatched");
+        let only_mismatched_blocks: Vec<BlockNumber> = mismatched_blocks.difference(&timedout_blocks).cloned().collect();
+        let ok_blocks: Vec<BlockNumber> = block_numbers.difference(&non_ok_blocks).cloned().collect();
+
+        if !timedout_blocks.is_empty() {
+            tracing::warn!(?timedout_blocks, "some blocks timed-out");
+        }
+
+        if !only_mismatched_blocks.is_empty() {
+            tracing::warn!(?only_mismatched_blocks, "some transactions mismatched");
+
             sqlx::query!(
                 r#"UPDATE relayer_blocks
-                    SET finished = true, mismatched = true
-                    WHERE number = $1"#,
-                block_number as _
-            )
-            .execute(&self.pool)
-            .await?;
-        } else {
-            tracing::info!(?block_number, "block relayed with no mismatches");
-            sqlx::query!(
-                r#"UPDATE relayer_blocks
-                    SET finished = true
-                    WHERE number = $1"#,
-                block_number as _
+                SET finished = true, mismatched = true
+                WHERE number = ANY($1)"#,
+                &only_mismatched_blocks[..] as _
             )
             .execute(&self.pool)
             .await?;
         }
 
-        Ok(Some(block_number))
+        if !ok_blocks.is_empty() {
+            sqlx::query!(
+                r#"UPDATE relayer_blocks
+                    SET finished = true
+                    WHERE number = ANY($1)"#,
+                &ok_blocks[..] as _
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(ok_blocks.into_iter().chain(only_mismatched_blocks.into_iter()).collect())
     }
 
     /// Compares the given receipt to the receipt returned by the pending transaction, retries until a receipt is returned
@@ -133,7 +150,9 @@ impl ExternalRelayer {
         let start_metric = metrics::now();
 
         let tx_hash: Hash = stratus_tx.input.hash;
-        tracing::info!(?tx_hash, "comparing receipts");
+        let block_number: BlockNumber = stratus_tx.block_number;
+
+        tracing::info!(?block_number, ?tx_hash, "comparing receipts");
 
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
@@ -142,8 +161,15 @@ impl ExternalRelayer {
         let mut substrate_receipt = substrate_pending_transaction;
         let _res = loop {
             let Ok(receipt) = timeout(Duration::from_secs(30), substrate_receipt).await else {
-                tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
-                break Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+                tracing::error!(
+                    ?block_number,
+                    ?tx_hash,
+                    "no receipt returned by substrate for more than 30 seconds, retrying block"
+                );
+                break Err(RelayError::CompareTimeout(
+                    block_number,
+                    anyhow!("no receipt returned by substrate for more than 30 seconds"),
+                ));
             };
 
             match receipt {
@@ -153,7 +179,7 @@ impl ExternalRelayer {
                         let err_string = compare_error.to_string();
                         let error = log_and_err!("transaction mismatch!").context(err_string.clone());
                         self.save_mismatch(stratus_tx, substrate_receipt, &err_string).await;
-                        break error.map_err(RelayError::Mismatch);
+                        break error.map_err(|err| RelayError::Mismatch(block_number, err));
                     } else {
                         break Ok(());
                     }
@@ -163,7 +189,10 @@ impl ExternalRelayer {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
                         tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
-                        break Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
+                        break Err(RelayError::CompareTimeout(
+                            block_number,
+                            anyhow!("no receipt returned by substrate for more than 30 seconds"),
+                        ));
                     },
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
@@ -284,7 +313,7 @@ impl ExternalRelayer {
     /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
     /// on the `mismatches` table in pgsql, or in ./data as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
-    async fn relay_dag(&self, mut dag: TransactionDag) -> anyhow::Result<(), RelayError> {
+    async fn relay_dag(&self, mut dag: TransactionDag) -> (MismatchedBlocks, TimedoutBlocks) {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -300,21 +329,22 @@ impl ExternalRelayer {
             .into_iter()
             .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
 
-        let _res = if join_all(futures)
-            .await
-            .into_iter()
-            .filter_map(Result::err)
-            .any(|err| matches!(err, RelayError::CompareTimeout(_)))
-        {
-            return Err(RelayError::CompareTimeout(anyhow!("some comparisons timed out, should retry them.")));
-        } else {
-            Ok(())
-        };
+        let errors = join_all(futures).await.into_iter().filter_map(Result::err);
+
+        let mut mismatched_blocks: MismatchedBlocks = HashSet::new();
+        let mut timedout_blocks: TimedoutBlocks = HashSet::new();
+
+        for error in errors {
+            match error {
+                RelayError::CompareTimeout(number, _) => timedout_blocks.insert(number),
+                RelayError::Mismatch(number, _) => mismatched_blocks.insert(number),
+            };
+        }
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_dag(start.elapsed());
 
-        _res
+        (mismatched_blocks, timedout_blocks)
     }
 }
 

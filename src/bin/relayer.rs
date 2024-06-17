@@ -32,7 +32,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
 
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-        let block_number = match relayer.relay_next_block().await {
+        let blocks = match relayer.relay_blocks().await {
             Ok(block_number) => {
                 #[cfg(feature = "metrics")]
                 metrics::inc_relay_next_block(start.elapsed());
@@ -44,12 +44,12 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
             }
         };
 
-        match block_number {
-            Some(block_number) => tracing::info!(number = %block_number, "relayed"),
-            None => {
-                tracing::info!("no pending block found");
+        match blocks.len() {
+            0 => {
+                tracing::info!("no blocks relayed");
                 traced_sleep(backoff, SleepReason::RetryBackoff).await;
             }
-        };
+            _ => tracing::info!(?blocks, "relayed"),
+        }
     }
 }
