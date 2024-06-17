@@ -604,10 +604,11 @@ impl Consensus {
     }
 
     async fn append_transaction_executions_to_peer(&self, peer: &mut Peer, executions: Vec<TransactionExecutionEntry>) {
+        let current_term = self.current_term.load(Ordering::SeqCst);
         let request = Request::new(AppendTransactionExecutionsRequest {
-            term: 0,
-            prev_log_index: 0,
-            prev_log_term: 0,
+            term: current_term,
+            prev_log_index: self.last_arrived_block_number.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
+            prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
             executions,
             leader_id: self.my_address.to_string(),
         });
@@ -629,10 +630,11 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
+        let current_term = self.current_term.load(Ordering::SeqCst);
         let request = Request::new(AppendBlockCommitRequest {
-            term: 0,
-            prev_log_index: 0,
-            prev_log_term: 0,
+            term: current_term,
+            prev_log_index: self.last_arrived_block_number.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
+            prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
             block_entry: Some(block_entry.clone()),
             leader_id: self.my_address.to_string(),
         });
@@ -700,7 +702,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             );
             return Err(Status::new(
                 (StatusCode::EntryAlreadyExists as i32).into(),
-                "Leader is behind follower and should step down".to_string(),
+                "leader is behind follower and should step down".to_string(),
             ));
         }
 
