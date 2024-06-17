@@ -67,6 +67,7 @@ use append_entry::RequestVoteResponse;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
 
+use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
 use super::primitives::TransactionExecution;
 use super::primitives::TransactionInput;
@@ -178,6 +179,7 @@ pub struct Consensus {
     my_address: PeerAddress,
     grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
+    log_entries_storage: AppendLogEntriesStorage,
 }
 
 impl Consensus {
@@ -194,6 +196,7 @@ impl Consensus {
         let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
+        let log_entries_storage = AppendLogEntriesStorage::new(&format!("{}./data/entries_log.rocksdb", path_prefix));
 
         let consensus = Self {
             sender,
