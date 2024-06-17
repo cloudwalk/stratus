@@ -172,7 +172,7 @@ pub struct Consensus {
     current_term: AtomicU64,
     last_arrived_block_number: AtomicU64, //FIXME this should be replaced by the index on our appendEntry log
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
-    role: RwLock<Role>,
+    role: RwLock<Role>, // TODO: remove RwLock and use Atomic
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
     grpc_address: SocketAddr,
