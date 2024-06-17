@@ -94,12 +94,14 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
         drop(enter);
         RpcResponse {
-            client,
-            id: request.id.to_string(),
-            method: method.to_string(),
-            function,
-            future_response: self.service.call(request),
+            identifiers: RpcResponseIdentifiers {
+                client,
+                id: request.id.to_string(),
+                method: method.to_string(),
+                function,
+            },
             start: Instant::now(),
+            future_response: self.service.call(request),
         }
         .instrument(span)
     }
@@ -112,17 +114,10 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 /// https://blog.adamchalmers.com/pin-unpin/
 #[pin_project]
 pub struct RpcResponse<'a> {
+    identifiers: RpcResponseIdentifiers,
+    start: Instant,
     #[pin]
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
-
-    // request metadata
-    client: RpcClientApp,
-    id: String,
-    method: String,
-    function: Option<SoliditySignature>,
-
-    // request services
-    start: Instant,
 }
 
 impl<'a> Future for RpcResponse<'a> {
@@ -141,10 +136,10 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                request_client = %proj.client,
-                request_id = %proj.id,
-                request_method = %proj.method,
-                request_function = %proj.function.clone().unwrap_or_default(),
+                request_client = %proj.identifiers.client,
+                request_id = %proj.identifiers.id,
+                request_method = %proj.identifiers.method,
+                request_function = %proj.identifiers.function.clone().unwrap_or_default(),
                 request_duration_us = %elapsed.as_micros(),
                 request_success = %response_success,
                 request_result = %response_result,
@@ -154,9 +149,6 @@ impl<'a> Future for RpcResponse<'a> {
             // metrify response
             #[cfg(feature = "metrics")]
             {
-                let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
-                metrics::set_rpc_requests_active(active, &*proj.client, proj.method.clone(), proj.function.clone());
-
                 let mut rpc_result = "error";
                 if response_success {
                     rpc_result = if_else!(response_result.contains("\"result\":null"), "missing", "present");
@@ -164,9 +156,9 @@ impl<'a> Future for RpcResponse<'a> {
 
                 metrics::inc_rpc_requests_finished(
                     elapsed,
-                    &*proj.client,
-                    proj.method.clone(),
-                    proj.function.clone(),
+                    &proj.identifiers.client,
+                    proj.identifiers.method.clone(),
+                    proj.identifiers.function.clone(),
                     rpc_result,
                     response.is_success(),
                 );
@@ -174,6 +166,20 @@ impl<'a> Future for RpcResponse<'a> {
         }
 
         response
+    }
+}
+
+struct RpcResponseIdentifiers {
+    client: RpcClientApp,
+    id: String,
+    method: String,
+    function: Option<SoliditySignature>,
+}
+
+impl Drop for RpcResponseIdentifiers {
+    fn drop(&mut self) {
+        let active = ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed) - 1;
+        metrics::set_rpc_requests_active(active, &self.client, self.method.clone(), self.function.clone());
     }
 }
 
