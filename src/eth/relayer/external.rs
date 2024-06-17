@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use ethers_core::types::Transaction;
 use futures::future::join_all;
+use itertools::Itertools;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
@@ -65,34 +66,43 @@ impl ExternalRelayer {
         })
     }
 
+    fn combine_transactions(blocks: Vec<Block>) -> Vec<TransactionMined> {
+        blocks.into_iter().flat_map(|block| block.transactions).collect()
+    }
+
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all, fields(block_number))]
-    pub async fn relay_next_block(&self) -> anyhow::Result<Option<BlockNumber>> {
-        let Some(row) = sqlx::query!(
-            r#"UPDATE relayer_blocks
+    pub async fn relay_blocks(&self) -> anyhow::Result<Option<()>> {
+        let block_rows = sqlx::query!(
+            r#"
+            WITH cte AS (
+                SELECT number
+                FROM relayer_blocks
+                WHERE finished = false
+                ORDER BY number ASC
+                LIMIT 20
+            )
+            UPDATE relayer_blocks r
                 SET started = true
-                WHERE number = (
-                    SELECT MIN(number)
-                    FROM relayer_blocks
-                    WHERE finished = false
-                )
-                RETURNING payload"#
+                FROM cte
+                WHERE r.number = cte.number
+                RETURNING r.number, r.payload"#
         )
-        .fetch_optional(&self.pool)
-        .await?
-        else {
-            return Ok(None);
-        };
-        let block: Block = row.payload.try_into()?;
-        let block_number = block.header.number;
+        .fetch_all(&self.pool)
+        .await?;
 
-        tracing::info!(?block_number, "relaying block");
+        let block_numbers: Vec<i64> = block_rows.iter().map(|row| row.number).collect();
+        let blocks: Vec<Block> = block_rows
+            .into_iter()
+            .sorted_by_key(|row| row.number)
+            .map(|row| row.payload.try_into())
+            .collect::<Result<_, _>>()?;
 
         // fill span
-        Span::with(|s| s.rec_str("block_number", &block_number));
+        // Span::with(|s| s.rec_str("block_number", &block_number));
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
-        let dag = TransactionDag::new(block.transactions);
+        let dag = TransactionDag::new(Self::combine_transactions(blocks));
 
         if let Err(err) = self.relay_dag(dag).await {
             if let RelayError::CompareTimeout(_) = err {
@@ -101,28 +111,28 @@ impl ExternalRelayer {
                 return Err(anyhow!("some receipt comparisons timed out, will retry next"));
             }
 
-            tracing::warn!(?block_number, ?err, "some transactions mismatched");
+            // tracing::warn!(?block_number, ?err, "some transactions mismatched");
             sqlx::query!(
                 r#"UPDATE relayer_blocks
                     SET finished = true, mismatched = true
-                    WHERE number = $1"#,
-                block_number as _
+                    WHERE number = ANY($1)"#,
+                &block_numbers[..] as _
             )
             .execute(&self.pool)
             .await?;
         } else {
-            tracing::info!(?block_number, "block relayed with no mismatches");
+            //tracing::info!(?block_number, "block relayed with no mismatches");
             sqlx::query!(
                 r#"UPDATE relayer_blocks
                     SET finished = true
-                    WHERE number = $1"#,
-                block_number as _
+                    WHERE number = ANY($1)"#,
+                &block_numbers[..] as _
             )
             .execute(&self.pool)
             .await?;
         }
 
-        Ok(Some(block_number))
+        Ok(Some(()))
     }
 
     /// Compares the given receipt to the receipt returned by the pending transaction, retries until a receipt is returned
@@ -158,13 +168,14 @@ impl ExternalRelayer {
                         break Ok(());
                     }
                 }
-                Ok(None) =>
+                Ok(None) => {
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
                         tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
                         break Err(RelayError::CompareTimeout(anyhow!("no receipt returned by substrate for more than 30 seconds")));
-                    },
+                    }
+                }
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -218,7 +229,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) =>
+            Ok(res) => {
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -226,7 +237,8 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                },
+                }
+            }
         }
 
         #[cfg(feature = "metrics")]

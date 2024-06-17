@@ -7,6 +7,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::IntoNodeIdentifiers;
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
@@ -61,28 +62,29 @@ impl TransactionDag {
             })
             .collect();
 
-        let mut slot_conflicts: HashMap<Index, HashSet<(Address, SlotIndex)>> = HashMap::new();
-        let mut balance_conflicts: HashMap<Index, HashSet<Address>> = HashMap::new();
-        let mut node_indexes: HashMap<Index, NodeIndex> = HashMap::new();
+        let mut slot_conflicts: HashMap<(BlockNumber, Index), HashSet<(Address, SlotIndex)>> = HashMap::new();
+        let mut balance_conflicts: HashMap<(BlockNumber, Index), HashSet<Address>> = HashMap::new();
+        let mut node_indexes: HashMap<(BlockNumber, Index), NodeIndex> = HashMap::new();
         let mut dag = StableGraph::new();
 
-        for tx in block_transactions.into_iter().sorted_by_key(|tx| tx.transaction_index) {
+        for tx in block_transactions.into_iter().sorted() {
             let tx_idx = tx.transaction_index;
+            let tx_bnum = tx.block_number;
             for (address, change) in &tx.execution.changes {
                 for idx in change.slots.keys() {
                     let slot = (*address, *idx);
                     if slot_writes.contains(&slot) {
-                        slot_conflicts.entry(tx_idx).or_default().insert(slot);
+                        slot_conflicts.entry((tx_bnum, tx_idx)).or_default().insert(slot);
                     }
                 }
 
                 let addr = *address;
                 if balance_writes.contains(&addr) {
-                    balance_conflicts.entry(tx_idx).or_default().insert(addr);
+                    balance_conflicts.entry((tx_bnum, tx_idx)).or_default().insert(addr);
                 }
             }
             let node_idx = dag.add_node(tx);
-            node_indexes.insert(tx_idx, node_idx);
+            node_indexes.insert((tx_bnum, tx_idx), node_idx);
         }
 
         Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
@@ -96,8 +98,8 @@ impl TransactionDag {
 
     fn compute_edges<T: std::hash::Hash + std::cmp::Eq + serde::Serialize>(
         dag: &mut StableGraph<TransactionMined, i32>,
-        conflicts: HashMap<Index, HashSet<T>>,
-        node_indexes: &HashMap<Index, NodeIndex>,
+        conflicts: HashMap<(BlockNumber, Index), HashSet<T>>,
+        node_indexes: &HashMap<(BlockNumber, Index), NodeIndex>,
     ) {
         for (i, (tx1, set1)) in conflicts.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
             let tx1_node_index = *node_indexes.get(tx1).unwrap();

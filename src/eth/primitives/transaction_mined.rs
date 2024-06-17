@@ -39,6 +39,18 @@ pub struct TransactionMined {
     pub block_hash: Hash,
 }
 
+impl PartialOrd for TransactionMined {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (self.block_number, self.transaction_index).partial_cmp(&(other.block_number, other.transaction_index))
+    }
+}
+
+impl Ord for TransactionMined {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.block_number, self.transaction_index).cmp(&(other.block_number, other.transaction_index))
+    }
+}
+
 impl HashTrait for TransactionMined {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.input.hash.hash(state);
