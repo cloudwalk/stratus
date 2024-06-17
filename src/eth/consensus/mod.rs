@@ -12,6 +12,7 @@ use std::env;
 use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -77,11 +78,11 @@ use crate::infra::metrics;
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 const PEER_DISCOVERY_DELAY: Duration = Duration::from_secs(30);
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Role {
-    Leader,
-    Follower,
-    _Candidate,
+    Leader = 1,
+    Follower = 2,
+    _Candidate = 3,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -172,7 +173,7 @@ pub struct Consensus {
     current_term: AtomicU64,
     last_arrived_block_number: AtomicU64, //FIXME this should be replaced by the index on our appendEntry log
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
-    role: RwLock<Role>, // TODO: remove RwLock and use Atomic
+    role: AtomicU8, // TODO: remove RwLock and use Atomic
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
     grpc_address: SocketAddr,
@@ -205,7 +206,7 @@ impl Consensus {
             last_arrived_block_number,
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
-            role: RwLock::new(Role::Follower),
+            role: AtomicU8::new(Role::Follower as u8),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(250..350)), // Adjust as needed
             my_address: my_address.clone(),
             grpc_address,
@@ -252,7 +253,7 @@ impl Consensus {
             loop {
                 tokio::select! {
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
-                        if !consensus.is_leader().await {
+                        if !consensus.is_leader() {
                             tracing::info!("starting election due to heartbeat timeout");
                             Self::start_election(Arc::clone(&consensus)).await;
                         } else {
@@ -332,7 +333,7 @@ impl Consensus {
             consensus.become_leader().await;
         } else {
             tracing::info!(votes = votes, peers = peers.len(), term = term, "failed to become the leader on election");
-            *consensus.role.write().await = Role::Follower;
+            consensus.set_role(Role::Follower);
         }
 
         #[cfg(feature = "metrics")]
@@ -340,7 +341,7 @@ impl Consensus {
     }
 
     async fn become_leader(&self) {
-        *self.role.write().await = Role::Leader;
+        self.set_role(Role::Leader);
 
         self.last_arrived_block_number.store(std::u64::MAX, Ordering::SeqCst); //as leader, we don't have a last block number
 
@@ -390,7 +391,7 @@ impl Consensus {
             loop {
                 let mut receiver_lock = external_receiver.lock().await;
                 if let Some(external_entity) = receiver_lock.recv().await {
-                    if consensus.is_leader().await {
+                    if consensus.is_leader() {
                         //TODO when we have followers only being incremented by append entries, add an ELSE to alert if a non-leader is trying to send a block
                         match external_entity {
                             ExternalEntry::Block(block) => {
@@ -444,17 +445,21 @@ impl Consensus {
         });
     }
 
+    fn set_role(&self, role: Role) {
+        self.role.store(role as u8, Ordering::SeqCst);
+    }
+
     //FIXME TODO automate the way we gather the leader, instead of using a env var
-    pub async fn is_leader(&self) -> bool {
-        *self.role.read().await == Role::Leader
+    pub fn is_leader(&self) -> bool {
+        self.role.load(Ordering::SeqCst) == Role::Leader as u8
     }
 
     pub async fn is_follower(&self) -> bool {
-        *self.role.read().await == Role::Follower
+        self.role.load(Ordering::SeqCst) == Role::Follower as u8
     }
 
     pub async fn should_forward(&self) -> bool {
-        let is_leader = self.is_leader().await;
+        let is_leader = self.is_leader();
         tracing::info!(
             is_leader = is_leader,
             sync_online_enabled = self.importer_config.is_some(),
@@ -485,8 +490,8 @@ impl Consensus {
     }
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
-    pub async fn should_serve(&self) -> bool {
-        if self.is_leader().await {
+    pub fn should_serve(&self) -> bool {
+        if self.is_leader() {
             return true;
         }
 
@@ -746,7 +751,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         if request.term > current_term {
             consensus.current_term.store(request.term, Ordering::SeqCst);
             *consensus.voted_for.lock().await = None;
-            *consensus.role.write().await = Role::Follower;
+            consensus.set_role(Role::Follower);
         }
 
         let mut voted_for = consensus.voted_for.lock().await;
