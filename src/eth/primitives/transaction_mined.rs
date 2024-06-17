@@ -41,7 +41,7 @@ pub struct TransactionMined {
 
 impl PartialOrd for TransactionMined {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        (self.block_number, self.transaction_index).partial_cmp(&(other.block_number, other.transaction_index))
+        Some(self.cmp(other))
     }
 }
 
