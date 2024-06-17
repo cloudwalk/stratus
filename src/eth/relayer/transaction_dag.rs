@@ -175,7 +175,7 @@ mod tests {
 
     const ADDRESS: Address = Address::ZERO;
 
-    fn create_tx(changed_slots_inidices: HashSet<SlotIndex>, tx_idx: u64) -> TransactionMined {
+    fn create_tx(changed_slots_inidices: HashSet<SlotIndex>, block_number: u64, tx_idx: u64) -> TransactionMined {
         let execution_changes = ExecutionAccountChanges {
             new_account: false,
             address: ADDRESS,
@@ -204,7 +204,7 @@ mod tests {
             execution,
             logs: vec![],
             transaction_index: tx_idx.into(),
-            block_number: 0.into(),
+            block_number: block_number.into(),
             block_hash: Hash::default(),
         }
     }
@@ -277,13 +277,14 @@ mod tests {
                 .into_iter()
                 .map(|indexes| indexes.into_iter().map(SlotIndex::from))
                 .enumerate()
-                .map(|(i, indexes)| create_tx(indexes.collect(), i as u64))
+                .map(|(i, indexes)| create_tx(indexes.collect(), i as u64, i as u64))
                 .collect();
 
             let mut dag = TransactionDag::new(transactions);
             let mut i = 0;
             while let Some(roots) = dag.take_roots() {
                 assert_eq!(roots.len(), expected[i].len());
+
                 assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
                 i += 1;
             }
