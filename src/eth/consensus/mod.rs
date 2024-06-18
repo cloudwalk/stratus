@@ -798,7 +798,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
