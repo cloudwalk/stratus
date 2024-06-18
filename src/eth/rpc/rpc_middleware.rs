@@ -1,8 +1,6 @@
 //! Track RPC requests and responses using metrics and traces.
 
 use std::future::Future;
-#[cfg(feature = "metrics")]
-#[cfg(feature = "metrics")]
 use std::task::Poll;
 use std::time::Instant;
 
