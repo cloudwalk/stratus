@@ -57,6 +57,11 @@ jobs:
       - name: Install jq
         run: sudo apt-get install jq -y
 
+      - name: Install grpcurl
+        run: |
+          GRPCURL_VERSION="1.9.1"
+          curl -sSL https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xz grpcurl
+
       - name: Set up Just
         uses: extractions/setup-just@v2
 
