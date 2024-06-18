@@ -371,7 +371,7 @@ mod interval_miner {
             }
 
             // mine
-            tracing::info!(lag_ys = %tick.elapsed().as_micros(), "interval mining block");
+            tracing::info!(lag_us = %tick.elapsed().as_micros(), "interval mining block");
             mine_and_commit(&miner);
         }
         warn_task_rx_closed(TASK_NAME);
