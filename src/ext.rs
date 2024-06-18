@@ -362,7 +362,7 @@ where
         .expect("spawning named blocking task should not fail")
 }
 
-/// Spawns a thread with the given name.
+/// Spawns a thread with the given name. Automatically enters Tokio context.
 #[track_caller]
 pub fn spawn_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> std::thread::JoinHandle<T>
 where
