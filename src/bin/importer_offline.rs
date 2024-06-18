@@ -54,9 +54,9 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
-    let storage = config.storage.init().await?;
-    let miner = config.miner.init_external_mode(Arc::clone(&storage), None).await?;
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
+    let storage = config.storage.init()?;
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None)?;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // init block snapshots to export
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();

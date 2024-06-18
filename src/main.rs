@@ -12,14 +12,14 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // init services
-    let storage = config.storage.init().await?;
+    let storage = config.storage.init()?;
     let external_relayer = if let Some(c) = config.clone().external_relayer {
         Some(c.init().await)
     } else {
         None
     };
-    let miner = config.miner.init(Arc::clone(&storage), external_relayer).await?;
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
+    let miner = config.miner.init(Arc::clone(&storage), external_relayer)?;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
     let consensus = Consensus::new(
         Arc::clone(&storage),
         config.clone().candidate_peers.clone(),
