@@ -1,7 +1,6 @@
 use std::cmp::min;
 use std::fs;
 use std::sync::Arc;
-use std::thread;
 
 use anyhow::anyhow;
 use futures::try_join;
@@ -18,8 +17,8 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
+use stratus::ext::spawn_thread;
 use stratus::ext::ResultExt;
-use stratus::infra::tracing::info_task_spawn;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
@@ -69,42 +68,27 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     storage.save_accounts(initial_accounts.clone())?;
 
     // execute thread: external rpc storage loader
-    let storage_thread = thread::Builder::new().name("storage-loader".into());
-    let storage_tokio = Handle::current();
-
-    info_task_spawn("storage-loader");
-    let storage_loader_thread = storage_thread
-        .spawn(move || {
-            let _tokio_guard = storage_tokio.enter();
-
-            let result = storage_tokio.block_on(execute_external_rpc_storage_loader(
-                rpc_storage,
-                config.blocks_by_fetch,
-                config.paralellism,
-                block_start,
-                block_end,
-                backlog_tx,
-            ));
-            if let Err(e) = result {
-                tracing::error!(reason = ?e, "storage-loader failed");
-            }
-        })
-        .expect("spawning storage-loader thread should not fail");
+    let storage_loader_thread = spawn_thread("storage-loader", move || {
+        let result = Handle::current().block_on(execute_external_rpc_storage_loader(
+            rpc_storage,
+            config.blocks_by_fetch,
+            config.paralellism,
+            block_start,
+            block_end,
+            backlog_tx,
+        ));
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "storage-loader failed");
+        }
+    });
 
     // execute thread: block importer
-    let importer_thread = thread::Builder::new().name("block-importer".into());
-    let importer_tokio = Handle::current();
-
-    info_task_spawn("block-importer");
-    let block_importer_thread = importer_thread
-        .spawn(move || {
-            let _tokio_guard = importer_tokio.enter();
-            let result = importer_tokio.block_on(execute_block_importer(executor, miner, backlog_rx, block_snapshots));
-            if let Err(e) = result {
-                tracing::error!(reason = ?e, "block-importer failed");
-            }
-        })
-        .expect("spawning block-importer thread should not fail");
+    let block_importer_thread = spawn_thread("block-importer", move || {
+        let result = Handle::current().block_on(execute_block_importer(executor, miner, backlog_rx, block_snapshots));
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "block-importer failed");
+        }
+    });
 
     // await tasks
     if let Err(e) = block_importer_thread.join() {

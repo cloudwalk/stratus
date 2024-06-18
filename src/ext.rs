@@ -341,6 +341,7 @@ where
     T: Send + 'static,
 {
     info_task_spawn(name);
+
     tokio::task::Builder::new()
         .name(name)
         .spawn(task)
@@ -354,10 +355,29 @@ where
     T: Send + 'static,
 {
     info_task_spawn(name);
+
     tokio::task::Builder::new()
         .name(name)
         .spawn_blocking(task)
         .expect("spawning named blocking task should not fail")
+}
+
+/// Spawns a thread with the given name.
+#[track_caller]
+pub fn spawn_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> std::thread::JoinHandle<T>
+where
+    T: Send + 'static,
+{
+    info_task_spawn(name);
+
+    let tokio = tokio::runtime::Handle::current();
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || {
+            let _tokio_guard = tokio.enter();
+            task()
+        })
+        .expect("spawning background thread should not fail")
 }
 
 /// Spawns a blocking Tokio task or a thread according to the compilation feature-flag.
@@ -368,16 +388,7 @@ where
 {
     #[cfg(feature = "bg-threads")]
     {
-        info_task_spawn(name);
-
-        let tokio = tokio::runtime::Handle::current();
-        std::thread::Builder::new()
-            .name(name.into())
-            .spawn(move || {
-                let _tokio_guard = tokio.enter();
-                task();
-            })
-            .expect("spawning background thread should not fail");
+        spawn_thread(name, task);
     }
 
     #[cfg(not(feature = "bg-threads"))]
