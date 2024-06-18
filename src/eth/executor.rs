@@ -17,9 +17,12 @@ use tracing::info_span;
 use tracing::span::Id;
 use tracing::Span;
 
-use super::Consensus;
 use crate::eth::consensus::forward_to::TransactionRelayer;
+use crate::eth::consensus::Consensus;
 use crate::eth::evm;
+use crate::eth::evm::revm::Revm;
+use crate::eth::evm::Evm;
+use crate::eth::evm::EvmConfig;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Block;
@@ -40,11 +43,15 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
+use crate::ext::named_spawn_blocking;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::tracing::info_task_spawn;
+use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::BlockchainClient;
+use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct EvmTask {
@@ -68,7 +75,7 @@ pub struct Executor {
     evm_tx: crossbeam_channel::Sender<EvmTask>,
 
     // Number of running EVMs.
-    num_evms: usize,
+    config: EvmConfig,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Arc<BlockMiner>,
@@ -79,15 +86,51 @@ pub struct Executor {
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, evm_tx: crossbeam_channel::Sender<EvmTask>, num_evms: usize) -> Self {
-        tracing::info!(%num_evms, "creating executor");
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, config: EvmConfig) -> Self {
+        tracing::info!(?config, "creating executor");
 
+        let evm_tx = Self::spawn_evms(Arc::clone(&storage), &config);
         Self {
             evm_tx,
-            num_evms,
+            config,
             miner,
             storage,
         }
+    }
+
+    /// Spawns EVM tasks in background.
+    fn spawn_evms(storage: Arc<StratusStorage>, config: &EvmConfig) -> crossbeam_channel::Sender<EvmTask> {
+        let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
+
+        let chain_id = config.chain_id;
+        for evm_index in 1..=config.num_evms {
+            // create evm resources
+            let evm_storage = Arc::clone(&storage);
+            let evm_rx = evm_rx.clone();
+
+            named_spawn_blocking(&format!("executor::evm-{}", evm_index), move || {
+                let task_name = &format!("evm-{}", evm_index);
+                let mut evm = Revm::new(evm_storage, chain_id);
+
+                // keep executing transactions until the channel is closed
+                while let Ok(task) = evm_rx.recv() {
+                    if GlobalState::warn_if_shutdown(task_name) {
+                        return;
+                    }
+
+                    // execute
+                    let _enter = task.span.enter();
+                    let result = evm.execute(task.input);
+                    if let Err(e) = task.response_tx.send(result) {
+                        tracing::error!(reason = ?e, "failed to send evm execution result");
+                    };
+                }
+
+                warn_task_tx_closed(task_name);
+            });
+        }
+
+        evm_tx
     }
 
     // -------------------------------------------------------------------------
@@ -120,7 +163,7 @@ impl Executor {
                 tx_parallel_executions.push(self.external_transaction(tx, receipt, block));
             }
         }
-        let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.num_evms);
+        let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.config.num_evms);
 
         // execute serial transactions joining them with parallel
         for tx_route in tx_routes {

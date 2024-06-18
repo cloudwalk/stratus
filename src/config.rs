@@ -6,7 +6,6 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -14,11 +13,8 @@ use clap::Parser;
 use display_json::DebugAsJson;
 use strum::VariantNames;
 use tokio::runtime::Builder;
-use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
-use crate::eth::evm::revm::Revm;
-use crate::eth::evm::Evm;
 use crate::eth::evm::EvmConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
@@ -40,17 +36,13 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::BlockMinerMode;
-use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
-use crate::infra::tracing::info_task_spawn;
-use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::TracingLogFormat;
 use crate::infra::tracing::TracingProtocol;
 use crate::infra::BlockchainClient;
-use crate::GlobalState;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
@@ -239,52 +231,13 @@ impl ExecutorConfig {
     ///
     /// Note: Should be called only after async runtime is initialized.
     pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
-        const TASK_NAME: &str = "evm-thread";
+        let config = EvmConfig {
+            num_evms: max(self.num_evms, 1),
+            chain_id: self.chain_id.into(),
+        };
+        tracing::info!(?config, "creating executor");
 
-        let num_evms = max(self.num_evms, 1);
-        tracing::info!(config = ?self, "creating executor");
-
-        // spawn evm in background using native threads
-        // TODO: move EVMs initialization to Executor.
-        let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
-        for _ in 1..=num_evms {
-            // create evm resources
-            let evm_config = EvmConfig {
-                chain_id: self.chain_id.into(),
-            };
-            let evm_storage = Arc::clone(&storage);
-            let evm_tokio = Handle::current();
-            let evm_rx = evm_rx.clone();
-
-            // spawn thread that will run evm
-            let t = thread::Builder::new().name("evm".into());
-
-            info_task_spawn(TASK_NAME);
-            t.spawn(move || {
-                // init services
-                let _tokio_guard = evm_tokio.enter();
-                let mut evm = Revm::new(evm_storage, evm_config);
-
-                // keep executing transactions until the channel is closed
-                while let Ok(task) = evm_rx.recv() {
-                    if GlobalState::warn_if_shutdown(TASK_NAME) {
-                        return;
-                    }
-
-                    // execute
-                    let _enter = task.span.enter();
-                    let result = evm.execute(task.input);
-                    if let Err(e) = task.response_tx.send(result) {
-                        tracing::error!(reason = ?e, "failed to send evm execution result");
-                    };
-                }
-
-                warn_task_tx_closed(TASK_NAME);
-            })
-            .expect("spawning evm threads should not fail");
-        }
-
-        let executor = Executor::new(storage, miner, evm_tx, self.num_evms);
+        let executor = Executor::new(storage, miner, config);
         Arc::new(executor)
     }
 }
