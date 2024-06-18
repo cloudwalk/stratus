@@ -144,7 +144,7 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
 // Channels
 // -----------------------------------------------------------------------------
 
-/// Reads a value from a channel logging timeout at some predefined interval.
+/// Reads a value from an async channel logging timeout at some predefined interval.
 #[macro_export]
 macro_rules! channel_read {
     ($rx: ident) => {
@@ -168,6 +168,39 @@ macro_rules! channel_read_impl {
                 Err(_) => {
                     tracing::warn!(target: TARGET, channel = %stringify!($rx), timeout_ms = %TIMEOUT.as_millis(), "timeout reading channel");
                     continue;
+                }
+            }
+        }
+    }};
+}
+
+/// Reads a value from a sync channel logging timeout at some predefined interval.
+#[macro_export]
+macro_rules! channel_read_sync {
+    ($rx: ident) => {
+        $crate::channel_read_sync_impl!($rx, timeout_ms: 2000)
+    };
+    ($rx: ident, $timeout_ms:expr) => {
+        $crate::channel_read_sync_impl!($rx, timeout_ms: $timeout_ms),
+    };
+}
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! channel_read_sync_impl {
+    ($rx: ident, timeout_ms: $timeout: expr) => {{
+        const TARGET: &str = const_format::formatcp!("{}::{}", module_path!(), "rx");
+        const TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_millis($timeout);
+
+        loop {
+            match $rx.recv_timeout(TIMEOUT) {
+                Ok(value) => break Ok(value),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    tracing::warn!(target: TARGET, channel = %stringify!($rx), timeout_ms = %TIMEOUT.as_millis(), "timeout reading channel");
+                    continue;
+                }
+                e @ Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    break e
                 }
             }
         }

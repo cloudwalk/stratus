@@ -336,7 +336,7 @@ impl MinerConfig {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                miner.commit(Block::genesis()).await?;
+                miner.commit(Block::genesis())?;
             }
         }
 

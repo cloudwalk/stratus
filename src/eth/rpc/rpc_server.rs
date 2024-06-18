@@ -141,7 +141,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     #[cfg(feature = "dev")]
     {
         module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
-        module.register_async_method("evm_mine", evm_mine)?; // TODO: blocking
+        module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("debug_setHead", debug_set_head)?;
         module.register_blocking_method("debug_readAllSlotsFromAccount", debug_read_all_slots)?;
     }
@@ -205,8 +205,8 @@ fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> an
 }
 
 #[cfg(feature = "dev")]
-async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    ctx.miner.mine_local_and_commit().await?;
+fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    ctx.miner.mine_local_and_commit()?;
     Ok(serde_json::to_value(true).expect_infallible())
 }
 
