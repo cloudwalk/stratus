@@ -534,12 +534,11 @@ impl Consensus {
     }
 
     pub async fn get_chain_url(&self) -> Option<(String, Option<String>)> {
-        if self.is_follower().await {
-            if let Ok(leader_address) = self.leader_address().await {
-                return Some((leader_address.full_jsonrpc_address(), None));
-            }
-            //TODO use peer discovery to discover the leader
-        }
+        //TODO FIXME move this code back when we have propagation: if self.is_follower().await {
+        //TODO FIXME move this code back when we have propagation:     if let Ok(leader_address) = self.leader_address().await {
+        //TODO FIXME move this code back when we have propagation:         return Some((leader_address.full_jsonrpc_address(), None));
+        //TODO FIXME move this code back when we have propagation:     }
+        //TODO FIXME move this code back when we have propagation: }
 
         match self.importer_config.clone() {
             Some(importer_config) => Some((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
