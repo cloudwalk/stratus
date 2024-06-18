@@ -2,6 +2,26 @@
 
 set -e
 
+# Default binary
+binary="stratus"
+
+# Parse command-line options
+while [[ "$#" -gt 0 ]]; do
+  case $1 in
+    --bin)
+      binary="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown parameter passed: $1"
+      echo "Usage: $0 [--bin binary]"
+      exit 1
+      ;;
+  esac
+done
+
+echo "Using binary: $binary"
+
 # Function to start an instance
 start_instance() {
     local address=$1
@@ -12,7 +32,7 @@ start_instance() {
     local tokio_console_address=$6
     local metrics_exporter_address=$7
 
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- \
+    RUST_LOG=info cargo run --release --bin $binary --features dev -- \
         --block-mode=1s \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
@@ -246,7 +266,7 @@ n=4
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
     echo -e "\n##############################################\n"
-    echo "Running test iteration $iteration_n of $n..."
+    echo "Running binary $binary test iteration $iteration_n of $n..."
     run_test
     sleep 5
 done
