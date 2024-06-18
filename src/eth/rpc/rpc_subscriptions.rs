@@ -16,8 +16,8 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
-use crate::ext::named_spawn;
 use crate::ext::not;
+use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
 use crate::if_else;
@@ -68,7 +68,7 @@ impl RpcSubscriptions {
     /// Spawns a new task to clean up closed subscriptions from time to time.
     fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::cleaner";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -99,7 +99,7 @@ impl RpcSubscriptions {
         mut rx_tx_hash: broadcast::Receiver<TransactionExecution>,
     ) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newPendingTransactions";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -120,7 +120,7 @@ impl RpcSubscriptions {
     /// Spawns a new task that notifies subscribers about new created blocks.
     fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_block: broadcast::Receiver<Block>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newHeads";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -141,7 +141,7 @@ impl RpcSubscriptions {
     /// Spawns a new task that notifies subscribers about new transactions logs.
     fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_log_mined: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::logs";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());

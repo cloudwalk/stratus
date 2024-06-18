@@ -35,8 +35,8 @@ use crate::eth::storage::rocks::types::HashRocksdb;
 use crate::eth::storage::rocks::types::IndexRocksdb;
 use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
-use crate::ext::named_spawn;
-use crate::ext::named_spawn_blocking;
+use crate::ext::spawn_blocking_named;
+use crate::ext::spawn_named;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
@@ -89,7 +89,7 @@ impl RocksStorageState {
         let transactions = Arc::<RocksDb<HashRocksdb, BlockNumberRocksdb>>::clone(&self.transactions);
         let logs = Arc::<RocksDb<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>>::clone(&self.logs);
 
-        named_spawn("storage::backup_trigger", async move {
+        spawn_named("storage::backup_trigger", async move {
             while rx.recv().is_ok() {
                 let accounts_clone = Arc::clone(&accounts);
                 let accounts_history_clone = Arc::clone(&accounts_history);
@@ -100,7 +100,7 @@ impl RocksStorageState {
                 let blocks_by_hash_clone = Arc::clone(&blocks_by_hash);
                 let logs_clone = Arc::clone(&logs);
 
-                named_spawn_blocking("storage::backup_execution", move || {
+                spawn_blocking_named("storage::backup_execution", move || {
                     tracing::info!("rocksdb backuping accounts");
                     accounts_clone.backup().unwrap();
 

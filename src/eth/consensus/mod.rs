@@ -42,7 +42,7 @@ use tonic::Status;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
-use crate::ext::named_spawn;
+use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
 use crate::infra::BlockchainClient;
@@ -229,7 +229,7 @@ impl Consensus {
     /// When there are healthy peers we need to wait for the grace period of discovery
     /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
-        named_spawn("consensus::heartbeat_timer", async move {
+        spawn_named("consensus::heartbeat_timer", async move {
             discovery::discover_peers(Arc::clone(&consensus)).await;
             if consensus.peers.read().await.is_empty() {
                 tracing::info!("no peers, starting hearbeat timer immediately");
@@ -340,7 +340,7 @@ impl Consensus {
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
-        named_spawn("consensus::peer_discovery", async move {
+        spawn_named("consensus::peer_discovery", async move {
             let mut interval = tokio::time::interval(PEER_DISCOVERY_DELAY);
             loop {
                 tracing::info!("starting periodic peer discovery");
@@ -355,7 +355,7 @@ impl Consensus {
         //TODO rediscover followers on comunication error
         //XXX FIXME deal with the scenario where a transactionHash arrives after the block, in this case before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
         //TODO maybe check if I'm currently the leader?
-        named_spawn("consensus::transaction_execution_queue", async move {
+        spawn_named("consensus::transaction_execution_queue", async move {
             let interval = Duration::from_millis(40);
             loop {
                 tokio::time::sleep(interval).await;
@@ -381,7 +381,7 @@ impl Consensus {
         mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
         mut rx_blocks: broadcast::Receiver<Block>,
     ) {
-        named_spawn("consensus::block_sender", async move {
+        spawn_named("consensus::block_sender", async move {
             loop {
                 tokio::select! {
                     Ok(tx) = rx_pending_txs.recv() => {
@@ -423,7 +423,7 @@ impl Consensus {
     }
 
     fn initialize_server(consensus: Arc<Consensus>) {
-        named_spawn("consensus::server", async move {
+        spawn_named("consensus::server", async move {
             tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
             let addr = consensus.grpc_address;
 
