@@ -60,11 +60,8 @@ find_leader() {
             leaders+=("$grpc_address")
         fi
     done
-    if [ ${#leaders[@]} -eq 0 ]; then
-        echo ""
-    else
-        echo "${leaders[@]}"
-    fi
+    
+    echo "${leaders[@]}"
 }
 
 # Function to remove rocks-path directory
