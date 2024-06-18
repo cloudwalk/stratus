@@ -173,10 +173,7 @@ run_test() {
     echo "Killing the leader instance on address $leader_grpc_address..."
     for i in "${!grpc_addresses[@]}"; do
         if [ "${grpc_addresses[i]}" == "$leader_grpc_address" ]; then
-            kill ${pids[i]}
-            unset grpc_addresses[i]
-            unset pids[i]
-            unset ports[i]
+            killport ${ports[i]}
             break
         fi
     done
@@ -251,8 +248,8 @@ run_test() {
 
     # Clean up
     echo "Cleaning up..."
-    for pid in "${pids[@]}"; do
-        kill $pid
+    for port in "${ports[@]}"; do
+        killport $port
     done
 
     for rocks_path in "${rocks_paths[@]}"; do
@@ -261,7 +258,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=4
+n=200
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
