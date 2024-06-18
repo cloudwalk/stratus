@@ -83,7 +83,7 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 
     // init server
     let storage = config.storage.init().await?;
-    let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await?;
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
     let chain = Arc::new(
         BlockchainClient::new_http_ws(

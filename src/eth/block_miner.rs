@@ -10,8 +10,6 @@ use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tracing::Span;
 
-use super::Consensus;
-use crate::eth::consensus::ExternalEntry;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -39,24 +37,21 @@ pub struct BlockMiner {
     mode: BlockMinerMode,
 
     /// Broadcasts pending transactions events.
-    pub notifier_pending_txs: broadcast::Sender<Hash>,
+    pub notifier_pending_txs: broadcast::Sender<TransactionExecution>,
 
     /// Broadcasts new mined blocks events.
-    pub notifier_blocks: broadcast::Sender<BlockHeader>,
+    pub notifier_blocks: broadcast::Sender<Block>,
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
 
     /// External relayer client
     relayer_client: Option<ExternalRelayerClient>,
-
-    /// Consensus logic.
-    consensus: Option<Arc<Consensus>>,
 }
 
 impl BlockMiner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, consensus: Option<Arc<Consensus>>, relayer_client: Option<ExternalRelayerClient>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, relayer_client: Option<ExternalRelayerClient>) -> Self {
         tracing::info!(?mode, "creating block miner");
         Self {
             storage,
@@ -65,7 +60,6 @@ impl BlockMiner {
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
             relayer_client,
-            consensus,
         }
     }
 
@@ -98,12 +92,7 @@ impl BlockMiner {
         });
 
         // save execution to temporary storage
-        let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution.clone())?;
-
-        if let Some(consensus) = &self.consensus {
-            consensus.sender.send(ExternalEntry::TransactionExecution(tx_execution.clone())).await?;
-        }
 
         // decide what to do based on mining mode
         match self.mode {
@@ -111,13 +100,13 @@ impl BlockMiner {
             // * notify pending transactions
             // * mine block immediately
             BlockMinerMode::Automine => {
-                let _ = self.notifier_pending_txs.send(tx_hash);
+                let _ = self.notifier_pending_txs.send(tx_execution);
                 self.mine_local_and_commit().await?;
             }
             // * consensus transactions
             // * notify pending transactions
             BlockMinerMode::Interval(_) => {
-                let _ = self.notifier_pending_txs.send(tx_hash);
+                let _ = self.notifier_pending_txs.send(tx_execution);
             }
             // * do nothing, the caller will decide what to do
             BlockMinerMode::External => {}
@@ -240,26 +229,21 @@ impl BlockMiner {
 
         // extract fields to use in notifications
         let block_number = block.number();
-        let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
 
         if let Some(relayer) = &self.relayer_client {
             relayer.send_to_relayer(block.clone()).await?;
         }
 
-        if let Some(consensus) = &self.consensus {
-            consensus.sender.send(ExternalEntry::Block(block.clone())).await?;
-        }
-
         // persist block
-        self.storage.save_block(block)?;
+        self.storage.save_block(block.clone())?;
         self.storage.set_mined_block_number(block_number)?;
 
         // notify
         for log in block_logs {
             let _ = self.notifier_logs.send(log);
         }
-        let _ = self.notifier_blocks.send(block_header);
+        let _ = self.notifier_blocks.send(block);
 
         Ok(())
     }
