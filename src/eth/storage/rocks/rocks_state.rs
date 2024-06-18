@@ -306,7 +306,7 @@ impl RocksStorageState {
             .flat_map(|transaction| transaction.logs)
             .filter(|log_mined| {
                 let topics = log_mined.log.to_topics_vec();
-                filter.topics_combinations.iter().all(|topic_filter| topic_filter.matches(&topics))
+                filter.topics_combinations.is_empty() || filter.topics_combinations.iter().any(|topic_filter| topic_filter.matches(&topics))
             })
             .map(LogMined::from)
             .collect())
