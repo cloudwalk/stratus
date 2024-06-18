@@ -5,7 +5,7 @@ metrics! {
     group: json_rpc,
 
     "Number of JSON-RPC requests active right now."
-    gauge rpc_requests_active{client, method, function},
+    gauge rpc_requests_active{client, method},
 
     "Number of JSON-RPC requests that started."
     counter rpc_requests_started{client, method, function},
