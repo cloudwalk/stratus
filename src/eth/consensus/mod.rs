@@ -523,15 +523,15 @@ impl Consensus {
         Some(namespace.trim().to_string())
     }
 
-    async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
-        let peers = self.peers.read().await;
-        for (address, (peer, _)) in peers.iter() {
-            if peer.role == Role::Leader {
-                return Ok(address.clone());
-            }
-        }
-        Err(anyhow!("Leader not found"))
-    }
+    //TODO FIXME move this code back when we have propagation: async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
+    //TODO FIXME move this code back when we have propagation:     let peers = self.peers.read().await;
+    //TODO FIXME move this code back when we have propagation:     for (address, (peer, _)) in peers.iter() {
+    //TODO FIXME move this code back when we have propagation:         if peer.role == Role::Leader {
+    //TODO FIXME move this code back when we have propagation:             return Ok(address.clone());
+    //TODO FIXME move this code back when we have propagation:         }
+    //TODO FIXME move this code back when we have propagation:     }
+    //TODO FIXME move this code back when we have propagation:     Err(anyhow!("Leader not found"))
+    //TODO FIXME move this code back when we have propagation: }
 
     pub async fn get_chain_url(&self) -> Option<(String, Option<String>)> {
         //TODO FIXME move this code back when we have propagation: if self.is_follower().await {
