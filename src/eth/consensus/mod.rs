@@ -103,9 +103,9 @@ impl PeerAddress {
         format!("{}:{}", self.address, self.grpc_port)
     }
 
-    fn full_jsonrpc_address(&self) -> String {
-        format!("http://{}:{}", self.address, self.jsonrpc_port)
-    }
+    //TODO FIXME move this code back when we have propagation: fn full_jsonrpc_address(&self) -> String {
+    //TODO FIXME move this code back when we have propagation:     format!("http://{}:{}", self.address, self.jsonrpc_port)
+    //TODO FIXME move this code back when we have propagation: }
 
     fn from_string(s: String) -> Result<Self, anyhow::Error> {
         let (scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
@@ -523,23 +523,22 @@ impl Consensus {
         Some(namespace.trim().to_string())
     }
 
-    async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
-        let peers = self.peers.read().await;
-        for (address, (peer, _)) in peers.iter() {
-            if peer.role == Role::Leader {
-                return Ok(address.clone());
-            }
-        }
-        Err(anyhow!("Leader not found"))
-    }
+    //TODO FIXME move this code back when we have propagation: async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
+    //TODO FIXME move this code back when we have propagation:     let peers = self.peers.read().await;
+    //TODO FIXME move this code back when we have propagation:     for (address, (peer, _)) in peers.iter() {
+    //TODO FIXME move this code back when we have propagation:         if peer.role == Role::Leader {
+    //TODO FIXME move this code back when we have propagation:             return Ok(address.clone());
+    //TODO FIXME move this code back when we have propagation:         }
+    //TODO FIXME move this code back when we have propagation:     }
+    //TODO FIXME move this code back when we have propagation:     Err(anyhow!("Leader not found"))
+    //TODO FIXME move this code back when we have propagation: }
 
     pub async fn get_chain_url(&self) -> Option<(String, Option<String>)> {
-        if self.is_follower().await {
-            if let Ok(leader_address) = self.leader_address().await {
-                return Some((leader_address.full_jsonrpc_address(), None));
-            }
-            //TODO use peer discovery to discover the leader
-        }
+        //TODO FIXME move this code back when we have propagation: if self.is_follower().await {
+        //TODO FIXME move this code back when we have propagation:     if let Ok(leader_address) = self.leader_address().await {
+        //TODO FIXME move this code back when we have propagation:         return Some((leader_address.full_jsonrpc_address(), None));
+        //TODO FIXME move this code back when we have propagation:     }
+        //TODO FIXME move this code back when we have propagation: }
 
         match self.importer_config.clone() {
             Some(importer_config) => Some((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
@@ -849,11 +848,5 @@ mod tests {
     fn test_peer_address_full_grpc_address() {
         let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
         assert_eq!(peer_address.full_grpc_address(), "127.0.0.1:3777");
-    }
-
-    #[test]
-    fn test_peer_address_full_jsonrpc_address() {
-        let peer_address = PeerAddress::new("127.0.0.1".to_string(), 3000, 3777);
-        assert_eq!(peer_address.full_jsonrpc_address(), "http://127.0.0.1:3000");
     }
 }
