@@ -1,4 +1,4 @@
-name: E2E Leader Election
+name: E2E Consensus
 
 on:
   pull_request:
