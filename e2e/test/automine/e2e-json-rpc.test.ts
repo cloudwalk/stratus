@@ -111,7 +111,7 @@ describe("JSON-RPC", () => {
                 expect(block.transactions.length).eq(0);
             })
             it("should return null if the block doesn't exist", async () => {
-                let block = await send("eth_getBlockByNumber", [HASH_ZERO, true]);
+                let block = await send("eth_getBlockByHash", [HASH_ZERO, true]);
                 expect(block).to.be.null;
             })
         });
