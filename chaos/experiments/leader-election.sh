@@ -13,12 +13,14 @@ start_instance() {
     local metrics_exporter_address=$7
 
     RUST_LOG=info cargo run --release --bin stratus --features dev -- \
+        --block-mode=1s \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
         -a=$address \
         --grpc-server-address=$grpc_address \
         --rocks-path-prefix=$rocks_path_prefix \
         --tokio-console-address=$tokio_console_address \
+        --perm-storage=rocks \
         --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
     echo $!
 }
@@ -35,31 +37,34 @@ check_liveness() {
 check_leader() {
     local grpc_address=$1
 
-    # Send the gRPC request using grpcurl
-    response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{"term": 0, "prevLogIndex": 0, "prevLogTerm": 0, "header": {"number": 1, "timestamp": 0}, "leader_id": ""}' $grpc_address append_entry.AppendEntryService/AppendBlockCommit)
-    echo $response
+    # Send the gRPC request using grpcurl and capture both stdout and stderr
+    response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{"term": 0, "prevLogIndex": 0, "prevLogTerm": 0, "leader_id": "leader_id_value", "block_entry": {"number": 1, "hash": "hash_value", "transactions_root": "transactions_root_value", "gas_used": "gas_used_value", "gas_limit": "gas_limit_value", "bloom": "bloom_value", "timestamp": 123456789, "parent_hash": "parent_hash_value", "author": "author_value", "extra_data": "ZXh0cmFfZGF0YV92YWx1ZQ==", "miner": "miner_value", "difficulty": "difficulty_value", "receipts_root": "receipts_root_value", "uncle_hash": "uncle_hash_value", "size": 12345, "state_root": "state_root_value", "total_difficulty": "total_difficulty_value", "nonce": "nonce_value", "transaction_hashes": ["tx_hash1", "tx_hash2"]}}' "$grpc_address" append_entry.AppendEntryService/AppendBlockCommit 2>&1)
 
-    # Check if the response status indicates success
-    if echo $response | grep -q '"status": 0'; then
-        echo "true"
+    # Check the response for specific strings to determine the node status
+    if [[ "$response" == *"append_transaction_executions called on leader node"* ]]; then
+        return 0 # Success exit code for leader
+    elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
+        return 1 # Failure exit code for non-leader
     else
-        echo "false"
+        echo "Unexpected response from $grpc_address: $response"
+        exit 1
     fi
 }
 
-# Function to find the leader
+# Function to find the leader node
 find_leader() {
-    echo "Finding leader..."
     local grpc_addresses=("$@")
     local leaders=()
     for grpc_address in "${grpc_addresses[@]}"; do
-        result=$(check_leader $grpc_address)
-        echo "Leader check for $grpc_address: $result"
-        if [ "$result" = "true" ]; then
-            leaders+=($grpc_address)
+        if check_leader "$grpc_address"; then
+            leaders+=("$grpc_address")
         fi
     done
-    echo "${leaders[@]}"
+    if [ ${#leaders[@]} -eq 0 ]; then
+        echo "No leader nodes found."
+    else
+        echo "${leaders[@]}"
+    fi
 }
 
 # Function to remove rocks-path directory
@@ -73,7 +78,7 @@ run_test() {
     local instances=(
         "0.0.0.0:3001 0.0.0.0:3778 tmp_rocks_3001 instance_3001.log 3001 http://0.0.0.0:3002;3779,http://0.0.0.0:3003;3780 0.0.0.0:6669 0.0.0.0:9001"
         "0.0.0.0:3002 0.0.0.0:3779 tmp_rocks_3002 instance_3002.log 3002 http://0.0.0.0:3001;3778,http://0.0.0.0:3003;3780 0.0.0.0:6670 0.0.0.0:9002"
-        "0.0.0.0:3003 0.0.0.0:3780 tmp_rocks_3003 instance_3003.log 3003 http://0.0.0.0:3001;3778,http://0.0.0.0:3002;3779 0.0.0.0:6671 0.0.0.0:9003"
+        #"0.0.0.0:3003 0.0.0.0:3780 tmp_rocks_3003 instance_3003.log 3003 http://0.0.0.0:3001;3778,http://0.0.0.0:3002;3779 0.0.0.0:6671 0.0.0.0:9003"
     )
 
     # Start instances
@@ -90,6 +95,7 @@ run_test() {
         grpc_addresses+=("${params[1]}")
         rocks_paths+=("${params[2]}")
         liveness+=(false)
+        sleep 20 # Add interval between instances startup to aoivd no leader case
     done
 
     all_ready=false
@@ -112,8 +118,7 @@ run_test() {
         fi
     done
 
-    echo "All instances are ready. Waiting for grace period before leader election"
-    sleep 120
+    echo "All instances are ready. Waiting for leader election"
 
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=60
@@ -148,6 +153,9 @@ run_test() {
         echo "Exiting due to leader election failure."
         exit 1
     fi
+
+    echo "Waiting for periodic discovery of remaining instances."
+    sleep 40
 
     # Kill the leader instance
     echo "Killing the leader instance on address $leader_grpc_address..."
@@ -240,7 +248,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=1
+n=2
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
