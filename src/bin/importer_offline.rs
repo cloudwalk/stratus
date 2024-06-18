@@ -143,7 +143,7 @@ async fn execute_block_importer(
             }
 
             // re-execute (and import) block
-            executor.external_block(&block, &receipts).await?;
+            executor.execute_external_block(&block, &receipts)?;
             transaction_count += block.transactions.len();
 
             // mine and save block

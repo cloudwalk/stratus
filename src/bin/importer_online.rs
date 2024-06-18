@@ -158,7 +158,7 @@ async fn start_block_executor(
 
         // execute and mine
         let receipts = ExternalReceipts::from(receipts);
-        if let Err(e) = executor.external_block(&block, &receipts).await {
+        if let Err(e) = executor.execute_external_block(&block, &receipts) {
             let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
             return log_and_err!(reason = e, message);
         };
