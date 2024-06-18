@@ -86,7 +86,7 @@ find_leader() {
 # Function to remove rocks-path directory
 remove_rocks_path() {
     local rocks_path=$1
-    rm -rf $rocks_path
+    rm -rf data/$rocks_path
 }
 
 # Function to run the election test
