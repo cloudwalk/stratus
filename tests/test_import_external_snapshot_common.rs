@@ -150,12 +150,12 @@ pub async fn execute_test(
 
     // init services
     let storage = Arc::new(StratusStorage::new(Arc::new(InMemoryTemporaryStorage::new()), Arc::new(perm_storage)));
-    let miner = config.miner.init_external_mode(Arc::clone(&storage), None, None).await.unwrap();
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None).await.unwrap();
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
 
     // execute and mine
-    executor.external_block(&block, &receipts).await.unwrap();
-    miner.mine_external_and_commit().await.unwrap();
+    executor.execute_external_block(&block, &receipts).unwrap();
+    miner.mine_external_and_commit().unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
     traced_sleep(Duration::from_secs(5), SleepReason::SyncData).await;

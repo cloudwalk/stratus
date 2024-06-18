@@ -3,8 +3,9 @@
 use std::cmp::max;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -12,11 +13,8 @@ use clap::Parser;
 use display_json::DebugAsJson;
 use strum::VariantNames;
 use tokio::runtime::Builder;
-use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
-use crate::eth::evm::revm::Revm;
-use crate::eth::evm::Evm;
 use crate::eth::evm::EvmConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
@@ -38,18 +36,13 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::BlockMinerMode;
-use crate::eth::Consensus;
-use crate::eth::EvmTask;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
-use crate::infra::tracing::info_task_spawn;
-use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::TracingLogFormat;
 use crate::infra::tracing::TracingProtocol;
 use crate::infra::BlockchainClient;
-use crate::GlobalState;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
@@ -141,12 +134,31 @@ impl CommonConfig {
             self.num_async_threads, self.num_blocking_threads
         );
 
+        let num_async_threads = self.num_async_threads;
+        let num_blocking_threads = self.num_blocking_threads;
         let result = Builder::new_multi_thread()
             .enable_all()
-            .thread_name("tokio")
-            .worker_threads(self.num_async_threads)
-            .max_blocking_threads(self.num_blocking_threads)
+            .worker_threads(num_async_threads)
+            .max_blocking_threads(num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
+            .thread_name_fn(move || {
+                // Tokio first create all async threads, then all blocking threads.
+                // Threads are not expected to die because Tokio catches panics and blocking threads are configured to never die.
+                // If one of these premises are not true anymore, this will possibly categorize threads wrongly.
+
+                static ASYNC_ID: AtomicUsize = AtomicUsize::new(1);
+                static BLOCKING_ID: AtomicUsize = AtomicUsize::new(1);
+
+                // identify async threads
+                let async_id = ASYNC_ID.fetch_add(1, Ordering::SeqCst);
+                if async_id <= num_async_threads {
+                    return format!("tokio-async-{}", async_id);
+                }
+
+                // identify blocking threads
+                let blocking_id = BLOCKING_ID.fetch_add(1, Ordering::SeqCst);
+                format!("tokio-blocking-{}", blocking_id)
+            })
             .build();
 
         match result {
@@ -219,52 +231,13 @@ impl ExecutorConfig {
     ///
     /// Note: Should be called only after async runtime is initialized.
     pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
-        const TASK_NAME: &str = "evm-thread";
+        let config = EvmConfig {
+            num_evms: max(self.num_evms, 1),
+            chain_id: self.chain_id.into(),
+        };
+        tracing::info!(?config, "creating executor");
 
-        let num_evms = max(self.num_evms, 1);
-        tracing::info!(config = ?self, "creating executor");
-
-        // spawn evm in background using native threads
-        // TODO: move EVMs initialization to Executor.
-        let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
-        for _ in 1..=num_evms {
-            // create evm resources
-            let evm_config = EvmConfig {
-                chain_id: self.chain_id.into(),
-            };
-            let evm_storage = Arc::clone(&storage);
-            let evm_tokio = Handle::current();
-            let evm_rx = evm_rx.clone();
-
-            // spawn thread that will run evm
-            let t = thread::Builder::new().name("evm".into());
-
-            info_task_spawn(TASK_NAME);
-            t.spawn(move || {
-                // init services
-                let _tokio_guard = evm_tokio.enter();
-                let mut evm = Revm::new(evm_storage, evm_config);
-
-                // keep executing transactions until the channel is closed
-                while let Ok(task) = evm_rx.recv() {
-                    if GlobalState::warn_if_shutdown(TASK_NAME) {
-                        return;
-                    }
-
-                    // execute
-                    let _enter = task.span.enter();
-                    let result = evm.execute(task.input);
-                    if let Err(e) = task.response_tx.send(result) {
-                        tracing::error!(reason = ?e, "failed to send evm execution result");
-                    };
-                }
-
-                warn_task_tx_closed(TASK_NAME);
-            })
-            .expect("spawning evm threads should not fail");
-        }
-
-        let executor = Executor::new(storage, miner, evm_tx, self.num_evms);
+        let executor = Executor::new(storage, miner, config);
         Arc::new(executor)
     }
 }
@@ -290,36 +263,25 @@ pub struct MinerConfig {
 
 impl MinerConfig {
     /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub async fn init_external_mode(
-        &self,
-        storage: Arc<StratusStorage>,
-        consensus: Option<Arc<Consensus>>,
-        relayer: Option<ExternalRelayerClient>,
-    ) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(BlockMinerMode::External, storage, consensus, relayer).await
+    pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(BlockMinerMode::External, storage, relayer).await
     }
 
     /// Inits [`BlockMiner`] with the configured mining mode.
-    pub async fn init(
-        &self,
-        storage: Arc<StratusStorage>,
-        consensus: Option<Arc<Consensus>>,
-        relayer: Option<ExternalRelayerClient>,
-    ) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(self.block_mode, storage, consensus, relayer).await
+    pub async fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(self.block_mode, storage, relayer).await
     }
 
     async fn init_with_mode(
         &self,
         mode: BlockMinerMode,
         storage: Arc<StratusStorage>,
-        consensus: Option<Arc<Consensus>>,
         relayer: Option<ExternalRelayerClient>,
     ) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "creating block miner");
 
         // create miner
-        let miner = BlockMiner::new(Arc::clone(&storage), mode, consensus, relayer);
+        let miner = BlockMiner::new(Arc::clone(&storage), mode, relayer);
         let miner = Arc::new(miner);
 
         // enable genesis block
@@ -327,7 +289,7 @@ impl MinerConfig {
             let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
-                miner.commit(Block::genesis()).await?;
+                miner.commit(Block::genesis())?;
             }
         }
 

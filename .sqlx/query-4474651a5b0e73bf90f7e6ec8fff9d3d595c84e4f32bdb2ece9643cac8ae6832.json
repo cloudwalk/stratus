@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE relayer_blocks\n                    SET finished = true\n                    WHERE number = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4474651a5b0e73bf90f7e6ec8fff9d3d595c84e4f32bdb2ece9643cac8ae6832"
+}

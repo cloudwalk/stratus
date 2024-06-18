@@ -25,6 +25,7 @@ indexmap = { version = "=2.2.6", features = ["serde"] }
 itertools = "=0.13.0"
 nonempty = { version = "=0.10.0", features = ["serialize"] }
 once_cell = "=1.19.0"
+oneshot = "=0.1.8"
 paste = "=1.0.15"
 phf = "=0.11.2"
 pin-project = "=1.1.5"
@@ -32,9 +33,9 @@ quote = "=1.0.36"
 rand = "=0.8.5"
 strum = "=0.26.2"
 thiserror = "=1.0.61"
+ulid = "=1.1.2"
 url = "=2.5.1"
 uuid = { version = "=1.8.0", features = ["v4", "fast-rng" ] }
-ulid = "=1.1.2"
 
 # async
 tokio = { version = "=1.38.0", features = ["rt-multi-thread", "macros", "signal"] }
@@ -177,7 +178,7 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing", "rocks"]
+default = ["bg-threads", "metrics", "tracing", "rocks"]
 
 # Application is running in develoment mode.
 dev  = []
@@ -188,14 +189,14 @@ metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
 # Enable runtime tracing/spans collection.
 tracing = []
 
+# Background tasks are spawned using threads instead of Tokio blocking tasks.
+bg-threads = []
+
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
 
 # Tools to comunicate with other pods
 kubernetes = ["kube", "k8s-openapi"]
-
-# XXX: Enable external transaction parallel execution.
-executor-parallel = []
 
 # ------------------------------------------------------------------------------
 # Lints

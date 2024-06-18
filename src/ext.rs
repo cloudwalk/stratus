@@ -144,7 +144,7 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
 // Channels
 // -----------------------------------------------------------------------------
 
-/// Reads a value from a channel logging timeout at some predefined interval.
+/// Reads a value from an async channel logging timeout at some predefined interval.
 #[macro_export]
 macro_rules! channel_read {
     ($rx: ident) => {
@@ -168,6 +168,39 @@ macro_rules! channel_read_impl {
                 Err(_) => {
                     tracing::warn!(target: TARGET, channel = %stringify!($rx), timeout_ms = %TIMEOUT.as_millis(), "timeout reading channel");
                     continue;
+                }
+            }
+        }
+    }};
+}
+
+/// Reads a value from a sync channel logging timeout at some predefined interval.
+#[macro_export]
+macro_rules! channel_read_sync {
+    ($rx: ident) => {
+        $crate::channel_read_sync_impl!($rx, timeout_ms: 2000)
+    };
+    ($rx: ident, $timeout_ms:expr) => {
+        $crate::channel_read_sync_impl!($rx, timeout_ms: $timeout_ms),
+    };
+}
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! channel_read_sync_impl {
+    ($rx: ident, timeout_ms: $timeout: expr) => {{
+        const TARGET: &str = const_format::formatcp!("{}::{}", module_path!(), "rx");
+        const TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_millis($timeout);
+
+        loop {
+            match $rx.recv_timeout(TIMEOUT) {
+                Ok(value) => break Ok(value),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    tracing::warn!(target: TARGET, channel = %stringify!($rx), timeout_ms = %TIMEOUT.as_millis(), "timeout reading channel");
+                    continue;
+                }
+                e @ Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    break e
                 }
             }
         }
@@ -303,11 +336,12 @@ pub async fn traced_sleep(duration: Duration, reason: SleepReason) {
 
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
-pub fn named_spawn<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
     info_task_spawn(name);
+
     tokio::task::Builder::new()
         .name(name)
         .spawn(task)
@@ -316,15 +350,51 @@ where
 
 /// Spawns a blocking Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
-pub fn named_spawn_blocking<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn spawn_blocking_named<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
     info_task_spawn(name);
+
     tokio::task::Builder::new()
         .name(name)
         .spawn_blocking(task)
         .expect("spawning named blocking task should not fail")
+}
+
+/// Spawns a thread with the given name. Automatically enters Tokio context.
+#[track_caller]
+pub fn spawn_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> std::thread::JoinHandle<T>
+where
+    T: Send + 'static,
+{
+    info_task_spawn(name);
+
+    let tokio = tokio::runtime::Handle::current();
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || {
+            let _tokio_guard = tokio.enter();
+            task()
+        })
+        .expect("spawning background thread should not fail")
+}
+
+/// Spawns a blocking Tokio task or a thread according to the compilation feature-flag.
+#[track_caller]
+pub fn spawn_blocking_named_or_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static)
+where
+    T: Send + 'static,
+{
+    #[cfg(feature = "bg-threads")]
+    {
+        spawn_thread(name, task);
+    }
+
+    #[cfg(not(feature = "bg-threads"))]
+    {
+        spawn_blocking_named(name, task);
+    }
 }
 
 /// Spawns a handler that listens to system signals.
@@ -340,7 +410,7 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
         Err(e) => return log_and_err!(reason = e, "failed to init SIGINT watcher"),
     };
 
-    named_spawn("sys::signal_handler", async move {
+    spawn_named("sys::signal_handler", async move {
         select! {
             _ = sigterm.recv() => {
                 GlobalState::shutdown_from(TASK_NAME, "received SIGTERM");

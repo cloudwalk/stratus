@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::thread;
 
 use anyhow::Context;
-use async_trait::async_trait;
 
 use super::rocks_state::RocksStorageState;
 use super::types::AddressRocksdb;
@@ -56,7 +55,6 @@ impl RocksPermanentStorage {
     }
 }
 
-#[async_trait]
 impl PermanentStorage for RocksPermanentStorage {
     // -------------------------------------------------------------------------
     // Block number operations

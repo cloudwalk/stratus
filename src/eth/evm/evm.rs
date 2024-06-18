@@ -60,6 +60,9 @@ pub trait Evm {
 /// EVM configuration.
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub struct EvmConfig {
+    /// Number of EVMs to spawn.
+    pub num_evms: usize,
+
     /// Chain ID of the EVM.
     pub chain_id: ChainId,
 }

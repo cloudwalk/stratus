@@ -24,7 +24,7 @@ use super::GlobalState;
 use super::Peer;
 use super::PeerAddress;
 use super::Role;
-use crate::ext::named_spawn;
+use crate::ext::spawn_named;
 
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
@@ -94,7 +94,7 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
         let consensus_clone = Arc::clone(&consensus);
         let peer_clone = peer.clone();
 
-        let handle = named_spawn("consensus::propagate", async move {
+        let handle = spawn_named("consensus::propagate", async move {
             super::Consensus::handle_peer_propagation(peer_clone, consensus_clone).await;
         });
 
