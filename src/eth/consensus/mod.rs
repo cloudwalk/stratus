@@ -679,11 +679,21 @@ impl AppendEntryService for AppendEntryServiceImpl {
         &self,
         request: Request<AppendTransactionExecutionsRequest>,
     ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
-        let executions = request.into_inner().executions;
+        let consensus = self.consensus.lock().await;
+        let request_inner = request.into_inner();
+
+        if consensus.is_leader() {
+            tracing::error!(sender = request_inner.leader_id, "append_transaction_executions called on leader node");
+            return Err(Status::new(
+                (StatusCode::NotLeader as i32).into(),
+                "append_transaction_executions called on leader node".to_string(),
+            ));
+        }
+
+        let executions = request_inner.executions;
         //TODO Process the transaction executions here
         tracing::info!(executions = executions.len(), "appending executions");
 
-        let consensus = self.consensus.lock().await;
         consensus.reset_heartbeat_signal.notify_waiters();
 
         Ok(Response::new(AppendTransactionExecutionsResponse {
@@ -694,14 +704,23 @@ impl AppendEntryService for AppendEntryServiceImpl {
     }
 
     async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
+        let consensus = self.consensus.lock().await;
         let request_inner = request.into_inner();
+
+        if consensus.is_leader() {
+            tracing::error!(sender = request_inner.leader_id, "append_transaction_executions called on leader node");
+            return Err(Status::new(
+                (StatusCode::NotLeader as i32).into(),
+                "append_transaction_executions called on leader node".to_string(),
+            ));
+        }
+
         let Some(block_entry) = request_inner.block_entry else {
             return Err(Status::invalid_argument("empty block entry"));
         };
 
         tracing::info!(number = block_entry.number, "appending new block");
 
-        let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
