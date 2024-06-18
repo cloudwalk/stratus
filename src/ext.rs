@@ -368,6 +368,8 @@ where
 {
     #[cfg(feature = "bg-threads")]
     {
+        info_task_spawn(name);
+
         let tokio = tokio::runtime::Handle::current();
         std::thread::Builder::new()
             .name(name.into())
