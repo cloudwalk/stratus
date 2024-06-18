@@ -161,7 +161,8 @@ run_test() {
         fi
     done
 
-    sleep 5
+    # Wait some time for the instance to be killed completely
+    sleep 15
 
     # Restart the killed instance
     echo "Restarting the killed instance..."
