@@ -48,8 +48,8 @@ use tracing_subscriber::Layer;
 use ulid::Ulid;
 
 use crate::config::TracingConfig;
-use crate::ext::named_spawn;
 use crate::ext::not;
+use crate::ext::spawn_named;
 use crate::ext::ResultExt;
 use crate::infra::build_info;
 
@@ -123,7 +123,7 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
     // configure tokio-console layer
     println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
     let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-    named_spawn("console::grpc-server", async move {
+    spawn_named("console::grpc-server", async move {
         if let Err(e) = console_server.serve().await {
             tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
         };

@@ -28,8 +28,6 @@ use kube::api::ListParams;
 use kube::Client;
 use rand::Rng;
 use tokio::sync::broadcast;
-use tokio::sync::mpsc::Sender;
-use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -44,7 +42,7 @@ use tonic::Status;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
-use crate::ext::named_spawn;
+use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
 use crate::infra::BlockchainClient;
@@ -157,14 +155,7 @@ struct Peer {
 
 type PeerTuple = (Peer, JoinHandle<()>);
 
-#[allow(clippy::large_enum_variant)]
-pub enum ExternalEntry {
-    Block(Block),
-    TransactionExecution(TransactionExecution),
-}
-
 pub struct Consensus {
-    pub sender: Sender<ExternalEntry>,                 //receives blocks
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
@@ -189,9 +180,9 @@ impl Consensus {
         importer_config: Option<RunWithImporterConfig>,
         jsonrpc_address: SocketAddr,
         grpc_address: SocketAddr,
+        rx_pending_txs: broadcast::Receiver<TransactionExecution>,
+        rx_blocks: broadcast::Receiver<Block>,
     ) -> Arc<Self> {
-        let (sender, receiver) = mpsc::channel::<ExternalEntry>(32); //TODO rename to external_sender, external_receiver
-        let receiver = Arc::new(Mutex::new(receiver));
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
         let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
@@ -199,7 +190,6 @@ impl Consensus {
         let log_entries_storage = AppendLogEntriesStorage::new(&format!("{}./data/entries_log.rocksdb", path_prefix));
 
         let consensus = Self {
-            sender,
             broadcast_sender,
             storage,
             peers,
@@ -219,7 +209,7 @@ impl Consensus {
 
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
-        Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
+        Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
         Self::initialize_server(Arc::clone(&consensus));
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
@@ -242,7 +232,7 @@ impl Consensus {
     /// When there are healthy peers we need to wait for the grace period of discovery
     /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
-        named_spawn("consensus::heartbeat_timer", async move {
+        spawn_named("consensus::heartbeat_timer", async move {
             discovery::discover_peers(Arc::clone(&consensus)).await;
             if consensus.peers.read().await.is_empty() {
                 tracing::info!("no peers, starting hearbeat timer immediately");
@@ -353,7 +343,7 @@ impl Consensus {
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
-        named_spawn("consensus::peer_discovery", async move {
+        spawn_named("consensus::peer_discovery", async move {
             let mut interval = tokio::time::interval(PEER_DISCOVERY_DELAY);
             loop {
                 tracing::info!("starting periodic peer discovery");
@@ -368,7 +358,7 @@ impl Consensus {
         //TODO rediscover followers on comunication error
         //XXX FIXME deal with the scenario where a transactionHash arrives after the block, in this case before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
         //TODO maybe check if I'm currently the leader?
-        named_spawn("consensus::transaction_execution_queue", async move {
+        spawn_named("consensus::transaction_execution_queue", async move {
             let interval = Duration::from_millis(40);
             loop {
                 tokio::time::sleep(interval).await;
@@ -389,38 +379,46 @@ impl Consensus {
     /// This channel broadcasts blocks and transactons executions to followers.
     /// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
     //TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
-    fn initialize_append_entries_channel(consensus: Arc<Consensus>, external_receiver: Arc<Mutex<mpsc::Receiver<ExternalEntry>>>) {
-        named_spawn("consensus::block_sender", async move {
+    fn initialize_append_entries_channel(
+        consensus: Arc<Consensus>,
+        mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
+        mut rx_blocks: broadcast::Receiver<Block>,
+    ) {
+        spawn_named("consensus::block_sender", async move {
             loop {
-                let mut receiver_lock = external_receiver.lock().await;
-                if let Some(external_entity) = receiver_lock.recv().await {
-                    if consensus.is_leader() {
-                        //TODO when we have followers only being incremented by append entries, add an ELSE to alert if a non-leader is trying to send a block
-                        match external_entity {
-                            ExternalEntry::Block(block) => {
-                                tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
-
-                                //TODO save block to appendEntries log
-                                //TODO before saving check if all transaction_hashes are already in the log
-
-                                let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
-                                if consensus.broadcast_sender.send(block_entry).is_err() {
-                                    tracing::error!("failed to broadcast block");
-                                }
+                tokio::select! {
+                    Ok(tx) = rx_pending_txs.recv() => {
+                        if consensus.is_leader() {
+                            tracing::info!(hash = %tx.hash(), "received transaction execution to send to followers");
+                            if tx.is_local() {
+                                tracing::debug!(hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
+                                continue;
                             }
-                            ExternalEntry::TransactionExecution(transaction) => {
-                                tracing::info!(hash = %transaction.hash(), "received transaction execution to send to followers");
 
-                                //TODO save transaction to appendEntries log
-                                //TODO before saving check if all transaction_hashes are already in the log
-
-                                let transaction = vec![transaction.to_append_entry_transaction()];
-                                let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
-                                if consensus.broadcast_sender.send(transaction_entry).is_err() {
-                                    tracing::error!("failed to broadcast transaction");
-                                }
+                            //TODO save transaction to appendEntries log
+                            //TODO before saving check if all transaction_hashes are already in the log
+                            let transaction = vec![tx.to_append_entry_transaction()];
+                            let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
+                            if consensus.broadcast_sender.send(transaction_entry).is_err() {
+                                tracing::error!("failed to broadcast transaction");
                             }
                         }
+                    }
+                    Ok(block) = rx_blocks.recv() => {
+                        if consensus.is_leader() {
+                            tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
+
+                            //TODO save block to appendEntries log
+                            //TODO before saving check if all transaction_hashes are already in the log
+
+                            let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
+                            if consensus.broadcast_sender.send(block_entry).is_err() {
+                                tracing::error!("failed to broadcast block");
+                            }
+                        }
+                    }
+                    else => {
+                        tokio::task::yield_now().await;
                     }
                 }
             }
@@ -428,7 +426,7 @@ impl Consensus {
     }
 
     fn initialize_server(consensus: Arc<Consensus>) {
-        named_spawn("consensus::server", async move {
+        spawn_named("consensus::server", async move {
             tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
             let addr = consensus.grpc_address;
 
@@ -461,7 +459,7 @@ impl Consensus {
         self.role.load(Ordering::SeqCst) == Role::Follower as u8
     }
 
-    pub async fn should_forward(&self) -> bool {
+    pub fn should_forward(&self) -> bool {
         let is_leader = self.is_leader();
         tracing::info!(
             is_leader = is_leader,
@@ -697,22 +695,19 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
-        if let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) {
-            #[cfg(feature = "metrics")]
-            {
-                metrics::set_append_entries_block_number_diff(diff);
-            }
-        } else {
-            tracing::error!(
-                "leader is behind follower: arrived_block: {}, block_entry: {}",
-                last_last_arrived_block_number,
-                block_entry.number
-            );
-            return Err(Status::new(
-                (StatusCode::EntryAlreadyExists as i32).into(),
-                "leader is behind follower and should step down".to_string(),
-            ));
-        }
+        //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
+        //TODO FIXME move this code back when we have propagation:      tracing::error!(
+        //TODO FIXME move this code back when we have propagation:          "leader is behind follower: arrived_block: {}, block_entry: {}",
+        //TODO FIXME move this code back when we have propagation:          last_last_arrived_block_number,
+        //TODO FIXME move this code back when we have propagation:          block_entry.number
+        //TODO FIXME move this code back when we have propagation:      );
+        //TODO FIXME move this code back when we have propagation:      return Err(Status::new(
+        //TODO FIXME move this code back when we have propagation:          (StatusCode::EntryAlreadyExists as i32).into(),
+        //TODO FIXME move this code back when we have propagation:          "leader is behind follower and should step down".to_string(),
+        //TODO FIXME move this code back when we have propagation:      ));
+        //TODO FIXME move this code back when we have propagation: };
+        //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
+        //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
         consensus.reset_heartbeat_signal.notify_waiters();
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {

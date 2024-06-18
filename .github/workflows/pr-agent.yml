@@ -24,9 +24,9 @@ env:
     * Most part of the codebase is written in Rust and formatted and analysed with clippy.
     * Do not waste time on trivial things like null handling or formatting because the compiler and clippy can handle these things.
     * When you detect a task spawned to background with tokio or threads,  ensure to review the operations are properly logged and monitored.
-    * When you detect the use of tokio::spawn or tokio::spawn_blocking, suggest using named_spawn or named_spawn_blocking functions.
+    * When you detect the use of tokio::spawn or tokio::spawn_blocking, suggest using spawn_named or spawn_blocking_named functions.
     * When you detect the use of tokio::sleep or thread::sleep, suggest to use traced_sleep, so we can have visibility in tracing events.
-    * When a long-running blocking task is running inside Tokio async context, suggest using named_spawn_blocking to avoid Tokio thread locking.
+    * When a long-running blocking task is running inside Tokio async context, suggest using spawn_blocking_named to avoid Tokio thread locking.
     * When a function is instrumented with tracing::instrument, suggest to record identifiers as span fields if none are present.
     * Never suggest to use log crate. We use structured tracing here.
     * When you detect a tracing event, do not allow the message to be formatted with dynamic fields. Instead suggest to add these dynamic fields as tracing fields.

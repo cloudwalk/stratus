@@ -12,12 +12,12 @@ use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 use crate::channel_read;
-use crate::eth::primitives::BlockHeader;
-use crate::eth::primitives::Hash;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
-use crate::ext::named_spawn;
+use crate::eth::primitives::TransactionExecution;
 use crate::ext::not;
+use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
 use crate::if_else;
@@ -48,7 +48,11 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Creates a new subscriptin manager that automatically spawns all necessary tasks in background.
-    pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<BlockHeader>, rx_logs: broadcast::Receiver<LogMined>) -> Self {
+    pub fn spawn(
+        rx_pending_txs: broadcast::Receiver<TransactionExecution>,
+        rx_blocks: broadcast::Receiver<Block>,
+        rx_logs: broadcast::Receiver<LogMined>,
+    ) -> Self {
         let connected = Arc::new(RpcSubscriptionsConnected::default());
 
         Self::spawn_subscriptions_cleaner(Arc::clone(&connected));
@@ -64,7 +68,7 @@ impl RpcSubscriptions {
     /// Spawns a new task to clean up closed subscriptions from time to time.
     fn spawn_subscriptions_cleaner(subs: Arc<RpcSubscriptionsConnected>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::cleaner";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
@@ -90,42 +94,45 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new executed transactions.
-    fn spawn_new_pending_txs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_tx_hash: broadcast::Receiver<Hash>) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_new_pending_txs_notifier(
+        subs: Arc<RpcSubscriptionsConnected>,
+        mut rx_tx_hash: broadcast::Receiver<TransactionExecution>,
+    ) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newPendingTransactions";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
-                let Ok(hash) = channel_read!(rx_tx_hash) else {
+                let Ok(tx) = channel_read!(rx_tx_hash) else {
                     warn_task_tx_closed(TASK_NAME);
                     break;
                 };
 
                 let subs = subs.new_pending_txs.read().await;
-                Self::notify(subs.values(), hash.to_string()).await;
+                Self::notify(subs.values(), tx.hash().to_string()).await;
             }
             Ok(())
         })
     }
 
     /// Spawns a new task that notifies subscribers about new created blocks.
-    fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_block_header: broadcast::Receiver<BlockHeader>) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_block: broadcast::Receiver<Block>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newHeads";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
-                let Ok(header) = channel_read!(rx_block_header) else {
+                let Ok(block) = channel_read!(rx_block) else {
                     warn_task_tx_closed(TASK_NAME);
                     break;
                 };
 
                 let subs = subs.new_heads.read().await;
-                Self::notify(subs.values(), header).await;
+                Self::notify(subs.values(), block.header).await;
             }
             Ok(())
         })
@@ -134,7 +141,7 @@ impl RpcSubscriptions {
     /// Spawns a new task that notifies subscribers about new transactions logs.
     fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_log_mined: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::logs";
-        named_spawn(TASK_NAME, async move {
+        spawn_named(TASK_NAME, async move {
             loop {
                 if GlobalState::warn_if_shutdown(TASK_NAME) {
                     return Ok(());

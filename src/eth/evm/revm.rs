@@ -27,12 +27,12 @@ use revm::Handler;
 
 use crate::eth::evm::evm::EvmExecutionResult;
 use crate::eth::evm::Evm;
-use crate::eth::evm::EvmConfig;
 use crate::eth::evm::EvmError;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
@@ -60,8 +60,8 @@ pub struct Revm {
 impl Revm {
     /// Creates a new instance of the Revm ready to be used.
     #[allow(clippy::arc_with_non_send_sync)]
-    pub fn new(storage: Arc<StratusStorage>, config: EvmConfig) -> Self {
-        tracing::info!(?config, "creating revm");
+    pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
+        tracing::info!(%chain_id, "creating revm");
 
         // configure handler
         let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
@@ -83,13 +83,13 @@ impl Revm {
         // configure revm
         let mut evm = RevmEvm::builder()
             .with_external_context(())
-            .with_db(RevmSession::new(storage, config.clone()))
+            .with_db(RevmSession::new(storage))
             .with_handler(handler)
             .build();
 
         // global general config
         let cfg_env = evm.cfg_mut();
-        cfg_env.chain_id = config.chain_id.into();
+        cfg_env.chain_id = chain_id.into();
         cfg_env.limit_contract_code_size = Some(usize::MAX);
 
         // global block config
@@ -176,9 +176,6 @@ struct RevmSession {
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
 
-    /// EVM global configuraiton directives,
-    _config: EvmConfig,
-
     /// Input passed to EVM to execute the transaction.
     input: EvmInput,
 
@@ -191,10 +188,9 @@ struct RevmSession {
 
 impl RevmSession {
     /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>, config: EvmConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
             storage,
-            _config: config,
             input: Default::default(),
             storage_changes: Default::default(),
             metrics: Default::default(),

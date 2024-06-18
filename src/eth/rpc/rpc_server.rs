@@ -17,6 +17,7 @@ use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
 use serde_json::Value as JsonValue;
+use tokio::runtime::Handle;
 use tokio::select;
 use tracing::Span;
 
@@ -141,7 +142,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     #[cfg(feature = "dev")]
     {
         module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
-        module.register_async_method("evm_mine", evm_mine)?; // TODO: blocking
+        module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("debug_setHead", debug_set_head)?;
         module.register_blocking_method("debug_readAllSlotsFromAccount", debug_read_all_slots)?;
     }
@@ -170,9 +171,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     // transactions
     module.register_blocking_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
     module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
-    module.register_async_method("eth_estimateGas", eth_estimate_gas)?; // TODO: blocking
-    module.register_async_method("eth_call", eth_call)?; // TODO: blocking
-    module.register_async_method("eth_sendRawTransaction", eth_send_raw_transaction)?; // TODO: blocking
+    module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
+    module.register_blocking_method("eth_call", eth_call)?;
+    module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
 
     // logs
     module.register_blocking_method("eth_getLogs", eth_get_logs)?;
@@ -205,8 +206,8 @@ fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> an
 }
 
 #[cfg(feature = "dev")]
-async fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    ctx.miner.mine_local_and_commit().await?;
+fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    ctx.miner.mine_local_and_commit()?;
     Ok(serde_json::to_value(true).expect_infallible())
 }
 
@@ -387,10 +388,10 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 }
 
 #[tracing::instrument(name = "rpc::eth_estimateGas", skip_all)]
-async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<String, RpcError> {
+fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<String, RpcError> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
-    match ctx.executor.local_call(call, StoragePointInTime::Present).await {
+    match ctx.executor.execute_local_call(call, StoragePointInTime::Present) {
         // result is success
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 
@@ -406,7 +407,7 @@ async fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, _: Extension
 }
 
 #[tracing::instrument(name = "rpc::eth_call", skip_all, fields(from, to))]
-async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<String, RpcError> {
+fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<String, RpcError> {
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
@@ -416,7 +417,7 @@ async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> an
     });
 
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    match ctx.executor.local_call(call, point_in_time).await {
+    match ctx.executor.execute_local_call(call, point_in_time) {
         // success or failure, does not matter
         Ok(result) => Ok(hex_data(result.output)),
 
@@ -429,7 +430,7 @@ async fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> an
 }
 
 #[tracing::instrument(name = "rpc::eth_sendRawTransaction", skip_all, fields(hash, from, to))]
-async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<String, RpcError> {
+fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<String, RpcError> {
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
 
@@ -441,9 +442,9 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: E
 
     // forward transaction to the leader
     // HACK: if importer-online is enabled, we forward the transction to substrate
-    if ctx.consensus.should_forward().await {
+    if ctx.consensus.should_forward() {
         tracing::info!("forwarding transaction");
-        return match ctx.consensus.forward(tx).await {
+        return match Handle::current().block_on(ctx.consensus.forward(tx)) {
             Ok(hash) => Ok(hex_data(hash)),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to forward transaction");
@@ -454,7 +455,7 @@ async fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: E
 
     // execute
     let tx_hash = tx.hash;
-    match ctx.executor.local_transaction(tx).await {
+    match ctx.executor.execute_local_transaction(tx) {
         // result is success
         Ok(evm_result) if evm_result.is_success() => Ok(hex_data(tx_hash)),
 
