@@ -198,9 +198,6 @@ rocks = ["rocksdb", "bincode"]
 # Tools to comunicate with other pods
 kubernetes = ["kube", "k8s-openapi"]
 
-# XXX: Enable external transaction parallel execution.
-executor-parallel = []
-
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------

@@ -58,46 +58,15 @@ use crate::GlobalState;
 pub struct EvmTask {
     pub span: Span,
     pub input: EvmInput,
-    pub response_tx: EvmTaskResponseChannel,
+    pub response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>,
 }
 
 impl EvmTask {
-    pub fn new_blocking(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
+    pub fn new(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
         Self {
             span: Span::current(),
             input,
-            response_tx: EvmTaskResponseChannel::Blocking(response_tx),
-        }
-    }
-
-    pub fn new_async(input: EvmInput, response_tx: tokio::sync::oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
-        Self {
-            span: Span::current(),
-            input,
-            response_tx: EvmTaskResponseChannel::Async(response_tx),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum EvmTaskResponseChannel {
-    Blocking(oneshot::Sender<anyhow::Result<EvmExecutionResult>>),
-    Async(tokio::sync::oneshot::Sender<anyhow::Result<EvmExecutionResult>>),
-}
-
-impl EvmTaskResponseChannel {
-    pub fn send(self, result: anyhow::Result<EvmExecutionResult>) {
-        match self {
-            EvmTaskResponseChannel::Blocking(tx) => {
-                if let Err(e) = tx.send(result) {
-                    tracing::error!(reason = ?e, "failed to send evm task result");
-                };
-            }
-            EvmTaskResponseChannel::Async(tx) => {
-                if let Err(e) = tx.send(result) {
-                    tracing::error!(reason = ?e, "failed to send evm task result");
-                };
-            }
+            response_tx,
         }
     }
 }
@@ -153,7 +122,9 @@ impl Executor {
                     // execute
                     let _enter = task.span.enter();
                     let result = evm.execute(task.input);
-                    task.response_tx.send(result);
+                    if let Err(e) = task.response_tx.send(result) {
+                        tracing::error!(reason = ?e, "failed to send evm task execution result");
+                    }
                 }
 
                 warn_task_tx_closed(task_name);
@@ -169,7 +140,7 @@ impl Executor {
 
     /// Reexecutes an external block locally and imports it to the temporary storage.
     #[tracing::instrument(name = "executor::external_block", skip_all, fields(number))]
-    pub async fn external_block(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
+    pub fn execute_external_block(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
@@ -184,54 +155,18 @@ impl Executor {
         storage.set_active_block_number(block.number())?;
 
         // determine how to execute each transaction
-        let tx_routes = route_transactions(&block.transactions, receipts)?;
-
-        // execute parallel executions
-        let mut tx_parallel_executions = Vec::with_capacity(block.transactions.len());
-        for tx_route in &tx_routes {
-            if let ParallelExecutionRoute::Parallel(tx, receipt) = tx_route {
-                tx_parallel_executions.push(self.external_transaction(tx, receipt, block));
-            }
-        }
-        let mut parallel_executions = futures::stream::iter(tx_parallel_executions).buffered(self.config.num_evms);
-
-        // execute serial transactions joining them with parallel
-        for tx_route in tx_routes {
-            let tx = match tx_route {
-                // serial: execute now
-                ParallelExecutionRoute::Serial(tx, receipt) => self.external_transaction(tx, receipt, block).await.map_err(|(_, _, e)| e)?,
-
-                // parallel: get parallel execution result and reexecute if failed
-                ParallelExecutionRoute::Parallel(..) => {
-                    match parallel_executions.next().await.unwrap() {
-                        // success: check conflicts
-                        Ok(tx) => match storage.check_conflicts(&tx.result.execution)? {
-                            // no conflict: proceeed
-                            None => tx,
-                            // conflict: reexecute
-                            Some(conflicts) => {
-                                tracing::warn!(?conflicts, "reexecuting serially because parallel execution conflicted");
-                                self.external_transaction(&tx.tx, &tx.receipt, block).await.map_err(|(_, _, e)| e)?
-                            }
-                        },
-
-                        // failure: reexecute
-                        Err((tx, receipt, e)) => {
-                            tracing::warn!(reason = ?e, "reexecuting serially because parallel execution errored");
-                            self.external_transaction(tx, receipt, block).await.map_err(|(_, _, e)| e)?
-                        }
-                    }
-                }
-            };
+        for tx in &block.transactions {
+            let receipt = receipts.try_get(&tx.hash())?;
+            let tx_execution = self.execute_external_transaction(tx, receipt, block)?;
 
             // track transaction metrics
             #[cfg(feature = "metrics")]
             {
-                block_metrics += tx.result.metrics;
+                block_metrics += tx_execution.result.metrics;
             }
 
             // persist state
-            self.miner.save_execution(TransactionExecution::External(tx))?;
+            self.miner.save_execution(TransactionExecution::External(tx_execution))?;
         }
 
         // track block metrics
@@ -249,26 +184,16 @@ impl Executor {
     /// This function wraps `reexecute_external_tx_inner` and returns back the payload
     /// to facilitate re-execution of parallel transactions that failed
     #[tracing::instrument(name = "executor::external_transaction", skip_all, fields(hash))]
-    async fn external_transaction<'a, 'b>(
-        &'a self,
-        tx: &'b ExternalTransaction,
-        receipt: &'b ExternalReceipt,
-        block: &ExternalBlock,
-    ) -> Result<ExternalTransactionExecution, (&'b ExternalTransaction, &'b ExternalReceipt, anyhow::Error)> {
-        Span::with(|s| {
-            s.rec_str("hash", &tx.hash);
-        });
-
-        self.external_transaction_inner(tx, receipt, block).await.map_err(|e| (tx, receipt, e))
-    }
-
-    /// Reexecutes an external transaction locally ensuring it produces the same output.
-    async fn external_transaction_inner<'a, 'b>(
+    fn execute_external_transaction<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
         receipt: &'b ExternalReceipt,
         block: &ExternalBlock,
     ) -> anyhow::Result<ExternalTransactionExecution> {
+        Span::with(|s| {
+            s.rec_str("hash", &tx.hash);
+        });
+
         tracing::info!(number = %block.number(), hash = %tx.hash(), "reexecuting external transaction");
 
         #[cfg(feature = "metrics")]
@@ -285,14 +210,13 @@ impl Executor {
             return Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
         }
 
-        // reexecute transaction
+        // re-execute transaction
         let evm_input = EvmInput::from_external(tx, receipt, block)?;
-
         #[cfg(feature = "metrics")]
         let function = evm_input.extract_function();
+        let evm_result = self.execute_in_evm(evm_input);
 
-        let evm_result = self.execute_in_evm_async(evm_input).await;
-
+        // handle re-execution result
         let mut evm_result = match evm_result {
             Ok(inner) => inner,
             Err(e) => {
@@ -310,7 +234,7 @@ impl Executor {
             metrics::inc_executor_external_transaction(start.elapsed(), function);
         }
 
-        // update execution with receipt info
+        // update execution with receipt
         evm_result.execution.apply_receipt(receipt)?;
 
         // ensure it matches receipt before saving
@@ -331,7 +255,7 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(hash, from, to))]
-    pub fn local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
@@ -390,7 +314,7 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn local_call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
+    pub fn execute_local_call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), input.extract_function());
 
@@ -425,79 +349,10 @@ impl Executor {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /// Submits a transaction to the EVM and awaits for its execution.
-    async fn execute_in_evm_async(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
-        let (execution_tx, execution_rx) = tokio::sync::oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
-        let task = EvmTask::new_async(evm_input, execution_tx);
-        let _ = self.evm_tx.send(task);
-        execution_rx.await?
-    }
-
     fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
         let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
-        let task = EvmTask::new_blocking(evm_input, execution_tx);
+        let task = EvmTask::new(evm_input, execution_tx);
         let _ = self.evm_tx.send(task);
         execution_rx.recv()?
     }
-}
-
-#[cfg(not(feature = "executor-parallel"))]
-fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a ExternalReceipts) -> anyhow::Result<Vec<ParallelExecutionRoute<'a>>> {
-    let mut routes = Vec::with_capacity(transactions.len());
-    for tx in transactions {
-        let receipt = receipts.try_get(&tx.hash())?;
-        routes.push(ParallelExecutionRoute::Serial(tx, receipt));
-    }
-    Ok(routes)
-}
-
-#[cfg(feature = "executor-parallel")]
-fn route_transactions<'a>(transactions: &'a [ExternalTransaction], receipts: &'a ExternalReceipts) -> anyhow::Result<Vec<ParallelExecutionRoute<'a>>> {
-    // no transactions
-    if transactions.is_empty() {
-        return Ok(vec![]);
-    }
-
-    // single transaction
-    if transactions.len() == 1 {
-        let tx = &transactions[0];
-        let receipt = receipts.try_get(&tx.hash())?;
-        return Ok(vec![ParallelExecutionRoute::Serial(tx, receipt)]);
-    }
-
-    // multiple transactions
-    let mut routes = Vec::with_capacity(transactions.len());
-    let mut seen_from = HashSet::with_capacity(transactions.len());
-    for tx in transactions {
-        let receipt = receipts.try_get(&tx.hash())?;
-
-        let mut route = ParallelExecutionRoute::Parallel(tx, receipt);
-        // transactions from same sender will conflict, so execute serially
-        if seen_from.contains(&tx.from) {
-            route = ParallelExecutionRoute::Serial(tx, receipt);
-        }
-        // failed receipts are not reexecuted, so they can be executed in parallel
-        if receipt.is_failure() {
-            route = ParallelExecutionRoute::Parallel(tx, receipt);
-        }
-
-        // track seen data
-        seen_from.insert(tx.from);
-
-        routes.push(route);
-    }
-
-    Ok(routes)
-}
-
-/// How a transaction should be executed in a parallel execution context.
-#[derive(Debug, strum::Display, strum::EnumIs)]
-enum ParallelExecutionRoute<'a> {
-    /// Transaction must be executed serially after all previous states are computed.
-    #[strum(to_string = "Serial")]
-    Serial(&'a ExternalTransaction, &'a ExternalReceipt),
-
-    /// Transaction can be executed in parallel with other transactions.
-    #[strum(to_string = "Parallel")]
-    Parallel(&'a ExternalTransaction, &'a ExternalReceipt),
 }
