@@ -377,6 +377,10 @@ pub struct ExternalRelayerServerConfig {
     #[arg(long = "forward-to", env = "RELAYER_FORWARD_TO")]
     pub forward_to: String,
 
+    /// RPC to forward to.
+    #[arg(long = "stratus-rpc", env = "STRATUS_RPC")]
+    pub stratus_rpc: String,
+
     /// Backoff.
     #[arg(long = "backoff", value_parser=parse_duration, env = "BACKOFF", default_value = "10ms")]
     pub backoff: Duration,
