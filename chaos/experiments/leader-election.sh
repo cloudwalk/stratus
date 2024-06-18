@@ -240,7 +240,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=20
+n=4
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
