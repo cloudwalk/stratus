@@ -43,7 +43,8 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-use crate::ext::named_spawn_blocking;
+use crate::ext::spawn_blocking_named;
+use crate::ext::spawn_to_background;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
 #[cfg(feature = "metrics")]
@@ -108,7 +109,7 @@ impl Executor {
             let evm_storage = Arc::clone(&storage);
             let evm_rx = evm_rx.clone();
 
-            named_spawn_blocking(&format!("executor::evm-{}", evm_index), move || {
+            spawn_to_background(&format!("executor::evm-{}", evm_index), move || {
                 let task_name = &format!("evm-{}", evm_index);
                 let mut evm = Revm::new(evm_storage, chain_id);
 

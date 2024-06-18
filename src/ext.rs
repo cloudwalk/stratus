@@ -336,7 +336,7 @@ pub async fn traced_sleep(duration: Duration, reason: SleepReason) {
 
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
-pub fn named_spawn<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
@@ -349,7 +349,7 @@ where
 
 /// Spawns a blocking Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
-pub fn named_spawn_blocking<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn spawn_blocking_named<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
@@ -358,6 +358,30 @@ where
         .name(name)
         .spawn_blocking(task)
         .expect("spawning named blocking task should not fail")
+}
+
+/// Spawns a background task that runs forever. It can be a thread or Tokio task.
+#[track_caller]
+pub fn spawn_to_background<T>(name: &str, task: impl FnOnce() -> T + Send + 'static)
+where
+    T: Send + 'static,
+{
+    #[cfg(feature = "bg-threads")]
+    {
+        let tokio = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(name.into())
+            .spawn(move || {
+                let _tokio_guard = tokio.enter();
+                task();
+            })
+            .expect("spawning background thread should not fail");
+    }
+
+    #[cfg(not(feature = "bg-threads"))]
+    {
+        spawn_blocking_named(name, task);
+    }
 }
 
 /// Spawns a handler that listens to system signals.
@@ -373,7 +397,7 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
         Err(e) => return log_and_err!(reason = e, "failed to init SIGINT watcher"),
     };
 
-    named_spawn("sys::signal_handler", async move {
+    spawn_named("sys::signal_handler", async move {
         select! {
             _ = sigterm.recv() => {
                 GlobalState::shutdown_from(TASK_NAME, "received SIGTERM");
