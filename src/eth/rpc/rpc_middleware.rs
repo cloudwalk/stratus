@@ -1,15 +1,8 @@
 //! Track RPC requests and responses using metrics and traces.
-//!
-//! TODO: If it becomes a bottleneck, it can be processed asynchronously.
 
-use std::collections::HashMap;
 use std::future::Future;
 #[cfg(feature = "metrics")]
-use std::sync::atomic::AtomicU64;
 #[cfg(feature = "metrics")]
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::sync::RwLock;
 use std::task::Poll;
 use std::time::Instant;
 
@@ -19,7 +12,6 @@ use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
-use lazy_static::lazy_static;
 use pin_project::pin_project;
 use tracing::field;
 use tracing::info_span;
@@ -43,41 +35,55 @@ use crate::infra::tracing::new_cid;
 // -----------------------------------------------------------------------------
 // Active requests tracking
 // -----------------------------------------------------------------------------
-lazy_static! {
-    static ref ACTIVE_REQUESTS: ActiveRequests = ActiveRequests::default();
-}
+#[cfg(feature = "metrics")]
+mod active_requests {
+    use std::collections::HashMap;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+    use std::sync::RwLock;
 
-#[derive(Default)]
-struct ActiveRequests {
-    inner: RwLock<HashMap<String, Arc<AtomicU64>>>,
-}
+    use lazy_static::lazy_static;
 
-impl ActiveRequests {
-    fn inc(&self, client: &RpcClientApp, method: &str) {
-        let active = self.get_active_requests_counter(client, method).fetch_add(1, Ordering::Relaxed) + 1;
-        metrics::set_rpc_requests_active(active, client, method);
+    use crate::eth::rpc::RpcClientApp;
+    use crate::infra::metrics;
+
+    lazy_static! {
+        pub static ref COUNTERS: ActiveRequests = ActiveRequests::default();
     }
 
-    fn dec(&self, client: &RpcClientApp, method: &str) {
-        let active = self.get_active_requests_counter(client, method).fetch_sub(1, Ordering::Relaxed) - 1;
-        metrics::set_rpc_requests_active(active, client, method);
+    #[derive(Default)]
+    pub struct ActiveRequests {
+        inner: RwLock<HashMap<String, Arc<AtomicU64>>>,
     }
 
-    fn get_active_requests_counter(&self, client: &RpcClientApp, method: &str) -> Arc<AtomicU64> {
-        let id = format!("{}::{}", client, method);
-
-        // try to read counter
-        let active_requests_read = self.inner.read().unwrap();
-        if let Some(counter) = active_requests_read.get(&id) {
-            return Arc::clone(counter);
+    impl ActiveRequests {
+        pub fn inc(&self, client: &RpcClientApp, method: &str) {
+            let active = self.counter_for(client, method).fetch_add(1, Ordering::Relaxed) + 1;
+            metrics::set_rpc_requests_active(active, client, method);
         }
-        drop(active_requests_read);
 
-        // create a new counter
-        let mut active_requests_write = self.inner.write().unwrap();
-        let counter = Arc::new(AtomicU64::new(0));
-        active_requests_write.insert(id.clone(), Arc::clone(&counter));
-        counter
+        pub fn dec(&self, client: &RpcClientApp, method: &str) {
+            let active = self.counter_for(client, method).fetch_sub(1, Ordering::Relaxed) - 1;
+            metrics::set_rpc_requests_active(active, client, method);
+        }
+
+        fn counter_for(&self, client: &RpcClientApp, method: &str) -> Arc<AtomicU64> {
+            let id = format!("{}::{}", client, method);
+
+            // try to read counter
+            let active_requests_read = self.inner.read().unwrap();
+            if let Some(counter) = active_requests_read.get(&id) {
+                return Arc::clone(counter);
+            }
+            drop(active_requests_read);
+
+            // create a new counter
+            let mut active_requests_write = self.inner.write().unwrap();
+            let counter = Arc::new(AtomicU64::new(0));
+            active_requests_write.insert(id.clone(), Arc::clone(&counter));
+            counter
+        }
     }
 }
 
@@ -126,7 +132,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         // metrify request
         #[cfg(feature = "metrics")]
         {
-            ACTIVE_REQUESTS.inc(&client, method);
+            active_requests::COUNTERS.inc(&client, method);
             metrics::inc_rpc_requests_started(&client, method, function.clone());
         }
 
@@ -218,7 +224,7 @@ impl Drop for RpcResponseIdentifiers {
     fn drop(&mut self) {
         #[cfg(feature = "metrics")]
         {
-            ACTIVE_REQUESTS.dec(&self.client, &self.method);
+            active_requests::COUNTERS.dec(&self.client, &self.method);
         }
     }
 }
