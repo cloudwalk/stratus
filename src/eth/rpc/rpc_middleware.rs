@@ -81,7 +81,7 @@ mod active_requests {
             // create a new counter
             let mut active_requests_write = self.inner.write().unwrap();
             let counter = Arc::new(AtomicU64::new(0));
-            active_requests_write.insert(id.clone(), Arc::clone(&counter));
+            active_requests_write.insert(id, Arc::clone(&counter));
             counter
         }
     }
