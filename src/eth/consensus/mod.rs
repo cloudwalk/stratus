@@ -28,8 +28,6 @@ use kube::api::ListParams;
 use kube::Client;
 use rand::Rng;
 use tokio::sync::broadcast;
-use tokio::sync::mpsc::Sender;
-use tokio::sync::mpsc::{self};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -156,14 +154,7 @@ struct Peer {
 
 type PeerTuple = (Peer, JoinHandle<()>);
 
-#[allow(clippy::large_enum_variant)]
-pub enum ExternalEntry {
-    Block(Block),
-    TransactionExecution(TransactionExecution),
-}
-
 pub struct Consensus {
-    pub sender: Sender<ExternalEntry>,                 //receives blocks
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
@@ -187,16 +178,15 @@ impl Consensus {
         importer_config: Option<RunWithImporterConfig>,
         jsonrpc_address: SocketAddr,
         grpc_address: SocketAddr,
+        rx_pending_txs: broadcast::Receiver<TransactionExecution>,
+        rx_blocks: broadcast::Receiver<Block>,
     ) -> Arc<Self> {
-        let (sender, receiver) = mpsc::channel::<ExternalEntry>(32); //TODO rename to external_sender, external_receiver
-        let receiver = Arc::new(Mutex::new(receiver));
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
         let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
         let consensus = Self {
-            sender,
             broadcast_sender,
             storage,
             peers,
@@ -216,7 +206,7 @@ impl Consensus {
 
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
-        Self::initialize_append_entries_channel(Arc::clone(&consensus), Arc::clone(&receiver));
+        Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
         Self::initialize_server(Arc::clone(&consensus));
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
@@ -386,38 +376,46 @@ impl Consensus {
     /// This channel broadcasts blocks and transactons executions to followers.
     /// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
     //TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
-    fn initialize_append_entries_channel(consensus: Arc<Consensus>, external_receiver: Arc<Mutex<mpsc::Receiver<ExternalEntry>>>) {
+    fn initialize_append_entries_channel(
+        consensus: Arc<Consensus>,
+        mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
+        mut rx_blocks: broadcast::Receiver<Block>,
+    ) {
         named_spawn("consensus::block_sender", async move {
             loop {
-                let mut receiver_lock = external_receiver.lock().await;
-                if let Some(external_entity) = receiver_lock.recv().await {
-                    if consensus.is_leader() {
-                        //TODO when we have followers only being incremented by append entries, add an ELSE to alert if a non-leader is trying to send a block
-                        match external_entity {
-                            ExternalEntry::Block(block) => {
-                                tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
-
-                                //TODO save block to appendEntries log
-                                //TODO before saving check if all transaction_hashes are already in the log
-
-                                let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
-                                if consensus.broadcast_sender.send(block_entry).is_err() {
-                                    tracing::error!("failed to broadcast block");
-                                }
+                tokio::select! {
+                    Ok(tx) = rx_pending_txs.recv() => {
+                        if consensus.is_leader() {
+                            tracing::info!(hash = %tx.hash(), "received transaction execution to send to followers");
+                            if tx.is_local() {
+                                tracing::debug!(hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
+                                continue;
                             }
-                            ExternalEntry::TransactionExecution(transaction) => {
-                                tracing::info!(hash = %transaction.hash(), "received transaction execution to send to followers");
 
-                                //TODO save transaction to appendEntries log
-                                //TODO before saving check if all transaction_hashes are already in the log
-
-                                let transaction = vec![transaction.to_append_entry_transaction()];
-                                let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
-                                if consensus.broadcast_sender.send(transaction_entry).is_err() {
-                                    tracing::error!("failed to broadcast transaction");
-                                }
+                            //TODO save transaction to appendEntries log
+                            //TODO before saving check if all transaction_hashes are already in the log
+                            let transaction = vec![tx.to_append_entry_transaction()];
+                            let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
+                            if consensus.broadcast_sender.send(transaction_entry).is_err() {
+                                tracing::error!("failed to broadcast transaction");
                             }
                         }
+                    }
+                    Ok(block) = rx_blocks.recv() => {
+                        if consensus.is_leader() {
+                            tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
+
+                            //TODO save block to appendEntries log
+                            //TODO before saving check if all transaction_hashes are already in the log
+
+                            let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
+                            if consensus.broadcast_sender.send(block_entry).is_err() {
+                                tracing::error!("failed to broadcast block");
+                            }
+                        }
+                    }
+                    else => {
+                        tokio::task::yield_now().await;
                     }
                 }
             }

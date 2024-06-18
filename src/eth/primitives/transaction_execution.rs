@@ -9,7 +9,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionInput;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(DebugAsJson, Clone, serde::Serialize)]
+#[derive(DebugAsJson, Clone, strum::EnumIs, serde::Serialize)]
 pub enum TransactionExecution {
     /// Transaction that was sent directly to Stratus.
     Local(LocalTransactionExecution),
@@ -64,6 +64,7 @@ impl TransactionExecution {
         }
     }
 
+    /// TODO: use From or TryFrom trait instead of this function
     pub fn to_append_entry_transaction(&self) -> append_entry::TransactionExecutionEntry {
         fn u256_to_bytes(u: ethereum_types::U256) -> Vec<u8> {
             let mut bytes = [0u8; 32];
@@ -109,6 +110,7 @@ impl TransactionExecution {
                 receipt_logs_bloom: receipt.logs_bloom.as_bytes().to_vec(),
                 receipt_effective_gas_price: receipt.effective_gas_price.map_or(vec![], u256_to_bytes),
             },
+            // TODO: no need to panic here, this could be implemented
             _ => panic!("Only ExternalTransactionExecution is supported"),
         }
     }

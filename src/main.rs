@@ -18,7 +18,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     } else {
         None
     };
-    let miner = config.miner.init(Arc::clone(&storage), None, external_relayer).await?;
+    let miner = config.miner.init(Arc::clone(&storage), external_relayer).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
     let consensus = Consensus::new(
         Arc::clone(&storage),
@@ -26,6 +26,8 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         None,
         config.address,
         config.grpc_server_address,
+        miner.notifier_pending_txs.subscribe(),
+        miner.notifier_blocks.subscribe(),
     )
     .await; // for now, we force None to initiate with the current node being the leader
 
