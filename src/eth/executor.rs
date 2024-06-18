@@ -8,10 +8,10 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
+use oneshot;
 use revm::primitives::bitvec::vec;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
-use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tracing::info_span;
 use tracing::span::Id;
@@ -58,15 +58,46 @@ use crate::GlobalState;
 pub struct EvmTask {
     pub span: Span,
     pub input: EvmInput,
-    pub response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>,
+    pub response_tx: EvmTaskResponseChannel,
 }
 
 impl EvmTask {
-    pub fn new(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
+    pub fn new_blocking(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
         Self {
             span: Span::current(),
             input,
-            response_tx,
+            response_tx: EvmTaskResponseChannel::Blocking(response_tx),
+        }
+    }
+
+    pub fn new_async(input: EvmInput, response_tx: tokio::sync::oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
+        Self {
+            span: Span::current(),
+            input,
+            response_tx: EvmTaskResponseChannel::Async(response_tx),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum EvmTaskResponseChannel {
+    Blocking(oneshot::Sender<anyhow::Result<EvmExecutionResult>>),
+    Async(tokio::sync::oneshot::Sender<anyhow::Result<EvmExecutionResult>>),
+}
+
+impl EvmTaskResponseChannel {
+    pub fn send(self, result: anyhow::Result<EvmExecutionResult>) {
+        match self {
+            EvmTaskResponseChannel::Blocking(tx) => {
+                if let Err(e) = tx.send(result) {
+                    tracing::error!(reason = ?e, "failed to send evm task result");
+                };
+            }
+            EvmTaskResponseChannel::Async(tx) => {
+                if let Err(e) = tx.send(result) {
+                    tracing::error!(reason = ?e, "failed to send evm task result");
+                };
+            }
         }
     }
 }
@@ -122,9 +153,7 @@ impl Executor {
                     // execute
                     let _enter = task.span.enter();
                     let result = evm.execute(task.input);
-                    if let Err(e) = task.response_tx.send(result) {
-                        tracing::error!(reason = ?e, "failed to send evm execution result");
-                    };
+                    task.response_tx.send(result);
                 }
 
                 warn_task_tx_closed(task_name);
@@ -262,7 +291,7 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let function = evm_input.extract_function();
 
-        let evm_result = self.execute_in_evm(evm_input).await;
+        let evm_result = self.execute_in_evm_async(evm_input).await;
 
         let mut evm_result = match evm_result {
             Ok(inner) => inner,
@@ -302,7 +331,7 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(hash, from, to))]
-    pub async fn local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    pub fn local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
@@ -333,7 +362,7 @@ impl Executor {
         let tx_execution = loop {
             // execute transaction
             let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
-            let evm_result = self.execute_in_evm(evm_input).await?;
+            let evm_result = self.execute_in_evm(evm_input)?;
 
             // save execution to temporary storage (not working yet)
             let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
@@ -361,7 +390,7 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub async fn local_call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
+    pub fn local_call(&self, input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), input.extract_function());
 
@@ -379,7 +408,7 @@ impl Executor {
         );
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
-        let evm_result = self.execute_in_evm(evm_input).await;
+        let evm_result = self.execute_in_evm(evm_input);
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_call(start.elapsed(), evm_result.is_ok(), function.clone());
@@ -397,10 +426,18 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Submits a transaction to the EVM and awaits for its execution.
-    async fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
-        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
-        self.evm_tx.send(EvmTask::new(evm_input, execution_tx))?;
+    async fn execute_in_evm_async(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
+        let (execution_tx, execution_rx) = tokio::sync::oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
+        let task = EvmTask::new_async(evm_input, execution_tx);
+        let _ = self.evm_tx.send(task);
         execution_rx.await?
+    }
+
+    fn execute_in_evm(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
+        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
+        let task = EvmTask::new_blocking(evm_input, execution_tx);
+        let _ = self.evm_tx.send(task);
+        execution_rx.recv()?
     }
 }
 
