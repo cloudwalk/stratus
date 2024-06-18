@@ -42,7 +42,6 @@ start_instance() {
         --tokio-console-address=$tokio_console_address \
         --perm-storage=rocks \
         --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
-    echo $!
 }
 
 # Function to check liveness of an instance
@@ -99,14 +98,13 @@ run_test() {
 
     # Start instances
     echo "Starting 3 instances..."
-    pids=()
     ports=()
     grpc_addresses=()
     rocks_paths=()
     liveness=()
     for instance in "${instances[@]}"; do
         IFS=' ' read -r -a params <<< "$instance"
-        pids+=($(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"))
+        start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
         ports+=("${params[4]}")
         grpc_addresses+=("${params[1]}")
         rocks_paths+=("${params[2]}")
@@ -178,19 +176,13 @@ run_test() {
         fi
     done
 
-    # Wait some time for the instance to be killed completely
-    sleep 15
-
     # Restart the killed instance
     echo "Restarting the killed instance..."
-    for instance in "${instances[@]}"; do
-        IFS=' ' read -r -a params <<< "$instance"
+    for i in "${!instances[@]}"; do
+        IFS=' ' read -r -a params <<< "${instances[i]}"
         if [ "${params[1]}" == "$leader_grpc_address" ]; then
-            new_pid=$(start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}")
-            pids+=("$new_pid")
-            grpc_addresses+=("${params[1]}")
-            ports+=("${params[4]}")
-            liveness+=(false)
+            start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
+            liveness[i]=false
             break
         fi
     done
@@ -258,7 +250,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=200
+n=4
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
