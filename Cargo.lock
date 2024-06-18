@@ -5633,6 +5633,7 @@ dependencies = [
  "k8s-openapi",
  "keccak-hasher",
  "kube",
+ "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
  "nom",

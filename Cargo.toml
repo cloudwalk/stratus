@@ -23,6 +23,7 @@ hex-literal = "=0.4.1"
 humantime = "=2.1.0"
 indexmap = { version = "=2.2.6", features = ["serde"] }
 itertools = "=0.13.0"
+lazy_static = "=1.4.0"
 nonempty = { version = "=0.10.0", features = ["serialize"] }
 once_cell = "=1.19.0"
 oneshot = "=0.1.8"
