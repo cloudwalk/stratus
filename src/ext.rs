@@ -360,9 +360,9 @@ where
         .expect("spawning named blocking task should not fail")
 }
 
-/// Spawns a background task that runs forever. It can be a thread or Tokio task.
+/// Spawns a blocking Tokio task or a thread according to the compilation feature-flag.
 #[track_caller]
-pub fn spawn_to_background<T>(name: &str, task: impl FnOnce() -> T + Send + 'static)
+pub fn spawn_blocking_named_or_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static)
 where
     T: Send + 'static,
 {
