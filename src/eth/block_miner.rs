@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,8 +8,6 @@ use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
-use tokio::sync::mpsc;
-use tokio::time::Instant;
 use tracing::Span;
 
 use crate::eth::primitives::Block;
@@ -74,7 +73,7 @@ impl BlockMiner {
         tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
 
         // spawn miner and ticker
-        let (ticks_tx, ticks_rx) = mpsc::unbounded_channel::<Instant>();
+        let (ticks_tx, ticks_rx) = mpsc::channel();
         named_spawn_blocking("miner::miner", move || interval_miner::run(Arc::clone(&self), ticks_rx));
         named_spawn("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx));
 
@@ -350,22 +349,20 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 // Miner
 // -----------------------------------------------------------------------------
 mod interval_miner {
+    use std::sync::mpsc;
     use std::sync::Arc;
 
-    use tokio::runtime::Handle;
-    use tokio::sync::mpsc;
     use tokio::time::Instant;
 
-    use crate::channel_read;
+    use crate::channel_read_sync;
     use crate::eth::BlockMiner;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
-    pub fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>) {
+    pub fn run(miner: Arc<BlockMiner>, ticks_rx: mpsc::Receiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
-        let tokio = Handle::current();
-        while let Some(tick) = tokio.block_on(async { channel_read!(ticks_rx) }) {
+        while let Ok(tick) = channel_read_sync!(ticks_rx) {
             if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }
@@ -403,18 +400,18 @@ mod interval_miner {
 }
 
 mod interval_miner_ticker {
+    use std::sync::mpsc;
     use std::thread;
     use std::time::Duration;
 
     use chrono::Timelike;
     use chrono::Utc;
-    use tokio::sync::mpsc;
     use tokio::time::Instant;
 
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
-    pub async fn run(block_time: Duration, ticks_tx: mpsc::UnboundedSender<Instant>) {
+    pub async fn run(block_time: Duration, ticks_tx: mpsc::Sender<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         // sync to next second
