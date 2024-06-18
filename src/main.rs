@@ -28,6 +28,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.grpc_server_address,
         miner.notifier_pending_txs.subscribe(),
         miner.notifier_blocks.subscribe(),
+        config.storage.perm_storage.rocks_path_prefix.clone(),
     )
     .await; // for now, we force None to initiate with the current node being the leader
 

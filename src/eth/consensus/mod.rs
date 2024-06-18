@@ -182,12 +182,14 @@ impl Consensus {
         grpc_address: SocketAddr,
         rx_pending_txs: broadcast::Receiver<TransactionExecution>,
         rx_blocks: broadcast::Receiver<Block>,
+        storage_path_prefix: Option<String>,
     ) -> Arc<Self> {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
         let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
-        let log_entries_storage = AppendLogEntriesStorage::new(&format!("{}./data/entries_log.rocksdb", path_prefix));
+        let storage_path_prefix = storage_path_prefix.unwrap_or_default();
+        let log_entries_storage = AppendLogEntriesStorage::new(&format!("{}./data/entries_log.rocksdb", storage_path_prefix)).expect("failed to create log entries storage");
 
         let consensus = Self {
             broadcast_sender,
@@ -204,6 +206,7 @@ impl Consensus {
             my_address: my_address.clone(),
             grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
+            log_entries_storage,
         };
         let consensus = Arc::new(consensus);
 

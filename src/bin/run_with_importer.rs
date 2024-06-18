@@ -31,6 +31,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         config.grpc_server_address,
         miner.notifier_pending_txs.subscribe(),
         miner.notifier_blocks.subscribe(),
+        config.storage.perm_storage.rocks_path_prefix.clone(),
     )
     .await; // in development, with no leader configured, the current node ends up being the leader
     let Some((http_url, ws_url)) = consensus.get_chain_url().await else {
