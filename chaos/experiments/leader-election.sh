@@ -61,7 +61,7 @@ find_leader() {
         fi
     done
     if [ ${#leaders[@]} -eq 0 ]; then
-        echo "No leader nodes found."
+        echo ""
     else
         echo "${leaders[@]}"
     fi
@@ -95,7 +95,6 @@ run_test() {
         grpc_addresses+=("${params[1]}")
         rocks_paths+=("${params[2]}")
         liveness+=(false)
-        sleep 20 # Add interval between instances startup to aoivd no leader case
     done
 
     all_ready=false
@@ -153,9 +152,6 @@ run_test() {
         echo "Exiting due to leader election failure."
         exit 1
     fi
-
-    echo "Waiting for periodic discovery of remaining instances."
-    sleep 40
 
     # Kill the leader instance
     echo "Killing the leader instance on address $leader_grpc_address..."
@@ -248,7 +244,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=2
+n=5
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
