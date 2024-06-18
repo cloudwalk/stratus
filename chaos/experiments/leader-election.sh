@@ -171,7 +171,7 @@ run_test() {
     echo "Killing the leader instance on address $leader_grpc_address..."
     for i in "${!grpc_addresses[@]}"; do
         if [ "${grpc_addresses[i]}" == "$leader_grpc_address" ]; then
-            killport ${ports[i]}
+            killport --quiet ${ports[i]}
             break
         fi
     done
@@ -241,7 +241,7 @@ run_test() {
     # Clean up
     echo "Cleaning up..."
     for port in "${ports[@]}"; do
-        killport $port
+        killport --quiet $port
     done
 
     for rocks_path in "${rocks_paths[@]}"; do
