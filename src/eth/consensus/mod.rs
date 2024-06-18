@@ -387,10 +387,13 @@ impl Consensus {
                     Ok(tx) = rx_pending_txs.recv() => {
                         if consensus.is_leader() {
                             tracing::info!(hash = %tx.hash(), "received transaction execution to send to followers");
+                            if tx.is_local() {
+                                tracing::debug!(hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
+                                continue;
+                            }
 
                             //TODO save transaction to appendEntries log
                             //TODO before saving check if all transaction_hashes are already in the log
-
                             let transaction = vec![tx.to_append_entry_transaction()];
                             let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
                             if consensus.broadcast_sender.send(transaction_entry).is_err() {
@@ -410,6 +413,9 @@ impl Consensus {
                                 tracing::error!("failed to broadcast block");
                             }
                         }
+                    }
+                    else => {
+                        tokio::task::yield_now().await;
                     }
                 }
             }
