@@ -9,6 +9,7 @@ use ethereum_types::H256;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethereum_types::U64;
+use itertools::Itertools;
 use revm::primitives::KECCAK_EMPTY;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -27,6 +28,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Size;
@@ -205,7 +207,7 @@ impl From<AddressRocksdb> for Address {
     }
 }
 
-#[derive(Debug, derive_more::Display, Clone, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct BlockNumberRocksdb(U64);
 
 gen_newtype_from!(self = BlockNumberRocksdb, other = u8, u16, u32, u64, U64, usize, i32, i64);
@@ -233,7 +235,7 @@ impl From<BlockNumberRocksdb> for u64 {
     }
 }
 
-#[derive(Clone, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndexRocksdb(U256);
 
 gen_newtype_from!(self = SlotIndexRocksdb, other = u64);
@@ -524,6 +526,13 @@ pub struct LogRocksdb {
     pub address: AddressRocksdb,
     pub topics: (Option<H256>, Option<H256>, Option<H256>, Option<H256>),
     pub data: BytesRocksdb,
+}
+
+impl LogRocksdb {
+    pub fn to_topics_vec(&self) -> Vec<LogTopic> {
+        let topics = &self.topics;
+        [topics.0, topics.1, topics.2, topics.3].into_iter().while_some().map(LogTopic::from).collect()
+    }
 }
 
 impl From<Log> for LogRocksdb {
