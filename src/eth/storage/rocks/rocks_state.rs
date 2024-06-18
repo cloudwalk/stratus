@@ -581,10 +581,12 @@ impl RocksStorageState {
             BlockSelection::Latest => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
             BlockSelection::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
             BlockSelection::Number(number) => self.blocks_by_number.get(&(*number).into()),
-            BlockSelection::Hash(hash) => {
-                let block_number = self.blocks_by_hash.get(&(*hash).into()).unwrap_or_default();
-                self.blocks_by_number.get(&block_number)
-            }
+            BlockSelection::Hash(hash) =>
+                if let Some(block_number) = self.blocks_by_hash.get(&(*hash).into()) {
+                    self.blocks_by_number.get(&block_number)
+                } else {
+                    None
+                },
         };
         match block {
             Some(block) => {
