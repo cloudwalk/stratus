@@ -178,9 +178,9 @@ run_test() {
         fi
     done
 
-    all_ready=false
-    while [ "$all_ready" != true ]; do
-        all_ready=true
+    restart_all_ready=false
+    while [ "$restart_all_ready" != true ]; do
+        restart_all_ready=true
         for i in "${!ports[@]}"; do
             if [ "${liveness[$i]}" != true ]; then
                 response=$(check_liveness "${ports[$i]}")
@@ -188,11 +188,11 @@ run_test() {
                     liveness[$i]=true
                     echo "Instance on address ${ports[$i]} is ready."
                 else
-                    all_ready=false
+                    restart_all_ready=false
                 fi
             fi
         done
-        if [ "$all_ready" != true ]; then
+        if [ "$restart_all_ready" != true ]; then
             echo "Waiting for all instances to be ready..."
             sleep 5
         fi
