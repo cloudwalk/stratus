@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { Block } from "web3-types";
+import { Block, Bytes } from "web3-types";
 
 import { ALICE, BOB } from "../helpers/account";
 import { isStratus } from "../helpers/network";
@@ -17,6 +17,7 @@ import {
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
     ONE,
+    HASH_ZERO,
 } from "../helpers/rpc";
 
 describe("JSON-RPC", () => {
@@ -90,9 +91,29 @@ describe("JSON-RPC", () => {
             (await sendExpect("eth_blockNumber")).eq(ONE);
             await sendReset();
         });
-        it("eth_getBlockByNumber", async function () {
-            let block: Block = await send("eth_getBlockByNumber", [ZERO, true]);
-            expect(block.transactions.length).eq(0);
+        let hash: Bytes;
+        describe("eth_getBlockByNumber", () => {
+            it("should fetch the genesis correctly", async () => {
+                let block: Block = await send("eth_getBlockByNumber", [ZERO, true]);
+                expect(block.hash).to.not.be.undefined;
+                hash = block.hash as Bytes; // get the genesis hash to use on the next test
+                expect(block.transactions.length).eq(0);
+            })
+            it("should return null if the block doesn't exist", async () => {
+                let block = await send("eth_getBlockByNumber", ["0xfffffff", true]);
+                expect(block).to.be.null;
+            })
+        });
+        describe("eth_getBlockByHash", () => {
+            it("should fetch the genesis correctly", async () => {
+                let block: Block = await send("eth_getBlockByHash", [hash, true]);
+                expect(block.number).eq("0x0")
+                expect(block.transactions.length).eq(0);
+            })
+            it("should return null if the block doesn't exist", async () => {
+                let block = await send("eth_getBlockByNumber", [HASH_ZERO, true]);
+                expect(block).to.be.null;
+            })
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
             if (isStratus) {
