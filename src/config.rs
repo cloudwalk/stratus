@@ -38,6 +38,7 @@ use crate::eth::BlockMiner;
 use crate::eth::BlockMinerMode;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::tracing::TracingLogFormat;
@@ -204,7 +205,7 @@ impl StratusStorageConfig {
     /// Initializes Stratus storage.
     pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
         let temp_storage = self.temp_storage.init().await?;
-        let perm_storage = self.perm_storage.init().await?;
+        let perm_storage = self.perm_storage.init()?;
         let storage = StratusStorage::new(temp_storage, perm_storage);
 
         Ok(Arc::new(storage))
@@ -850,8 +851,12 @@ pub struct PermanentStorageConfig {
 
     #[cfg(feature = "rocks")]
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
-    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
+    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
+
+    // Disable RocksDB backups
+    #[arg(long = "perm-storage-disable-backups", env = "PERM_STORAGE_DISABLE_BACKUPS")]
+    pub perm_storage_disable_backups: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -863,13 +868,17 @@ pub enum PermanentStorageKind {
 
 impl PermanentStorageConfig {
     /// Initializes permanent storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
+    pub fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         tracing::info!(config = ?self, "creating permanent storage");
 
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone())?),
+            PermanentStorageKind::Rocks => {
+                let enable_backups = not(self.perm_storage_disable_backups);
+                let prefix = self.rocks_path_prefix.clone();
+                Arc::new(RocksPermanentStorage::new(enable_backups, prefix)?)
+            }
         };
         Ok(perm)
     }

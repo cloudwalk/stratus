@@ -1,6 +1,14 @@
 use std::time::Duration;
 
 use tokio::time::Instant;
+use uuid::Uuid;
+
+/// Amount of bytes in one GB
+pub const GIGABYTE: usize = 1024 * 1024 * 1024;
+
+pub fn new_context_id() -> String {
+    Uuid::new_v4().to_string()
+}
 
 pub fn calculate_tps_and_bpm(duration: Duration, transaction_count: usize, block_count: usize) -> (f64, f64) {
     let seconds_elapsed = duration.as_secs_f64() + f64::EPSILON;
