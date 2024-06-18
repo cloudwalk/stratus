@@ -158,7 +158,7 @@ impl Executor {
             }
 
             // persist state
-            self.miner.save_execution(TransactionExecution::External(tx)).await?;
+            self.miner.save_execution(TransactionExecution::External(tx))?;
         }
 
         // track block metrics
@@ -293,7 +293,7 @@ impl Executor {
 
             // save execution to temporary storage (not working yet)
             let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-            if let Err(e) = self.miner.save_execution(tx_execution.clone()).await {
+            if let Err(e) = self.miner.save_execution(tx_execution.clone()) {
                 if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
                     tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
                     continue;

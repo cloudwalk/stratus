@@ -155,7 +155,7 @@ pub async fn execute_test(
 
     // execute and mine
     executor.external_block(&block, &receipts).await.unwrap();
-    miner.mine_external_and_commit().await.unwrap();
+    miner.mine_external_and_commit().unwrap();
 
     // get metrics from prometheus (sleep to ensure prometheus collected)
     traced_sleep(Duration::from_secs(5), SleepReason::SyncData).await;

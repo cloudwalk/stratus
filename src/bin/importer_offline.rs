@@ -163,11 +163,11 @@ async fn execute_block_importer(
             transaction_count += block.transactions.len();
 
             // mine and save block
-            let mined_block = miner.mine_external().await?;
+            let mined_block = miner.mine_external()?;
             if blocks_to_export_snapshot.contains(&mined_block.number()) {
                 export_snapshot(&block, &receipts, &mined_block)?;
             }
-            miner.commit(mined_block.clone()).await?;
+            miner.commit(mined_block.clone())?;
         }
 
         let duration = instant_before_execution.elapsed();

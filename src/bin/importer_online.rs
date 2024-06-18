@@ -178,7 +178,7 @@ async fn start_block_executor(
             );
         }
 
-        if let Err(e) = miner.mine_external_mixed_and_commit().await {
+        if let Err(e) = miner.mine_external_mixed_and_commit() {
             let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
             return log_and_err!(reason = e, message);
         };

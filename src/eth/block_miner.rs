@@ -5,6 +5,7 @@ use std::time::Duration;
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
+use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
@@ -24,6 +25,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::named_spawn;
+use crate::ext::named_spawn_blocking;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::DisplayExt;
@@ -73,7 +75,7 @@ impl BlockMiner {
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::unbounded_channel::<Instant>();
-        named_spawn("miner::miner", interval_miner::run(Arc::clone(&self), ticks_rx));
+        named_spawn_blocking("miner::miner", move || interval_miner::run(Arc::clone(&self), ticks_rx));
         named_spawn("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx));
 
         Ok(())
@@ -86,7 +88,7 @@ impl BlockMiner {
 
     /// Persists a transaction execution.
     #[tracing::instrument(name = "miner::save_execution", skip_all, fields(hash))]
-    pub async fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
+    pub fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
         Span::with(|s| {
             s.rec_str("hash", &tx_execution.hash());
         });
@@ -101,7 +103,7 @@ impl BlockMiner {
             // * mine block immediately
             BlockMinerMode::Automine => {
                 let _ = self.notifier_pending_txs.send(tx_execution);
-                self.mine_local_and_commit().await?;
+                self.mine_local_and_commit()?;
             }
             // * consensus transactions
             // * notify pending transactions
@@ -119,7 +121,7 @@ impl BlockMiner {
     ///
     /// Local transactions are not allowed to be part of the block.
     #[tracing::instrument(name = "miner::mine_external", skip_all, fields(number))]
-    pub async fn mine_external(&self) -> anyhow::Result<Block> {
+    pub fn mine_external(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external block");
 
         let block = self.storage.finish_block()?;
@@ -144,16 +146,16 @@ impl BlockMiner {
     }
 
     /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
-    pub async fn mine_external_and_commit(&self) -> anyhow::Result<()> {
-        let block = self.mine_external().await?;
-        self.commit(block).await
+    pub fn mine_external_and_commit(&self) -> anyhow::Result<()> {
+        let block = self.mine_external()?;
+        self.commit(block)
     }
 
     /// Mines external block and external transactions.
     ///
     /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
     #[tracing::instrument(name = "miner::mine_external_mixed", skip_all, fields(number))]
-    pub async fn mine_external_mixed(&self) -> anyhow::Result<Block> {
+    pub fn mine_external_mixed(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external mixed block");
 
         let block = self.storage.finish_block()?;
@@ -182,16 +184,16 @@ impl BlockMiner {
     }
 
     /// Same as [`Self::mine_external_mixed`], but automatically commits the block instead of returning it.
-    pub async fn mine_external_mixed_and_commit(&self) -> anyhow::Result<()> {
-        let block = self.mine_external_mixed().await?;
-        self.commit(block).await
+    pub fn mine_external_mixed_and_commit(&self) -> anyhow::Result<()> {
+        let block = self.mine_external_mixed()?;
+        self.commit(block)
     }
 
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
     #[tracing::instrument(name = "miner::mine_local", skip_all, fields(number))]
-    pub async fn mine_local(&self) -> anyhow::Result<Block> {
+    pub fn mine_local(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining local block");
 
         let block = self.storage.finish_block()?;
@@ -215,14 +217,14 @@ impl BlockMiner {
     }
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
-    pub async fn mine_local_and_commit(&self) -> anyhow::Result<()> {
-        let block = self.mine_local().await?;
-        self.commit(block).await
+    pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
+        let block = self.mine_local()?;
+        self.commit(block)
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
     #[tracing::instrument(name = "miner::commit", skip_all, fields(number))]
-    pub async fn commit(&self, block: Block) -> anyhow::Result<()> {
+    pub fn commit(&self, block: Block) -> anyhow::Result<()> {
         Span::with(|s| s.rec_str("number", &block.number()));
 
         tracing::info!(number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
@@ -232,7 +234,7 @@ impl BlockMiner {
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
 
         if let Some(relayer) = &self.relayer_client {
-            relayer.send_to_relayer(block.clone()).await?;
+            Handle::current().block_on(relayer.send_to_relayer(block.clone()))?;
         }
 
         // persist block
@@ -350,6 +352,7 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 mod interval_miner {
     use std::sync::Arc;
 
+    use tokio::runtime::Handle;
     use tokio::sync::mpsc;
     use tokio::time::Instant;
 
@@ -358,26 +361,27 @@ mod interval_miner {
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
-    pub async fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>) {
+    pub fn run(miner: Arc<BlockMiner>, mut ticks_rx: mpsc::UnboundedReceiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
-        while let Some(tick) = channel_read!(ticks_rx) {
+        let tokio = Handle::current();
+        while let Some(tick) = tokio.block_on(async { channel_read!(ticks_rx) }) {
             if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
             }
 
             // mine
             tracing::info!(lag_ys = %tick.elapsed().as_micros(), "interval mining block");
-            mine_and_commit(&miner).await;
+            mine_and_commit(&miner);
         }
         warn_task_rx_closed(TASK_NAME);
     }
 
     #[inline(always)]
-    async fn mine_and_commit(miner: &BlockMiner) {
+    fn mine_and_commit(miner: &BlockMiner) {
         // mine
         let block = loop {
-            match miner.mine_local().await {
+            match miner.mine_local() {
                 Ok(block) => break block,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to mine block");
@@ -387,7 +391,7 @@ mod interval_miner {
 
         // commit
         loop {
-            match miner.commit(block.clone()).await {
+            match miner.commit(block.clone()) {
                 Ok(_) => break,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to commit block");
