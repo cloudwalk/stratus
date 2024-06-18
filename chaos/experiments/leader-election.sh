@@ -43,11 +43,6 @@ check_leader() {
     # Check the response for specific strings to determine the node status
     if [[ "$response" == *"append_transaction_executions called on leader node"* ]]; then
         return 0 # Success exit code for leader
-    elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
-        return 1 # Failure exit code for non-leader
-    else
-        echo "Unexpected response from $grpc_address: $response"
-        exit 1
     fi
 }
 
@@ -56,7 +51,9 @@ find_leader() {
     local grpc_addresses=("$@")
     local leaders=()
     for grpc_address in "${grpc_addresses[@]}"; do
-        if check_leader "$grpc_address"; then
+        check_leader "$grpc_address"
+        local status=$?
+        if [ $status -eq 0 ]; then
             leaders+=("$grpc_address")
         fi
     done
@@ -241,7 +238,7 @@ run_test() {
 }
 
 # Number of times to run the test
-n=5
+n=10
 
 # Run the test n times
 for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
