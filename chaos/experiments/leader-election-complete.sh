@@ -2,8 +2,8 @@
 
 set -e
 
-# Default binary
-binary="stratus"
+# Default number of instances
+num_instances=3
 
 # Parse command-line options
 while [[ "$#" -gt 0 ]]; do
@@ -12,15 +12,20 @@ while [[ "$#" -gt 0 ]]; do
       binary="$2"
       shift 2
       ;;
+    --instances)
+      num_instances="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown parameter passed: $1"
-      echo "Usage: $0 [--bin binary]"
+      echo "Usage: $0 [--bin binary] [--instances number]"
       exit 1
       ;;
   esac
 done
 
 echo "Using binary: $binary"
+echo "Number of instances: $num_instances"
 
 # Function to start an instance
 start_instance() {
@@ -90,11 +95,14 @@ remove_rocks_path() {
 
 # Function to run the election test
 run_test() {
-    local instances=(
-        "0.0.0.0:3001 0.0.0.0:3778 tmp_rocks_3001 instance_3001.log 3001 http://0.0.0.0:3002;3779,http://0.0.0.0:3003;3780 0.0.0.0:6669 0.0.0.0:9001"
-        "0.0.0.0:3002 0.0.0.0:3779 tmp_rocks_3002 instance_3002.log 3002 http://0.0.0.0:3001;3778,http://0.0.0.0:3003;3780 0.0.0.0:6670 0.0.0.0:9002"
-        "0.0.0.0:3003 0.0.0.0:3780 tmp_rocks_3003 instance_3003.log 3003 http://0.0.0.0:3001;3778,http://0.0.0.0:3002;3779 0.0.0.0:6671 0.0.0.0:9003"
-    )
+    local instances=()
+    for ((i=1; i<=num_instances; i++)); do
+        local base_port=$((3000 + i))
+        local grpc_port=$((3777 + i))
+        local tokio_console_port=$((6668 + i))
+        local metrics_exporter_port=$((9000 + i))
+        instances+=("0.0.0.0:$base_port 0.0.0.0:$grpc_port tmp_rocks_$base_port instance_$base_port.log $base_port http://0.0.0.0:$((base_port+1));$((grpc_port+1)),http://0.0.0.0:$((base_port+2));$((grpc_port+2)) 0.0.0.0:$tokio_console_port 0.0.0.0:$metrics_exporter_port")
+    done
 
     # Start instances
     echo "Starting 3 instances..."
@@ -132,7 +140,7 @@ run_test() {
     done
 
     echo "All instances are ready. Waiting for leader election"
-
+]
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=60
 

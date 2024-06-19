@@ -518,9 +518,9 @@ local-chaos-test:
     just local-chaos-cleanup
 
 # Chaos Testing: Run chaos experiment
-run-chaos-experiment bin="" experiment="":
+run-chaos-experiment bin="" instances="" experiment="":
     echo "Building Stratus"
     cargo build --release --bin {{ bin }} --features dev
 
-    echo "Executing experiment on {{bin}} binary: {{ experiment }}"
-    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }}
+    echo "Executing experiment on {{ bin }} binary with {{ instances }} instance(s): {{ experiment }}"
+    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }}

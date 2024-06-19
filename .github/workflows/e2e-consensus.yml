@@ -26,12 +26,17 @@ on:
 
 jobs:
   e2e_leader_election:
-    name: E2E Leader Election Test
+    strategy:
+      fail-fast: false
+      matrix:
+        experiment: [startup, complete]
+        instances: [1, 2, 3]
+    name: E2E Leader Election ${{ matrix.experiment }} with ${{ matrix.instances }} instances
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.experiment }}-${{ matrix.instances }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -72,7 +77,7 @@ jobs:
           cargo install wait-service || true
 
       - name: Run e2e tests
-        run: just run-chaos-experiment stratus leader-election
+        run: just run-chaos-experiment stratus ${{ matrix.instances }} leader-election-${{ matrix.experiment }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
           RUST_LOG: off 
