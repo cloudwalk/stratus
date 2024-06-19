@@ -522,5 +522,5 @@ run-chaos-experiment bin="" instances="" enable-leader-restart="" experiment="":
     echo "Building Stratus"
     cargo build --release --bin {{ bin }} --features dev
 
-    echo "Executing experiment on {{ bin }} binary with {{ instances }} instance(s): {{ experiment }}"
+    echo "Executing experiment {{ experiment }} on {{ bin }} binary with {{ instances }} instance(s)"
     ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --enable-leader-restart {{ enable-leader-restart }}

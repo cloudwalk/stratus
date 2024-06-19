@@ -23,12 +23,17 @@ while [[ "$#" -gt 0 ]]; do
       shift 2
       ;;
     --enable-leader-restart)
-      enable_leader_restart=true
-      shift
+      if [[ "$2" == "true" || "$2" == "false" ]]; then
+        enable_leader_restart="$2"
+        shift 2
+      else
+        echo "Error: --enable-leader-restart must be followed by true or false"
+        exit 1
+      fi
       ;;
     *)
       echo "Unknown parameter passed: $1"
-      echo "Usage: $0 [--bin binary] [--instances number] [--enable-leader-restart]"
+      echo "Usage: $0 [--bin binary] [--instances number] [--enable-leader-restart true|false]"
       exit 1
       ;;
   esac
