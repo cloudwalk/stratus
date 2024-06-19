@@ -113,8 +113,7 @@ find_leader() {
 
 # Function to remove rocks-path directory
 remove_rocks_path() {
-    local rocks_path=$1
-    rm -rf data/$rocks_path
+    rm -rf data/
 }
 
 # Function to run the election test
@@ -294,10 +293,8 @@ run_test() {
     for port in "${ports[@]}"; do
         killport --quiet $port
     done
-
-    for rocks_path in "${rocks_paths[@]}"; do
-        remove_rocks_path $rocks_path
-    done
+    
+    remove_rocks_path
 }
 
 # Run the test n times
