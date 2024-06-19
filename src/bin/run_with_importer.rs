@@ -2,7 +2,6 @@ mod importer_online;
 
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;

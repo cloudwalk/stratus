@@ -1,10 +1,10 @@
+use std::sync::Arc;
+
 use ethers_core::types::Transaction;
 
 use crate::eth::primitives::TransactionInput;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 use crate::infra::BlockchainClient;
-
-use std::sync::Arc;
 
 pub struct TransactionRelayer {
     /// RPC client that will submit transactions.

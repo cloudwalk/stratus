@@ -337,7 +337,12 @@ impl Consensus {
         if self.importer_config.is_none() {
             let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
             let mut blockchain_client_lock = self.blockchain_client.lock().await;
-            *blockchain_client_lock = Some(BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await.expect("failed to create blockchain client").into());
+            *blockchain_client_lock = Some(
+                BlockchainClient::new_http(&http_url, Duration::from_secs(2))
+                    .await
+                    .expect("failed to create blockchain client")
+                    .into(),
+            );
             drop(blockchain_client_lock);
         }
 
@@ -537,15 +542,15 @@ impl Consensus {
         Some(namespace.trim().to_string())
     }
 
-    async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
-        let peers = self.peers.read().await;
-        for (address, (peer, _)) in peers.iter() {
-            if peer.role == Role::Leader {
-                return Ok(address.clone());
-            }
-        }
-        Err(anyhow!("Leader not found"))
-    }
+    //TODO FIXME move this code back when we have propagation: async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
+    //TODO FIXME move this code back when we have propagation:     let peers = self.peers.read().await;
+    //TODO FIXME move this code back when we have propagation:     for (address, (peer, _)) in peers.iter() {
+    //TODO FIXME move this code back when we have propagation:         if peer.role == Role::Leader {
+    //TODO FIXME move this code back when we have propagation:             return Ok(address.clone());
+    //TODO FIXME move this code back when we have propagation:         }
+    //TODO FIXME move this code back when we have propagation:     }
+    //TODO FIXME move this code back when we have propagation:     Err(anyhow!("Leader not found"))
+    //TODO FIXME move this code back when we have propagation: }
 
     pub async fn get_chain_url(&self) -> anyhow::Result<(String, Option<String>)> {
         //TODO FIXME move this code back when we have propagation: if self.is_follower().await {
@@ -565,11 +570,15 @@ impl Consensus {
 
         for (address, (peer, _)) in peers.iter_mut() {
             if *address == leader_address {
-
                 //IMPORTANT, as the leader changes, we need to update the blockchain client with its address
                 let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
                 let mut blockchain_client_lock = self.blockchain_client.lock().await;
-                *blockchain_client_lock = Some(BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await.expect("failed to create blockchain client").into());
+                *blockchain_client_lock = Some(
+                    BlockchainClient::new_http(&http_url, Duration::from_secs(2))
+                        .await
+                        .expect("failed to create blockchain client")
+                        .into(),
+                );
                 drop(blockchain_client_lock);
 
                 peer.role = Role::Leader;

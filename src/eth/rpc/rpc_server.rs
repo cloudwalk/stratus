@@ -269,7 +269,7 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
 // -----------------------------------------------------------------------------
 
 fn net_listening(params: Params<'_>, arc: &RpcContext, ext: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    stratus_readiness(params, &arc, &ext)
+    stratus_readiness(params, arc, ext)
 }
 
 #[tracing::instrument(name = "rpc::net_version", skip_all)]
