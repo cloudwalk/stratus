@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
+use jsonrpsee::types::SubscriptionId;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
@@ -81,6 +82,15 @@ pub trait DisplayExt {
 impl DisplayExt for std::time::Duration {
     fn to_string_ext(&self) -> String {
         humantime::Duration::from(*self).to_string()
+    }
+}
+
+impl DisplayExt for SubscriptionId<'_> {
+    fn to_string_ext(&self) -> String {
+        match self {
+            SubscriptionId::Num(value) => value.to_string(),
+            SubscriptionId::Str(value) => value.to_string(),
+        }
     }
 }
 

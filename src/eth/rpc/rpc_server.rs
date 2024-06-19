@@ -39,6 +39,7 @@ use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
 use crate::eth::rpc::rpc_invalid_params_error;
+use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcHttpMiddleware;
@@ -48,6 +49,7 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::Consensus;
 use crate::eth::Executor;
+use crate::ext::not;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
 use crate::infra::build_info;
@@ -236,34 +238,36 @@ fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions)
 async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> JsonValue {
     let (pending_txs, new_heads, logs) = join!(ctx.subs.pending_txs.read(), ctx.subs.new_heads.read(), ctx.subs.logs.read());
     json!({
-        "newPendingTransactions": {
-            "size": pending_txs.len(),
-            "items": pending_txs.values().map(|s|
+        "newPendingTransactions":
+            pending_txs.values().map(|(client, sink)|
                 json!({
-                    "id": s.subscription_id()
+                    "client": client,
+                    "id": sink.subscription_id(),
+                    "active": not(sink.is_closed())
                 })
             ).collect_vec()
-        },
-        "newHeads": {
-            "size": new_heads.len(),
-            "items": new_heads.values().map(|s|
+        ,
+        "newHeads":
+            new_heads.values().map(|(client, sink)|
                 json!({
-                    "id": s.subscription_id()
+                    "client": client,
+                    "id": sink.subscription_id(),
+                    "active": not(sink.is_closed())
                 })
             ).collect_vec()
-        },
-        "logs": {
-            "size": logs.len(),
-            "items": logs.values().map(|s|
+        ,
+        "logs":
+            logs.values().map(|(client, sink, filter)|
                 json!({
-                    "id": s.0.subscription_id(),
+                    "client": client,
+                    "id": sink.subscription_id(),
+                    "active": not(sink.is_closed()),
                     "filter": {
-                        "parsed": s.1,
-                        "original": s.1.original_input
+                        "parsed": filter,
+                        "original": filter.original_input
                     }
                 })
             ).collect_vec()
-        }
     })
 }
 
@@ -576,21 +580,22 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyh
 // -----------------------------------------------------------------------------
 
 #[tracing::instrument(name = "rpc::eth_subscribe", skip_all)]
-async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, _: Extensions) -> impl IntoSubscriptionCloseResponse {
+async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
+    let client = ext.rpc_client();
     let (params, kind) = next_rpc_param::<String>(params.sequence())?;
     match kind.deref() {
         "newPendingTransactions" => {
-            ctx.subs.add_new_pending_txs(pending.accept().await?).await;
+            ctx.subs.add_new_pending_txs(client, pending.accept().await?).await;
         }
 
         "newHeads" => {
-            ctx.subs.add_new_heads(pending.accept().await?).await;
+            ctx.subs.add_new_heads(client, pending.accept().await?).await;
         }
 
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage)?;
-            ctx.subs.add_logs(pending.accept().await?, filter).await;
+            ctx.subs.add_logs(client, pending.accept().await?, filter).await;
         }
 
         // unsupported
