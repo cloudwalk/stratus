@@ -203,8 +203,8 @@ pub struct StratusStorageConfig {
 
 impl StratusStorageConfig {
     /// Initializes Stratus storage.
-    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp_storage = self.temp_storage.init().await?;
+    pub fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+        let temp_storage = self.temp_storage.init()?;
         let perm_storage = self.perm_storage.init()?;
         let storage = StratusStorage::new(temp_storage, perm_storage);
 
@@ -231,7 +231,7 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
+    pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
         let config = EvmConfig {
             num_evms: max(self.num_evms, 1),
             chain_id: self.chain_id.into(),
@@ -264,21 +264,16 @@ pub struct MinerConfig {
 
 impl MinerConfig {
     /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(BlockMinerMode::External, storage, relayer).await
+    pub fn init_external_mode(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(BlockMinerMode::External, storage, relayer)
     }
 
     /// Inits [`BlockMiner`] with the configured mining mode.
-    pub async fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(self.block_mode, storage, relayer).await
+    pub fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(self.block_mode, storage, relayer)
     }
 
-    async fn init_with_mode(
-        &self,
-        mode: BlockMinerMode,
-        storage: Arc<StratusStorage>,
-        relayer: Option<ExternalRelayerClient>,
-    ) -> anyhow::Result<Arc<BlockMiner>> {
+    fn init_with_mode(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "creating block miner");
 
         // create miner
@@ -818,7 +813,7 @@ pub enum TemporaryStorageKind {
 
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
+    pub fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
         tracing::info!(config = ?self, "creating temporary storage");
 
         match self.temp_storage_kind {
