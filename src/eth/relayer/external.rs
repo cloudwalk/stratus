@@ -50,6 +50,9 @@ pub struct ExternalRelayer {
 
     /// RPC client that will submit transactions.
     substrate_chain: BlockchainClient,
+
+    /// RPC client that will submit transactions.
+    stratus_chain: BlockchainClient,
 }
 
 impl ExternalRelayer {
@@ -66,12 +69,18 @@ impl ExternalRelayer {
 
         Ok(Self {
             substrate_chain: BlockchainClient::new_http(&config.forward_to, config.rpc_timeout).await?,
+            stratus_chain: BlockchainClient::new_http(&config.stratus_rpc, config.rpc_timeout).await?,
             pool,
         })
     }
 
     fn combine_transactions(blocks: Vec<Block>) -> Vec<TransactionMined> {
         blocks.into_iter().flat_map(|block| block.transactions).collect()
+    }
+
+    async fn blocks_have_been_mined(&self, blocks: Vec<Hash>) -> bool {
+        let futures = blocks.into_iter().map(|hash| self.stratus_chain.fetch_block_by_hash(hash, false));
+        !join_all(futures).await.into_iter().any(|result| result.is_err() || result.unwrap().is_null())
     }
 
     /// Polls the next block to be relayed and relays it to Substrate.
@@ -84,7 +93,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 20
+                LIMIT 5
             )
             UPDATE relayer_blocks r
                 SET started = true
@@ -101,6 +110,10 @@ impl ExternalRelayer {
             .sorted_by_key(|row| row.number)
             .map(|row| row.payload.try_into())
             .collect::<Result<_, _>>()?;
+
+        if !self.blocks_have_been_mined(blocks.iter().map(|block| block.hash()).collect()).await {
+            return Err(anyhow!("some blocks in this batch have not been mined in stratus"));
+        }
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
         let dag = TransactionDag::new(Self::combine_transactions(blocks));
@@ -390,9 +403,18 @@ impl ExternalRelayerClient {
         let mut remaining_tries = 5;
 
         while remaining_tries > 0 {
-            if let Err(err) = sqlx::query!("INSERT INTO relayer_blocks (number, payload) VALUES ($1, $2)", block_number as _, &block_json)
-                .execute(&self.pool)
-                .await
+            if let Err(err) = sqlx::query!(
+                r#"
+                    INSERT INTO relayer_blocks
+                    (number, payload)
+                    VALUES ($1, $2)
+                    ON CONFLICT (number) DO UPDATE
+                    SET payload = EXCLUDED.payload"#,
+                block_number as _,
+                &block_json
+            )
+            .execute(&self.pool)
+            .await
             {
                 remaining_tries -= 1;
                 tracing::warn!(?err, ?remaining_tries, "failed to insert into relayer_blocks");

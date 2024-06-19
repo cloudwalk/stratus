@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    INSERT INTO relayer_blocks\n                    (number, payload)\n                    VALUES ($1, $2)\n                    ON CONFLICT (number) DO UPDATE\n                    SET payload = EXCLUDED.payload",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ef81ad16f7c77ed95c3dd1f7370a9ef99121245033f9e9491cea594d2f1362ad"
+}

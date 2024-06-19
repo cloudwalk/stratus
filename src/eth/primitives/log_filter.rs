@@ -51,7 +51,7 @@ pub struct LogFilterTopicCombination(Vec<(usize, LogTopic)>);
 gen_newtype_from!(self = LogFilterTopicCombination, other = Vec<(usize, LogTopic)>);
 
 impl LogFilterTopicCombination {
-    fn matches(&self, log_topics: &[LogTopic]) -> bool {
+    pub fn matches(&self, log_topics: &[LogTopic]) -> bool {
         for (topic_index, topic) in &self.0 {
             if log_topics.get(*topic_index).is_some_and(|log_topic| log_topic != topic) {
                 return false;
