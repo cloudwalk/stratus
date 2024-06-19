@@ -99,7 +99,7 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
-    clone brlc-periphery b8d507a
+    clone brlc-periphery fed9fcb
 fi
 
 if [ "$multisig" == 1 ]; then
