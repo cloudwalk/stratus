@@ -17,11 +17,14 @@ use tracing::Span;
 use super::transaction_dag::TransactionDag;
 use crate::config::ExternalRelayerClientConfig;
 use crate::config::ExternalRelayerServerConfig;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
@@ -83,6 +86,42 @@ impl ExternalRelayer {
         !join_all(futures).await.into_iter().any(|result| result.is_err() || result.unwrap().is_null())
     }
 
+    #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all)]
+    async fn compare_final_state(&self, changed_slots: HashSet<(Address, SlotIndex)>, block_number: BlockNumber) {
+        let point_in_time = StoragePointInTime::Past(block_number);
+        for (addr, index) in changed_slots {
+            let stratus_slot_value = loop {
+                match self.stratus_chain.fetch_storage_at(&addr, &index, point_in_time).await {
+                    Ok(value) => break value,
+                    Err(err) => tracing::warn!(?addr, ?index, ?err, "failed to fetch slot value from stratus, retrying..."),
+                }
+            };
+
+            let substrate_slot_value = loop {
+                match self.substrate_chain.fetch_storage_at(&addr, &index, point_in_time).await {
+                    Ok(value) => break value,
+                    Err(err) => tracing::warn!(?addr, ?index, ?err, "failed to fetch slot value from substrate, retrying..."),
+                }
+            };
+
+            if stratus_slot_value != substrate_slot_value {
+                tracing::error!(?addr, ?index, ?point_in_time, "evm state mismatch between stratus and substrate");
+                while let Err(e) = sqlx::query!(
+                    "INSERT INTO slot_mismatches (address, index, block_number, stratus_value, substrate_value) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+                    addr as _,
+                    index as _,
+                    block_number as _,
+                    stratus_slot_value as _,
+                    substrate_slot_value as _
+                )
+                .execute(&self.pool)
+                .await {
+                    tracing::warn!(?e, "failed to insert slot mismatch, retrying...")
+                }
+            }
+        }
+    }
+
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all, fields(block_number))]
     pub async fn relay_blocks(&self) -> anyhow::Result<Vec<BlockNumber>> {
@@ -104,7 +143,17 @@ impl ExternalRelayer {
         .fetch_all(&self.pool)
         .await?;
 
+        if block_rows.len() == 0 {
+            tracing::info!("no blocks to relay");
+            return Ok(vec![]);
+        }
+
         let block_numbers: HashSet<BlockNumber> = block_rows.iter().map(|row| row.number.into()).collect();
+        let max_number = block_numbers.iter().max().cloned().unwrap();
+
+        // fill span
+        Span::with(|s| s.rec_str("block_number", &max_number));
+
         let blocks: Vec<Block> = block_rows
             .into_iter()
             .sorted_by_key(|row| row.number)
@@ -115,8 +164,11 @@ impl ExternalRelayer {
             return Err(anyhow!("some blocks in this batch have not been mined in stratus"));
         }
 
+        let combined_transactions = Self::combine_transactions(blocks);
+        let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
+
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
-        let dag = TransactionDag::new(Self::combine_transactions(blocks));
+        let dag = TransactionDag::new(combined_transactions);
         let (mismatched_blocks, timedout_blocks) = self.relay_dag(dag).await;
 
         let non_ok_blocks: HashSet<BlockNumber> = mismatched_blocks.union(&timedout_blocks).cloned().collect();
@@ -152,6 +204,7 @@ impl ExternalRelayer {
             .await?;
         }
 
+        self.compare_final_state(modified_slots, max_number).await;
         Ok(ok_blocks.into_iter().chain(only_mismatched_blocks.into_iter()).collect())
     }
 
@@ -197,7 +250,7 @@ impl ExternalRelayer {
                         break Ok(());
                     }
                 }
-                Ok(None) =>
+                Ok(None) => {
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
@@ -206,7 +259,8 @@ impl ExternalRelayer {
                             block_number,
                             anyhow!("no receipt returned by substrate for more than 30 seconds"),
                         ));
-                    },
+                    }
+                }
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -260,7 +314,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) =>
+            Ok(res) => {
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -268,7 +322,8 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                },
+                }
+            }
         }
 
         #[cfg(feature = "metrics")]

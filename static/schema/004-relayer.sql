@@ -13,3 +13,12 @@ create table mismatches(
     substrate_receipt jsonb not null,
     error text not null
 );
+
+create table slot_mismatches(
+    address bytea not null,
+    index bytea not null,
+    block_number bigint not null,
+    stratus_value bytea not null,
+    substrate_value bytea not null,
+    primary key (address, index)
+);
