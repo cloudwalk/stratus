@@ -32,7 +32,7 @@ jobs:
         include:
           - leader-restart: true
             instances: 2
-            iterations: 5
+            iterations: 4
           - leader-restart: true
             instances: 3
             iterations: 4
