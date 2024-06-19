@@ -106,11 +106,9 @@ impl BlockMiner {
             }
             // * consensus transactions
             // * notify pending transactions
-            BlockMinerMode::Interval(_) => {
+            BlockMinerMode::Interval(_) | BlockMinerMode::External => {
                 let _ = self.notifier_pending_txs.send(tx_execution);
             }
-            //XXX
-            BlockMinerMode::External => {}
         }
 
         Ok(())
