@@ -109,7 +109,7 @@ impl BlockMiner {
             BlockMinerMode::Interval(_) => {
                 let _ = self.notifier_pending_txs.send(tx_execution);
             }
-            // * do nothing, the caller will decide what to do
+            //XXX
             BlockMinerMode::External => {}
         }
 
