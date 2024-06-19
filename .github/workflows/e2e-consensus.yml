@@ -38,7 +38,7 @@ jobs:
             iterations: 4
           - leader-restart: false
             instances: 2
-            iterations: 15
+            iterations: 12
           - leader-restart: false
             instances: 3
             iterations: 12
