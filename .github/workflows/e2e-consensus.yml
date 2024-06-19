@@ -29,14 +29,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        leader-restart: [true, false]
-        instances: [2, 3]
+        include:
+          - leader-restart: true
+            instances: [2, 3]
+            iterations: 4
+          - leader-restart: false
+            instances: [2, 3]
+            iterations: 10
     name: E2E Leader Election with ${{ matrix.instances }} instance(s) and leader restart ${{ matrix.leader-restart }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.leader-restart }}-${{ matrix.instances }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.leader-restart }}-${{ matrix.instances }}-${{ matrix.iterations }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -77,7 +82,7 @@ jobs:
           cargo install wait-service || true
 
       - name: Run e2e tests
-        run: just run-chaos-experiment stratus ${{ matrix.instances }} ${{ matrix.leader-restart }} leader-election
+        run: just run-chaos-experiment stratus ${{ matrix.instances }} ${{ matrix.iterations }} ${{ matrix.leader-restart }} leader-election
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
           RUST_LOG: off 

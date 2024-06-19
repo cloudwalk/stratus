@@ -8,6 +8,9 @@ binary="stratus"
 # Default number of instances
 num_instances=3
 
+# Default number of iterations
+iterations=4
+
 # Flag for enabling leader restart feature
 enable_leader_restart=false
 
@@ -22,6 +25,10 @@ while [[ "$#" -gt 0 ]]; do
       num_instances="$2"
       shift 2
       ;;
+    --iterations)
+      iterations="$2"
+      shift 2
+      ;;
     --enable-leader-restart)
       if [[ "$2" == "true" || "$2" == "false" ]]; then
         enable_leader_restart="$2"
@@ -33,7 +40,7 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     *)
       echo "Unknown parameter passed: $1"
-      echo "Usage: $0 [--bin binary] [--instances number] [--enable-leader-restart true|false]"
+      echo "Usage: $0 [--bin binary] [--instances number] [--iterations number] [--enable-leader-restart true|false]"
       exit 1
       ;;
   esac
@@ -292,13 +299,10 @@ run_test() {
     done
 }
 
-# Number of times to run the test
-n=4
-
 # Run the test n times
-for ((iteration_n=1; iteration_n<=n; iteration_n++)); do
+for ((iteration_n=1; iteration_n<=$iterations; iteration_n++)); do
     echo -e "\n##############################################\n"
-    echo "Running binary $binary test iteration $iteration_n of $n..."
+    echo "Running binary $binary test iteration $iteration_n of $iterationsn..."
     run_test
     sleep 5
 done

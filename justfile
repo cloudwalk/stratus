@@ -518,9 +518,9 @@ local-chaos-test:
     just local-chaos-cleanup
 
 # Chaos Testing: Run chaos experiment
-run-chaos-experiment bin="" instances="" enable-leader-restart="" experiment="":
+run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
     echo "Building Stratus"
     cargo build --release --bin {{ bin }} --features dev
 
-    echo "Executing experiment {{ experiment }} on {{ bin }} binary with {{ instances }} instance(s)"
-    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --enable-leader-restart {{ enable-leader-restart }}
+    echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
+    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
