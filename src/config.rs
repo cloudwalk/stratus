@@ -330,7 +330,7 @@ impl IntegratedRelayerConfig {
         match self.forward_to {
             Some(ref forward_to) => {
                 let chain = BlockchainClient::new_http(forward_to, self.relayer_timeout).await?;
-                let relayer = TransactionRelayer::new(chain);
+                let relayer = TransactionRelayer::new(Arc::new(chain));
                 Ok(Some(Arc::new(relayer)))
             }
             None => Ok(None),

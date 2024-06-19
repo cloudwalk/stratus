@@ -63,3 +63,4 @@ jobs:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: off
           RELEASE: 1
+          RUST_BACKTRACE: 1
