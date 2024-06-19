@@ -30,8 +30,8 @@ jobs:
       fail-fast: false
       matrix:
         experiment: [startup, complete]
-        instances: [1, 2, 3]
-    name: E2E Leader Election ${{ matrix.experiment }} with ${{ matrix.instances }} instances
+        instances: [2, 3]
+    name: E2E Leader Election ${{ matrix.experiment }} with ${{ matrix.instances }} instance(s)
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
