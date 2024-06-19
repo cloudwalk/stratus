@@ -120,6 +120,7 @@ run_test() {
         grpc_addresses+=("${params[1]}")
         rocks_paths+=("${params[2]}")
         liveness+=(false)
+        sleep 15
     done
 
     all_ready=false
