@@ -110,11 +110,12 @@ impl RocksStorageState {
     pub fn new(path: impl AsRef<Path>) -> Self {
         let db_path = path.as_ref().to_path_buf();
         let (backup_trigger_tx, backup_trigger_rx) = mpsc::sync_channel::<()>(1);
+        tracing::debug!("initializing RocksStorageState");
 
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
 
-        //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
+        tracing::debug!("opened database successfully");
         let state = Self {
             db_path,
             accounts: new_cf(&db, "accounts"),
@@ -134,7 +135,10 @@ impl RocksStorageState {
             db,
         };
 
+        tracing::debug!("initializing backup trigger");
         state.listen_for_backup_trigger(backup_trigger_rx).unwrap();
+
+        tracing::debug!("returning RocksStorageState");
         state
     }
 
@@ -586,6 +590,7 @@ where
     K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
+    tracing::debug!(column_family = column_family, "creating new column family");
     let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
         panic!("column_family `{column_family}` given to `new_cf` not found in options map");
     };
