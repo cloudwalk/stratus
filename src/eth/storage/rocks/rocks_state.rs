@@ -110,12 +110,12 @@ impl RocksStorageState {
     pub fn new(path: impl AsRef<Path>) -> Self {
         let db_path = path.as_ref().to_path_buf();
         let (backup_trigger_tx, backup_trigger_rx) = mpsc::sync_channel::<()>(1);
-        tracing::debug!(db_path = db_path, "initializing RocksStorageState");
+        tracing::debug!("initializing RocksStorageState");
 
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
 
-        tracing::debug!(db_options = db_options, "opened database successfully");
+        tracing::debug!("opened database successfully");
         let state = Self {
             db_path,
             accounts: new_cf(&db, "accounts"),
