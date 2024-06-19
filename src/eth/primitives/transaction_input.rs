@@ -22,7 +22,6 @@ use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;
-use crate::log_and_err;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -131,12 +130,6 @@ fn try_from_ethers_transaction(value: EthersTransaction, compute_signer: bool) -
         false => value.from.into(),
     };
 
-    // extract gas price
-    let gas_price: Wei = match value.gas_price {
-        Some(wei) => wei.into(),
-        None => return log_and_err!("transaction without gas_price id is not allowed"),
-    };
-
     Ok(TransactionInput {
         tx_type: value.transaction_type,
         chain_id: match value.chain_id {
@@ -151,7 +144,7 @@ fn try_from_ethers_transaction(value: EthersTransaction, compute_signer: bool) -
         value: value.value.into(),
         input: value.input.clone().into(),
         gas_limit: value.gas.try_into()?,
-        gas_price,
+        gas_price: value.gas_price.unwrap_or_default().into(),
         v: value.v,
         r: value.r,
         s: value.s,
