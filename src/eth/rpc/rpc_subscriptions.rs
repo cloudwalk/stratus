@@ -16,9 +16,11 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::rpc::RpcClientApp;
 use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
+use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::if_else;
 #[cfg(feature = "metrics")]
@@ -75,14 +77,14 @@ impl RpcSubscriptions {
                 }
 
                 // remove closed subscriptions
-                subs.new_pending_txs.write().await.retain(|_, sub| not(sub.is_closed()));
-                subs.new_heads.write().await.retain(|_, sub| not(sub.is_closed()));
-                subs.logs.write().await.retain(|_, (sub, _)| not(sub.is_closed()));
+                subs.pending_txs.write().await.retain(|_, (_, sub)| not(sub.is_closed()));
+                subs.new_heads.write().await.retain(|_, (_, sub)| not(sub.is_closed()));
+                subs.logs.write().await.retain(|_, (_, sub, _)| not(sub.is_closed()));
 
                 // update metrics
                 #[cfg(feature = "metrics")]
                 {
-                    metrics::set_rpc_subscriptions_active(subs.new_pending_txs.read().await.len() as u64, label::PENDING_TXS);
+                    metrics::set_rpc_subscriptions_active(subs.pending_txs.read().await.len() as u64, label::PENDING_TXS);
                     metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
                     metrics::set_rpc_subscriptions_active(subs.logs.read().await.len() as u64, label::LOGS);
                 }
@@ -110,8 +112,8 @@ impl RpcSubscriptions {
                     break;
                 };
 
-                let subs = subs.new_pending_txs.read().await;
-                Self::notify(subs.values(), tx.hash().to_string()).await;
+                let subs = subs.pending_txs.read().await;
+                Self::notify(subs.values().map(|(_, sub)| sub), tx.hash().to_string()).await;
             }
             Ok(())
         })
@@ -132,7 +134,7 @@ impl RpcSubscriptions {
                 };
 
                 let subs = subs.new_heads.read().await;
-                Self::notify(subs.values(), block.header).await;
+                Self::notify(subs.values().map(|(_, sub)| sub), block.header).await;
             }
             Ok(())
         })
@@ -155,7 +157,7 @@ impl RpcSubscriptions {
                 let subs = subs.logs.read().await;
                 let interested_subs = subs
                     .values()
-                    .filter_map(|(sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
+                    .filter_map(|(_, sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
                     .collect_vec();
 
                 Self::notify(interested_subs.into_iter(), log).await;
@@ -163,6 +165,10 @@ impl RpcSubscriptions {
             Ok(())
         })
     }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
 
     async fn notify(subs: impl ExactSizeIterator<Item = &SubscriptionSink>, msg: impl Into<SubscriptionMessage>) {
         if subs.len() == 0 {
@@ -206,37 +212,49 @@ impl RpcSubscriptionsHandles {
 /// Active client subscriptions.
 #[derive(Debug, Default)]
 pub struct RpcSubscriptionsConnected {
-    new_pending_txs: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
-    new_heads: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
-    logs: RwLock<HashMap<ConnectionId, (SubscriptionSink, LogFilter)>>,
+    pub pending_txs: RwLock<HashMap<ConnectionId, (RpcClientApp, SubscriptionSink)>>,
+    pub new_heads: RwLock<HashMap<ConnectionId, (RpcClientApp, SubscriptionSink)>>,
+    pub logs: RwLock<HashMap<ConnectionId, (RpcClientApp, SubscriptionSink, LogFilter)>>,
 }
 
 impl RpcSubscriptionsConnected {
     /// Adds a new subscriber to `newPendingTransactions` event.
-    pub async fn add_new_pending_txs(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id().0, "subscribing to newPendingTransactions event");
-        let mut subs = self.new_pending_txs.write().await;
-        subs.insert(sink.connection_id(), sink);
+    pub async fn add_new_pending_txs(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+        tracing::debug!(
+            id = sink.subscription_id().to_string_ext(),
+            %rpc_client,
+            "subscribing to newPendingTransactions event"
+        );
+        let mut subs = self.pending_txs.write().await;
+        subs.insert(sink.connection_id(), (rpc_client, sink));
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::PENDING_TXS);
     }
 
     /// Adds a new subscriber to `newHeads` event.
-    pub async fn add_new_heads(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id().0, "subscribing to newHeads event");
+    pub async fn add_new_heads(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+        tracing::debug!(
+            id = sink.subscription_id().to_string_ext(),
+            %rpc_client,
+            "subscribing to newHeads event"
+        );
         let mut subs = self.new_heads.write().await;
-        subs.insert(sink.connection_id(), sink);
+        subs.insert(sink.connection_id(), (rpc_client, sink));
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::NEW_HEADS);
     }
 
     /// Adds a new subscriber to `logs` event.
-    pub async fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
-        tracing::debug!(id = %sink.connection_id().0, ?filter, "subscribing to logs event");
+    pub async fn add_logs(&self, rpc_client: RpcClientApp, sink: SubscriptionSink, filter: LogFilter) {
+        tracing::debug!(
+            id = sink.subscription_id().to_string_ext(), ?filter,
+            %rpc_client,
+            "subscribing to logs event"
+        );
         let mut subs = self.logs.write().await;
-        subs.insert(sink.connection_id(), (sink, filter));
+        subs.insert(sink.connection_id(), (rpc_client, sink, filter));
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);

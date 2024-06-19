@@ -13,12 +13,9 @@ use std::fs;
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use anyhow::Context;
-use futures::join;
 use futures::try_join;
 use futures::StreamExt;
 use itertools::Itertools;
-use stratus::channel_read;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
@@ -30,6 +27,7 @@ use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::spawn_named;
+use stratus::ext::spawn_thread;
 use stratus::ext::ResultExt;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
@@ -79,12 +77,21 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     storage.save_accounts(initial_accounts.clone())?;
 
     let storage_loader = execute_external_rpc_storage_loader(rpc_storage, config.blocks_by_fetch, config.paralellism, block_start, block_end, backlog_tx);
-    let storage_loader = spawn_named("storage-loader", async move { storage_loader.await.context("'storage-loader' task failed") });
+    spawn_named("storage-loader", async move {
+        if let Err(err) = storage_loader.await {
+            tracing::error!(?err, "'storage-loader' task failed");
+        }
+    });
 
-    let block_importer = execute_block_importer(executor, miner, backlog_rx, block_snapshots);
-    let block_importer = spawn_named("block-importer", async move { block_importer.await.context("'block-importer' task failed") });
+    let block_importer = spawn_thread("block-importer", || {
+        if let Err(err) = execute_block_importer(executor, miner, backlog_rx, block_snapshots) {
+            tracing::error!(?err, "'block-importer' task failed");
+        }
+    });
 
-    let (_, _) = join!(storage_loader, block_importer);
+    block_importer
+        .join()
+        .expect("'block-importer' thread panic'ed instead of properly returning an error");
 
     Ok(())
 }
@@ -92,7 +99,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 // -----------------------------------------------------------------------------
 // Block importer
 // -----------------------------------------------------------------------------
-async fn execute_block_importer(
+fn execute_block_importer(
     // services
     executor: Arc<Executor>,
     miner: Arc<BlockMiner>,
@@ -110,7 +117,7 @@ async fn execute_block_importer(
         };
 
         // receive new tasks to execute, or exit
-        let Some((blocks, receipts)) = channel_read!(backlog_rx) else {
+        let Some((blocks, receipts)) = backlog_rx.blocking_recv() else {
             tracing::info!("{} has no more blocks to process", TASK_NAME);
             return Ok(());
         };
