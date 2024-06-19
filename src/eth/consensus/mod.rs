@@ -169,6 +169,7 @@ pub struct Consensus {
     my_address: PeerAddress,
     grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
+    blockchain_client: Mutex<Option<Arc<BlockchainClient>>>,
 }
 
 impl Consensus {
@@ -201,6 +202,7 @@ impl Consensus {
             my_address: my_address.clone(),
             grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
+            blockchain_client: Mutex::new(None),
         };
         let consensus = Arc::new(consensus);
 
@@ -331,12 +333,22 @@ impl Consensus {
     }
 
     async fn become_leader(&self) {
+        // checks if it's running on importer-online mode
+        if self.importer_config.is_some() {
+            let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
+            let mut blockchain_client_lock = self.blockchain_client.lock().await;
+            *blockchain_client_lock = Some(
+                BlockchainClient::new_http(&http_url, Duration::from_secs(2))
+                    .await
+                    .expect("failed to create blockchain client")
+                    .into(),
+            );
+            drop(blockchain_client_lock);
+        }
+
         self.set_role(Role::Leader);
 
         self.last_arrived_block_number.store(std::u64::MAX, Ordering::SeqCst); //as leader, we don't have a last block number
-
-        //TODO XXX // Initialize leader-specific tasks such as sending appendEntries
-        //TODO XXX self.send_append_entries().await;
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
@@ -473,12 +485,13 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        //TODO rename to TransactionForward
-        let Some((http_url, _)) = self.get_chain_url().await else {
-            return Err(anyhow!("No chain url found"));
+        let blockchain_client_lock = self.blockchain_client.lock().await;
+
+        let Some(ref blockchain_client) = *blockchain_client_lock else {
+            return Err(anyhow::anyhow!("blockchain client is not set, cannot forward transaction"));
         };
-        let chain = BlockchainClient::new_http(&http_url, Duration::from_secs(2)).await?;
-        let forward_to = forward_to::TransactionRelayer::new(chain);
+
+        let forward_to = forward_to::TransactionRelayer::new(Arc::clone(blockchain_client));
         let result = forward_to.forward(transaction).await?;
 
         #[cfg(feature = "metrics")]
@@ -488,9 +501,15 @@ impl Consensus {
     }
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
-    pub fn should_serve(&self) -> bool {
+    pub async fn should_serve(&self) -> bool {
         if self.is_leader() {
             return true;
+        }
+
+        let blockchain_client_lock = self.blockchain_client.lock().await;
+        if blockchain_client_lock.is_none() {
+            tracing::warn!("blockchain client is not set, cannot serve requests because they cant be forwarded");
+            return false;
         }
 
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
@@ -533,7 +552,7 @@ impl Consensus {
     //TODO FIXME move this code back when we have propagation:     Err(anyhow!("Leader not found"))
     //TODO FIXME move this code back when we have propagation: }
 
-    pub async fn get_chain_url(&self) -> Option<(String, Option<String>)> {
+    pub async fn get_chain_url(&self) -> anyhow::Result<(String, Option<String>)> {
         //TODO FIXME move this code back when we have propagation: if self.is_follower().await {
         //TODO FIXME move this code back when we have propagation:     if let Ok(leader_address) = self.leader_address().await {
         //TODO FIXME move this code back when we have propagation:         return Some((leader_address.full_jsonrpc_address(), None));
@@ -541,8 +560,8 @@ impl Consensus {
         //TODO FIXME move this code back when we have propagation: }
 
         match self.importer_config.clone() {
-            Some(importer_config) => Some((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
-            None => None,
+            Some(importer_config) => Ok((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
+            None => Err(anyhow!("tried to get chain url as a leader and while running on miner mode")),
         }
     }
 
@@ -551,6 +570,17 @@ impl Consensus {
 
         for (address, (peer, _)) in peers.iter_mut() {
             if *address == leader_address {
+                //IMPORTANT, as the leader changes, we need to update the blockchain client with its address
+                let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
+                let mut blockchain_client_lock = self.blockchain_client.lock().await;
+                *blockchain_client_lock = Some(
+                    BlockchainClient::new_http(&http_url, Duration::from_secs(2))
+                        .await
+                        .expect("failed to create blockchain client")
+                        .into(),
+                );
+                drop(blockchain_client_lock);
+
                 peer.role = Role::Leader;
             } else {
                 peer.role = Role::Follower;
