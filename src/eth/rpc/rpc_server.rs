@@ -241,7 +241,8 @@ fn stratus_startup(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
 }
 
 fn stratus_readiness(_: Params<'_>, context: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let should_serve = context.consensus.should_serve();
+    let handle = Handle::current();
+    let should_serve = handle.block_on(context.consensus.should_serve());
     tracing::info!("stratus_readiness: {}", should_serve);
 
     if should_serve {
@@ -268,7 +269,7 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
 // -----------------------------------------------------------------------------
 
 fn net_listening(params: Params<'_>, arc: &RpcContext, ext: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    stratus_readiness(params, arc, ext)
+    stratus_readiness(params, &arc, &ext)
 }
 
 #[tracing::instrument(name = "rpc::net_version", skip_all)]

@@ -4,15 +4,16 @@ use crate::eth::primitives::TransactionInput;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 use crate::infra::BlockchainClient;
 
-/// Forwards transactions without execution
+use std::sync::Arc;
+
 pub struct TransactionRelayer {
     /// RPC client that will submit transactions.
-    chain: BlockchainClient,
+    chain: Arc<BlockchainClient>,
 }
 
 impl TransactionRelayer {
     /// Creates a new [`TransactionRelayer`].
-    pub fn new(chain: BlockchainClient) -> Self {
+    pub fn new(chain: Arc<BlockchainClient>) -> Self {
         tracing::info!(?chain, "creating transaction relayer");
         Self { chain }
     }
