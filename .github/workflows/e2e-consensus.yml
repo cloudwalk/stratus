@@ -31,11 +31,18 @@ jobs:
       matrix:
         include:
           - leader-restart: true
-            instances: [2, 3]
+            instances: 2
             iterations: 4
           - leader-restart: false
-            instances: [2, 3]
+            instances: 3
             iterations: 10
+          - leader-restart: true
+            instances: 2
+            iterations: 4
+          - leader-restart: false
+            instances: 3
+            iterations: 10
+            
     name: E2E Leader Election with ${{ matrix.instances }} instance(s) and leader restart ${{ matrix.leader-restart }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
