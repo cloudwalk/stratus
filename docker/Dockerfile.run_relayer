@@ -27,4 +27,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/relayer /app/relayer
 COPY --from=builder /app/config/* /app/config/
 
-CMD ["sh", "-c", "/app/relayer"]
+CMD sh -c /app/relayer

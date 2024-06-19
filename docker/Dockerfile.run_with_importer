@@ -19,7 +19,7 @@ ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json
 ENV NO_COLOR=1
 
-RUN cargo build --release --bin run-with-importer --features metrics,rocks,kubernetes
+RUN cargo build --release --bin run-with-importer --features kubernetes
 
 # Runtime
 FROM rust:1.75 as runtime
@@ -27,4 +27,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/run-with-importer /app/run-with-importer
 COPY --from=builder /app/config/* /app/config/
 
-CMD ["sh", "-c", "tail --follow=name --retry data/rocksdb/LOG & /app/run-with-importer"]
+CMD sh -c "tail --follow=name --retry data/rocksdb/LOG & /app/run-with-importer"
