@@ -523,4 +523,4 @@ run-chaos-experiment bin="" instances="" experiment="":
     cargo build --release --bin {{ bin }} --features dev
 
     echo "Executing experiment on {{ bin }} binary with {{ instances }} instance(s): {{ experiment }}"
-    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }}
+    ./chaos/experiments/leader-election-{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }}

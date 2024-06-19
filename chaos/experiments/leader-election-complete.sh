@@ -140,7 +140,7 @@ run_test() {
     done
 
     echo "All instances are ready. Waiting for leader election"
-]
+
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=60
 
