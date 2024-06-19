@@ -99,12 +99,29 @@ remove_rocks_path() {
 # Function to run the election test
 run_test() {
     local instances=()
+    local all_addresses=()
+
+    for ((i=1; i<=num_instances; i++)); do
+        local base_port=$((3000 + i))
+        local grpc_port=$((3777 + i))
+        all_addresses+=("http://0.0.0.0:$base_port;$grpc_port")
+    done
+
     for ((i=1; i<=num_instances; i++)); do
         local base_port=$((3000 + i))
         local grpc_port=$((3777 + i))
         local tokio_console_port=$((6668 + i))
         local metrics_exporter_port=$((9000 + i))
-        instances+=("0.0.0.0:$base_port 0.0.0.0:$grpc_port tmp_rocks_$base_port instance_$base_port.log $base_port http://0.0.0.0:$((base_port+1));$((grpc_port+1)),http://0.0.0.0:$((base_port+2));$((grpc_port+2)) 0.0.0.0:$tokio_console_port 0.0.0.0:$metrics_exporter_port")
+        
+        # Exclude current instance's address to get candidate_peers
+        local candidate_peers=($(printf "%s\n" "${all_addresses[@]}" | grep -v "http://0.0.0.0:$base_port;$grpc_port"))
+        local candidate_peers_str=""
+
+        if [ ${#candidate_peers[@]} -gt 0 ]; then
+            candidate_peers_str=$(printf ",%s" "${candidate_peers[@]}")
+            candidate_peers_str=${candidate_peers_str:1}
+        fi
+        instances+=("0.0.0.0:$base_port 0.0.0.0:$grpc_port tmp_rocks_$base_port instance_$base_port.log $base_port ${candidate_peers_str} 0.0.0.0:$tokio_console_port 0.0.0.0:$metrics_exporter_port")
     done
 
     # Start instances
@@ -120,7 +137,6 @@ run_test() {
         grpc_addresses+=("${params[1]}")
         rocks_paths+=("${params[2]}")
         liveness+=(false)
-        sleep 15
     done
 
     all_ready=false
