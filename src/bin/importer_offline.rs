@@ -83,9 +83,8 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         }
     });
 
-    let block_importer = execute_block_importer(executor, miner, backlog_rx, block_snapshots);
     let block_importer = spawn_thread("block-importer", || {
-        if let Err(err) = block_importer {
+        if let Err(err) = execute_block_importer(executor, miner, backlog_rx, block_snapshots) {
             tracing::error!(?err, "'block-importer' task failed");
         }
     });
