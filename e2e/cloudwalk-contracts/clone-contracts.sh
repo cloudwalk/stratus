@@ -91,7 +91,7 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    clone brlc-pix-cashier a528d0c
+    clone brlc-pix-cashier fe9343c
 fi
 
 if [ "$yield" == 1 ]; then
