@@ -358,7 +358,7 @@ impl StratusStorage {
             })
             .map_err(Into::into);
 
-        if let Ok(ref block) = result {
+        if let Ok(block) = &result {
             Span::with(|s| s.rec_str("block_number", &block.number));
         }
 
