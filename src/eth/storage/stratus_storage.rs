@@ -330,7 +330,7 @@ impl StratusStorage {
             metrics::inc_storage_finish_block(m.elapsed, label::TEMP, m.result.is_ok());
         });
 
-        if let Ok(ref block) = result {
+        if let Ok(block) = &result {
             Span::with(|s| s.rec_str("block_number", &block.number));
         }
 
