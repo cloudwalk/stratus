@@ -812,6 +812,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let mut voted_for = consensus.voted_for.lock().await;
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
         if voted_for.is_none() {
+            consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
             *voted_for = Some(candidate_address.clone());
             tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
             return Ok(Response::new(RequestVoteResponse {
