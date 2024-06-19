@@ -334,7 +334,7 @@ impl Consensus {
 
     async fn become_leader(&self) {
         // checks if it's running on importer-online mode
-        if self.importer_config.is_none() {
+        if self.importer_config.is_some() {
             let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
             let mut blockchain_client_lock = self.blockchain_client.lock().await;
             *blockchain_client_lock = Some(
