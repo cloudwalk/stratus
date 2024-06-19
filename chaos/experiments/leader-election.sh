@@ -2,8 +2,14 @@
 
 set -e
 
+# Default binary
+binary="stratus"
+
 # Default number of instances
 num_instances=3
+
+# Flag for enabling leader restart feature
+enable_leader_restart=false
 
 # Parse command-line options
 while [[ "$#" -gt 0 ]]; do
@@ -16,9 +22,13 @@ while [[ "$#" -gt 0 ]]; do
       num_instances="$2"
       shift 2
       ;;
+    --enable-leader-restart)
+      enable_leader_restart=true
+      shift
+      ;;
     *)
       echo "Unknown parameter passed: $1"
-      echo "Usage: $0 [--bin binary] [--instances number]"
+      echo "Usage: $0 [--bin binary] [--instances number] [--enable-leader-restart]"
       exit 1
       ;;
   esac
@@ -26,6 +36,7 @@ done
 
 echo "Using binary: $binary"
 echo "Number of instances: $num_instances"
+echo "Enable leader restart: $enable_leader_restart"
 
 # Function to start an instance
 start_instance() {
@@ -192,76 +203,78 @@ run_test() {
         exit 1
     fi
 
-    # Kill the leader instance
-    echo "Killing the leader instance on address $leader_grpc_address..."
-    for i in "${!grpc_addresses[@]}"; do
-        if [ "${grpc_addresses[i]}" == "$leader_grpc_address" ]; then
-            killport --quiet ${ports[i]}
-            break
-        fi
-    done
-
-    # Restart the killed instance
-    echo "Restarting the killed instance..."
-    for i in "${!instances[@]}"; do
-        IFS=' ' read -r -a params <<< "${instances[i]}"
-        if [ "${params[1]}" == "$leader_grpc_address" ]; then
-            start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
-            liveness[i]=false
-            break
-        fi
-    done
-
-    restart_all_ready=false
-    while [ "$restart_all_ready" != true ]; do
-        restart_all_ready=true
-        for i in "${!ports[@]}"; do
-            if [ "${liveness[$i]}" != true ]; then
-                response=$(check_liveness "${ports[$i]}")
-                if [ "$response" = "true" ]; then
-                    liveness[$i]=true
-                    echo "Instance on address ${ports[$i]} is ready."
-                else
-                    restart_all_ready=false
-                fi
+    if [ "$enable_leader_restart" = true ]; then
+        # Kill the leader instance
+        echo "Killing the leader instance on address $leader_grpc_address..."
+        for i in "${!grpc_addresses[@]}"; do
+            if [ "${grpc_addresses[i]}" == "$leader_grpc_address" ]; then
+                killport --quiet ${ports[i]}
+                break
             fi
         done
-        if [ "$restart_all_ready" != true ]; then
-            echo "Waiting for all instances to be ready..."
-            sleep 5
-        fi
-    done
 
-    echo "All instances are ready after restart. Waiting for new leader election."
+        # Restart the killed instance
+        echo "Restarting the killed instance..."
+        for i in "${!instances[@]}"; do
+            IFS=' ' read -r -a params <<< "${instances[i]}"
+            if [ "${params[1]}" == "$leader_grpc_address" ]; then
+                start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
+                liveness[i]=false
+                break
+            fi
+        done
 
-    # Maximum timeout duration in seconds for new leader election
-    max_timeout=60
+        restart_all_ready=false
+        while [ "$restart_all_ready" != true ]; do
+            restart_all_ready=true
+            for i in "${!ports[@]}"; do
+                if [ "${liveness[$i]}" != true ]; then
+                    response=$(check_liveness "${ports[$i]}")
+                    if [ "$response" = "true" ]; then
+                        liveness[$i]=true
+                        echo "Instance on address ${ports[$i]} is ready."
+                    else
+                        restart_all_ready=false
+                    fi
+                fi
+            done
+            if [ "$restart_all_ready" != true ]; then
+                echo "Waiting for all instances to be ready..."
+                sleep 5
+            fi
+        done
 
-    # Capture the start time
-    start_time=$(date +%s)
+        echo "All instances are ready after restart. Waiting for new leader election."
 
-    # Wait until a new leader is found or timeout
-    while true; do
-        current_time=$(date +%s)
-        elapsed_time=$((current_time - start_time))
+        # Maximum timeout duration in seconds for new leader election
+        max_timeout=60
 
-        if [ $elapsed_time -ge $max_timeout ]; then
-            echo "Timeout reached without finding a new leader."
-            exit 1
-        fi
+        # Capture the start time
+        start_time=$(date +%s)
 
-        leader_grpc_addresses=($(find_leader "${grpc_addresses[@]}"))
-        if [ ${#leader_grpc_addresses[@]} -gt 1 ]; then
-            echo "Error: More than one leader found: ${leader_grpc_addresses[*]}"
-            exit 1
-        elif [ ${#leader_grpc_addresses[@]} -eq 1 ]; then
-            leader_grpc_address=${leader_grpc_addresses[0]}
-            echo "Leader found on address $leader_grpc_address"
-            break
-        else
-            sleep 1
-        fi
-    done
+        # Wait until a new leader is found or timeout
+        while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -ge $max_timeout ]; then
+                echo "Timeout reached without finding a new leader."
+                exit 1
+            fi
+
+            leader_grpc_addresses=($(find_leader "${grpc_addresses[@]}"))
+            if [ ${#leader_grpc_addresses[@]} -gt 1 ]; then
+                echo "Error: More than one leader found: ${leader_grpc_addresses[*]}"
+                exit 1
+            elif [ ${#leader_grpc_addresses[@]} -eq 1 ]; then
+                leader_grpc_address=${leader_grpc_addresses[0]}
+                echo "Leader found on address $leader_grpc_address"
+                break
+            else
+                sleep 1
+            fi
+        done
+    fi
 
     # Clean up
     echo "Cleaning up..."
