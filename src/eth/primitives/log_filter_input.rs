@@ -24,7 +24,7 @@ use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
 #[serde_as]
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
     pub from_block: Option<BlockSelection>,
@@ -47,6 +47,8 @@ pub struct LogFilterInput {
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
     pub fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter> {
+        let original_input = self.clone();
+
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
@@ -88,6 +90,7 @@ impl LogFilterInput {
             to_block: to,
             addresses: self.address,
             topics_combinations: topics,
+            original_input,
         })
     }
 }

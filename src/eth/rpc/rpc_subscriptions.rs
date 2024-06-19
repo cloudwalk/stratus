@@ -75,14 +75,14 @@ impl RpcSubscriptions {
                 }
 
                 // remove closed subscriptions
-                subs.new_pending_txs.write().await.retain(|_, sub| not(sub.is_closed()));
+                subs.pending_txs.write().await.retain(|_, sub| not(sub.is_closed()));
                 subs.new_heads.write().await.retain(|_, sub| not(sub.is_closed()));
                 subs.logs.write().await.retain(|_, (sub, _)| not(sub.is_closed()));
 
                 // update metrics
                 #[cfg(feature = "metrics")]
                 {
-                    metrics::set_rpc_subscriptions_active(subs.new_pending_txs.read().await.len() as u64, label::PENDING_TXS);
+                    metrics::set_rpc_subscriptions_active(subs.pending_txs.read().await.len() as u64, label::PENDING_TXS);
                     metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
                     metrics::set_rpc_subscriptions_active(subs.logs.read().await.len() as u64, label::LOGS);
                 }
@@ -110,7 +110,7 @@ impl RpcSubscriptions {
                     break;
                 };
 
-                let subs = subs.new_pending_txs.read().await;
+                let subs = subs.pending_txs.read().await;
                 Self::notify(subs.values(), tx.hash().to_string()).await;
             }
             Ok(())
@@ -164,6 +164,10 @@ impl RpcSubscriptions {
         })
     }
 
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
     async fn notify(subs: impl ExactSizeIterator<Item = &SubscriptionSink>, msg: impl Into<SubscriptionMessage>) {
         if subs.len() == 0 {
             return;
@@ -206,16 +210,16 @@ impl RpcSubscriptionsHandles {
 /// Active client subscriptions.
 #[derive(Debug, Default)]
 pub struct RpcSubscriptionsConnected {
-    new_pending_txs: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
-    new_heads: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
-    logs: RwLock<HashMap<ConnectionId, (SubscriptionSink, LogFilter)>>,
+    pub pending_txs: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
+    pub new_heads: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
+    pub logs: RwLock<HashMap<ConnectionId, (SubscriptionSink, LogFilter)>>,
 }
 
 impl RpcSubscriptionsConnected {
     /// Adds a new subscriber to `newPendingTransactions` event.
     pub async fn add_new_pending_txs(&self, sink: SubscriptionSink) {
         tracing::debug!(id = %sink.connection_id().0, "subscribing to newPendingTransactions event");
-        let mut subs = self.new_pending_txs.write().await;
+        let mut subs = self.pending_txs.write().await;
         subs.insert(sink.connection_id(), sink);
 
         #[cfg(feature = "metrics")]
