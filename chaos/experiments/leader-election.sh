@@ -48,6 +48,7 @@ done
 
 echo "Using binary: $binary"
 echo "Number of instances: $num_instances"
+echo "Number of iterations: $iterations"
 echo "Enable leader restart: $enable_leader_restart"
 
 # Function to start an instance
@@ -302,7 +303,7 @@ run_test() {
 # Run the test n times
 for ((iteration_n=1; iteration_n<=$iterations; iteration_n++)); do
     echo -e "\n##############################################\n"
-    echo "Running binary $binary test iteration $iteration_n of $iterationsn..."
+    echo "Running binary $binary test iteration $iteration_n of $iterations..."
     run_test
     sleep 5
 done
