@@ -1,0 +1,49 @@
+# Build
+FROM rust:1.75 as builder
+
+WORKDIR /app
+COPY .git /app/.git
+COPY build.rs /app/build.rs
+COPY src /app/src
+COPY static /app/static
+COPY config /app/config
+COPY .sqlx /app/.sqlx
+COPY .cargo .cargo
+COPY Cargo.toml /app/Cargo.toml
+COPY Cargo.lock /app/Cargo.lock
+
+RUN apt update
+RUN apt-get install -y libclang-dev cmake protobuf-compiler
+# Flamegraph specific
+RUN apt-get install -y linux-perf
+RUN git clone https://github.com/flamegraph-rs/flamegraph
+RUN cargo install --path flamegraph
+
+
+ENV CARGO_PROFILE_RELEASE_DEBUG=1
+ENV LOG_FORMAT=json
+ENV NO_COLOR=1
+
+# RUN which flamegraph
+
+# RUN cargo build --release --bin stratus
+
+# # Runtime
+FROM rust:1.75 as runtime
+WORKDIR /app
+COPY --from=builder /app/target/release/stratus /app/stratus
+COPY --from=builder /app/config/* /app/config/
+
+# CMD sh -c /app/stratus
+# CMD ["perf", "record", "-F", "1500", "--call-graph", "dwarf,16384", "-o", "perf.data", "-g", "--", "echo"]
+CMD perf record --freq 1500 --call-graph dwarf -o perf.data -g -- git log > /dev/null \
+	&& sh -c "flamegraph --palette rust --perfdata perf.data -o flame.svg" \
+	&& ls flame.svg
+# CMD perf record -F 1500 --call-graph dwarf -o perf.data -g -- git log \
+# 	&& sh -c "perf script \
+# 		| ./FlameGraph/stackcollapse-perf.pl \
+# 		| ./FlameGraph/flamegraph.pl --width 1900 --height 24 --hash \
+# 		> flame.svg" \
+# 	&& ls flame.svg
+# 
+# CMD flamegraph --palette rust -F 1500 -o flamegraph_output.svg -- sleep 0
