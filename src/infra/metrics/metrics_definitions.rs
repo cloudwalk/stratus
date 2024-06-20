@@ -206,5 +206,8 @@ metrics! {
     histogram_duration save_mismatch{},
 
     "Time to run ExternalRelayerClient::send_to_relayer."
-    histogram_duration send_to_relayer{}
+    histogram_duration send_to_relayer{},
+
+    "Time to run ExternalRelayerClient::compare_final_state."
+    histogram_duration compare_final_state{}
 }

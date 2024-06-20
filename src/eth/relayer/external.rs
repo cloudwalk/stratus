@@ -33,6 +33,7 @@ use crate::ext::SpanExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::metrics::inc_compare_final_state;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
@@ -88,6 +89,9 @@ impl ExternalRelayer {
 
     #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all)]
     async fn compare_final_state(&self, changed_slots: HashSet<(Address, SlotIndex)>, block_number: BlockNumber) {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
         let point_in_time = StoragePointInTime::Past(block_number);
         for (addr, index) in changed_slots {
             let stratus_slot_value = loop {
@@ -120,6 +124,9 @@ impl ExternalRelayer {
                 }
             }
         }
+
+        #[cfg(feature = "metrics")]
+        inc_compare_final_state(start.elapsed());
     }
 
     /// Polls the next block to be relayed and relays it to Substrate.
