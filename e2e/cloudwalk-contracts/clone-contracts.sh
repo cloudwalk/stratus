@@ -95,7 +95,7 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
-    clone brlc-yield-streamer 7683517
+    clone brlc-yield-streamer 236dbcb
 fi
 
 if [ "$periphery" == 1 ]; then
@@ -107,5 +107,5 @@ if [ "$multisig" == 1 ]; then
 fi
 
 if [ "$compound" == 1 ]; then
-    clone compound-periphery e4d68df
+    clone compound-periphery c3ca5df
 fi
