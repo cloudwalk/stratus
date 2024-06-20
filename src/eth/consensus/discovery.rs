@@ -39,12 +39,12 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
             match discover_peers_kubernetes(Arc::clone(&consensus)).await {
                 Ok(k8s_peers) => {
                     new_peers.extend(k8s_peers);
-                    tracing::info!("discovered {} peers from kubernetes", new_peers.len());
+                    tracing::info!("discovered {} new peers from kubernetes", new_peers.len());
                     break;
                 }
                 Err(e) => {
                     attempts += 1;
-                    tracing::warn!("failed to discover peers from Kubernetes (attempt {}/{}): {:?}", attempts, max_attempts, e);
+                    tracing::warn!("failed to discover new peers from Kubernetes (attempt {}/{}): {:?}", attempts, max_attempts, e);
 
                     if attempts >= max_attempts {
                         tracing::error!("exceeded maximum attempts to discover peers from kubernetes. initiating shutdown.");
