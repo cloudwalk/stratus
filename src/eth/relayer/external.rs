@@ -145,7 +145,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 50
+                LIMIT 100
             )
             UPDATE relayer_blocks r
                 SET started = true
