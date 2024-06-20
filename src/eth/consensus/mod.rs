@@ -249,7 +249,8 @@ impl Consensus {
                             tracing::info!("starting election due to heartbeat timeout");
                             Self::start_election(Arc::clone(&consensus)).await;
                         } else {
-                            tracing::info!("heartbeat timeout reached, but I am the leader, so we ignore the election");
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            tracing::info!(current_term = current_term, "heartbeat timeout reached, but I am the leader, so we ignore the election");
                         }
                     },
                     _ = consensus.reset_heartbeat_signal.notified() => {
@@ -745,10 +746,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let request_inner = request.into_inner();
 
         if consensus.is_leader() {
-            tracing::error!(sender = request_inner.leader_id, "append_transaction_executions called on leader node");
+            tracing::error!(sender = request_inner.leader_id, "append_block_commit called on leader node");
             return Err(Status::new(
                 (StatusCode::NotLeader as i32).into(),
-                "append_transaction_executions called on leader node".to_string(),
+                "append_block_commit called on leader node".to_string(),
             ));
         }
 
