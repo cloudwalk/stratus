@@ -304,13 +304,21 @@ impl Consensus {
             });
 
             match peer_clone.client.request_vote(request).await {
-                Ok(response) =>
-                    if response.into_inner().vote_granted {
-                        tracing::info!(peer_address = %peer_address, "received vote on election");
-                        votes += 1;
+                Ok(response) => {
+                    let response_inner = response.into_inner();
+                    if response_inner.vote_granted {
+                        let current_term = consensus.current_term.load(Ordering::SeqCst);
+                        if response_inner.term == current_term {
+                            tracing::info!(peer_address = %peer_address, "received vote on election");
+                            votes += 1;
+                        } else {
+                            // this usually happens when we have either a split brain or a network issue, maybe both
+                            tracing::error!(peer_address = %peer_address, expected_term = response_inner.term, "received vote on election with different term");
+                        }
                     } else {
                         tracing::info!(peer_address = %peer_address, "did not receive vote on election");
-                    },
+                    }
+                }
                 Err(_) => {
                     tracing::warn!("failed to request vote on election from {:?}", peer_address);
                 }
