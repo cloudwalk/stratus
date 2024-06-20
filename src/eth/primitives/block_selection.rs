@@ -1,7 +1,7 @@
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum BlockSelection {
     /// Retrieve the most recent block.
     Latest,

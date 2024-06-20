@@ -417,8 +417,8 @@ contracts-test *args="":
 alias e2e-contracts := contracts-test
 
 # Contracts: Remove all the cloned repositories
-contracts-remove:
-    cd e2e/cloudwalk-contracts && ./remove-contracts.sh
+contracts-remove *args="":
+    cd e2e/cloudwalk-contracts && ./remove-contracts.sh {{ args }}
 
 # Contracts: Start Stratus and run contracts test
 contracts-test-stratus *args="":
@@ -516,3 +516,11 @@ local-chaos-test:
     @echo "Leader polling and followers syncing simulated."
     @echo "Cleaning up..."
     just local-chaos-cleanup
+
+# Chaos Testing: Run chaos experiment
+run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
+    echo "Building Stratus"
+    cargo build --release --bin {{ bin }} --features dev
+
+    echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
+    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}

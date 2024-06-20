@@ -2,6 +2,7 @@ use display_json::DebugAsJson;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::LogTopic;
 use crate::ext::not;
@@ -13,6 +14,10 @@ pub struct LogFilter {
     pub to_block: Option<BlockNumber>,
     pub addresses: Vec<Address>,
     pub topics_combinations: Vec<LogFilterTopicCombination>,
+
+    /// Original payload received via RPC.
+    #[serde(skip)]
+    pub original_input: LogFilterInput,
 }
 
 impl LogFilter {
@@ -27,7 +32,8 @@ impl LogFilter {
         }
 
         // filter address
-        if not(self.addresses.contains(log.address())) {
+        let has_addresses = not(self.addresses.is_empty());
+        if has_addresses && not(self.addresses.contains(log.address())) {
             return false;
         }
 

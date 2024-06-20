@@ -23,6 +23,7 @@ use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::SpanExt;
 use crate::if_else;
@@ -99,11 +100,11 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // track request
-        let span = info_span!("rpc::request", cid = %new_cid(), request_client = field::Empty, request_id = field::Empty, request_method = field::Empty, request_function = field::Empty);
+        let span = info_span!("rpc::request", cid = %new_cid(), rpc_client = field::Empty, rpc_id = field::Empty, rpc_method = field::Empty, rpc_function = field::Empty);
         let enter = span.enter();
 
         // extract request data
-        let client = extract_client_app(&request);
+        let client = request.extensions.rpc_client();
         let method = request.method_name();
         let function = match method {
             "eth_call" | "eth_estimateGas" => extract_call_function(request.params()),
@@ -111,19 +112,19 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             _ => None,
         };
         Span::with(|s| {
-            s.rec_str("request_id", &request.id);
-            s.rec_str("request_client", &client);
-            s.rec_str("request_method", &method);
-            s.rec_opt("request_function", &function);
+            s.rec_str("rpc_id", &request.id);
+            s.rec_str("rpc_client", &client);
+            s.rec_str("rpc_method", &method);
+            s.rec_opt("rpc_function", &function);
         });
 
         // trace request
         tracing::info!(
-            request_client = %client,
-            request_id = %request.id,
-            request_method = %method,
-            request_function = %function.clone().unwrap_or_default(),
-            request_params = ?request.params(),
+            rpc_client = %client,
+            rpc_id = %request.id,
+            rpc_method = %method,
+            rpc_function = %function.clone().unwrap_or_default(),
+            rpc_params = ?request.params(),
             "rpc request"
         );
 
@@ -178,13 +179,13 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                request_client = %proj.identifiers.client,
-                request_id = %proj.identifiers.id,
-                request_method = %proj.identifiers.method,
-                request_function = %proj.identifiers.function.clone().unwrap_or_default(),
-                request_duration_us = %elapsed.as_micros(),
-                request_success = %response_success,
-                request_result = %response_result,
+                rpc_client = %proj.identifiers.client,
+                rpc_id = %proj.identifiers.id,
+                rpc_method = %proj.identifiers.method,
+                rpc_function = %proj.identifiers.function.clone().unwrap_or_default(),
+                rpc_duration_us = %elapsed.as_micros(),
+                rpc_success = %response_success,
+                rpc_result = %response_result,
                 "rpc response"
             );
 
@@ -230,10 +231,6 @@ impl Drop for RpcResponseIdentifiers {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-fn extract_client_app(request: &jsonrpsee::types::Request) -> RpcClientApp {
-    request.extensions().get::<RpcClientApp>().unwrap_or(&RpcClientApp::Unknown).clone()
-}
 
 fn extract_call_function(params: Params) -> Option<SoliditySignature> {
     let (_, call) = next_rpc_param::<CallInput>(params.sequence()).ok()?;

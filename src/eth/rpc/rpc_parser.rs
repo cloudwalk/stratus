@@ -7,7 +7,22 @@ use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 use jsonrpsee::types::error::INVALID_PARAMS_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
+use jsonrpsee::Extensions;
 use rlp::Decodable;
+
+use crate::eth::rpc::rpc_client_app::RpcClientApp;
+
+/// Extensions for jsonrpsee Extensions.
+pub trait RpcExtensionsExt {
+    /// Returns the client performing the JSON-RPC request.
+    fn rpc_client(&self) -> RpcClientApp;
+}
+
+impl RpcExtensionsExt for Extensions {
+    fn rpc_client(&self) -> RpcClientApp {
+        self.get::<RpcClientApp>().cloned().unwrap_or_default()
+    }
+}
 
 /// Extracts the next RPC parameter. Fails if parameter not present.
 pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> anyhow::Result<(ParamsSequence, T)> {

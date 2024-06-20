@@ -23,6 +23,21 @@ impl Display for RpcClientApp {
 }
 
 // -----------------------------------------------------------------------------
+// Serialization / Deserialization
+// -----------------------------------------------------------------------------
+impl serde::Serialize for RpcClientApp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            RpcClientApp::Identified(client) => serializer.serialize_str(client.as_ref()),
+            RpcClientApp::Unknown => serializer.serialize_str("unknown"),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 #[cfg(feature = "metrics")]
