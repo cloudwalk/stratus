@@ -145,7 +145,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 2
+                LIMIT 50
             )
             UPDATE relayer_blocks r
                 SET started = true
@@ -263,7 +263,7 @@ impl ExternalRelayer {
                         break Ok(());
                     }
                 }
-                Ok(None) => {
+                Ok(None) =>
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
@@ -272,8 +272,7 @@ impl ExternalRelayer {
                             block_number,
                             anyhow!("no receipt returned by substrate for more than 30 seconds"),
                         ));
-                    }
-                }
+                    },
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -327,7 +326,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) => {
+            Ok(res) =>
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -335,8 +334,7 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                }
-            }
+                },
         }
 
         #[cfg(feature = "metrics")]
@@ -346,7 +344,7 @@ impl ExternalRelayer {
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
     /// calling eth_getTransactionByHash. (infallible)
     #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(hash))]
-    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> (PendingTransaction, TransactionMined) {
+    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(), RelayError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -367,7 +365,7 @@ impl ExternalRelayer {
                     );
                     if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
                         tracing::info!(?tx_hash, "transaction found on substrate");
-                        return (PendingTransaction::new(tx_hash, &self.substrate_chain), tx_mined);
+                        return self.compare_receipt(tx_mined, PendingTransaction::new(tx_hash, &self.substrate_chain)).await;
                     }
                     tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
                     continue;
@@ -386,8 +384,7 @@ impl ExternalRelayer {
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_and_check_mempool(start.elapsed());
-
-        (tx, tx_mined)
+        self.compare_receipt(tx_mined, tx).await
     }
 
     /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
@@ -406,11 +403,7 @@ impl ExternalRelayer {
             results.extend(join_all(futures).await);
         }
 
-        let futures = results
-            .into_iter()
-            .map(|(substrate_pending_tx, stratus_receipt)| self.compare_receipt(stratus_receipt, substrate_pending_tx));
-
-        let errors = join_all(futures).await.into_iter().filter_map(Result::err);
+        let errors = results.into_iter().filter_map(Result::err);
 
         let mut mismatched_blocks: MismatchedBlocks = HashSet::new();
         let mut timedout_blocks: TimedoutBlocks = HashSet::new();
