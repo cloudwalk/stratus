@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use ethers_core::types::Transaction;
 use futures::future::join_all;
+use futures::StreamExt;
 use itertools::Itertools;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -93,7 +94,9 @@ impl ExternalRelayer {
         let start = metrics::now();
 
         let point_in_time = StoragePointInTime::Past(block_number);
+        let mut futures = vec![];
         for (addr, index) in changed_slots {
+            futures.push(async move {
             let stratus_slot_value = loop {
                 match self.stratus_chain.fetch_storage_at(&addr, &index, point_in_time).await {
                     Ok(value) => break value,
@@ -122,8 +125,11 @@ impl ExternalRelayer {
                 .await {
                     tracing::warn!(?e, "failed to insert slot mismatch, retrying...")
                 }
-            }
+            }})
         }
+
+        let mut buffer = futures::stream::iter(futures).buffer_unordered(100);
+        while let Some(_) = buffer.next().await {}
 
         #[cfg(feature = "metrics")]
         inc_compare_final_state(start.elapsed());
@@ -139,7 +145,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 5
+                LIMIT 2
             )
             UPDATE relayer_blocks r
                 SET started = true
