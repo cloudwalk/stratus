@@ -24,7 +24,7 @@ use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
 #[serde_as]
-#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq)]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
     pub from_block: Option<BlockSelection>,
@@ -40,9 +40,13 @@ pub struct LogFilterInput {
     pub address: Vec<Address>,
 
     #[serde(rename = "topics", default)]
-    #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
-    pub topics: Vec<Vec<Option<LogTopic>>>,
+    pub topics: Vec<LogFilterInputTopic>,
 }
+
+#[serde_as]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq)]
+// This nested type is necessary to fine-tune how we want serde to deserialize the topics field
+pub struct LogFilterInputTopic(#[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")] Vec<Option<LogTopic>>);
 
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
@@ -77,6 +81,7 @@ impl LogFilterInput {
             .into_iter()
             .map(|topics| {
                 topics
+                    .0
                     .into_iter()
                     .enumerate()
                     .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
@@ -92,5 +97,50 @@ impl LogFilterInput {
             topics_combinations: topics,
             original_input,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_log_filter_input() {
+        use serde_plain::from_str as deser;
+
+        let input = r#"{
+            "fromBlock": "0x3F5DBCA",
+            "toBlock": "latest",
+            "address": [
+              "0xea86da4a617b32b081a4af12e6c13ae7edf8dfc9"
+            ],
+            "topics": [
+              [
+                "0x712a5b346bb553ab14a2a2b44106991a5b94e4d44890d9aaa0f8e6b3268c502c",
+                "0xc9de12e35626948d49833bbe7ac6ebe7e7d96e2d2a2e01e1eaca07830c0bf03d"
+              ],
+              "0x000000000000000000000000c23f832f3d9dd9492df35197f3ec0caa1cb23ce1",
+              "0x453138313839353437323032343036323031373434307a495331324d4b446f36"
+            ]
+        }"#;
+
+        let result: LogFilterInput = serde_json::from_str(input).unwrap();
+
+        let expected = LogFilterInput {
+            from_block: Some(deser("0x3F5DBCA").unwrap()),
+            to_block: Some(deser("latest").unwrap()),
+            block_hash: None,
+            address: vec![deser("0xea86da4a617b32b081a4af12e6c13ae7edf8dfc9").unwrap()],
+            topics: vec![
+                LogFilterInputTopic(vec![
+                    deser("0x712a5b346bb553ab14a2a2b44106991a5b94e4d44890d9aaa0f8e6b3268c502c").unwrap(),
+                    deser("0xc9de12e35626948d49833bbe7ac6ebe7e7d96e2d2a2e01e1eaca07830c0bf03d").unwrap(),
+                ]),
+                LogFilterInputTopic(vec![deser("0x000000000000000000000000c23f832f3d9dd9492df35197f3ec0caa1cb23ce1").unwrap()]),
+                LogFilterInputTopic(vec![deser("0x453138313839353437323032343036323031373434307a495331324d4b446f36").unwrap()]),
+            ],
+        };
+
+        assert_eq!(result, expected);
     }
 }
