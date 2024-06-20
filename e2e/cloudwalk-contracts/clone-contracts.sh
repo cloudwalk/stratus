@@ -107,5 +107,5 @@ if [ "$multisig" == 1 ]; then
 fi
 
 if [ "$compound" == 1 ]; then
-    clone compound-periphery e4d68df
+    clone compound-periphery c3ca5df
 fi
