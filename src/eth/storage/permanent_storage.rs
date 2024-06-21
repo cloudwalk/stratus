@@ -13,7 +13,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 
 /// Permanent (committed) storage operations
-pub trait PermanentStorage: Send + Sync {
+pub trait PermanentStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------

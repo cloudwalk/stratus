@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::anyhow;
 use tracing::Span;
 
@@ -48,8 +46,8 @@ cfg_if::cfg_if! {
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
 pub struct StratusStorage {
-    temp: Arc<dyn TemporaryStorage>,
-    perm: Arc<dyn PermanentStorage>,
+    temp: Box<dyn TemporaryStorage>,
+    perm: Box<dyn PermanentStorage>,
 }
 
 impl StratusStorage {
@@ -58,7 +56,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
+    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
     }
 
@@ -66,8 +64,8 @@ impl StratusStorage {
     #[cfg(test)]
     pub fn mock_new() -> Self {
         Self {
-            temp: Arc::new(InMemoryTemporaryStorage::new()),
-            perm: Arc::new(InMemoryPermanentStorage::new()),
+            temp: Box::new(InMemoryTemporaryStorage::new()),
+            perm: Box::new(InMemoryPermanentStorage::new()),
         }
     }
 
@@ -83,8 +81,8 @@ impl StratusStorage {
 
         (
             Self {
-                temp: Arc::new(InMemoryTemporaryStorage::new()),
-                perm: Arc::new(rocks_permanent_storage),
+                temp: Box::new(InMemoryTemporaryStorage::new()),
+                perm: Box::new(rocks_permanent_storage),
             },
             temp_dir,
         )
