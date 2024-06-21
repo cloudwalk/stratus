@@ -404,7 +404,7 @@ pub struct StratusConfig {
     pub address: SocketAddr,
 
     /// JSON-RPC max active connections
-    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
     pub max_connections: u32,
 
     #[clap(flatten)]

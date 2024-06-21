@@ -73,7 +73,7 @@ pub async fn serve_rpc(
     max_connections: u32,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-    tracing::info!("creating {}", TASK_NAME);
+    tracing::info!(%address, %max_connections, "creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
@@ -239,32 +239,32 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
     let (pending_txs, new_heads, logs) = join!(ctx.subs.pending_txs.read(), ctx.subs.new_heads.read(), ctx.subs.logs.read());
     json!({
         "newPendingTransactions":
-            pending_txs.values().map(|(client, sink)|
+            pending_txs.values().map(|s|
                 json!({
-                    "client": client,
-                    "id": sink.subscription_id(),
-                    "active": not(sink.is_closed())
+                    "client": s.client,
+                    "id": s.sink.subscription_id(),
+                    "active": not(s.sink.is_closed())
                 })
             ).collect_vec()
         ,
         "newHeads":
-            new_heads.values().map(|(client, sink)|
+            new_heads.values().map(|s|
                 json!({
-                    "client": client,
-                    "id": sink.subscription_id(),
-                    "active": not(sink.is_closed())
+                    "client": s.client,
+                    "id": s.sink.subscription_id(),
+                    "active": not(s.sink.is_closed())
                 })
             ).collect_vec()
         ,
         "logs":
-            logs.values().map(|(client, sink, filter)|
+            logs.values().map(|s|
                 json!({
-                    "client": client,
-                    "id": sink.subscription_id(),
-                    "active": not(sink.is_closed()),
+                    "client": s.client,
+                    "id": s.sink.subscription_id(),
+                    "active": not(s.sink.is_closed()),
                     "filter": {
-                        "parsed": filter,
-                        "original": filter.original_input
+                        "parsed": s.filter,
+                        "original": s.filter.original_input
                     }
                 })
             ).collect_vec()
@@ -595,7 +595,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage)?;
-            ctx.subs.add_logs(client, pending.accept().await?, filter).await;
+            ctx.subs.add_logs(client, filter, pending.accept().await?).await;
         }
 
         // unsupported
