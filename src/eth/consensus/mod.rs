@@ -159,6 +159,7 @@ pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
+    #[cfg(feature = "rocks")]
     log_entries_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
@@ -194,6 +195,7 @@ impl Consensus {
         let consensus = Self {
             broadcast_sender,
             storage,
+            #[cfg(feature = "rocks")]
             log_entries_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
             peers,
             direct_peers,
@@ -522,6 +524,7 @@ impl Consensus {
         });
     }
 
+    #[cfg(feature = "rocks")]
     fn save_log_entry(consensus: &Arc<Consensus>, index: u64, term: u64, data: LogEntryData, entry_type: &str) -> Result<(), String> {
         tracing::debug!(index, term, "Creating {} log entry", entry_type);
         let log_entry = LogEntry { term, index, data };
