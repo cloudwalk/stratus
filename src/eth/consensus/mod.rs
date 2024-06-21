@@ -65,7 +65,6 @@ use append_entry::TransactionExecutionEntry;
 
 #[cfg(feature = "rocks")]
 use self::append_log_entries_storage::AppendLogEntriesStorage;
-use self::log_entry::LogEntry;
 use self::log_entry::LogEntryData;
 use super::primitives::TransactionExecution;
 use super::primitives::TransactionInput;
@@ -407,7 +406,7 @@ impl Consensus {
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
                             tracing::debug!(current_term, "Current term loaded");
 
-                            match Self::save_log_entry(
+                            match consensus.log_entries_storage.save_log_entry(
                                 &consensus,
                                 last_index + 1,
                                 current_term,
@@ -478,7 +477,7 @@ impl Consensus {
                                 let current_term = consensus.current_term.load(Ordering::SeqCst);
                                 tracing::debug!(current_term, "Current term for block loaded");
 
-                                if Self::save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), "block").is_ok() {
+                                if consensus.log_entries_storage.save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), "block").is_ok() {
                                     let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
                                     if consensus.broadcast_sender.send(block_entry).is_err() {
                                         tracing::error!("failed to broadcast block");
@@ -522,30 +521,6 @@ impl Consensus {
                 tracing::error!(reason = ?e, %message);
             }
         });
-    }
-
-    #[cfg(feature = "rocks")]
-    fn save_log_entry(consensus: &Arc<Consensus>, index: u64, term: u64, data: LogEntryData, entry_type: &str) -> Result<(), String> {
-        tracing::debug!(index, term, "Creating {} log entry", entry_type);
-        let log_entry = LogEntry { term, index, data };
-        tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
-
-        tracing::debug!("Checking for existing {} entry at new index", entry_type);
-        if let Some(existing_entry) = consensus.log_entries_storage.get_entry(log_entry.index).unwrap_or(None) {
-            if existing_entry.term != log_entry.term {
-                tracing::debug!(index = log_entry.index, "Deleting {} entries from index due to term mismatch", entry_type);
-                consensus
-                    .log_entries_storage
-                    .delete_entries_from(log_entry.index)
-                    .map_err(|e| format!("Failed to delete existing {} entries: {:?}", entry_type, e))?;
-            }
-        }
-
-        tracing::debug!("Saving new {} log entry", entry_type);
-        consensus
-            .log_entries_storage
-            .save_entry(&log_entry)
-            .map_err(|e| format!("Failed to save {} log entry: {:?}", entry_type, e))
     }
 
     fn set_role(&self, role: Role) {

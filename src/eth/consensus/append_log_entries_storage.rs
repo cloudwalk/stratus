@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
@@ -7,6 +8,8 @@ use rocksdb::Options;
 use rocksdb::DB;
 
 use super::log_entry::LogEntry;
+use super::log_entry::LogEntryData;
+use super::Consensus;
 
 pub struct AppendLogEntriesStorage {
     db: DB,
@@ -96,5 +99,28 @@ impl AppendLogEntriesStorage {
             Some(entry) => Ok(entry.term),
             None => Ok(0), // Default to 0 if not set
         }
+    }
+
+    pub fn save_log_entry(&self, consensus: &Arc<Consensus>, index: u64, term: u64, data: LogEntryData, entry_type: &str) -> Result<(), String> {
+        tracing::debug!(index, term, "Creating {} log entry", entry_type);
+        let log_entry = LogEntry { term, index, data };
+        tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
+
+        tracing::debug!("Checking for existing {} entry at new index", entry_type);
+        if let Some(existing_entry) = consensus.log_entries_storage.get_entry(log_entry.index).unwrap_or(None) {
+            if existing_entry.term != log_entry.term {
+                tracing::debug!(index = log_entry.index, "Deleting {} entries from index due to term mismatch", entry_type);
+                consensus
+                    .log_entries_storage
+                    .delete_entries_from(log_entry.index)
+                    .map_err(|e| format!("Failed to delete existing {} entries: {:?}", entry_type, e))?;
+            }
+        }
+
+        tracing::debug!("Saving new {} log entry", entry_type);
+        consensus
+            .log_entries_storage
+            .save_entry(&log_entry)
+            .map_err(|e| format!("Failed to save {} log entry: {:?}", entry_type, e))
     }
 }
