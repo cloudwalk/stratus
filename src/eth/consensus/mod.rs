@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod append_log_entries_storage;
 mod discovery;
 pub mod forward_to;
