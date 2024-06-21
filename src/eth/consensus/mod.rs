@@ -174,7 +174,7 @@ pub struct Consensus {
 }
 
 impl Consensus {
-    #[allow(clippy::too_many_arguments)] //TODO refactor into consensus config
+    #[allow(clippy::too_many_arguments)] //TODO: refactor into consensus config
     pub async fn new(
         storage: Arc<StratusStorage>,
         log_storage_path: Option<String>,
@@ -461,11 +461,20 @@ impl Consensus {
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
-                            //TODO save block to appendEntries log
-                            //TODO before saving check if all transaction_hashes are already in the log
-                            let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
-                            if consensus.broadcast_sender.send(block_entry).is_err() {
-                                tracing::error!("failed to broadcast block");
+                            //TODO: before saving check if all transaction_hashes are already in the log
+                            tracing::debug!("Fetching last index from log entries storage for block");
+                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                            tracing::debug!(last_index, "Last index for block fetched");
+
+                            tracing::debug!("Loading current term for block");
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            tracing::debug!(current_term, "Current term for block loaded");
+
+                            if Self::save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())),"block").is_ok() {
+                                let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
+                                if consensus.broadcast_sender.send(block_entry).is_err() {
+                                    tracing::error!("failed to broadcast block");
+                                }
                             }
                         }
                     }
