@@ -22,7 +22,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
     let consensus = Consensus::new(
         Arc::clone(&storage),
-        config.clone().storage.perm_storage.rocks_path_prefix,
+        config.storage.perm_storage.rocks_path_prefix.clone(),
         config.clone().candidate_peers.clone(),
         None,
         config.address,
