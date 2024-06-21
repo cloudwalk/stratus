@@ -174,6 +174,7 @@ pub struct Consensus {
 }
 
 impl Consensus {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         storage: Arc<StratusStorage>,
         log_storage_path: Option<String>,
