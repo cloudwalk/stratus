@@ -24,14 +24,24 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::ext::SpanExt;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
-#[cfg(feature = "metrics")]
-mod label {
-    pub(super) const TEMP: &str = "temporary";
-    pub(super) const PERM: &str = "permanent";
-    pub(super) const DEFAULT: &str = "default";
+cfg_if::cfg_if! {
+    if #[cfg(test)] {
+        use crate::eth::storage::InMemoryPermanentStorage;
+        use crate::eth::storage::InMemoryTemporaryStorage;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "metrics")] {
+        use crate::infra::metrics;
+
+        mod label {
+            pub(super) const TEMP: &str = "temporary";
+            pub(super) const PERM: &str = "permanent";
+            pub(super) const DEFAULT: &str = "default";
+        }
+    }
 }
 
 /// Proxy that simplifies interaction with permanent and temporary storages.
@@ -50,6 +60,34 @@ impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
+    }
+
+    /// Creates an inmemory stratus storage for testing.
+    #[cfg(test)]
+    pub fn mock_new() -> Self {
+        Self {
+            temp: Arc::new(InMemoryTemporaryStorage::new()),
+            perm: Arc::new(InMemoryPermanentStorage::new()),
+        }
+    }
+
+    /// Creates an inmemory stratus storage for testing.
+    #[cfg(test)]
+    pub fn mock_new_rocksdb() -> (Self, tempfile::TempDir) {
+        // Create a unique temporary directory within the ./data directory
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
+
+        let rocks_permanent_storage =
+            crate::eth::storage::RocksPermanentStorage::new(false, Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
+
+        (
+            Self {
+                temp: Arc::new(InMemoryTemporaryStorage::new()),
+                perm: Arc::new(rocks_permanent_storage),
+            },
+            temp_dir,
+        )
     }
 
     // -------------------------------------------------------------------------

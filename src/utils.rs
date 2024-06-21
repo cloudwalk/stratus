@@ -41,3 +41,31 @@ impl Drop for DropTimer {
         tracing::info!("Timer: '{}' ran for `{:?}`", self.scope_name, self.instant.elapsed());
     }
 }
+
+#[cfg(test)]
+pub mod test_utils {
+    use fake::Fake;
+    use fake::Faker;
+    use rand::rngs::SmallRng;
+    use rand::SeedableRng;
+
+    fn deterministic_rng() -> SmallRng {
+        SeedableRng::seed_from_u64(0)
+    }
+
+    /// Fake the first `size` values of type `T` using the default seed.
+    ///
+    /// Multiple calls of this (for the same `T` and `size`) will return the same list.
+    pub fn fake_list<T: fake::Dummy<Faker>>(size: usize) -> Vec<T> {
+        let mut rng = deterministic_rng();
+        (0..size).map(|_| Faker.fake_with_rng::<T, _>(&mut rng)).collect()
+    }
+
+    /// Fake the first `T` value in the default seed.
+    ///
+    /// Multiple calls of this (for the same `T`) will return the same value.
+    pub fn fake_first<T: fake::Dummy<Faker>>() -> T {
+        let mut rng = deterministic_rng();
+        Faker.fake_with_rng::<T, _>(&mut rng)
+    }
+}

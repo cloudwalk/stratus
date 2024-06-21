@@ -404,7 +404,7 @@ pub struct StratusConfig {
     pub address: SocketAddr,
 
     /// JSON-RPC max active connections
-    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
     pub max_connections: u32,
 
     #[clap(flatten)]
@@ -582,10 +582,10 @@ pub struct RunWithImporterConfig {
     pub address: SocketAddr,
 
     /// JSON-RPC max active connections
-    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
     pub max_connections: u32,
 
-    #[arg(long = "leader_node", env = "LEADER_NODE")]
+    #[arg(long = "leader-node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
 
     #[clap(flatten)]

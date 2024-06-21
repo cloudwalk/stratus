@@ -27,4 +27,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/run-with-importer /app/run-with-importer
 COPY --from=builder /app/config/* /app/config/
 
-CMD ["sh", "-c", "/app/run-with-importer"]
+CMD ["sh", "-c", "tail --follow=name --retry data/rocksdb/LOG & /app/run-with-importer"]
