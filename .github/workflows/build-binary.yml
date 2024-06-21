@@ -11,7 +11,7 @@ on:
       - 'Cargo.lock'
       - 'tests/fixtures/**'
       - 'static/**'
-      - '.sqlx'
+      - '.sqlx/**'
 
 jobs:
   build_run_with_importer:
