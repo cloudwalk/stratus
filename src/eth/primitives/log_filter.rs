@@ -4,9 +4,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
-use crate::eth::primitives::LogTopic;
 use crate::ext::not;
-use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, serde::Serialize)]
 #[cfg_attr(test, derive(Default))]
@@ -14,7 +12,6 @@ pub struct LogFilter {
     pub from_block: BlockNumber,
     pub to_block: Option<BlockNumber>,
     pub addresses: Vec<Address>,
-    pub topics_combinations: Vec<LogFilterTopicCombination>,
 
     /// Original payload received via RPC.
     #[serde(skip)]
@@ -88,22 +85,6 @@ impl LogFilter {
     }
 }
 
-#[derive(DebugAsJson, serde::Serialize)]
-pub struct LogFilterTopicCombination(Vec<(usize, LogTopic)>);
-
-gen_newtype_from!(self = LogFilterTopicCombination, other = Vec<(usize, LogTopic)>);
-
-impl LogFilterTopicCombination {
-    pub fn matches(&self, log_topics: &[LogTopic]) -> bool {
-        for (topic_index, topic) in &self.0 {
-            if log_topics.get(*topic_index).is_some_and(|log_topic| log_topic != topic) {
-                return false;
-            }
-        }
-        true
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -113,9 +94,12 @@ mod tests {
     use super::*;
     use crate::eth::primitives::Log;
     use crate::eth::primitives::LogFilterInputTopic;
+    use crate::eth::primitives::LogTopic;
     use crate::eth::storage::StratusStorage;
     use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::fake_list;
+
+    // TODO: consider moving these 3 functions to the file that defined the returned type
 
     fn build_filter(addresses: Vec<Address>, topics_nested: Vec<Vec<Option<LogTopic>>>) -> LogFilter {
         let topics_map = |topics: Vec<Option<LogTopic>>| LogFilterInputTopic(topics.into_iter().collect());

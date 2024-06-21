@@ -9,7 +9,6 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use serde_with::formats::PreferMany;
 use serde_with::serde_as;
 use serde_with::OneOrMany;
@@ -72,25 +71,10 @@ impl LogFilterInput {
             StoragePointInTime::Past(number) => Some(number),
         };
 
-        let topics_combinations = self
-            .topics
-            .into_iter()
-            .map(|topics| {
-                topics
-                    .0
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(index, topic)| topic.map(|topic| (index, topic)))
-                    .collect_vec()
-                    .into()
-            })
-            .collect_vec();
-
         Ok(LogFilter {
             from_block: from,
             to_block: to,
             addresses: self.address,
-            topics_combinations,
             original_input,
         })
     }
