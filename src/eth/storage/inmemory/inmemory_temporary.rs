@@ -118,13 +118,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
-        tracing::debug!(%address, "reading account");
         let states = self.lock_read();
         Ok(read_account(&states, address))
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, "reading slot in temporary");
         let states = self.lock_read();
         Ok(read_slot(&states, address, index))
     }
@@ -134,8 +132,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        tracing::debug!(%number, "setting active block number");
-
         let mut states = self.lock_write();
         match states.head.block.as_mut() {
             Some(block) => block.number = number,
@@ -147,8 +143,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
-        tracing::debug!("reading active block number");
-
         let states = self.lock_read();
         match &states.head.block {
             Some(block) => Ok(Some(block.number)),
@@ -161,8 +155,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
-        tracing::debug!(number = %block.number(), "setting reexecuted external block");
-
         let mut states = self.lock_write();
         states.head.require_active_block_mut()?.external_block = Some(block);
         Ok(())
@@ -173,8 +165,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
-        tracing::debug!(hash = %tx.hash(), "saving execution");
-
         // check conflicts
         let mut states = self.lock_write();
         if let Some(conflicts) = check_conflicts(&states, tx.execution()) {
@@ -222,15 +212,12 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        tracing::debug!("checking conflicts");
         let states = self.lock_read();
         Ok(check_conflicts(&states, execution))
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_block(&self) -> anyhow::Result<PendingBlock> {
-        tracing::debug!("finishing active block");
-
         let mut states = self.lock_write();
         let finished_block = states.head.require_active_block()?.clone();
 
@@ -247,8 +234,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     fn reset(&self) -> anyhow::Result<()> {
-        tracing::debug!("reseting temporary storage");
-
         let mut state = self.lock_write();
         state.tail.clear();
         state.head.reset();
@@ -264,8 +249,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 // Implementations without lock
 // -----------------------------------------------------------------------------
 fn read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address) -> Option<Account> {
-    tracing::debug!(%address, "reading account");
-
     // search all
     for state in states.iter() {
         let Some(account) = state.accounts.get(address) else { continue };
@@ -289,8 +272,6 @@ fn read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Addr
 }
 
 fn read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
-    tracing::debug!(%address, %index, "reading slot in temporary");
-
     // search all
     for state in states.iter() {
         let Some(account) = state.accounts.get(address) else { continue };
@@ -306,7 +287,6 @@ fn read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address
 }
 
 fn check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
-    tracing::debug!("checking conflicts");
     let mut conflicts = ExecutionConflictsBuilder::default();
 
     for (address, change) in &execution.changes {
