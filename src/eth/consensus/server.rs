@@ -188,7 +188,7 @@ mod tests {
     async fn test_append_transaction_executions_not_leader() {
         let consensus = create_mock_consensus().await;
         let service = AppendEntryServiceImpl {
-            consensus: Mutex::new(consensus.clone()),
+            consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
         // Simulate the node as not a leader
@@ -215,7 +215,7 @@ mod tests {
     async fn test_append_transaction_executions_leader() {
         let consensus = create_mock_consensus().await;
         let service = AppendEntryServiceImpl {
-            consensus: Mutex::new(consensus.clone()),
+            consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
         // Simulate the node as a leader
@@ -241,7 +241,7 @@ mod tests {
     async fn test_append_block_commit_not_leader() {
         let consensus = create_mock_consensus().await;
         let service = AppendEntryServiceImpl {
-            consensus: Mutex::new(consensus.clone()),
+            consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
         // Simulate the node as not a leader
@@ -271,7 +271,7 @@ mod tests {
     async fn test_append_block_commit_leader() {
         let consensus = create_mock_consensus().await;
         let service = AppendEntryServiceImpl {
-            consensus: Mutex::new(consensus.clone()),
+            consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
         // Simulate the node as a leader
@@ -300,7 +300,7 @@ mod tests {
     async fn test_request_vote() {
         let consensus = create_mock_consensus().await;
         let service = AppendEntryServiceImpl {
-            consensus: Mutex::new(consensus.clone()),
+            consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
         let request = Request::new(RequestVoteRequest {
