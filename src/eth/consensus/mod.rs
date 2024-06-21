@@ -410,79 +410,99 @@ impl Consensus {
             loop {
                 tokio::select! {
                     Ok(tx) = rx_pending_txs.recv() => {
+                        tracing::debug!("Attempting to receive transaction execution");
                         if consensus.is_leader() {
-                            tracing::info!(hash = %tx.hash(), "received transaction execution to send to followers");
+                            tracing::info!(hash = %tx.hash(), "Leader received transaction execution to send to followers");
                             if tx.is_local() {
-                                tracing::debug!(hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
+                                tracing::debug!(hash = %tx.hash(), "Skipping local transaction because only external transactions are supported for now");
                                 continue;
                             }
 
+                            tracing::debug!("Fetching last index from log entries storage");
                             let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                            tracing::debug!(last_index, "Last index fetched");
 
+                            tracing::debug!("Loading current term");
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            tracing::debug!(current_term, "Current term loaded");
 
+                            tracing::debug!("Creating transaction log entry");
                             let transaction_entry = LogEntry {
                                 term: current_term,
                                 index: last_index + 1,
-                                data: LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]), // TODO Check ordering?
+                                data: LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]),
                             };
+                            tracing::debug!(index = transaction_entry.index, term = transaction_entry.term, "Transaction log entry created");
 
+                            tracing::debug!("Checking for existing entry at new index");
                             if let Some(existing_entry) = consensus.log_entries_storage.get_entry(transaction_entry.index).unwrap_or(None) {
                                 if existing_entry.term != transaction_entry.term {
+                                    tracing::debug!(index = transaction_entry.index, "Deleting entries from index due to term mismatch");
                                     consensus.log_entries_storage.delete_entries_from(transaction_entry.index).expect("Failed to delete existing transaction entries");
                                 }
                             }
 
+                            tracing::debug!("Saving new transaction log entry");
                             if let Err(e) = consensus.log_entries_storage.save_entry(&transaction_entry) {
-                                tracing::error!("failed to save transaction log entry: {:?}", e);
+                                tracing::error!("Failed to save transaction log entry: {:?}", e);
+                            } else {
+                                tracing::debug!("Transaction log entry saved successfully");
                             }
 
-                            // TODO
-                            //  If leaderCommit > commitIndex, set commitIndex =
-                            // min(leaderCommit, index of last new entry)
-
-                            let transaction_entry_data = LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]);
-                            if consensus.broadcast_sender.send(transaction_entry_data).is_err() {
-                                tracing::error!("failed to broadcast transaction");
+                            tracing::debug!("Broadcasting transaction");
+                            if consensus.broadcast_sender.send(transaction_entry.data.clone()).is_err() {
+                                tracing::error!("Failed to broadcast transaction");
+                            } else {
+                                tracing::debug!("Transaction broadcasted successfully");
                             }
                         }
                     }
                     Ok(block) = rx_blocks.recv() => {
+                        tracing::debug!("Attempting to receive block");
                         if consensus.is_leader() {
-                            tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
+                            tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
+                            tracing::debug!("Fetching last index from log entries storage for block");
                             let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                            tracing::debug!(last_index, "Last index for block fetched");
 
+                            tracing::debug!("Loading current term for block");
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            tracing::debug!(current_term, "Current term for block loaded");
 
+                            tracing::debug!("Creating block log entry");
                             let block_entry = LogEntry {
                                 term: current_term,
                                 index: last_index + 1,
-                                data: LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), // TODO Check ordering?
+                                data: LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())),
                             };
+                            tracing::debug!(index = block_entry.index, term = block_entry.term, "Block log entry created");
 
+                            tracing::debug!("Checking for existing block entry at new index");
                             if let Some(existing_entry) = consensus.log_entries_storage.get_entry(block_entry.index).unwrap_or(None) {
                                 if existing_entry.term != block_entry.term {
+                                    tracing::debug!(index = block_entry.index, "Deleting block entries from index due to term mismatch");
                                     consensus.log_entries_storage.delete_entries_from(block_entry.index).expect("Failed to delete existing block entries");
                                 }
                             }
 
+                            tracing::debug!("Saving new block log entry");
                             if let Err(e) = consensus.log_entries_storage.save_entry(&block_entry) {
-                                tracing::error!("failed to save block log entry: {:?}", e);
+                                tracing::error!("Failed to save block log entry: {:?}", e);
+                            } else {
+                                tracing::debug!("Block log entry saved successfully");
                             }
 
-                            // TODO
-                            //  If leaderCommit > commitIndex, set commitIndex =
-                            // min(leaderCommit, index of last new entry)
-
-                            //TODO before saving check if all transaction_hashes are already in the log
-                            let block_entry_data = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
-                            if consensus.broadcast_sender.send(block_entry_data).is_err() {
-                                tracing::error!("failed to broadcast block");
+                            tracing::debug!("Broadcasting block");
+                            if consensus.broadcast_sender.send(block_entry.data.clone()).is_err() {
+                                tracing::error!("Failed to broadcast block");
+                            } else {
+                                tracing::debug!("Block broadcasted successfully");
                             }
                         }
                     }
                     else => {
+                        tracing::debug!("No transactions or blocks received, yielding");
                         tokio::task::yield_now().await;
                     }
                 }
