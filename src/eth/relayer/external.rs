@@ -361,7 +361,7 @@ impl ExternalRelayer {
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
         let req = TypedTransaction::Legacy(tx_mined.input.clone().into());
-        let _new_hash = req.sighash();
+        let new_hash = req.sighash();
         let signature = self.signer
             .sign_transaction(&req).await.unwrap();
 
@@ -373,9 +373,9 @@ impl ExternalRelayer {
                         ?tx_hash,
                         "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
                     );
-                    if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
-                        tracing::info!(?tx_hash, "transaction found on substrate");
-                        return self.compare_receipt(tx_mined, PendingTransaction::new(tx_hash, &self.substrate_chain)).await;
+                    if self.substrate_chain.fetch_transaction(new_hash.into()).await.unwrap_or(None).is_some() {
+                        tracing::info!(?new_hash, "transaction found on substrate");
+                        return self.compare_receipt(tx_mined, PendingTransaction::new(new_hash.into(), &self.substrate_chain)).await;
                     }
                     tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
                     continue;
@@ -384,10 +384,10 @@ impl ExternalRelayer {
         };
 
         // this is probably redundant since send_raw_transaction probably only succeeds if the transaction was added to the mempool already.
-        tracing::info!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
+        tracing::info!(?new_hash, "polling eth_getTransactionByHash");
         let mut tries = 0;
-        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
-            tracing::warn!(?tx_mined.input.hash, ?tries, "transaction not found, retrying...");
+        while self.substrate_chain.fetch_transaction(new_hash.into()).await.unwrap_or(None).is_none() {
+            tracing::warn!(?new_hash, ?tries, "transaction not found, retrying...");
             traced_sleep(Duration::from_millis(100), SleepReason::SyncData).await;
             tries += 1;
         }
