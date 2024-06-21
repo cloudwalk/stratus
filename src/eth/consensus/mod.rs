@@ -176,6 +176,7 @@ pub struct Consensus {
 impl Consensus {
     pub async fn new(
         storage: Arc<StratusStorage>,
+        log_storage_path: Option<String>,
         direct_peers: Vec<String>,
         importer_config: Option<RunWithImporterConfig>,
         jsonrpc_address: SocketAddr,
@@ -191,7 +192,7 @@ impl Consensus {
         let consensus = Self {
             broadcast_sender,
             storage,
-            log_storage: Arc::new(AppendLogEntriesStorage::new("log_storage").unwrap()), // FIXME: use a proper path
+            log_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
             peers,
             direct_peers,
             current_term: AtomicU64::new(0),

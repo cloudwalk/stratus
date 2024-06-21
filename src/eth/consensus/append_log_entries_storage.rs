@@ -13,9 +13,25 @@ pub struct AppendLogEntriesStorage {
 }
 
 impl AppendLogEntriesStorage {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn new(path: Option<String>) -> Result<Self> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
+
+        let path = if let Some(prefix) = path {
+            // run some checks on the given prefix
+            assert!(!prefix.is_empty(), "given prefix for RocksDB is empty, try not providing the flag");
+            if Path::new(&prefix).is_dir() || Path::new(&prefix).iter().count() > 1 {
+                tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
+            }
+
+            let path = format!("{prefix}-log-entries-rocksdb");
+            tracing::info!("starting rocksdb log entries storage - at custom path: '{:?}'", path);
+            path
+        } else {
+            tracing::info!("starting rocksdb log entries storage - at default path: 'data/log-entries-rocksdb'"); // TODO: keep inside data?
+            "data/log-entries-rocksdb".to_string()
+        };
+
         let db = DB::open(&opts, path).context("Failed to open RocksDB")?;
         Ok(Self { db })
     }

@@ -24,6 +24,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let miner = config.miner.init_external_mode(Arc::clone(&storage), None)?;
     let consensus = Consensus::new(
         Arc::clone(&storage),
+        config.clone().storage.perm_storage.rocks_path_prefix,
         config.clone().candidate_peers.clone(),
         Some(config.clone()),
         config.address,

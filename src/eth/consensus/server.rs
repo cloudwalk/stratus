@@ -174,6 +174,7 @@ mod tests {
 
         Consensus::new(
             storage.into(),
+            None,
             direct_peers,
             importer_config,
             jsonrpc_address,
