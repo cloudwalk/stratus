@@ -151,16 +151,16 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use tokio::sync::Mutex;
-    use tonic::{Request, Response, Status};
-    use crate::eth::primitives::{BlockNumber, Hash, TransactionExecution};
-    use crate::eth::storage::StratusStorage;
-    use crate::config::RunWithImporterConfig;
-    use crate::eth::primitives::Block;
-    use std::net::{SocketAddr, Ipv4Addr};
+    use std::net::Ipv4Addr;
+    use std::net::SocketAddr;
+
     use tokio::sync::broadcast;
+    use tokio::sync::Mutex;
+    use tonic::Request;
+
+    use super::*;
     use crate::eth::consensus::BlockEntry;
+    use crate::eth::storage::StratusStorage;
 
     // Helper function to create a mock consensus instance
     async fn create_mock_consensus() -> Arc<Consensus> {
@@ -179,8 +179,9 @@ mod tests {
             jsonrpc_address,
             grpc_address,
             tx_pending_txs.subscribe(),
-            tx_blocks.subscribe()
-        ).await
+            tx_blocks.subscribe(),
+        )
+        .await
     }
 
     #[tokio::test]

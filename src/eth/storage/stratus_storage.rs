@@ -82,15 +82,15 @@ impl StratusStorage {
 
         let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
 
-        let rocks_permanent_storage = crate::eth::storage::RocksPermanentStorage::new(false, Some(temp_path.clone()))
-            .expect("Failed to create RocksPermanentStorage");
+        let rocks_permanent_storage =
+            crate::eth::storage::RocksPermanentStorage::new(false, Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
 
         (
             Self {
                 temp: Arc::new(InMemoryTemporaryStorage::new()),
                 perm: Arc::new(rocks_permanent_storage),
             },
-            temp_dir
+            temp_dir,
         )
     }
 
