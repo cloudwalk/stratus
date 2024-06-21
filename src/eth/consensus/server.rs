@@ -146,7 +146,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
         Ok(Response::new(RequestVoteResponse {
             term: request.term,
             vote_granted: false,
-            message: format!("index is bellow expectation: last_log_index {}, last_arrived_block_number {}", request.last_log_index, consensus.last_arrived_block_number.load(Ordering::SeqCst)),
+            message: format!(
+                "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
+                request.last_log_index,
+                consensus.last_arrived_block_number.load(Ordering::SeqCst)
+            ),
         }))
     }
 }
