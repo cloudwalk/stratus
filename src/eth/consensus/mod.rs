@@ -63,7 +63,9 @@ use append_entry::RequestVoteRequest;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
 
+use self::log_entry::LogEntry;
 use self::log_entry::LogEntryData;
+use self::append_log_entries_storage::AppendLogEntriesStorage;
 use super::primitives::TransactionExecution;
 use super::primitives::TransactionInput;
 use crate::config::RunWithImporterConfig;
@@ -156,6 +158,7 @@ pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
+    log_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
@@ -188,6 +191,7 @@ impl Consensus {
         let consensus = Self {
             broadcast_sender,
             storage,
+            log_storage: Arc::new(AppendLogEntriesStorage::new("log_storage").unwrap()), // FIXME: use a proper path
             peers,
             direct_peers,
             current_term: AtomicU64::new(0),
@@ -412,10 +416,32 @@ impl Consensus {
                                 continue;
                             }
 
-                            //TODO XXX save transaction to appendEntries log
-                            let transaction = vec![tx.to_append_entry_transaction()];
-                            let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
-                            if consensus.broadcast_sender.send(transaction_entry).is_err() {
+                            let last_index = consensus.log_storage.get_last_index().unwrap_or(0);
+
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+
+                            let transaction_entry = LogEntry {
+                                term: current_term,
+                                index: last_index + 1,
+                                data: LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]), // TODO Check ordering?
+                            };
+
+                            if let Some(existing_entry) = consensus.log_storage.get_entry(transaction_entry.index).unwrap_or(None) {
+                                if existing_entry.term != transaction_entry.term {
+                                    consensus.log_storage.delete_entries_from(transaction_entry.index).expect("Failed to delete existing transaction entries");
+                                }
+                            }
+
+                            if let Err(e) = consensus.log_storage.save_entry(&transaction_entry) {
+                                tracing::error!("failed to save transaction log entry: {:?}", e);
+                            }
+
+                            // TODO
+                            //  If leaderCommit > commitIndex, set commitIndex =
+                            // min(leaderCommit, index of last new entry)
+                            
+                            let transaction_entry_data = LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]);
+                            if consensus.broadcast_sender.send(transaction_entry_data).is_err() {
                                 tracing::error!("failed to broadcast transaction");
                             }
                         }
@@ -424,10 +450,33 @@ impl Consensus {
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
 
-                            //TODO save block to appendEntries log
+                            let last_index = consensus.log_storage.get_last_index().unwrap_or(0);
+
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+
+                            let block_entry = LogEntry {
+                                term: current_term,
+                                index: last_index + 1,
+                                data: LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), // TODO Check ordering?
+                            };
+
+                            if let Some(existing_entry) = consensus.log_storage.get_entry(block_entry.index).unwrap_or(None) {
+                                if existing_entry.term != block_entry.term {
+                                    consensus.log_storage.delete_entries_from(block_entry.index).expect("Failed to delete existing block entries");
+                                }
+                            }
+
+                            if let Err(e) = consensus.log_storage.save_entry(&block_entry) {
+                                tracing::error!("failed to save block log entry: {:?}", e);
+                            }
+
+                            // TODO
+                            //  If leaderCommit > commitIndex, set commitIndex =
+                            // min(leaderCommit, index of last new entry)
+
                             //TODO before saving check if all transaction_hashes are already in the log
-                            let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
-                            if consensus.broadcast_sender.send(block_entry).is_err() {
+                            let block_entry_data = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
+                            if consensus.broadcast_sender.send(block_entry_data).is_err() {
                                 tracing::error!("failed to broadcast block");
                             }
                         }
