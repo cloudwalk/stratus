@@ -488,11 +488,12 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            tracing::debug!(storage = %label::TEMP, "reseting temporary storage");
+            tracing::debug!(storage = %label::PERM, "reseting storage");
             let result = self.perm.reset_at(number);
             metrics::inc_storage_reset(start.elapsed(), label::PERM, result.is_ok());
 
             let start = metrics::now();
+            tracing::debug!(storage = %label::TEMP, "reseting storage");
             let result = self.temp.reset();
             metrics::inc_storage_reset(start.elapsed(), label::TEMP, result.is_ok());
 
@@ -503,9 +504,12 @@ impl StratusStorage {
 
         #[cfg(not(feature = "metrics"))]
         {
-            tracing::debug!(storage = %label::TEMP, "reseting temporary storage");
+            tracing::debug!(storage = %label::PERM, "reseting storage");
             self.perm.reset_at(number)?;
+
+            tracing::debug!(storage = %label::TEMP, "reseting storage");
             self.temp.reset()?;
+
             self.set_active_block_number_as_next()?;
             Ok(())
         }
