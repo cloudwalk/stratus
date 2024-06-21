@@ -71,6 +71,25 @@ impl StratusStorage {
         }
     }
 
+    /// Creates an inmemory stratus storage for testing.
+    #[cfg(test)]
+    pub fn mock_new_rocksdb() -> (Self, tempfile::TempDir) {
+        // Create a unique temporary directory within the ./data directory
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
+
+        let rocks_permanent_storage =
+            crate::eth::storage::RocksPermanentStorage::new(false, Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
+
+        (
+            Self {
+                temp: Arc::new(InMemoryTemporaryStorage::new()),
+                perm: Arc::new(rocks_permanent_storage),
+            },
+            temp_dir,
+        )
+    }
+
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------

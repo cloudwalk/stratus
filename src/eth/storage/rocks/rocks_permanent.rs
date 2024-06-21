@@ -35,7 +35,7 @@ impl RocksPermanentStorage {
                 tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
             }
 
-            let path = format!("data/{prefix}-rocksdb");
+            let path = format!("{prefix}-rocksdb");
             tracing::info!("starting rocksdb storage - at custom path: '{:?}'", path);
             path
         } else {

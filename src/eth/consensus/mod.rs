@@ -63,9 +63,9 @@ use append_entry::RequestVoteRequest;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
 
+use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntry;
 use self::log_entry::LogEntryData;
-use self::append_log_entries_storage::AppendLogEntriesStorage;
 use super::primitives::TransactionExecution;
 use super::primitives::TransactionInput;
 use crate::config::RunWithImporterConfig;
@@ -439,7 +439,7 @@ impl Consensus {
                             // TODO
                             //  If leaderCommit > commitIndex, set commitIndex =
                             // min(leaderCommit, index of last new entry)
-                            
+
                             let transaction_entry_data = LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]);
                             if consensus.broadcast_sender.send(transaction_entry_data).is_err() {
                                 tracing::error!("failed to broadcast transaction");
