@@ -378,46 +378,47 @@ impl Consensus {
     fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
         // TODO: add data to consensus-log-transactions
         // TODO: rediscover followers on communication error
-        // XXX FIXME: deal with the scenario where a transactionHash arrives after the block; 
+        // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
         // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
         // TODO: maybe check if I'm currently the leader?
-    
+
         spawn_named("consensus::transaction_execution_queue", async move {
             let interval = Duration::from_millis(40);
             loop {
                 tokio::time::sleep(interval).await;
-    
+
                 if consensus.is_leader() {
                     let mut queue = consensus.transaction_execution_queue.lock().await;
                     let executions = queue.drain(..).collect::<Vec<_>>();
                     drop(queue);
-    
+
                     tracing::debug!(executions_len = executions.len(), "Processing transaction executions");
                     if !executions.is_empty() {
                         tracing::debug!("Fetching last index from log entries storage");
                         let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
                         tracing::debug!(last_index, "Last index fetched");
-    
+
                         tracing::debug!("Loading current term");
                         let current_term = consensus.current_term.load(Ordering::SeqCst);
                         tracing::debug!(current_term, "Current term loaded");
-    
+
                         match Self::save_log_entry(
-                            &consensus, 
-                            last_index + 1, 
-                            current_term, 
-                            LogEntryData::TransactionExecutionEntries(executions.clone()), 
-                            "transaction"
+                            &consensus,
+                            last_index + 1,
+                            current_term,
+                            LogEntryData::TransactionExecutionEntries(executions.clone()),
+                            "transaction",
                         ) {
                             Ok(_) => {
                                 tracing::debug!("Log entry saved successfully");
-                            },
+                            }
                             Err(e) => {
-                                tracing::error!("Failed to save log entry: {:?}", e); //TODO: handle error
+                                tracing::error!("Failed to save log entry: {:?}", e);
+                                //TODO: handle error
                             }
                         }
                     }
-    
+
                     let peers = consensus.peers.read().await;
                     for (_, (peer, _)) in peers.iter() {
                         let mut peer_clone = peer.clone();
@@ -427,7 +428,6 @@ impl Consensus {
             }
         });
     }
-
 
     /// This channel broadcasts blocks and transactons executions to followers.
     /// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
@@ -448,7 +448,7 @@ impl Consensus {
                                 tracing::debug!(hash = %tx.hash(), "Skipping local transaction because only external transactions are supported for now");
                                 continue;
                             }
-                            
+
                             let transaction = vec![tx.to_append_entry_transaction()];
                             let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
                             if consensus.broadcast_sender.send(transaction_entry).is_err() {
