@@ -113,7 +113,7 @@ find_leader() {
 
 # Function to remove rocks-path directory
 remove_rocks_path() {
-    rm -rf data/
+    find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf
 }
 
 # Function to run the election test
