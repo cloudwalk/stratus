@@ -538,7 +538,7 @@ hive:
         echo "Docker image already built."; \
     fi
     cd hive && go build .
-    cd hive && ./hive --client stratus --sim stratus/rpc-compat --sim.parallelism 10
+    cd hive && ./hive --client stratus --sim stratus/rpc --sim.parallelism 10
 #    cd hive && sudo ./hive --client stratus --sim stratus/rpc --sim.parallelism 10 --loglevel 5 --docker.output
 
 # Run Hiveview
