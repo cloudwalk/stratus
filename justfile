@@ -524,3 +524,24 @@ run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" 
 
     echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
     ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
+
+# Build Stratus docker image for hive test
+hive-build-client:
+    docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .
+
+# Run Hive test
+hive:
+    if ! docker images | grep -q stratus_base; then \
+        echo "Building Docker image..."; \
+        docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .; \
+    else \
+        echo "Docker image already built."; \
+    fi
+    cd hive && go build .
+    cd hive && ./hive --client stratus --sim stratus/rpc-compat --sim.parallelism 10
+#    cd hive && sudo ./hive --client stratus --sim stratus/rpc --sim.parallelism 10 --loglevel 5 --docker.output
+
+# Run Hiveview
+hiveview:
+    cd hive && go build ./cmd/hiveview
+    ./hive/hiveview --serve --addr 0.0.0.0:8080 --logdir ./hive/workspace/logs/
