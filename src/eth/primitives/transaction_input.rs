@@ -4,7 +4,9 @@ use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
+use ethers_core::types::NameOrAddress;
 use ethers_core::types::Transaction as EthersTransaction;
+use ethers_core::types::TransactionRequest;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
@@ -179,6 +181,22 @@ impl From<TransactionInput> for EthersTransaction {
             s: value.s,
             transaction_type: value.tx_type,
             ..Default::default()
+        }
+    }
+}
+
+impl From<TransactionInput> for TransactionRequest {
+    fn from(value: TransactionInput) -> Self {
+        let input = value;
+        Self {
+            chain_id: input.chain_id.map(|id| id.inner_value()),
+            nonce: Some(input.nonce.into()),
+            from: Some(input.signer.into()),
+            to: input.to.map(|to| NameOrAddress::Address(to.into())),
+            value: Some(input.value.into()),
+            gas_price: Some(input.gas_price.into()),
+            gas: Some(input.gas_limit.into()),
+            data: Some(input.input.into())
         }
     }
 }

@@ -21,28 +21,28 @@ pub struct TransactionDag {
 impl TransactionDag {
     pub fn get_slot_writes(block_transactions: &Vec<TransactionMined>) -> HashSet<(Address, SlotIndex)> {
         block_transactions
-        .iter()
-        .flat_map(|tx| {
-            tx.execution.changes.iter().flat_map(|(address, change)| {
-                change
-                    .slots
-                    .iter()
-                    .filter_map(|(idx, slot_change)| slot_change.is_modified().then_some((*address, *idx)))
+            .iter()
+            .flat_map(|tx| {
+                tx.execution.changes.iter().flat_map(|(address, change)| {
+                    change
+                        .slots
+                        .iter()
+                        .filter_map(|(idx, slot_change)| slot_change.is_modified().then_some((*address, *idx)))
+                })
             })
-        })
-        .collect()
+            .collect()
     }
 
     pub fn get_balance_writes(block_transactions: &Vec<TransactionMined>) -> HashSet<Address> {
         block_transactions
-        .iter()
-        .flat_map(|tx| {
-            tx.execution
-                .changes
-                .iter()
-                .filter_map(|(address, change)| change.balance.is_modified().then_some(*address))
-        })
-        .collect()
+            .iter()
+            .flat_map(|tx| {
+                tx.execution
+                    .changes
+                    .iter()
+                    .filter_map(|(address, change)| change.balance.is_modified().then_some(*address))
+            })
+            .collect()
     }
 
     /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
@@ -94,8 +94,8 @@ impl TransactionDag {
             node_indexes.insert((tx_bnum, tx_idx), node_idx);
         }
 
-        Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
-        Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
+        //Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
+        //Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
 
         #[cfg(feature = "metrics")]
         metrics::inc_compute_tx_dag(start.elapsed());

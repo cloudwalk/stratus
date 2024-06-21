@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
-use ethers_core::types::Transaction;
+use ethers_core::types::transaction::eip2718::TypedTransaction;
+use ethers_signers::LocalWallet;
+use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -58,6 +60,8 @@ pub struct ExternalRelayer {
 
     /// RPC client that will submit transactions.
     stratus_chain: BlockchainClient,
+
+    signer: LocalWallet,
 }
 
 impl ExternalRelayer {
@@ -76,6 +80,7 @@ impl ExternalRelayer {
             substrate_chain: BlockchainClient::new_http(&config.forward_to, config.rpc_timeout).await?,
             stratus_chain: BlockchainClient::new_http(&config.stratus_rpc, config.rpc_timeout).await?,
             pool,
+            signer: LocalWallet::from_bytes(&const_hex::decode(config.signer).unwrap()).unwrap(),
         })
     }
 
@@ -263,7 +268,7 @@ impl ExternalRelayer {
                         break Ok(());
                     }
                 }
-                Ok(None) =>
+                Ok(None) => {
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
@@ -272,7 +277,8 @@ impl ExternalRelayer {
                             block_number,
                             anyhow!("no receipt returned by substrate for more than 30 seconds"),
                         ));
-                    },
+                    }
+                }
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -326,7 +332,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) =>
+            Ok(res) => {
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -334,7 +340,8 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                },
+                }
+            }
         }
 
         #[cfg(feature = "metrics")]
@@ -353,10 +360,13 @@ impl ExternalRelayer {
 
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
+        let req = TypedTransaction::Legacy(tx_mined.input.clone().into());
+        let _new_hash = req.sighash();
+        let signature = self.signer
+            .sign_transaction(&req).await.unwrap();
 
-        let ethers_tx = Transaction::from(tx_mined.input.clone());
         let tx = loop {
-            match self.substrate_chain.send_raw_transaction(tx_hash, ethers_tx.rlp()).await {
+            match self.substrate_chain.send_raw_transaction(tx_hash, req.rlp_signed(&signature)).await {
                 Ok(tx) => break tx,
                 Err(err) => {
                     tracing::info!(
