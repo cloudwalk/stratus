@@ -13,6 +13,7 @@ import {
     ONE,
     TEST_BALANCE,
     TEST_TRANSFER,
+    TWO,
     ZERO,
     fromHexTimestamp,
     send,
@@ -30,6 +31,8 @@ describe("Transaction: serial transfer", () => {
 
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
     it("Send transaction", async () => {
         let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
@@ -114,5 +117,53 @@ describe("Transaction: serial transfer", () => {
     });
     it("Receiver balance is increased", async () => {
         expect(await sendGetBalance(new_account)).eq(TEST_TRANSFER);
+    });
+});
+
+describe("EIP-1559: serial transfer", () => {
+    var _tx: Transaction;
+    var _txHash: string;
+    var _txSentTimestamp: number;
+
+    it("Resets blockchain", async () => {
+        await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
+    });
+
+    it("Send transaction", async () => {
+        let txSigned = await ALICE.signWeiTransferEIP1559(BOB.address, TEST_TRANSFER);
+        _txSentTimestamp = Math.floor(Date.now() / 1000);
+        _txHash = await sendRawTransaction(txSigned);
+        expect(_txHash).eq(keccak256(txSigned));
+    });
+
+    it("Transaction is created", async () => {
+        _tx = await send("eth_getTransactionByHash", [_txHash]);
+        expect(_tx.from).eq(ALICE.address, "tx.from");
+        expect(_tx.to).eq(BOB.address, "tx.to");
+        expect(_tx.nonce).eq(ZERO, "tx.nonce");
+        expect(_tx.chainId).eq(CHAIN_ID, "tx.chainId");
+
+        const expectedValue = `0x${TEST_TRANSFER.toString(16)}`;
+        expect(_tx.value).eq(expectedValue, "tx.value");
+
+        expect(_tx.gasPrice).eq(ZERO, "tx.gasPrice");
+        expect(_tx.gas).match(HEX_PATTERN, "tx.gas format");
+        // FIXME expect(_tx.maxFeePerGas).eq(ZERO, "tx.maxFeePerGas");
+        // FIXME expect(_tx.maxPriorityFeePerGas).eq(ZERO, "tx.maxPriorityFeePerGas");
+        expect(_tx.input).eq("0x", "tx.input");
+        expect(_tx.v).match(HEX_PATTERN, "tx.v format");
+        expect(_tx.r).match(HEX_PATTERN, "tx.r format");
+        expect(_tx.s).match(HEX_PATTERN, "tx.s format");
+        // FIXME expect(_tx.type).eq(TWO, "tx.type");
+    });
+
+    it("Receipt states a succesful type 2 transfer", async () => {
+        let receipt: TransactionReceipt = await send("eth_getTransactionReceipt", [_txHash]);
+        expect(receipt.from).eq(ALICE.address, "receipt.from");
+        expect(receipt.to).eq(BOB.address, "receipt.to");
+        expect(receipt.status).eq(ONE, "receipt.status");
+        // FIXME expect(receipt.type).eq(TWO, "receipt.type");
     });
 });

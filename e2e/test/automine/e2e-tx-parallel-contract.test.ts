@@ -9,6 +9,7 @@ import {
     sendGetNonce,
     sendRawTransactions,
     sendReset,
+    send
 } from "../helpers/rpc";
 
 describe("Transaction: parallel TestContractBalances", async () => {
@@ -16,6 +17,8 @@ describe("Transaction: parallel TestContractBalances", async () => {
 
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
 
     it("Deploy TestContractBalances", async () => {
@@ -98,6 +101,10 @@ describe("Transaction: parallel TestContractCounter", async () => {
 
     it("Resets blockchain", async () => {
         await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        // // TODO: re-enable this, for some reason it's returning `0x49`
+        // // maybe the Rocks running in multi-threaded mode doesn't guarantee an immediate impact
+        // expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
 
     it("Deploy TestContractCounter", async () => {

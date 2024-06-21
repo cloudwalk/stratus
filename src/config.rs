@@ -38,6 +38,7 @@ use crate::eth::BlockMiner;
 use crate::eth::BlockMinerMode;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
+use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::tracing::TracingLogFormat;
@@ -202,9 +203,9 @@ pub struct StratusStorageConfig {
 
 impl StratusStorageConfig {
     /// Initializes Stratus storage.
-    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp_storage = self.temp_storage.init().await?;
-        let perm_storage = self.perm_storage.init().await?;
+    pub fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+        let temp_storage = self.temp_storage.init()?;
+        let perm_storage = self.perm_storage.init()?;
         let storage = StratusStorage::new(temp_storage, perm_storage);
 
         Ok(Arc::new(storage))
@@ -230,7 +231,7 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    pub async fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
+    pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
         let config = EvmConfig {
             num_evms: max(self.num_evms, 1),
             chain_id: self.chain_id.into(),
@@ -263,21 +264,16 @@ pub struct MinerConfig {
 
 impl MinerConfig {
     /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub async fn init_external_mode(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(BlockMinerMode::External, storage, relayer).await
+    pub fn init_external_mode(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(BlockMinerMode::External, storage, relayer)
     }
 
     /// Inits [`BlockMiner`] with the configured mining mode.
-    pub async fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(self.block_mode, storage, relayer).await
+    pub fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
+        self.init_with_mode(self.block_mode, storage, relayer)
     }
 
-    async fn init_with_mode(
-        &self,
-        mode: BlockMinerMode,
-        storage: Arc<StratusStorage>,
-        relayer: Option<ExternalRelayerClient>,
-    ) -> anyhow::Result<Arc<BlockMiner>> {
+    fn init_with_mode(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
         tracing::info!(config = ?self, "creating block miner");
 
         // create miner
@@ -334,7 +330,7 @@ impl IntegratedRelayerConfig {
         match self.forward_to {
             Some(ref forward_to) => {
                 let chain = BlockchainClient::new_http(forward_to, self.relayer_timeout).await?;
-                let relayer = TransactionRelayer::new(chain);
+                let relayer = TransactionRelayer::new(Arc::new(chain));
                 Ok(Some(Arc::new(relayer)))
             }
             None => Ok(None),
@@ -377,6 +373,10 @@ pub struct ExternalRelayerServerConfig {
     #[arg(long = "forward-to", env = "RELAYER_FORWARD_TO")]
     pub forward_to: String,
 
+    /// RPC to forward to.
+    #[arg(long = "stratus-rpc", env = "STRATUS_RPC")]
+    pub stratus_rpc: String,
+
     /// Backoff.
     #[arg(long = "backoff", value_parser=parse_duration, env = "BACKOFF", default_value = "10ms")]
     pub backoff: Duration,
@@ -404,7 +404,7 @@ pub struct StratusConfig {
     pub address: SocketAddr,
 
     /// JSON-RPC max active connections
-    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
     pub max_connections: u32,
 
     #[clap(flatten)]
@@ -582,10 +582,10 @@ pub struct RunWithImporterConfig {
     pub address: SocketAddr,
 
     /// JSON-RPC max active connections
-    #[arg(long = "max_connections", env = "MAX_CONNECTIONS", default_value = "200")]
+    #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
     pub max_connections: u32,
 
-    #[arg(long = "leader_node", env = "LEADER_NODE")]
+    #[arg(long = "leader-node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
 
     #[clap(flatten)]
@@ -813,7 +813,7 @@ pub enum TemporaryStorageKind {
 
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
+    pub fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
         tracing::info!(config = ?self, "creating temporary storage");
 
         match self.temp_storage_kind {
@@ -846,8 +846,12 @@ pub struct PermanentStorageConfig {
 
     #[cfg(feature = "rocks")]
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
-    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX", default_value = "")]
+    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
+
+    // Disable RocksDB backups
+    #[arg(long = "perm-storage-disable-backups", env = "PERM_STORAGE_DISABLE_BACKUPS")]
+    pub perm_storage_disable_backups: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -859,13 +863,17 @@ pub enum PermanentStorageKind {
 
 impl PermanentStorageConfig {
     /// Initializes permanent storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
+    pub fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
         tracing::info!(config = ?self, "creating permanent storage");
 
         let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
             #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new(self.rocks_path_prefix.clone())?),
+            PermanentStorageKind::Rocks => {
+                let enable_backups = not(self.perm_storage_disable_backups);
+                let prefix = self.rocks_path_prefix.clone();
+                Arc::new(RocksPermanentStorage::new(enable_backups, prefix)?)
+            }
         };
         Ok(perm)
     }

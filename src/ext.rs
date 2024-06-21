@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
+use jsonrpsee::types::SubscriptionId;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
@@ -84,6 +85,15 @@ impl DisplayExt for std::time::Duration {
     }
 }
 
+impl DisplayExt for SubscriptionId<'_> {
+    fn to_string_ext(&self) -> String {
+        match self {
+            SubscriptionId::Num(value) => value.to_string(),
+            SubscriptionId::Str(value) => value.to_string(),
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Option
 // -----------------------------------------------------------------------------
@@ -145,6 +155,8 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
 // -----------------------------------------------------------------------------
 
 /// Reads a value from an async channel logging timeout at some predefined interval.
+///
+/// Expects the tokio mpsc receiver.
 #[macro_export]
 macro_rules! channel_read {
     ($rx: ident) => {
@@ -175,6 +187,8 @@ macro_rules! channel_read_impl {
 }
 
 /// Reads a value from a sync channel logging timeout at some predefined interval.
+///
+/// Expects the `std` mpsc receiver.
 #[macro_export]
 macro_rules! channel_read_sync {
     ($rx: ident) => {
@@ -190,7 +204,7 @@ macro_rules! channel_read_sync {
 macro_rules! channel_read_sync_impl {
     ($rx: ident, timeout_ms: $timeout: expr) => {{
         const TARGET: &str = const_format::formatcp!("{}::{}", module_path!(), "rx");
-        const TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_millis($timeout);
+        const TIMEOUT: std::time::Duration = std::time::Duration::from_millis($timeout);
 
         loop {
             match $rx.recv_timeout(TIMEOUT) {

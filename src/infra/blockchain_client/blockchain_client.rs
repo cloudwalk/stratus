@@ -158,6 +158,22 @@ impl BlockchainClient {
         }
     }
 
+    /// Fetches a block by hash.
+    pub async fn fetch_block_by_hash(&self, hash: Hash, tx_detail: bool) -> anyhow::Result<JsonValue> {
+        tracing::debug!(%hash, "fetching block");
+
+        let hash = serde_json::to_value(hash).expect_infallible();
+        let result = self
+            .http
+            .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByHash", vec![hash, JsonValue::Bool(tx_detail)])
+            .await;
+
+        match result {
+            Ok(block) => Ok(block),
+            Err(e) => log_and_err!(reason = e, "failed to fetch block by hash"),
+        }
+    }
+
     /// Fetches a transaction by hash.
     pub async fn fetch_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
         tracing::debug!(%hash, "fetching transaction");

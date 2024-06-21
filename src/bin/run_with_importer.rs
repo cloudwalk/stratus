@@ -2,7 +2,6 @@ mod importer_online;
 
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 use stratus::eth::rpc::serve_rpc;
@@ -21,8 +20,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     const TASK_NAME: &str = "run-with-importer";
 
     // init services
-    let storage = config.storage.init().await?;
-    let miner = config.miner.init_external_mode(Arc::clone(&storage), None).await?;
+    let storage = config.storage.init()?;
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None)?;
     let consensus = Consensus::new(
         Arc::clone(&storage),
         config.clone().candidate_peers.clone(),
@@ -34,12 +33,10 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         config.storage.perm_storage.rocks_path_prefix.clone(),
     )
     .await; // in development, with no leader configured, the current node ends up being the leader
-    let Some((http_url, ws_url)) = consensus.get_chain_url().await else {
-        return Err(anyhow!("No chain url found"));
-    };
+    let (http_url, ws_url) = consensus.get_chain_url().await.expect("chain url not found");
     let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref(), config.online.external_rpc_timeout).await?);
 
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     let rpc_storage = Arc::clone(&storage);
     let rpc_executor = Arc::clone(&executor);

@@ -16,9 +16,11 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::rpc::RpcClientApp;
 use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
+use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::if_else;
 #[cfg(feature = "metrics")]
@@ -30,7 +32,7 @@ use crate::GlobalState;
 const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
 
 /// Timeout used when sending notifications to subscribers.
-const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
+const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[cfg(feature = "metrics")]
 mod label {
@@ -75,14 +77,14 @@ impl RpcSubscriptions {
                 }
 
                 // remove closed subscriptions
-                subs.new_pending_txs.write().await.retain(|_, sub| not(sub.is_closed()));
-                subs.new_heads.write().await.retain(|_, sub| not(sub.is_closed()));
-                subs.logs.write().await.retain(|_, (sub, _)| not(sub.is_closed()));
+                subs.pending_txs.write().await.retain(|_, s| not(s.sink.is_closed()));
+                subs.new_heads.write().await.retain(|_, s| not(s.sink.is_closed()));
+                subs.logs.write().await.retain(|_, s| not(s.sink.is_closed()));
 
                 // update metrics
                 #[cfg(feature = "metrics")]
                 {
-                    metrics::set_rpc_subscriptions_active(subs.new_pending_txs.read().await.len() as u64, label::PENDING_TXS);
+                    metrics::set_rpc_subscriptions_active(subs.pending_txs.read().await.len() as u64, label::PENDING_TXS);
                     metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
                     metrics::set_rpc_subscriptions_active(subs.logs.read().await.len() as u64, label::LOGS);
                 }
@@ -110,8 +112,8 @@ impl RpcSubscriptions {
                     break;
                 };
 
-                let subs = subs.new_pending_txs.read().await;
-                Self::notify(subs.values(), tx.hash().to_string()).await;
+                let subs = subs.pending_txs.read().await;
+                Self::notify(subs.values().map(|s| Arc::clone(&s.sink)), tx.hash().to_string()).await;
             }
             Ok(())
         })
@@ -132,7 +134,7 @@ impl RpcSubscriptions {
                 };
 
                 let subs = subs.new_heads.read().await;
-                Self::notify(subs.values(), block.header).await;
+                Self::notify(subs.values().map(|s| Arc::clone(&s.sink)), block.header).await;
             }
             Ok(())
         })
@@ -155,7 +157,7 @@ impl RpcSubscriptions {
                 let subs = subs.logs.read().await;
                 let interested_subs = subs
                     .values()
-                    .filter_map(|(sub, filter)| if_else!(filter.matches(&log), Some(sub), None))
+                    .filter_map(|s| if_else!(s.filter.matches(&log), Some(Arc::clone(&s.sink)), None))
                     .collect_vec();
 
                 Self::notify(interested_subs.into_iter(), log).await;
@@ -164,7 +166,11 @@ impl RpcSubscriptions {
         })
     }
 
-    async fn notify(subs: impl ExactSizeIterator<Item = &SubscriptionSink>, msg: impl Into<SubscriptionMessage>) {
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    async fn notify(subs: impl ExactSizeIterator<Item = Arc<SubscriptionSink>>, msg: impl Into<SubscriptionMessage>) {
         if subs.len() == 0 {
             return;
         }
@@ -174,9 +180,12 @@ impl RpcSubscriptions {
             if sub.is_closed() {
                 continue;
             }
-            if let Err(e) = sub.send_timeout(msg.clone(), NOTIFICATION_TIMEOUT).await {
-                tracing::error!(reason = ?e, "failed to send subscription notification");
-            }
+            let msg_clone = msg.clone();
+            spawn_named("rpc::sub::notify", async move {
+                if let Err(e) = sub.send_timeout(msg_clone, NOTIFICATION_TIMEOUT).await {
+                    tracing::error!(reason = ?e, "failed to send subscription notification");
+                }
+            });
         }
     }
 }
@@ -203,40 +212,71 @@ impl RpcSubscriptionsHandles {
 // Connected clients
 // -----------------------------------------------------------------------------
 
+#[derive(Debug, derive_new::new)]
+pub struct PendingTransactionSubscription {
+    pub client: RpcClientApp,
+    pub sink: Arc<SubscriptionSink>,
+}
+
+#[derive(Debug, derive_new::new)]
+pub struct NewHeadsSubscription {
+    pub client: RpcClientApp,
+    pub sink: Arc<SubscriptionSink>,
+}
+
+#[derive(Debug, derive_new::new)]
+pub struct LogsSubscription {
+    pub client: RpcClientApp,
+    pub filter: LogFilter,
+    pub sink: Arc<SubscriptionSink>,
+}
+
 /// Active client subscriptions.
 #[derive(Debug, Default)]
 pub struct RpcSubscriptionsConnected {
-    new_pending_txs: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
-    new_heads: RwLock<HashMap<ConnectionId, SubscriptionSink>>,
-    logs: RwLock<HashMap<ConnectionId, (SubscriptionSink, LogFilter)>>,
+    pub pending_txs: RwLock<HashMap<ConnectionId, PendingTransactionSubscription>>,
+    pub new_heads: RwLock<HashMap<ConnectionId, NewHeadsSubscription>>,
+    pub logs: RwLock<HashMap<ConnectionId, LogsSubscription>>,
 }
 
 impl RpcSubscriptionsConnected {
     /// Adds a new subscriber to `newPendingTransactions` event.
-    pub async fn add_new_pending_txs(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id().0, "subscribing to newPendingTransactions event");
-        let mut subs = self.new_pending_txs.write().await;
-        subs.insert(sink.connection_id(), sink);
+    pub async fn add_new_pending_txs(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+        tracing::debug!(
+            id = sink.subscription_id().to_string_ext(),
+            %rpc_client,
+            "subscribing to newPendingTransactions event"
+        );
+        let mut subs = self.pending_txs.write().await;
+        subs.insert(sink.connection_id(), PendingTransactionSubscription::new(rpc_client, sink.into()));
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::PENDING_TXS);
     }
 
     /// Adds a new subscriber to `newHeads` event.
-    pub async fn add_new_heads(&self, sink: SubscriptionSink) {
-        tracing::debug!(id = %sink.connection_id().0, "subscribing to newHeads event");
+    pub async fn add_new_heads(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+        tracing::debug!(
+            id = sink.subscription_id().to_string_ext(),
+            %rpc_client,
+            "subscribing to newHeads event"
+        );
         let mut subs = self.new_heads.write().await;
-        subs.insert(sink.connection_id(), sink);
+        subs.insert(sink.connection_id(), NewHeadsSubscription::new(rpc_client, sink.into()));
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::NEW_HEADS);
     }
 
     /// Adds a new subscriber to `logs` event.
-    pub async fn add_logs(&self, sink: SubscriptionSink, filter: LogFilter) {
-        tracing::debug!(id = %sink.connection_id().0, ?filter, "subscribing to logs event");
+    pub async fn add_logs(&self, rpc_client: RpcClientApp, filter: LogFilter, sink: SubscriptionSink) {
+        tracing::debug!(
+            id = sink.subscription_id().to_string_ext(), ?filter,
+            %rpc_client,
+            "subscribing to logs event"
+        );
         let mut subs = self.logs.write().await;
-        subs.insert(sink.connection_id(), (sink, filter));
+        subs.insert(sink.connection_id(), LogsSubscription::new(rpc_client, filter, sink.into()));
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);

@@ -2,7 +2,7 @@ import '.justfile_helpers' # _lint, _outdated
 
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
-export RUST_BACKTRACE := "0"
+export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 
 # Global arguments that can be passed to receipts.
 feature_flags := "dev," + env("FEATURES", "")
@@ -349,7 +349,7 @@ e2e-relayer-external-up:
     sleep 5
 
     # Start Relayer External binary
-    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
+    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --stratus-rpc http://0.0.0.0:3000 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
 
     if [ -d e2e/cloudwalk-contracts ]; then
     (
@@ -417,8 +417,8 @@ contracts-test *args="":
 alias e2e-contracts := contracts-test
 
 # Contracts: Remove all the cloned repositories
-contracts-remove:
-    cd e2e/cloudwalk-contracts && ./remove-contracts.sh
+contracts-remove *args="":
+    cd e2e/cloudwalk-contracts && ./remove-contracts.sh {{ args }}
 
 # Contracts: Start Stratus and run contracts test
 contracts-test-stratus *args="":
@@ -516,3 +516,11 @@ local-chaos-test:
     @echo "Leader polling and followers syncing simulated."
     @echo "Cleaning up..."
     just local-chaos-cleanup
+
+# Chaos Testing: Run chaos experiment
+run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
+    echo "Building Stratus"
+    cargo build --release --bin {{ bin }} --features dev
+
+    echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
+    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}

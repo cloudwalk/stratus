@@ -6,7 +6,7 @@ export class Account implements Addressable {
     constructor(
         readonly address: string,
         readonly privateKey: string,
-    ) {}
+    ) { }
 
     getAddress(): Promise<string> {
         return Promise.resolve(this.address);
@@ -28,6 +28,23 @@ export class Account implements Addressable {
             chainId: CHAIN_ID_DEC,
             gasPrice: 0,
             gasLimit: gasLimit,
+            nonce,
+        });
+    }
+
+    async signWeiTransferEIP1559(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            gasLimit,
             nonce,
         });
     }

@@ -33,6 +33,7 @@ export const DEFAULT_TX_TIMEOUT_IN_MS = (currentMiningIntervalInMs() ?? 1000) * 
 // Special numbers
 export const ZERO = "0x0";
 export const ONE = "0x1";
+export const TWO = "0x2";
 export const TEST_BALANCE = "0xffffffffffffffff";
 export const TEST_TRANSFER = 12345678;
 export const NATIVE_TRANSFER_GAS = "0x5208"; // 21000

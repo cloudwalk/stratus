@@ -82,9 +82,9 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
     let _timer = DropTimer::start("importer-online");
 
     // init server
-    let storage = config.storage.init().await?;
-    let miner = config.miner.init_external_mode(Arc::clone(&storage), None).await?;
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
+    let storage = config.storage.init()?;
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None)?;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
     let chain = Arc::new(
         BlockchainClient::new_http_ws(
             &config.base.external_rpc,

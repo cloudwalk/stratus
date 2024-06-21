@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use ethereum_types::U256;
 use futures::join;
+use itertools::Itertools;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
@@ -38,6 +39,7 @@ use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
 use crate::eth::rpc::rpc_invalid_params_error;
+use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcHttpMiddleware;
@@ -47,6 +49,7 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::Consensus;
 use crate::eth::Executor;
+use crate::ext::not;
 use crate::ext::ResultExt;
 use crate::ext::SpanExt;
 use crate::infra::build_info;
@@ -70,7 +73,7 @@ pub async fn serve_rpc(
     max_connections: u32,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-    tracing::info!("creating {}", TASK_NAME);
+    tracing::info!(%address, %max_connections, "creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
@@ -146,16 +149,17 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("debug_setHead", debug_set_head)?;
         module.register_blocking_method("debug_readAllSlotsFromAccount", debug_read_all_slots)?;
     }
+    module.register_async_method("debug_readSubscriptions", debug_read_subscriptions)?;
 
     // stratus health check
     module.register_method("stratus_startup", stratus_startup)?;
-    module.register_method("stratus_readiness", stratus_readiness)?;
+    module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_method("stratus_liveness", stratus_liveness)?;
     module.register_method("stratus_version", stratus_version)?;
 
     // blockchain
     module.register_method("net_version", net_version)?;
-    module.register_method("net_listening", net_listening)?;
+    module.register_async_method("net_listening", net_listening)?;
     module.register_method("eth_chainId", eth_chain_id)?;
     module.register_method("web3_clientVersion", web3_client_version)?;
 
@@ -194,10 +198,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 }
 
 // -----------------------------------------------------------------------------
-// Handlers
+// Debug
 // -----------------------------------------------------------------------------
 
-// Debug
 #[cfg(feature = "dev")]
 fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
@@ -232,6 +235,42 @@ fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions)
     Ok(serde_json::to_value(slots).expect_infallible())
 }
 
+async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> JsonValue {
+    let (pending_txs, new_heads, logs) = join!(ctx.subs.pending_txs.read(), ctx.subs.new_heads.read(), ctx.subs.logs.read());
+    json!({
+        "newPendingTransactions":
+            pending_txs.values().map(|s|
+                json!({
+                    "client": s.client,
+                    "id": s.sink.subscription_id(),
+                    "active": not(s.sink.is_closed())
+                })
+            ).collect_vec()
+        ,
+        "newHeads":
+            new_heads.values().map(|s|
+                json!({
+                    "client": s.client,
+                    "id": s.sink.subscription_id(),
+                    "active": not(s.sink.is_closed())
+                })
+            ).collect_vec()
+        ,
+        "logs":
+            logs.values().map(|s|
+                json!({
+                    "client": s.client,
+                    "id": s.sink.subscription_id(),
+                    "active": not(s.sink.is_closed()),
+                    "filter": {
+                        "parsed": s.filter,
+                        "original": s.filter.original_input
+                    }
+                })
+            ).collect_vec()
+    })
+}
+
 // -----------------------------------------------------------------------------
 // Status
 // -----------------------------------------------------------------------------
@@ -240,8 +279,8 @@ fn stratus_startup(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
     Ok(json!(true))
 }
 
-fn stratus_readiness(_: Params<'_>, context: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let should_serve = context.consensus.should_serve();
+async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    let should_serve = context.consensus.should_serve().await;
     tracing::info!("stratus_readiness: {}", should_serve);
 
     if should_serve {
@@ -267,8 +306,8 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
 // Blockchain
 // -----------------------------------------------------------------------------
 
-fn net_listening(params: Params<'_>, arc: &RpcContext, ext: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    stratus_readiness(params, arc, ext)
+async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    stratus_readiness(params, arc, ext).await
 }
 
 #[tracing::instrument(name = "rpc::net_version", skip_all)]
@@ -541,21 +580,22 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyh
 // -----------------------------------------------------------------------------
 
 #[tracing::instrument(name = "rpc::eth_subscribe", skip_all)]
-async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, _: Extensions) -> impl IntoSubscriptionCloseResponse {
+async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
+    let client = ext.rpc_client();
     let (params, kind) = next_rpc_param::<String>(params.sequence())?;
     match kind.deref() {
         "newPendingTransactions" => {
-            ctx.subs.add_new_pending_txs(pending.accept().await?).await;
+            ctx.subs.add_new_pending_txs(client, pending.accept().await?).await;
         }
 
         "newHeads" => {
-            ctx.subs.add_new_heads(pending.accept().await?).await;
+            ctx.subs.add_new_heads(client, pending.accept().await?).await;
         }
 
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage)?;
-            ctx.subs.add_logs(pending.accept().await?, filter).await;
+            ctx.subs.add_logs(client, filter, pending.accept().await?).await;
         }
 
         // unsupported

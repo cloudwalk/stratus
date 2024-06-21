@@ -1,3 +1,13 @@
+//! Importer-Offline binary.
+//!
+//! It loads blocks (and receipts) from an external RPC server, or from a PostgreSQL DB
+//! that was prepared with the `rpc-downloader` binary.
+//!
+//! This importer will check on startup what is the `block_end` value at the external
+//! storage, and will not update while running, in contrast with that, the
+//! Importer-Online (other binary) will stay up to date with the newer blocks that
+//! arrive.
+
 use std::cmp::min;
 use std::fs;
 use std::sync::Arc;
@@ -6,7 +16,6 @@ use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
 use itertools::Itertools;
-use stratus::channel_read;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
@@ -17,6 +26,7 @@ use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
+use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::ext::ResultExt;
 use stratus::log_and_err;
@@ -24,11 +34,10 @@ use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
-/// Number of tasks in the backlog. Each task contains 10_000 blocks and all receipts for them.
+/// Number of tasks in the backlog. Each task contains `--blocks-by-fetch` blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
@@ -43,9 +52,9 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
-    let storage = config.storage.init().await?;
-    let miner = config.miner.init_external_mode(Arc::clone(&storage), None).await?;
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner)).await;
+    let storage = config.storage.init()?;
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None)?;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // init block snapshots to export
     let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
@@ -67,36 +76,22 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
     storage.save_accounts(initial_accounts.clone())?;
 
-    // execute thread: external rpc storage loader
-    let storage_loader_thread = spawn_thread("storage-loader", move || {
-        let result = Handle::current().block_on(execute_external_rpc_storage_loader(
-            rpc_storage,
-            config.blocks_by_fetch,
-            config.paralellism,
-            block_start,
-            block_end,
-            backlog_tx,
-        ));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "storage-loader failed");
+    let storage_loader = execute_external_rpc_storage_loader(rpc_storage, config.blocks_by_fetch, config.paralellism, block_start, block_end, backlog_tx);
+    spawn_named("storage-loader", async move {
+        if let Err(err) = storage_loader.await {
+            tracing::error!(?err, "'storage-loader' task failed");
         }
     });
 
-    // execute thread: block importer
-    let block_importer_thread = spawn_thread("block-importer", move || {
-        let result = Handle::current().block_on(execute_block_importer(executor, miner, backlog_rx, block_snapshots));
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "block-importer failed");
+    let block_importer = spawn_thread("block-importer", || {
+        if let Err(err) = execute_block_importer(executor, miner, backlog_rx, block_snapshots) {
+            tracing::error!(?err, "'block-importer' task failed");
         }
     });
 
-    // await tasks
-    if let Err(e) = block_importer_thread.join() {
-        tracing::error!(reason = ?e, "block-importer thread failed");
-    }
-    if let Err(e) = storage_loader_thread.join() {
-        tracing::error!(reason = ?e, "storage-loader thread failed");
-    }
+    block_importer
+        .join()
+        .expect("'block-importer' thread panic'ed instead of properly returning an error");
 
     Ok(())
 }
@@ -104,7 +99,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 // -----------------------------------------------------------------------------
 // Block importer
 // -----------------------------------------------------------------------------
-async fn execute_block_importer(
+fn execute_block_importer(
     // services
     executor: Arc<Executor>,
     miner: Arc<BlockMiner>,
@@ -122,7 +117,7 @@ async fn execute_block_importer(
         };
 
         // receive new tasks to execute, or exit
-        let Some((blocks, receipts)) = channel_read!(backlog_rx) else {
+        let Some((blocks, receipts)) = backlog_rx.blocking_recv() else {
             tracing::info!("{} has no more blocks to process", TASK_NAME);
             return Ok(());
         };
