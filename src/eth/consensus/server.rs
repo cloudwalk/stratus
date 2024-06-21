@@ -321,6 +321,6 @@ mod tests {
 
         let response = response.unwrap().into_inner();
         assert_eq!(response.term, 1);
-        assert_eq!(response.vote_granted, true);
+        assert!(response.vote_granted);
     }
 }

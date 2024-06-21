@@ -531,7 +531,14 @@ impl Consensus {
             storage_block_number
         );
 
-        (last_arrived_block_number - 3) <= storage_block_number
+        if (last_arrived_block_number - 3) <= storage_block_number {
+            tracing::info!("should serve request");
+            true
+        } else {
+            let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
+            tracing::warn!(diff = diff, "should not serve request");
+            false
+        }
     }
 
     #[cfg(feature = "kubernetes")]
