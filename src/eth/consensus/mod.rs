@@ -158,7 +158,7 @@ pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
-    log_storage: Arc<AppendLogEntriesStorage>,
+    log_entries_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
@@ -192,7 +192,7 @@ impl Consensus {
         let consensus = Self {
             broadcast_sender,
             storage,
-            log_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
+            log_entries_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
             peers,
             direct_peers,
             current_term: AtomicU64::new(0),
@@ -417,7 +417,7 @@ impl Consensus {
                                 continue;
                             }
 
-                            let last_index = consensus.log_storage.get_last_index().unwrap_or(0);
+                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
 
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
 
@@ -427,13 +427,13 @@ impl Consensus {
                                 data: LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]), // TODO Check ordering?
                             };
 
-                            if let Some(existing_entry) = consensus.log_storage.get_entry(transaction_entry.index).unwrap_or(None) {
+                            if let Some(existing_entry) = consensus.log_entries_storage.get_entry(transaction_entry.index).unwrap_or(None) {
                                 if existing_entry.term != transaction_entry.term {
-                                    consensus.log_storage.delete_entries_from(transaction_entry.index).expect("Failed to delete existing transaction entries");
+                                    consensus.log_entries_storage.delete_entries_from(transaction_entry.index).expect("Failed to delete existing transaction entries");
                                 }
                             }
 
-                            if let Err(e) = consensus.log_storage.save_entry(&transaction_entry) {
+                            if let Err(e) = consensus.log_entries_storage.save_entry(&transaction_entry) {
                                 tracing::error!("failed to save transaction log entry: {:?}", e);
                             }
 
@@ -451,7 +451,7 @@ impl Consensus {
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
 
-                            let last_index = consensus.log_storage.get_last_index().unwrap_or(0);
+                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
 
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
 
@@ -461,13 +461,13 @@ impl Consensus {
                                 data: LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), // TODO Check ordering?
                             };
 
-                            if let Some(existing_entry) = consensus.log_storage.get_entry(block_entry.index).unwrap_or(None) {
+                            if let Some(existing_entry) = consensus.log_entries_storage.get_entry(block_entry.index).unwrap_or(None) {
                                 if existing_entry.term != block_entry.term {
-                                    consensus.log_storage.delete_entries_from(block_entry.index).expect("Failed to delete existing block entries");
+                                    consensus.log_entries_storage.delete_entries_from(block_entry.index).expect("Failed to delete existing block entries");
                                 }
                             }
 
-                            if let Err(e) = consensus.log_storage.save_entry(&block_entry) {
+                            if let Err(e) = consensus.log_entries_storage.save_entry(&block_entry) {
                                 tracing::error!("failed to save block log entry: {:?}", e);
                             }
 
