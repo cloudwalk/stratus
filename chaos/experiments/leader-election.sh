@@ -257,6 +257,7 @@ run_test() {
         done
 
         echo "All instances are ready after restart. Waiting for new leader election."
+        sleep 15 # wait until election is settled down
 
         # Maximum timeout duration in seconds for new leader election
         max_timeout=60
