@@ -164,7 +164,7 @@ pub struct Consensus {
     current_term: AtomicU64,
     last_arrived_block_number: AtomicU64, //FIXME this should be replaced by the index on our appendEntry log
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
-    role: AtomicU8, // TODO: remove RwLock and use Atomic
+    role: AtomicU8,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
     grpc_address: SocketAddr,
@@ -380,15 +380,16 @@ impl Consensus {
             let interval = Duration::from_millis(40);
             loop {
                 tokio::time::sleep(interval).await;
+                if consensus.is_leader() {
+                    let mut queue = consensus.transaction_execution_queue.lock().await;
+                    let executions = queue.drain(..).collect::<Vec<_>>();
+                    drop(queue);
 
-                let mut queue = consensus.transaction_execution_queue.lock().await;
-                let executions = queue.drain(..).collect::<Vec<_>>();
-                drop(queue);
-
-                let peers = consensus.peers.read().await;
-                for (_, (peer, _)) in peers.iter() {
-                    let mut peer_clone = peer.clone();
-                    consensus.append_transaction_executions_to_peer(&mut peer_clone, executions.clone()).await;
+                    let peers = consensus.peers.read().await;
+                    for (_, (peer, _)) in peers.iter() {
+                        let mut peer_clone = peer.clone();
+                        consensus.append_transaction_executions_to_peer(&mut peer_clone, executions.clone()).await;
+                    }
                 }
             }
         });
