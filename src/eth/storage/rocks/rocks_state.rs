@@ -12,6 +12,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use anyhow::Context;
 use lazy_static::lazy_static;
+use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
@@ -301,18 +302,20 @@ impl RocksStorageState {
     pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         let addresses: HashSet<AddressRocksdb> = filter.addresses.iter().map(|&address| AddressRocksdb::from(address)).collect();
 
+        let end_block_range_filter = |number: BlockNumber| match filter.to_block.as_ref() {
+            Some(&last_block) => number <= last_block,
+            None => true,
+        };
+
         Ok(self
             .blocks_by_number
-            .iter_from(BlockNumberRocksdb::from(filter.from_block), rocksdb::Direction::Forward)
-            .take_while(|(number, _)| filter.to_block.as_ref().map_or(true, |last_block| BlockNumber::from(*number) <= *last_block))
+            .iter_from(BlockNumberRocksdb::from(filter.from_block), Direction::Forward)
+            .take_while(|(number, _)| end_block_range_filter((*number).into()))
             .flat_map(|(_, block)| block.transactions)
             .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)))
             .flat_map(|transaction| transaction.logs)
-            .filter(|log_mined| {
-                let topics = log_mined.log.to_topics_vec();
-                filter.topics_combinations.is_empty() || filter.topics_combinations.iter().any(|topic_filter| topic_filter.matches(&topics))
-            })
             .map(LogMined::from)
+            .filter(|log_mined| filter.matches(log_mined))
             .collect())
     }
 
