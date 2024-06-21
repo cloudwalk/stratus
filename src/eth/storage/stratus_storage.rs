@@ -141,6 +141,8 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_mined_block_number", skip_all)]
     pub fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+        tracing::debug!(storage = %label::PERM, "reading mined block number");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -190,6 +192,7 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(number))]
     pub fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         Span::with(|s| s.rec_str("number", &number));
+        tracing::debug!(storage = %label::PERM, %number, "setting mined block number");
 
         #[cfg(feature = "metrics")]
         {
@@ -232,6 +235,8 @@ impl StratusStorage {
                 missing_accounts.push(account);
             }
         }
+
+        tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
 
         #[cfg(feature = "metrics")]
         {
@@ -283,6 +288,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
+        tracing::debug!(storage = %label::PERM, %address, "reading account");
         match self.perm.read_account(address, point_in_time)? {
             Some(account) => {
                 tracing::debug!(%address, "account found in permanent storage");
@@ -322,6 +328,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
+        tracing::debug!(storage = %label::PERM, %address, %index, ?point_in_time, "reading slot");
         match self.perm.read_slot(address, index, point_in_time)? {
             Some(slot) => {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
@@ -340,6 +347,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
     pub fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        tracing::info!(storage = %label::PERM, %address, "reading all slots");
         self.perm.read_all_slots(address)
     }
 
@@ -391,6 +399,7 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
     pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
         Span::with(|s| s.rec_str("number", &block.number()));
+        tracing::debug!(storage = %label::PERM, number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
 
         #[cfg(feature = "metrics")]
         {
@@ -405,22 +414,25 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_block", skip_all)]
-    pub fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    pub fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+        tracing::debug!(storage = %label::PERM, ?selection, "reading block");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.read_block(block_selection);
+            let result = self.perm.read_block(selection);
             metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.read_block(block_selection)
+        self.perm.read_block(selection)
     }
 
     #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
     pub fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         Span::with(|s| s.rec_str("hash", hash));
+        tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
 
         #[cfg(feature = "metrics")]
         {
@@ -436,6 +448,8 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_logs", skip_all)]
     pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        tracing::debug!(storage = %label::PERM, ?filter, "reading logs");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();

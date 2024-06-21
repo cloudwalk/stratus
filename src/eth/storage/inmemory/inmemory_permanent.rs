@@ -136,12 +136,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
 
     fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
-        tracing::debug!("reading mined block number");
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
     fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        tracing::debug!(%number, "setting mined block number");
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
     }
@@ -151,44 +149,29 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // ------------------------------------------------------------------------
 
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        tracing::debug!(%address, "reading account");
-
         let state = self.lock_read();
 
         match state.accounts.get(address) {
             Some(inmemory_account) => {
                 let account = inmemory_account.to_account(point_in_time);
-                tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
-
-            None => {
-                tracing::trace!(%address, "account not found");
-                Ok(None)
-            }
+            None => Ok(None),
         }
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, ?point_in_time, "reading slot in permanent");
-
         let state = self.lock_read();
         let Some(account) = state.accounts.get(address) else {
-            tracing::trace!(%address, "account not found in permanent");
             return Ok(Default::default());
         };
 
         match account.slots.get(index) {
             Some(slot_history) => {
                 let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
-                tracing::trace!(%address, %index, ?point_in_time, %slot, "slot found in permanent");
                 Ok(Some(slot))
             }
-
-            None => {
-                tracing::trace!(%address, %index, ?point_in_time, "slot not found in permanent");
-                Ok(None)
-            }
+            None => Ok(None),
         }
     }
 
@@ -196,7 +179,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let state = self.lock_read();
 
         let Some(account) = state.accounts.get(address) else {
-            tracing::trace!(%address, "account not found in permanent");
             return Ok(Default::default());
         };
 
@@ -204,8 +186,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
-        tracing::debug!(?selection, "reading block");
-
         let state_lock = self.lock_read();
         let block = match selection {
             BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
@@ -214,35 +194,21 @@ impl PermanentStorage for InMemoryPermanentStorage {
             BlockSelection::Hash(hash) => state_lock.blocks_by_hash.get(hash).cloned(),
         };
         match block {
-            Some(block) => {
-                tracing::trace!(?selection, ?block, "block found");
-                Ok(Some((*block).clone()))
-            }
-            None => {
-                tracing::trace!(?selection, "block not found");
-                Ok(None)
-            }
+            Some(block) => Ok(Some((*block).clone())),
+            None => Ok(None),
         }
     }
 
     fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        tracing::debug!(%hash, "reading transaction");
         let state_lock = self.lock_read();
 
         match state_lock.transactions.get(hash) {
-            Some(transaction) => {
-                tracing::trace!(%hash, "transaction found");
-                Ok(Some(transaction.clone()))
-            }
-            None => {
-                tracing::trace!(%hash, "transaction not found");
-                Ok(None)
-            }
+            Some(transaction) => Ok(Some(transaction.clone())),
+            None => Ok(None),
         }
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        tracing::debug!(?filter, "reading logs");
         let state_lock = self.lock_read();
 
         let logs = state_lock
@@ -263,7 +229,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let mut state = self.lock_write();
 
         // save block
-        tracing::debug!(number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
         let block = Arc::new(block);
         let block_number = block.number();
         state.blocks_by_number.insert(block_number, Arc::clone(&block));
@@ -271,7 +236,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         // save transactions
         for transaction in block.transactions.clone() {
-            tracing::debug!(hash = %transaction.input.hash, "saving transaction");
             state.transactions.insert(transaction.input.hash, transaction.clone());
             if transaction.is_success() {
                 for log in transaction.logs {
@@ -319,8 +283,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        tracing::debug!(?accounts, "saving initial accounts");
-
         let mut state = self.lock_write();
         for account in accounts {
             state
