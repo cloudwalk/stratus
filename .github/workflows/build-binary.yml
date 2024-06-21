@@ -2,16 +2,16 @@ name: Build Binary
 
 on:
   workflow_dispatch:
-#   push:
-#     branches:
-#       - 'main'
-#     paths:
-#       - src
-#       - Cargo.toml
-#       - Cargo.lock
-#       - tests
-#       - static
-#       - .sqlx
+  push:
+    branches:
+      - 'main'
+    paths:
+      - src
+      - Cargo.toml
+      - Cargo.lock
+      - tests
+      - static
+      - .sqlx
 
 jobs:
   build_run_with_importer:
