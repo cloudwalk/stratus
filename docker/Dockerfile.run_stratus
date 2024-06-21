@@ -28,4 +28,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/stratus /app/stratus
 COPY --from=builder /app/config/* /app/config/
 
-CMD ["sh", "-c", "/app/stratus"]
+CMD ["sh", "-c", "tail --follow=name --retry data/rocksdb/LOG & /app/stratus"]
