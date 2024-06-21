@@ -417,43 +417,17 @@ impl Consensus {
                                 tracing::debug!(hash = %tx.hash(), "Skipping local transaction because only external transactions are supported for now");
                                 continue;
                             }
-
+    
                             tracing::debug!("Fetching last index from log entries storage");
                             let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
                             tracing::debug!(last_index, "Last index fetched");
-
+    
                             tracing::debug!("Loading current term");
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
                             tracing::debug!(current_term, "Current term loaded");
-
-                            tracing::debug!("Creating transaction log entry");
-                            let transaction_entry = LogEntry {
-                                term: current_term,
-                                index: last_index + 1,
-                                data: LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]),
-                            };
-                            tracing::debug!(index = transaction_entry.index, term = transaction_entry.term, "Transaction log entry created");
-
-                            tracing::debug!("Checking for existing entry at new index");
-                            if let Some(existing_entry) = consensus.log_entries_storage.get_entry(transaction_entry.index).unwrap_or(None) {
-                                if existing_entry.term != transaction_entry.term {
-                                    tracing::debug!(index = transaction_entry.index, "Deleting entries from index due to term mismatch");
-                                    consensus.log_entries_storage.delete_entries_from(transaction_entry.index).expect("Failed to delete existing transaction entries");
-                                }
-                            }
-
-                            tracing::debug!("Saving new transaction log entry");
-                            if let Err(e) = consensus.log_entries_storage.save_entry(&transaction_entry) {
-                                tracing::error!("Failed to save transaction log entry: {:?}", e);
-                            } else {
-                                tracing::debug!("Transaction log entry saved successfully");
-                            }
-
-                            tracing::debug!("Broadcasting transaction");
-                            if consensus.broadcast_sender.send(transaction_entry.data.clone()).is_err() {
-                                tracing::error!("Failed to broadcast transaction");
-                            } else {
-                                tracing::debug!("Transaction broadcasted successfully");
+    
+                            if Self::save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]), "transaction").is_ok() {
+                                Self::broadcast_log_entry(&consensus, LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]), "transaction");
                             }
                         }
                     }
@@ -461,43 +435,17 @@ impl Consensus {
                         tracing::debug!("Attempting to receive block");
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
-
+    
                             tracing::debug!("Fetching last index from log entries storage for block");
                             let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
                             tracing::debug!(last_index, "Last index for block fetched");
-
+    
                             tracing::debug!("Loading current term for block");
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
                             tracing::debug!(current_term, "Current term for block loaded");
-
-                            tracing::debug!("Creating block log entry");
-                            let block_entry = LogEntry {
-                                term: current_term,
-                                index: last_index + 1,
-                                data: LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())),
-                            };
-                            tracing::debug!(index = block_entry.index, term = block_entry.term, "Block log entry created");
-
-                            tracing::debug!("Checking for existing block entry at new index");
-                            if let Some(existing_entry) = consensus.log_entries_storage.get_entry(block_entry.index).unwrap_or(None) {
-                                if existing_entry.term != block_entry.term {
-                                    tracing::debug!(index = block_entry.index, "Deleting block entries from index due to term mismatch");
-                                    consensus.log_entries_storage.delete_entries_from(block_entry.index).expect("Failed to delete existing block entries");
-                                }
-                            }
-
-                            tracing::debug!("Saving new block log entry");
-                            if let Err(e) = consensus.log_entries_storage.save_entry(&block_entry) {
-                                tracing::error!("Failed to save block log entry: {:?}", e);
-                            } else {
-                                tracing::debug!("Block log entry saved successfully");
-                            }
-
-                            tracing::debug!("Broadcasting block");
-                            if consensus.broadcast_sender.send(block_entry.data.clone()).is_err() {
-                                tracing::error!("Failed to broadcast block");
-                            } else {
-                                tracing::debug!("Block broadcasted successfully");
+    
+                            if Self::save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())),"block").is_ok() {
+                                Self::broadcast_log_entry(&consensus, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), "block");
                             }
                         }
                     }
@@ -529,6 +477,46 @@ impl Consensus {
                 tracing::error!(reason = ?e, %message);
             }
         });
+    }
+
+    fn save_log_entry(
+        consensus: &Arc<Consensus>,
+        index: u64,
+        term: u64,
+        data: LogEntryData,
+        entry_type: &str,
+    ) -> Result<(), String> {
+        tracing::debug!(index, term, "Creating {} log entry", entry_type);
+        let log_entry = LogEntry {
+            term,
+            index,
+            data,
+        };
+        tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
+    
+        tracing::debug!("Checking for existing {} entry at new index", entry_type);
+        if let Some(existing_entry) = consensus.log_entries_storage.get_entry(log_entry.index).unwrap_or(None) {
+            if existing_entry.term != log_entry.term {
+                tracing::debug!(index = log_entry.index, "Deleting {} entries from index due to term mismatch", entry_type);
+                consensus.log_entries_storage.delete_entries_from(log_entry.index).map_err(|e| format!("Failed to delete existing {} entries: {:?}", entry_type, e))?;
+            }
+        }
+    
+        tracing::debug!("Saving new {} log entry", entry_type);
+        consensus.log_entries_storage.save_entry(&log_entry).map_err(|e| format!("Failed to save {} log entry: {:?}", entry_type, e))
+    }
+
+    fn broadcast_log_entry(
+        consensus: &Arc<Consensus>,
+        data: LogEntryData,
+        entry_type: &str,
+    ) {
+        tracing::debug!("Broadcasting {}", entry_type);
+        if consensus.broadcast_sender.send(data.clone()).is_err() {
+            tracing::error!("Failed to broadcast {}", entry_type);
+        } else {
+            tracing::debug!("{} broadcasted successfully", entry_type);
+        }
     }
 
     fn set_role(&self, role: Role) {
