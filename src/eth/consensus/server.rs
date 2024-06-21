@@ -111,7 +111,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);
 
-        if request.term < current_term {
+        if request.term <= current_term {
             tracing::info!(
                 vote_granted = false,
                 current_term = current_term,
@@ -121,12 +121,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Ok(Response::new(RequestVoteResponse {
                 term: current_term,
                 vote_granted: false,
+                message: format!("stale term: current_term {}, request_term {}", current_term, request.term),
             }));
         }
 
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
 
-        if request.term > current_term && request.last_log_index >= consensus.last_arrived_block_number.load(Ordering::SeqCst) {
+        if request.last_log_index >= consensus.last_arrived_block_number.load(Ordering::SeqCst) {
             consensus.current_term.store(request.term, Ordering::SeqCst);
             consensus.set_role(Role::Follower);
             consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
@@ -138,13 +139,18 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Ok(Response::new(RequestVoteResponse {
                 term: request.term,
                 vote_granted: true,
+                message: "success".to_string(),
             }));
         }
 
-        tracing::info!(vote_granted = false, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "already voted for another candidate on election");
         Ok(Response::new(RequestVoteResponse {
             term: request.term,
             vote_granted: false,
+            message: format!(
+                "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
+                request.last_log_index,
+                consensus.last_arrived_block_number.load(Ordering::SeqCst)
+            ),
         }))
     }
 }
