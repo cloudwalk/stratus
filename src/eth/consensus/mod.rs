@@ -418,17 +418,11 @@ impl Consensus {
                                 tracing::debug!(hash = %tx.hash(), "Skipping local transaction because only external transactions are supported for now");
                                 continue;
                             }
-
-                            tracing::debug!("Fetching last index from log entries storage");
-                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                            tracing::debug!(last_index, "Last index fetched");
-
-                            tracing::debug!("Loading current term");
-                            let current_term = consensus.current_term.load(Ordering::SeqCst);
-                            tracing::debug!(current_term, "Current term loaded");
-
-                            if Self::save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]), "transaction").is_ok() {
-                                Self::broadcast_log_entry(&consensus, LogEntryData::TransactionExecutionEntries(vec![tx.to_append_entry_transaction()]), "transaction");
+                            
+                            let transaction = vec![tx.to_append_entry_transaction()];
+                            let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
+                            if consensus.broadcast_sender.send(transaction_entry).is_err() {
+                                tracing::error!("failed to broadcast transaction");
                             }
                         }
                     }
@@ -437,16 +431,11 @@ impl Consensus {
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
-                            tracing::debug!("Fetching last index from log entries storage for block");
-                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                            tracing::debug!(last_index, "Last index for block fetched");
-
-                            tracing::debug!("Loading current term for block");
-                            let current_term = consensus.current_term.load(Ordering::SeqCst);
-                            tracing::debug!(current_term, "Current term for block loaded");
-
-                            if Self::save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())),"block").is_ok() {
-                                Self::broadcast_log_entry(&consensus, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), "block");
+                            //TODO save block to appendEntries log
+                            //TODO before saving check if all transaction_hashes are already in the log
+                            let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
+                            if consensus.broadcast_sender.send(block_entry).is_err() {
+                                tracing::error!("failed to broadcast block");
                             }
                         }
                     }
@@ -501,15 +490,6 @@ impl Consensus {
             .log_entries_storage
             .save_entry(&log_entry)
             .map_err(|e| format!("Failed to save {} log entry: {:?}", entry_type, e))
-    }
-
-    fn broadcast_log_entry(consensus: &Arc<Consensus>, data: LogEntryData, entry_type: &str) {
-        tracing::debug!("Broadcasting {}", entry_type);
-        if consensus.broadcast_sender.send(data.clone()).is_err() {
-            tracing::error!("Failed to broadcast {}", entry_type);
-        } else {
-            tracing::debug!("{} broadcasted successfully", entry_type);
-        }
     }
 
     fn set_role(&self, role: Role) {
