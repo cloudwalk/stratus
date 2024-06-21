@@ -1,5 +1,3 @@
-// append_entry_service.rs
-
 use core::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -148,5 +146,174 @@ impl AppendEntryService for AppendEntryServiceImpl {
             term: request.term,
             vote_granted: false,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::Mutex;
+    use tonic::{Request, Response, Status};
+    use crate::eth::primitives::{BlockNumber, Hash, TransactionExecution};
+    use crate::eth::storage::StratusStorage;
+    use crate::config::RunWithImporterConfig;
+    use crate::eth::primitives::Block;
+    use std::net::{SocketAddr, Ipv4Addr};
+    use tokio::sync::broadcast;
+    use crate::eth::consensus::BlockEntry;
+
+    // Helper function to create a mock consensus instance
+    async fn create_mock_consensus() -> Arc<Consensus> {
+        let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
+        let direct_peers = Vec::new();
+        let importer_config = None;
+        let jsonrpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
+        let grpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
+        let (tx_pending_txs, _) = broadcast::channel(10);
+        let (tx_blocks, _) = broadcast::channel(10);
+
+        Consensus::new(
+            storage.into(),
+            direct_peers,
+            importer_config,
+            jsonrpc_address,
+            grpc_address,
+            tx_pending_txs.subscribe(),
+            tx_blocks.subscribe()
+        ).await
+    }
+
+    #[tokio::test]
+    async fn test_append_transaction_executions_not_leader() {
+        let consensus = create_mock_consensus().await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(consensus.clone()),
+        };
+
+        // Simulate the node as not a leader
+        consensus.set_role(Role::Follower);
+
+        let request = Request::new(AppendTransactionExecutionsRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            executions: vec![],
+        });
+
+        let response = service.append_transaction_executions(request).await;
+        assert!(response.is_ok());
+
+        let response = response.unwrap().into_inner();
+        assert_eq!(response.status, StatusCode::AppendSuccess as i32);
+        assert_eq!(response.message, "transaction Executions appended successfully");
+        assert_eq!(response.last_committed_block_number, 0);
+    }
+
+    #[tokio::test]
+    async fn test_append_transaction_executions_leader() {
+        let consensus = create_mock_consensus().await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(consensus.clone()),
+        };
+
+        // Simulate the node as a leader
+        consensus.set_role(Role::Leader);
+
+        let request = Request::new(AppendTransactionExecutionsRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            executions: vec![],
+        });
+
+        let response = service.append_transaction_executions(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::Unknown);
+        assert_eq!(status.message(), "append_transaction_executions called on leader node");
+    }
+
+    #[tokio::test]
+    async fn test_append_block_commit_not_leader() {
+        let consensus = create_mock_consensus().await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(consensus.clone()),
+        };
+
+        // Simulate the node as not a leader
+        consensus.set_role(Role::Follower);
+
+        let request = Request::new(AppendBlockCommitRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            block_entry: Some(BlockEntry {
+                number: 1,
+                ..Default::default()
+            }),
+        });
+
+        let response = service.append_block_commit(request).await;
+        assert!(response.is_ok());
+
+        let response = response.unwrap().into_inner();
+        assert_eq!(response.status, StatusCode::AppendSuccess as i32);
+        assert_eq!(response.message, "Block Commit appended successfully");
+        assert_eq!(response.last_committed_block_number, 1);
+    }
+
+    #[tokio::test]
+    async fn test_append_block_commit_leader() {
+        let consensus = create_mock_consensus().await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(consensus.clone()),
+        };
+
+        // Simulate the node as a leader
+        consensus.set_role(Role::Leader);
+
+        let request = Request::new(AppendBlockCommitRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            block_entry: Some(BlockEntry {
+                number: 1,
+                ..Default::default()
+            }),
+        });
+
+        let response = service.append_block_commit(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::Unknown);
+        assert_eq!(status.message(), "append_block_commit called on leader node");
+    }
+
+    #[tokio::test]
+    async fn test_request_vote() {
+        let consensus = create_mock_consensus().await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(consensus.clone()),
+        };
+
+        let request = Request::new(RequestVoteRequest {
+            term: 1,
+            candidate_id: "https://candidate:1234;4321".to_string(),
+            last_log_index: 0,
+            last_log_term: 0,
+        });
+
+        let response = service.request_vote(request).await;
+        assert!(response.is_ok());
+
+        let response = response.unwrap().into_inner();
+        assert_eq!(response.term, 1);
+        //XXX assert_eq!(response.vote_granted, true);
     }
 }
