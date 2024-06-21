@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::anyhow;
 use tracing::Span;
 
@@ -32,15 +30,15 @@ cfg_if::cfg_if! {
     }
 }
 
+mod label {
+    pub(super) const TEMP: &str = "temporary";
+    pub(super) const PERM: &str = "permanent";
+    pub(super) const DEFAULT: &str = "default";
+}
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "metrics")] {
         use crate::infra::metrics;
-
-        mod label {
-            pub(super) const TEMP: &str = "temporary";
-            pub(super) const PERM: &str = "permanent";
-            pub(super) const DEFAULT: &str = "default";
-        }
     }
 }
 
@@ -48,8 +46,8 @@ cfg_if::cfg_if! {
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
 pub struct StratusStorage {
-    temp: Arc<dyn TemporaryStorage>,
-    perm: Arc<dyn PermanentStorage>,
+    temp: Box<dyn TemporaryStorage>,
+    perm: Box<dyn PermanentStorage>,
 }
 
 impl StratusStorage {
@@ -58,7 +56,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
+    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
     }
 
@@ -66,8 +64,8 @@ impl StratusStorage {
     #[cfg(test)]
     pub fn mock_new() -> Self {
         Self {
-            temp: Arc::new(InMemoryTemporaryStorage::new()),
-            perm: Arc::new(InMemoryPermanentStorage::new()),
+            temp: Box::new(InMemoryTemporaryStorage::new()),
+            perm: Box::new(InMemoryPermanentStorage::new()),
         }
     }
 
@@ -83,8 +81,8 @@ impl StratusStorage {
 
         (
             Self {
-                temp: Arc::new(InMemoryTemporaryStorage::new()),
-                perm: Arc::new(rocks_permanent_storage),
+                temp: Box::new(InMemoryTemporaryStorage::new()),
+                perm: Box::new(rocks_permanent_storage),
             },
             temp_dir,
         )
@@ -127,6 +125,8 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_active_block_number", skip_all)]
     pub fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+        tracing::debug!(storage = %label::TEMP, "reading active block number");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -141,6 +141,8 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_mined_block_number", skip_all)]
     pub fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+        tracing::debug!(storage = %label::PERM, "reading mined block number");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -158,6 +160,7 @@ impl StratusStorage {
         Span::with(|s| {
             s.rec_str("number", &number);
         });
+        tracing::debug!(storage = &label::TEMP, %number, "setting active block number");
 
         #[cfg(feature = "metrics")]
         {
@@ -189,6 +192,7 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(number))]
     pub fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         Span::with(|s| s.rec_str("number", &number));
+        tracing::debug!(storage = %label::PERM, %number, "setting mined block number");
 
         #[cfg(feature = "metrics")]
         {
@@ -207,6 +211,8 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     pub fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+        tracing::debug!(storage = %label::TEMP, number = %block.number(), "setting active external block");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -230,6 +236,8 @@ impl StratusStorage {
             }
         }
 
+        tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -244,6 +252,8 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::check_conflicts", skip_all)]
     pub fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        tracing::debug!(storage = %label::TEMP, "checking conflicts");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -268,8 +278,9 @@ impl StratusStorage {
 
         // read from temp only if present
         if point_in_time.is_present() {
+            tracing::debug!(storage = %label::TEMP, %address, "reading account");
             if let Some(account) = self.temp.read_account(address)? {
-                tracing::debug!(%address, "account found in temporary storage");
+                tracing::debug!(storage = %label::TEMP, %address, "account found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_account(start.elapsed(), label::TEMP, point_in_time, true);
                 return Ok(account);
@@ -277,6 +288,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
+        tracing::debug!(storage = %label::PERM, %address, "reading account");
         match self.perm.read_account(address, point_in_time)? {
             Some(account) => {
                 tracing::debug!(%address, "account found in permanent storage");
@@ -306,8 +318,9 @@ impl StratusStorage {
 
         // read from temp only if present
         if point_in_time.is_present() {
+            tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
             if let Some(slot) = self.temp.read_slot(address, index)? {
-                tracing::debug!(%address, %index, value = %slot.value, "slot found in temporary storage");
+                tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
                 #[cfg(feature = "metrics")]
                 metrics::inc_storage_read_slot(start.elapsed(), label::TEMP, point_in_time, true);
                 return Ok(slot);
@@ -315,6 +328,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
+        tracing::debug!(storage = %label::PERM, %address, %index, ?point_in_time, "reading slot");
         match self.perm.read_slot(address, index, point_in_time)? {
             Some(slot) => {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
@@ -333,6 +347,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
     pub fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+        tracing::info!(storage = %label::PERM, %address, "reading all slots");
         self.perm.read_all_slots(address)
     }
 
@@ -345,6 +360,7 @@ impl StratusStorage {
         Span::with(|s| {
             s.rec_str("hash", &tx.hash());
         });
+        tracing::debug!(storage = %label::TEMP, hash = %tx.hash(), "saving execution");
 
         #[cfg(feature = "metrics")]
         {
@@ -360,6 +376,8 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::finish_block", skip_all, fields(number))]
     pub fn finish_block(&self) -> anyhow::Result<PendingBlock> {
+        tracing::debug!(storage = %label::TEMP, "finishing active block");
+
         #[cfg(feature = "metrics")]
         let result = {
             let start = metrics::now();
@@ -381,6 +399,7 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
     pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
         Span::with(|s| s.rec_str("number", &block.number()));
+        tracing::debug!(storage = %label::PERM, number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
 
         #[cfg(feature = "metrics")]
         {
@@ -395,22 +414,25 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_block", skip_all)]
-    pub fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    pub fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+        tracing::debug!(storage = %label::PERM, ?selection, "reading block");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
-            let result = self.perm.read_block(block_selection);
+            let result = self.perm.read_block(selection);
             metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
             result
         }
 
         #[cfg(not(feature = "metrics"))]
-        self.perm.read_block(block_selection)
+        self.perm.read_block(selection)
     }
 
     #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
     pub fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         Span::with(|s| s.rec_str("hash", hash));
+        tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
 
         #[cfg(feature = "metrics")]
         {
@@ -426,6 +448,8 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_logs", skip_all)]
     pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        tracing::debug!(storage = %label::PERM, ?filter, "reading logs");
+
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
@@ -464,10 +488,12 @@ impl StratusStorage {
         #[cfg(feature = "metrics")]
         {
             let start = metrics::now();
+            tracing::debug!(storage = %label::PERM, "reseting storage");
             let result = self.perm.reset_at(number);
             metrics::inc_storage_reset(start.elapsed(), label::PERM, result.is_ok());
 
             let start = metrics::now();
+            tracing::debug!(storage = %label::TEMP, "reseting storage");
             let result = self.temp.reset();
             metrics::inc_storage_reset(start.elapsed(), label::TEMP, result.is_ok());
 
@@ -478,8 +504,12 @@ impl StratusStorage {
 
         #[cfg(not(feature = "metrics"))]
         {
+            tracing::debug!(storage = %label::PERM, "reseting storage");
             self.perm.reset_at(number)?;
+
+            tracing::debug!(storage = %label::TEMP, "reseting storage");
             self.temp.reset()?;
+
             self.set_active_block_number_as_next()?;
             Ok(())
         }

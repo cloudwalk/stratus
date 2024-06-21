@@ -6,12 +6,12 @@ on:
     branches:
       - 'main'
     paths:
-      - src
-      - Cargo.toml
-      - Cargo.lock
-      - tests
-      - static
-      - .sqlx
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tests/fixtures/**'
+      - 'static/**'
+      - '.sqlx/**'
 
 jobs:
   build_run_with_importer:

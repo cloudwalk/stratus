@@ -813,11 +813,11 @@ pub enum TemporaryStorageKind {
 
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
-    pub fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
+    pub fn init(&self) -> anyhow::Result<Box<dyn TemporaryStorage>> {
         tracing::info!(config = ?self, "creating temporary storage");
 
         match self.temp_storage_kind {
-            TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
+            TemporaryStorageKind::InMemory => Ok(Box::<InMemoryTemporaryStorage>::default()),
         }
     }
 }
@@ -862,16 +862,16 @@ pub enum PermanentStorageKind {
 
 impl PermanentStorageConfig {
     /// Initializes permanent storage implementation.
-    pub fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
+    pub fn init(&self) -> anyhow::Result<Box<dyn PermanentStorage>> {
         tracing::info!(config = ?self, "creating permanent storage");
 
-        let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
-            PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
+        let perm: Box<dyn PermanentStorage> = match self.perm_storage_kind {
+            PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
             #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => {
                 let enable_backups = not(self.perm_storage_disable_backups);
                 let prefix = self.rocks_path_prefix.clone();
-                Arc::new(RocksPermanentStorage::new(enable_backups, prefix)?)
+                Box::new(RocksPermanentStorage::new(enable_backups, prefix)?)
             }
         };
         Ok(perm)
