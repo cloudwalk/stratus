@@ -23,7 +23,11 @@ pub struct Log {
 
 impl Log {
     pub fn topics(&self) -> Vec<LogTopic> {
-        [self.topic0, self.topic1, self.topic2, self.topic3].into_iter().flatten().collect()
+        self.topics_array().into_iter().flatten().collect()
+    }
+
+    pub fn topics_array(&self) -> [Option<LogTopic>; 4] {
+        [self.topic0, self.topic1, self.topic2, self.topic3]
     }
 }
 

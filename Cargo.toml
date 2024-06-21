@@ -32,7 +32,7 @@ paste = "=1.0.15"
 phf = "=0.11.2"
 pin-project = "=1.1.5"
 quote = "=1.0.36"
-rand = "=0.8.5"
+rand = { version = "=0.8.5", features = ["small_rng"] }
 strum = "=0.26.2"
 thiserror = "=1.0.61"
 sugars = "=3.0.1"
