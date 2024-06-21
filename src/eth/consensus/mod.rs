@@ -407,7 +407,6 @@ impl Consensus {
                             tracing::debug!(current_term, "Current term loaded");
 
                             match consensus.log_entries_storage.save_log_entry(
-                                &consensus,
                                 last_index + 1,
                                 current_term,
                                 LogEntryData::TransactionExecutionEntries(executions.clone()),
@@ -477,7 +476,7 @@ impl Consensus {
                                 let current_term = consensus.current_term.load(Ordering::SeqCst);
                                 tracing::debug!(current_term, "Current term for block loaded");
 
-                                if consensus.log_entries_storage.save_log_entry(&consensus, last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), "block").is_ok() {
+                                if consensus.log_entries_storage.save_log_entry(last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), "block").is_ok() {
                                     let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
                                     if consensus.broadcast_sender.send(block_entry).is_err() {
                                         tracing::error!("failed to broadcast block");
