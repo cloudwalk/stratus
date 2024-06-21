@@ -429,7 +429,6 @@ impl Consensus {
     }
 
 
-
     /// This channel broadcasts blocks and transactons executions to followers.
     /// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
     //TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
