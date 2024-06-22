@@ -9,6 +9,9 @@ pub const CARGO_DEBUG: &str = env!("VERGEN_CARGO_DEBUG");
 pub const CARGO_FEATURES: &str = env!("VERGEN_CARGO_FEATURES");
 
 pub const GIT_COMMIT: &str = env!("VERGEN_GIT_SHA");
+pub const GIT_COMMIT_TIMESTAMP: &str = env!("VERGEN_GIT_COMMIT_TIMESTAMP");
+pub const GIT_COMMIT_MESSAGE: &str = env!("VERGEN_GIT_COMMIT_MESSAGE");
+pub const GIT_COMMIT_AUTHOR: &str = env!("VERGEN_GIT_COMMIT_AUTHOR_NAME");
 pub const GIT_BRANCH: &str = env!("VERGEN_GIT_BRANCH");
 pub const GIT_DESCRIBE: &str = env!("VERGEN_GIT_DESCRIBE");
 
@@ -64,6 +67,9 @@ pub fn as_json() -> serde_json::Value {
             "cargo_debug": CARGO_DEBUG,
             "cargo_features": CARGO_FEATURES,
             "git_commit": GIT_COMMIT,
+            "git_commit_timestamp": GIT_COMMIT_TIMESTAMP,
+            "git_commit_message": GIT_COMMIT_MESSAGE,
+            "git_commit_author": GIT_COMMIT_AUTHOR,
             "git_branch": GIT_BRANCH,
             "git_describe": GIT_DESCRIBE,
             "rustc_version": RUSTC_VERSION,
