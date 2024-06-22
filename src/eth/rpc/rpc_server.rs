@@ -286,7 +286,7 @@ async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extension
     if should_serve {
         Ok(json!(true))
     } else {
-        Err(RpcError::Response(rpc_internal_error("Service Not Ready".to_string())))
+        Err(rpc_internal_error("Service Not Ready".to_string()).into())
     }
 }
 
@@ -294,7 +294,7 @@ fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Re
     if !GlobalState::is_shutdown() {
         Ok(json!(true))
     } else {
-        Err(RpcError::Response(rpc_internal_error("Service Unhealthy".to_string())))
+        Err(rpc_internal_error("Service Unhealthy".to_string()).into())
     }
 }
 
@@ -435,7 +435,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> 
         Ok(result) if result.is_success() => Ok(hex_num(result.gas)),
 
         // result is failure
-        Ok(result) => Err(RpcError::Response(rpc_internal_error(hex_data(result.output)))),
+        Ok(result) => Err(rpc_internal_error(hex_data(result.output)).into()),
 
         // internal error
         Err(e) => {
@@ -487,7 +487,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensi
             Ok(hash) => Ok(hex_data(hash)),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to forward transaction");
-                Err(RpcError::Response(rpc_internal_error(e.to_string())))
+                Err(rpc_internal_error(e.to_string()).into())
             }
         };
     }
@@ -499,7 +499,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensi
         Ok(evm_result) if evm_result.is_success() => Ok(hex_data(tx_hash)),
 
         // result is failure
-        Ok(evm_result) => Err(RpcError::Response(rpc_internal_error(hex_data(evm_result.execution().output.clone())))),
+        Ok(evm_result) => Err(rpc_internal_error(hex_data(evm_result.execution().output.clone())).into()),
 
         // internal error
         Err(e) => {
@@ -515,8 +515,25 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensi
 
 #[tracing::instrument(name = "rpc::eth_getLogs", skip_all)]
 fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let (_, filter_input) = next_rpc_param::<LogFilterInput>(params.sequence())?;
-    let filter = filter_input.parse(&ctx.storage)?;
+    const MAX_BLOCK_RANGE: u64 = 5_000;
+
+    let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params.sequence())?;
+    let mut filter = filter_input.parse(&ctx.storage)?;
+
+    // for this operation, the filter always need the end block specified to calculate the difference
+    if filter.to_block.is_none() {
+        filter.to_block = Some(ctx.storage.read_mined_block_number()?);
+    }
+
+    // check range
+    let blocks_in_range = filter.from_block.count_to(&filter.to_block.unwrap());
+    if blocks_in_range > MAX_BLOCK_RANGE {
+        return Err(rpc_invalid_params_error(format!(
+            "filter range will fetch logs from {} blocks, but the max allowed is {}",
+            blocks_in_range, MAX_BLOCK_RANGE
+        ))
+        .into());
+    }
 
     let logs = ctx.storage.read_logs(&filter)?;
     Ok(JsonValue::Array(logs.into_iter().map(|x| x.to_json_rpc_log()).collect()))
