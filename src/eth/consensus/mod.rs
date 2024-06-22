@@ -181,7 +181,7 @@ impl Consensus {
         rx_blocks: broadcast::Receiver<Block>,
     ) -> Arc<Self> {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
-        let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
+        let last_arrived_block_number = AtomicU64::new(0); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
@@ -354,8 +354,6 @@ impl Consensus {
         }
 
         self.set_role(Role::Leader);
-
-        self.last_arrived_block_number.store(std::u64::MAX, Ordering::SeqCst); //as leader, we don't have a last block number
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
@@ -520,7 +518,7 @@ impl Consensus {
 
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
 
-        if last_arrived_block_number == std::u64::MAX {
+        if last_arrived_block_number == 0 {
             tracing::warn!("no appendEntry has been received yet");
             return false;
         }
@@ -533,7 +531,14 @@ impl Consensus {
             storage_block_number
         );
 
-        (last_arrived_block_number - 2) <= storage_block_number
+        if (last_arrived_block_number - 3) <= storage_block_number {
+            tracing::info!("should serve request");
+            true
+        } else {
+            let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
+            tracing::warn!(diff = diff, "should not serve request");
+            false
+        }
     }
 
     #[cfg(feature = "kubernetes")]
