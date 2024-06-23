@@ -9,12 +9,15 @@ pub const CARGO_DEBUG: &str = env!("VERGEN_CARGO_DEBUG");
 pub const CARGO_FEATURES: &str = env!("VERGEN_CARGO_FEATURES");
 
 pub const GIT_COMMIT: &str = env!("VERGEN_GIT_SHA");
+pub const GIT_COMMIT_TIMESTAMP: &str = env!("VERGEN_GIT_COMMIT_TIMESTAMP");
+pub const GIT_COMMIT_MESSAGE: &str = env!("VERGEN_GIT_COMMIT_MESSAGE");
+pub const GIT_COMMIT_AUTHOR: &str = env!("VERGEN_GIT_COMMIT_AUTHOR_NAME");
 pub const GIT_BRANCH: &str = env!("VERGEN_GIT_BRANCH");
 pub const GIT_DESCRIBE: &str = env!("VERGEN_GIT_DESCRIBE");
 
-pub const RUSTC_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
-pub const RUSTC_CHANNEL: &str = env!("VERGEN_RUSTC_CHANNEL");
-pub const RUSTC_TARGET: &str = env!("VERGEN_RUSTC_HOST_TRIPLE");
+pub const RUST_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
+pub const RUST_CHANNEL: &str = env!("VERGEN_RUSTC_CHANNEL");
+pub const RUST_TARGET: &str = env!("VERGEN_RUSTC_HOST_TRIPLE");
 
 const VERSION_WITH_BRANCH: &str = const_format::formatcp!("{}::{}", GIT_BRANCH, GIT_COMMIT);
 const VERSION_WITH_DESCRIBE: &str = const_format::formatcp!("{}::{}", GIT_DESCRIBE, GIT_COMMIT);
@@ -56,19 +59,30 @@ pub fn version() -> &'static str {
 pub fn as_json() -> serde_json::Value {
     json!(
         {
-            "_service_name": service_name(),
-            "_binary_name": binary_name(),
-            "_version": version(),
-            "_service_name_with_version": service_name_with_version(),
-            "build_timestamp": BUILD_TIMESTAMP,
-            "cargo_debug": CARGO_DEBUG,
-            "cargo_features": CARGO_FEATURES,
-            "git_commit": GIT_COMMIT,
-            "git_branch": GIT_BRANCH,
-            "git_describe": GIT_DESCRIBE,
-            "rustc_version": RUSTC_VERSION,
-            "rustc_channel": RUSTC_CHANNEL,
-            "rustc_target": RUSTC_TARGET
+            "build": {
+                "service_name": service_name(),
+                "binary_name": binary_name(),
+                "version": version(),
+                "service_name_with_version": service_name_with_version(),
+                "timestamp": BUILD_TIMESTAMP,
+            },
+            "cargo": {
+                "debug": CARGO_DEBUG,
+                "features": CARGO_FEATURES,
+            },
+            "git": {
+                "commit": GIT_COMMIT,
+                "commit_timestamp": GIT_COMMIT_TIMESTAMP,
+                "commit_message": GIT_COMMIT_MESSAGE,
+                "commit_author": GIT_COMMIT_AUTHOR,
+                "branch": GIT_BRANCH,
+                "describe": GIT_DESCRIBE,
+            },
+            "rust": {
+                "version": RUST_VERSION,
+                "channel": RUST_CHANNEL,
+                "target": RUST_TARGET
+            }
         }
     )
 }
