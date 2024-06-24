@@ -1,16 +1,18 @@
 import { expect } from "chai";
-import { Block, Bytes } from "web3-types";
+import { Block, Bytes, TransactionReceipt } from "web3-types";
 
 import { ALICE, BOB } from "../helpers/account";
 import { isStratus } from "../helpers/network";
 import {
     CHAIN_ID,
     CHAIN_ID_DEC,
+    ETHERJS,
     HASH_ZERO,
     HEX_PATTERN,
     ONE,
     TEST_BALANCE,
     ZERO,
+    deployTestContractBalances,
     send,
     sendAndGetError,
     sendEvmMine,
@@ -18,6 +20,7 @@ import {
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
+    toHex,
 } from "../helpers/rpc";
 
 describe("JSON-RPC", () => {
@@ -120,6 +123,26 @@ describe("JSON-RPC", () => {
             if (isStratus) {
                 (await sendExpect("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO])).eq(null);
             }
+        });
+    });
+
+    describe("Logs", () => {
+        describe("eth_getLogs", () => {
+            it("return no logs for queries after the last mined block", async () => {
+                // mine a test transaction
+                const contract = await deployTestContractBalances();
+                const txResponse = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
+                const txReceipt = await ETHERJS.getTransactionReceipt(txResponse.hash);
+                expect(txReceipt).exist;
+                expect(txReceipt?.status).eq(1);
+
+                // check log queries starting at the last mined block and starting after it
+                const txBlockNumber = txReceipt?.blockNumber ?? 0;
+                const filter = { address: contract.target };
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber) }])).length(1); // last mined block
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 1) }])).length(0); // 1 after mined block
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 2) }])).length(0); // 2 after mined block
+            });
         });
     });
 
