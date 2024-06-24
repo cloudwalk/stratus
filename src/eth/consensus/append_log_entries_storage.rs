@@ -244,4 +244,97 @@ mod tests {
             panic!("Expected TransactionExecutionEntries");
         }
     }
+
+    #[test]
+    fn test_save_log_entry_no_conflict() {
+        let storage = setup_storage();
+        let index = 1;
+        let term = 1;
+        let log_entry_data = create_mock_log_entry_data_block();
+
+        storage.save_log_entry(index, term, log_entry_data.clone(), "block").unwrap();
+        let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
+
+        assert_eq!(retrieved_entry.index, index);
+        assert_eq!(retrieved_entry.term, term);
+
+        if let LogEntryData::BlockEntry(ref block) = retrieved_entry.data {
+            if let LogEntryData::BlockEntry(ref expected_block) = log_entry_data {
+                assert_eq!(block.hash, expected_block.hash);
+                assert_eq!(block.number, expected_block.number);
+                assert_eq!(block.parent_hash, expected_block.parent_hash);
+                assert_eq!(block.nonce, expected_block.nonce);
+                assert_eq!(block.uncle_hash, expected_block.uncle_hash);
+                assert_eq!(block.transactions_root, expected_block.transactions_root);
+                assert_eq!(block.state_root, expected_block.state_root);
+                assert_eq!(block.receipts_root, expected_block.receipts_root);
+                assert_eq!(block.miner, expected_block.miner);
+                assert_eq!(block.difficulty, expected_block.difficulty);
+                assert_eq!(block.total_difficulty, expected_block.total_difficulty);
+                assert_eq!(block.extra_data, expected_block.extra_data);
+                assert_eq!(block.size, expected_block.size);
+                assert_eq!(block.gas_limit, expected_block.gas_limit);
+                assert_eq!(block.gas_used, expected_block.gas_used);
+                assert_eq!(block.timestamp, expected_block.timestamp);
+                assert_eq!(block.bloom, expected_block.bloom);
+                assert_eq!(block.author, expected_block.author);
+                assert_eq!(block.transaction_hashes, expected_block.transaction_hashes);
+            } else {
+                panic!("Expected BlockEntry");
+            }
+        } else {
+            panic!("Expected BlockEntry");
+        }
+    }
+
+    #[test]
+    fn test_save_log_entry_with_conflict() {
+        let storage = setup_storage();
+        let index = 1;
+        let term = 1;
+        let conflicting_term = 2;
+        let log_entry_data = create_mock_log_entry_data_block();
+
+        // Save initial log entry
+        storage.save_log_entry(index, term, log_entry_data.clone(), "block").unwrap();
+
+        // Save conflicting log entry at the same index but with a different term
+        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block").unwrap();
+
+        // Assert no entries exist after the conflicting entry's index
+        assert!(storage.get_entry(index + 1).unwrap().is_none());
+
+        // Retrieve the entry at the index and assert it matches the conflicting term entry
+        let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
+        assert_eq!(retrieved_entry.index, index);
+        assert_eq!(retrieved_entry.term, conflicting_term);
+
+        if let LogEntryData::BlockEntry(ref block) = retrieved_entry.data {
+            if let LogEntryData::BlockEntry(ref expected_block) = log_entry_data {
+                assert_eq!(block.hash, expected_block.hash);
+                assert_eq!(block.number, expected_block.number);
+                assert_eq!(block.parent_hash, expected_block.parent_hash);
+                assert_eq!(block.nonce, expected_block.nonce);
+                assert_eq!(block.uncle_hash, expected_block.uncle_hash);
+                assert_eq!(block.transactions_root, expected_block.transactions_root);
+                assert_eq!(block.state_root, expected_block.state_root);
+                assert_eq!(block.receipts_root, expected_block.receipts_root);
+                assert_eq!(block.miner, expected_block.miner);
+                assert_eq!(block.difficulty, expected_block.difficulty);
+                assert_eq!(block.total_difficulty, expected_block.total_difficulty);
+                assert_eq!(block.extra_data, expected_block.extra_data);
+                assert_eq!(block.size, expected_block.size);
+                assert_eq!(block.gas_limit, expected_block.gas_limit);
+                assert_eq!(block.gas_used, expected_block.gas_used);
+                assert_eq!(block.timestamp, expected_block.timestamp);
+                assert_eq!(block.bloom, expected_block.bloom);
+                assert_eq!(block.author, expected_block.author);
+                assert_eq!(block.transaction_hashes, expected_block.transaction_hashes);
+            } else {
+                panic!("Expected BlockEntry");
+            }
+        } else {
+            panic!("Expected BlockEntry");
+        }
+    }
 }
