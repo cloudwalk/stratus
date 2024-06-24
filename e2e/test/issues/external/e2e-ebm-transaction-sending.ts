@@ -1,11 +1,11 @@
 import { expect } from "chai";
-import { keccak256, TransactionReceipt } from "ethers";
+import { TransactionReceipt, keccak256 } from "ethers";
 
 import { ALICE } from "../../helpers/account";
 import { BlockMode, currentBlockMode } from "../../helpers/network";
 import {
-    deployTestContractBalances,
     ETHERJS,
+    deployTestContractBalances,
     prepareSignedTx,
     sendEvmMine,
     sendRawTransaction,
@@ -13,10 +13,7 @@ import {
 
 describe("Known issues for the external block mining mode. The 'eth_sendRawTransaction' API call", async () => {
     before(async () => {
-        expect(currentBlockMode()).eq(
-            BlockMode.External,
-            "Wrong block mining mode is used"
-        );
+        expect(currentBlockMode()).eq(BlockMode.External, "Wrong block mining mode is used");
     });
 
     it("Returns an expected result when a contract transaction fails", async () => {
@@ -28,7 +25,7 @@ describe("Known issues for the external block mining mode. The 'eth_sendRawTrans
             contract,
             account: ALICE,
             methodName: "sub",
-            methodParameters: [ALICE.address, amount]
+            methodParameters: [ALICE.address, amount],
         });
         const expectedTxHash = keccak256(signedTx);
 
