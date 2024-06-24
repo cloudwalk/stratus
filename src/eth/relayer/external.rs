@@ -74,12 +74,12 @@ impl TxSigner {
         })
     }
 
-    pub async fn sign_transaction(&self, tx: TransactionInput) -> (H256, Bytes) {
+    pub fn sign_transaction(&self, tx: TransactionInput) -> (H256, Bytes) {
         let tx: TransactionRequest =
             <TransactionRequest as From<TransactionInput>>::from(tx).nonce(self.nonce.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
         let req = TypedTransaction::Legacy(tx);
         let new_hash = req.sighash();
-        let signature = self.wallet.sign_transaction(&req).await.unwrap();
+        let signature = self.wallet.sign_transaction_sync(&req).unwrap();
         (new_hash, req.rlp_signed(&signature))
     }
 }
@@ -396,7 +396,7 @@ impl ExternalRelayer {
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
 
-        let (new_hash, rlp) = self.signer.sign_transaction(tx_mined.input.clone()).await;
+        let (new_hash, rlp) = self.signer.sign_transaction(tx_mined.input.clone());
 
         let tx = loop {
             match self.substrate_chain.send_raw_transaction(tx_hash, rlp.clone()).await {

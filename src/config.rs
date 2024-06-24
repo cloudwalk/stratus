@@ -385,7 +385,7 @@ pub struct ExternalRelayerServerConfig {
     #[arg(long = "rpc-timeout", value_parser=parse_duration, env = "RPC_TIMEOUT", default_value = "2s")]
     pub rpc_timeout: Duration,
 
-    #[arg(long = "signer", value_parser=parse_duration, env = "SIGNER")]
+    #[arg(long = "signer", env = "SIGNER")]
     pub signer: String,
 }
 
