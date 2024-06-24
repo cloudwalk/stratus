@@ -118,7 +118,7 @@ where
 
 #[cfg(not(feature = "metrics"))]
 /// Executes the provided function
-pub fn metrify<F, T>(f: F) -> Timed<T>
+pub fn timed<F, T>(f: F) -> Timed<T>
 where
     F: FnOnce() -> T,
 {
