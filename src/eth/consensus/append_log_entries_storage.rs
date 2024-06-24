@@ -99,7 +99,7 @@ impl AppendLogEntriesStorage {
         }
     }
 
-    pub fn save_log_entry(&self, index: u64, term: u64, data: LogEntryData, entry_type: &str) -> Result<(), String> {
+    pub fn save_log_entry(&self, index: u64, term: u64, data: LogEntryData, entry_type: &str) -> Result<()> {
         tracing::debug!(index, term, "Creating {} log entry", entry_type);
         let log_entry = LogEntry { term, index, data };
         tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
@@ -107,14 +107,13 @@ impl AppendLogEntriesStorage {
         tracing::debug!("Checking for existing {} entry at new index", entry_type);
         if let Some(existing_entry) = self.get_entry(log_entry.index).unwrap_or(None) {
             if existing_entry.term != log_entry.term {
-                tracing::debug!(index = log_entry.index, "Deleting {} entries from index due to term mismatch", entry_type);
-                self.delete_entries_from(log_entry.index)
-                    .map_err(|e| format!("Failed to delete existing {} entries: {:?}", entry_type, e))?;
+                tracing::error!(index = log_entry.index, "duplicated entries from index due to term mismatch");
+                 return Err(anyhow::anyhow!("Duplicated entries from index due to term mismatch"));
             }
         }
 
         tracing::debug!("Saving new {} log entry", entry_type);
         self.save_entry(&log_entry)
-            .map_err(|e| format!("Failed to save {} log entry: {:?}", entry_type, e))
+            .map_err(|_| anyhow::anyhow!("Failed to save {}", entry_type))
     }
 }
