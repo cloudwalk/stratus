@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH cte AS (\n                SELECT number\n                FROM relayer_blocks\n                WHERE finished = false\n                ORDER BY number ASC\n                LIMIT 10\n            )\n            UPDATE relayer_blocks r\n                SET started = true\n                FROM cte\n                WHERE r.number = cte.number\n                RETURNING r.number, r.payload",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "payload",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1da3934b6b1ddac87dc25723f755e5ac8f53e4e1ff1f677f8ed58bd8266d270d"
+}
