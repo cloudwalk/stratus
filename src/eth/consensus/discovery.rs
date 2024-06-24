@@ -111,7 +111,8 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
 async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
     use tokio::sync::Mutex;
 
-    use super::{append_entry::append_entry_service_client::AppendEntryServiceClient, Role};
+    use super::append_entry::append_entry_service_client::AppendEntryServiceClient;
+    use super::Role;
 
     let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
