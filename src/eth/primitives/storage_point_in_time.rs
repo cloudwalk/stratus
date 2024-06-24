@@ -1,5 +1,4 @@
 use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics::MetricLabelValue;
 
 /// EVM storage point-in-time indicator.
@@ -18,7 +17,6 @@ pub enum StoragePointInTime {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-#[cfg(feature = "metrics")]
 impl From<&StoragePointInTime> for MetricLabelValue {
     fn from(value: &StoragePointInTime) -> Self {
         match value {
