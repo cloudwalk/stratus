@@ -399,11 +399,11 @@ impl ExternalRelayer {
         let (new_hash, rlp) = self.signer.sign_transaction(tx_mined.input.clone());
 
         let tx = loop {
-            match self.substrate_chain.send_raw_transaction(tx_hash, rlp.clone()).await {
+            match self.substrate_chain.send_raw_transaction(new_hash.into(), rlp.clone()).await {
                 Ok(tx) => break tx,
                 Err(err) => {
-                    tracing::info!(
-                        ?tx_hash,
+                    tracing::warn!(
+                        ?new_hash,
                         "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
                     );
                     if self.substrate_chain.fetch_transaction(new_hash.into()).await.unwrap_or(None).is_some() {
@@ -412,7 +412,7 @@ impl ExternalRelayer {
                             .compare_receipt(tx_mined, PendingTransaction::new(new_hash.into(), &self.substrate_chain))
                             .await;
                     }
-                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
+                    tracing::warn!(?new_hash, ?err, "failed to send raw transaction, retrying...");
                     continue;
                 }
             }
