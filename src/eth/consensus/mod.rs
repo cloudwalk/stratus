@@ -773,6 +773,7 @@ impl Consensus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    pub mod factories;
 
     #[test]
     fn test_peer_address_from_string_valid_http() {
