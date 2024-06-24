@@ -1,12 +1,14 @@
 import { expect } from "chai";
+import { network } from "hardhat";
+import { Transaction } from "web3-types";
 
 import { TestContractBalances } from "../../typechain-types";
 import { CHARLIE } from "../helpers/account";
 import {
-    calculateSlotPosition,
     CHAIN_ID,
-    deployTestContractBalances,
     HEX_PATTERN,
+    calculateSlotPosition,
+    deployTestContractBalances,
     send,
     sendExpect,
     sendGetBlockNumber,
@@ -15,8 +17,6 @@ import {
     toHex,
     toPaddedHex,
 } from "../helpers/rpc";
-import { Transaction } from "web3-types";
-import { network } from "hardhat";
 
 // Test contract topics
 const CONTRACT_TOPIC_ADD = "0x2728c9d3205d667bbc0eefdfeda366261b4d021949630c047f3e5834b30611ab";
@@ -45,9 +45,9 @@ describe("Transaction: serial TestContractBalances", () => {
     it("Deployment transaction receipt", async () => {
         const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
         expect(deploymentTransactionHash).not.eq(undefined);
-        
+
         const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
-        
+
         // Fields existence and null checks
         expect(receipt.contractAddress).not.eq(null, "receipt.contractAddress");
         expect(receipt.transactionHash).not.eq(null, "receipt.transactionHash");
@@ -66,15 +66,21 @@ describe("Transaction: serial TestContractBalances", () => {
         // contract address
         const expectedContractAddress = _contract.target as string;
         const actualContractAddress = receipt.contractAddress as string;
-        expect(expectedContractAddress.toLowerCase()).eq(actualContractAddress.toLowerCase(), "receipt.contractAddress");
+        expect(expectedContractAddress.toLowerCase()).eq(
+            actualContractAddress.toLowerCase(),
+            "receipt.contractAddress",
+        );
 
         // transaction hash
         const expectedTransactionHash = deploymentTransactionHash as string;
         const actualTransactionHash = receipt.transactionHash as string;
-        expect(expectedTransactionHash.toLowerCase()).eq(actualTransactionHash.toLowerCase(), "receipt.transactionHash");
+        expect(expectedTransactionHash.toLowerCase()).eq(
+            actualTransactionHash.toLowerCase(),
+            "receipt.transactionHash",
+        );
 
         // transaction index
-        const expectedTransactionIndex = '0x0';
+        const expectedTransactionIndex = "0x0";
         const actualTransactionIndex = receipt.transactionIndex as number;
         expect(expectedTransactionIndex).eq(actualTransactionIndex, "receipt.transactionIndex");
 
@@ -82,7 +88,7 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(receipt.from.toLowerCase()).eq(CHARLIE.address.toLowerCase(), "receipt.from");
 
         // status
-        const STATUS_SUCCESS = '0x1';
+        const STATUS_SUCCESS = "0x1";
         expect(receipt.status).eq(STATUS_SUCCESS, "receipt.status");
     });
 
@@ -91,19 +97,19 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(deploymentTransactionHash).not.eq(undefined);
 
         const transaction: Transaction = await send("eth_getTransactionByHash", [deploymentTransactionHash]);
-        
+
         expect(transaction.from).eq(CHARLIE.address, "tx.from");
         expect(transaction.to).eq(null, "tx.to");
-        expect(transaction.value).eq('0x0', "tx.value");
+        expect(transaction.value).eq("0x0", "tx.value");
         expect(transaction.gas).match(HEX_PATTERN, "tx.gas format");
         expect(transaction.gasPrice).match(HEX_PATTERN, "tx.gasPrice format");
         expect(transaction.input).match(HEX_PATTERN, "tx.input format");
-        expect(transaction.nonce).eq('0x0', "tx.nonce");
+        expect(transaction.nonce).eq("0x0", "tx.nonce");
 
-        if (network.name === 'stratus') {
+        if (network.name === "stratus") {
             expect(transaction.chainId).eq(CHAIN_ID, "tx.chainId");
         }
-        
+
         expect(transaction.v).match(HEX_PATTERN, "tx.v format");
         expect(transaction.r).match(HEX_PATTERN, "tx.r format");
         expect(transaction.s).match(HEX_PATTERN, "tx.s format");
