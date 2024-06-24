@@ -16,7 +16,7 @@ const config: HardhatUserConfig = {
                         enabled: true,
                         runs: 1000,
                     },
-                }
+                },
             },
             {
                 version: "0.8.24",
@@ -25,17 +25,18 @@ const config: HardhatUserConfig = {
                         enabled: true,
                         runs: 1000,
                     },
-                }
-            }
-        ]
+                },
+            },
+        ],
     },
     networks: {
         hardhat: {
             chainId: 2008,
             initialBaseFeePerGas: 0,
             mining: {
-                auto: process.env.BLOCK_MODE === 'automine',
-                interval: process.env.BLOCK_MODE === 'automine' ? undefined : (process.env.BLOCK_MODE === '1s' ? 1000 : 0)
+                auto: process.env.BLOCK_MODE === "automine",
+                interval:
+                    process.env.BLOCK_MODE === "automine" ? undefined : process.env.BLOCK_MODE === "1s" ? 1000 : 0,
             },
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,

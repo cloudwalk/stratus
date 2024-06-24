@@ -1,21 +1,13 @@
 import { expect } from "chai";
-import { keccak256, TransactionResponse } from "ethers";
+import { TransactionResponse, keccak256 } from "ethers";
 
 import { ALICE, BOB } from "../../helpers/account";
 import { BlockMode, currentBlockMode } from "../../helpers/network";
-import {
-    ETHERJS,
-    sendEvmMine,
-    sendGetNonce,
-    sendRawTransaction,
-} from "../../helpers/rpc";
+import { ETHERJS, sendEvmMine, sendGetNonce, sendRawTransaction } from "../../helpers/rpc";
 
 describe("Known issues for the external block mining mode. Pending transactions", async () => {
     before(async () => {
-        expect(currentBlockMode()).eq(
-            BlockMode.External,
-            "Wrong block mining mode is used"
-        );
+        expect(currentBlockMode()).eq(BlockMode.External, "Wrong block mining mode is used");
     });
 
     it("Can be fetched by the hash before and after minting", async () => {

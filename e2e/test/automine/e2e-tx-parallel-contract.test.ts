@@ -6,10 +6,10 @@ import {
     TX_PARAMS,
     deployTestContractBalances,
     deployTestContractCounter,
+    send,
     sendGetNonce,
     sendRawTransactions,
     sendReset,
-    send
 } from "../helpers/rpc";
 
 describe("Transaction: parallel TestContractBalances", async () => {
@@ -88,7 +88,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
 
         // send transactions in parallel
         let hashes = await sendRawTransactions(signedTxs);
-        let failed = hashes.filter(x => x === undefined).length;
+        let failed = hashes.filter((x) => x === undefined).length;
 
         // check remaining balance
         expect(await _contract.get(ALICE.address)).eq(15);

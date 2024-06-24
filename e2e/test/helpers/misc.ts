@@ -3,7 +3,7 @@ export function checkTimeEnough(begTimeInMs: number, timeoutInMs: number) {
     if (currentTimeInMs - begTimeInMs >= timeoutInMs) {
         throw new Error(
             "The time to properly check the conditions has expired. " +
-            "Try increasing the block interval of the blockchain you are testing"
+                "Try increasing the block interval of the blockchain you are testing",
         );
     }
 }
