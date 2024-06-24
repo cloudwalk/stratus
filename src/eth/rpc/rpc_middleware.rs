@@ -100,7 +100,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
     fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // track request
-        let span = info_span!("rpc::request", cid = %new_cid(), request_client = field::Empty, request_id = field::Empty, request_method = field::Empty, request_function = field::Empty);
+        let span = info_span!("rpc::request", cid = %new_cid(), rpc_client = field::Empty, rpc_id = field::Empty, rpc_method = field::Empty, rpc_function = field::Empty);
         let enter = span.enter();
 
         // extract request data
@@ -179,13 +179,13 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                request_client = %proj.identifiers.client,
-                request_id = %proj.identifiers.id,
-                request_method = %proj.identifiers.method,
-                request_function = %proj.identifiers.function.clone().unwrap_or_default(),
-                request_duration_us = %elapsed.as_micros(),
-                request_success = %response_success,
-                request_result = %response_result,
+                rpc_client = %proj.identifiers.client,
+                rpc_id = %proj.identifiers.id,
+                rpc_method = %proj.identifiers.method,
+                rpc_function = %proj.identifiers.function.clone().unwrap_or_default(),
+                rpc_duration_us = %elapsed.as_micros(),
+                rpc_success = %response_success,
+                rpc_result = %response_result,
                 "rpc response"
             );
 

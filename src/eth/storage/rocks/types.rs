@@ -9,7 +9,6 @@ use ethereum_types::H256;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethereum_types::U64;
-use itertools::Itertools;
 use revm::primitives::KECCAK_EMPTY;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -28,7 +27,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogMined;
-use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Size;
@@ -526,13 +524,6 @@ pub struct LogRocksdb {
     pub address: AddressRocksdb,
     pub topics: (Option<H256>, Option<H256>, Option<H256>, Option<H256>),
     pub data: BytesRocksdb,
-}
-
-impl LogRocksdb {
-    pub fn to_topics_vec(&self) -> Vec<LogTopic> {
-        let topics = &self.topics;
-        [topics.0, topics.1, topics.2, topics.3].into_iter().while_some().map(LogTopic::from).collect()
-    }
 }
 
 impl From<Log> for LogRocksdb {

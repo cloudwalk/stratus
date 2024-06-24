@@ -12,6 +12,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use anyhow::Context;
 use lazy_static::lazy_static;
+use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
@@ -110,11 +111,12 @@ impl RocksStorageState {
     pub fn new(path: impl AsRef<Path>) -> Self {
         let db_path = path.as_ref().to_path_buf();
         let (backup_trigger_tx, backup_trigger_rx) = mpsc::sync_channel::<()>(1);
+        tracing::debug!("initializing RocksStorageState");
 
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
 
-        //XXX TODO while repair/restore from backup, make sure to sync online and only when its in sync with other nodes, receive requests
+        tracing::debug!("opened database successfully");
         let state = Self {
             db_path,
             accounts: new_cf(&db, "accounts"),
@@ -134,7 +136,10 @@ impl RocksStorageState {
             db,
         };
 
+        tracing::debug!("initializing backup trigger");
         state.listen_for_backup_trigger(backup_trigger_rx).unwrap();
+
+        tracing::debug!("returning RocksStorageState");
         state
     }
 
@@ -297,18 +302,20 @@ impl RocksStorageState {
     pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         let addresses: HashSet<AddressRocksdb> = filter.addresses.iter().map(|&address| AddressRocksdb::from(address)).collect();
 
+        let end_block_range_filter = |number: BlockNumber| match filter.to_block.as_ref() {
+            Some(&last_block) => number <= last_block,
+            None => true,
+        };
+
         Ok(self
             .blocks_by_number
-            .iter_from(BlockNumberRocksdb::from(filter.from_block), rocksdb::Direction::Forward)
-            .take_while(|(number, _)| filter.to_block.as_ref().map_or(true, |last_block| BlockNumber::from(*number) <= *last_block))
+            .iter_from(BlockNumberRocksdb::from(filter.from_block), Direction::Forward)
+            .take_while(|(number, _)| end_block_range_filter((*number).into()))
             .flat_map(|(_, block)| block.transactions)
             .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)))
             .flat_map(|transaction| transaction.logs)
-            .filter(|log_mined| {
-                let topics = log_mined.log.to_topics_vec();
-                filter.topics_combinations.is_empty() || filter.topics_combinations.iter().any(|topic_filter| topic_filter.matches(&topics))
-            })
             .map(LogMined::from)
+            .filter(|log_mined| filter.matches(log_mined))
             .collect())
     }
 
@@ -586,6 +593,7 @@ where
     K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
+    tracing::debug!(column_family = column_family, "creating new column family");
     let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
         panic!("column_family `{column_family}` given to `new_cf` not found in options map");
     };

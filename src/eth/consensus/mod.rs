@@ -6,6 +6,8 @@ pub mod forward_to;
 #[allow(dead_code)]
 mod log_entry;
 
+mod server;
+
 use std::collections::HashMap;
 #[cfg(feature = "kubernetes")]
 use std::env;
@@ -27,6 +29,7 @@ use kube::api::ListParams;
 #[cfg(feature = "kubernetes")]
 use kube::Client;
 use rand::Rng;
+use server::AppendEntryServiceImpl;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
@@ -36,8 +39,6 @@ use tokio::time::sleep;
 use tonic::transport::Channel;
 use tonic::transport::Server;
 use tonic::Request;
-use tonic::Response;
-use tonic::Status;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -56,12 +57,9 @@ use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
 use append_entry::AppendBlockCommitRequest;
-use append_entry::AppendBlockCommitResponse;
 use append_entry::AppendTransactionExecutionsRequest;
-use append_entry::AppendTransactionExecutionsResponse;
 use append_entry::BlockEntry;
 use append_entry::RequestVoteRequest;
-use append_entry::RequestVoteResponse;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
 
@@ -164,7 +162,7 @@ pub struct Consensus {
     current_term: AtomicU64,
     last_arrived_block_number: AtomicU64, //FIXME this should be replaced by the index on our appendEntry log
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
-    role: AtomicU8, // TODO: remove RwLock and use Atomic
+    role: AtomicU8,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
     grpc_address: SocketAddr,
@@ -183,7 +181,7 @@ impl Consensus {
         rx_blocks: broadcast::Receiver<Block>,
     ) -> Arc<Self> {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
-        let last_arrived_block_number = AtomicU64::new(std::u64::MAX); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
+        let last_arrived_block_number = AtomicU64::new(0); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
@@ -198,7 +196,7 @@ impl Consensus {
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
             role: AtomicU8::new(Role::Follower as u8),
-            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(250..350)), // Adjust as needed
+            heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(300..400)), // Adjust as needed
             my_address: my_address.clone(),
             grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
@@ -249,7 +247,8 @@ impl Consensus {
                             tracing::info!("starting election due to heartbeat timeout");
                             Self::start_election(Arc::clone(&consensus)).await;
                         } else {
-                            tracing::info!("heartbeat timeout reached, but I am the leader, so we ignore the election");
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            tracing::info!(current_term = current_term, "heartbeat timeout reached, but I am the leader, so we ignore the election");
                         }
                     },
                     _ = consensus.reset_heartbeat_signal.notified() => {
@@ -304,13 +303,21 @@ impl Consensus {
             });
 
             match peer_clone.client.request_vote(request).await {
-                Ok(response) =>
-                    if response.into_inner().vote_granted {
-                        tracing::info!(peer_address = %peer_address, "received vote on election");
-                        votes += 1;
+                Ok(response) => {
+                    let response_inner = response.into_inner();
+                    if response_inner.vote_granted {
+                        let current_term = consensus.current_term.load(Ordering::SeqCst);
+                        if response_inner.term == current_term {
+                            tracing::info!(peer_address = %peer_address, "received vote on election");
+                            votes += 1;
+                        } else {
+                            // this usually happens when we have either a split brain or a network issue, maybe both
+                            tracing::error!(peer_address = %peer_address, expected_term = response_inner.term, "received vote on election with different term");
+                        }
                     } else {
                         tracing::info!(peer_address = %peer_address, "did not receive vote on election");
-                    },
+                    }
+                }
                 Err(_) => {
                     tracing::warn!("failed to request vote on election from {:?}", peer_address);
                 }
@@ -347,8 +354,6 @@ impl Consensus {
         }
 
         self.set_role(Role::Leader);
-
-        self.last_arrived_block_number.store(std::u64::MAX, Ordering::SeqCst); //as leader, we don't have a last block number
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
@@ -371,15 +376,16 @@ impl Consensus {
             let interval = Duration::from_millis(40);
             loop {
                 tokio::time::sleep(interval).await;
+                if consensus.is_leader() {
+                    let mut queue = consensus.transaction_execution_queue.lock().await;
+                    let executions = queue.drain(..).collect::<Vec<_>>();
+                    drop(queue);
 
-                let mut queue = consensus.transaction_execution_queue.lock().await;
-                let executions = queue.drain(..).collect::<Vec<_>>();
-                drop(queue);
-
-                let peers = consensus.peers.read().await;
-                for (_, (peer, _)) in peers.iter() {
-                    let mut peer_clone = peer.clone();
-                    consensus.append_transaction_executions_to_peer(&mut peer_clone, executions.clone()).await;
+                    let peers = consensus.peers.read().await;
+                    for (_, (peer, _)) in peers.iter() {
+                        let mut peer_clone = peer.clone();
+                        consensus.append_transaction_executions_to_peer(&mut peer_clone, executions.clone()).await;
+                    }
                 }
             }
         });
@@ -393,7 +399,7 @@ impl Consensus {
         mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
         mut rx_blocks: broadcast::Receiver<Block>,
     ) {
-        spawn_named("consensus::block_sender", async move {
+        spawn_named("consensus::block_and_executions_sender", async move {
             loop {
                 tokio::select! {
                     Ok(tx) = rx_pending_txs.recv() => {
@@ -404,8 +410,7 @@ impl Consensus {
                                 continue;
                             }
 
-                            //TODO save transaction to appendEntries log
-                            //TODO before saving check if all transaction_hashes are already in the log
+                            //TODO XXX save transaction to appendEntries log
                             let transaction = vec![tx.to_append_entry_transaction()];
                             let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
                             if consensus.broadcast_sender.send(transaction_entry).is_err() {
@@ -419,7 +424,6 @@ impl Consensus {
 
                             //TODO save block to appendEntries log
                             //TODO before saving check if all transaction_hashes are already in the log
-
                             let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
                             if consensus.broadcast_sender.send(block_entry).is_err() {
                                 tracing::error!("failed to broadcast block");
@@ -514,7 +518,7 @@ impl Consensus {
 
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
 
-        if last_arrived_block_number == std::u64::MAX {
+        if last_arrived_block_number == 0 {
             tracing::warn!("no appendEntry has been received yet");
             return false;
         }
@@ -527,7 +531,14 @@ impl Consensus {
             storage_block_number
         );
 
-        (last_arrived_block_number - 2) <= storage_block_number
+        if (last_arrived_block_number - 3) <= storage_block_number {
+            tracing::info!("should serve request");
+            true
+        } else {
+            let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
+            tracing::warn!(diff = diff, "should not serve request");
+            false
+        }
     }
 
     #[cfg(feature = "kubernetes")]
@@ -698,140 +709,10 @@ impl Consensus {
     }
 }
 
-pub struct AppendEntryServiceImpl {
-    consensus: Mutex<Arc<Consensus>>,
-}
-
-#[tonic::async_trait]
-impl AppendEntryService for AppendEntryServiceImpl {
-    async fn append_transaction_executions(
-        &self,
-        request: Request<AppendTransactionExecutionsRequest>,
-    ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
-        let consensus = self.consensus.lock().await;
-        let request_inner = request.into_inner();
-
-        if consensus.is_leader() {
-            tracing::error!(sender = request_inner.leader_id, "append_transaction_executions called on leader node");
-            return Err(Status::new(
-                (StatusCode::NotLeader as i32).into(),
-                "append_transaction_executions called on leader node".to_string(),
-            ));
-        }
-
-        let executions = request_inner.executions;
-        //TODO Process the transaction executions here
-        tracing::info!(executions = executions.len(), "appending executions");
-
-        consensus.reset_heartbeat_signal.notify_waiters();
-
-        Ok(Response::new(AppendTransactionExecutionsResponse {
-            status: StatusCode::AppendSuccess as i32,
-            message: "transaction Executions appended successfully".into(),
-            last_committed_block_number: 0,
-        }))
-    }
-
-    async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
-        let consensus = self.consensus.lock().await;
-        let request_inner = request.into_inner();
-
-        if consensus.is_leader() {
-            tracing::error!(sender = request_inner.leader_id, "append_transaction_executions called on leader node");
-            return Err(Status::new(
-                (StatusCode::NotLeader as i32).into(),
-                "append_transaction_executions called on leader node".to_string(),
-            ));
-        }
-
-        let Some(block_entry) = request_inner.block_entry else {
-            return Err(Status::invalid_argument("empty block entry"));
-        };
-
-        tracing::info!(number = block_entry.number, "appending new block");
-
-        let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
-
-        //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
-        //TODO FIXME move this code back when we have propagation:      tracing::error!(
-        //TODO FIXME move this code back when we have propagation:          "leader is behind follower: arrived_block: {}, block_entry: {}",
-        //TODO FIXME move this code back when we have propagation:          last_last_arrived_block_number,
-        //TODO FIXME move this code back when we have propagation:          block_entry.number
-        //TODO FIXME move this code back when we have propagation:      );
-        //TODO FIXME move this code back when we have propagation:      return Err(Status::new(
-        //TODO FIXME move this code back when we have propagation:          (StatusCode::EntryAlreadyExists as i32).into(),
-        //TODO FIXME move this code back when we have propagation:          "leader is behind follower and should step down".to_string(),
-        //TODO FIXME move this code back when we have propagation:      ));
-        //TODO FIXME move this code back when we have propagation: };
-        //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
-        //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
-
-        consensus.reset_heartbeat_signal.notify_waiters();
-        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
-            consensus.update_leader(leader_peer_address).await;
-        }
-        consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
-
-        tracing::info!(
-            last_last_arrived_block_number = last_last_arrived_block_number,
-            new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
-            "last arrived block number set",
-        );
-
-        Ok(Response::new(AppendBlockCommitResponse {
-            status: StatusCode::AppendSuccess as i32,
-            message: "Block Commit appended successfully".into(),
-            last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
-        }))
-    }
-
-    async fn request_vote(&self, request: Request<RequestVoteRequest>) -> Result<Response<RequestVoteResponse>, Status> {
-        let request = request.into_inner();
-        let consensus = self.consensus.lock().await;
-        let current_term = consensus.current_term.load(Ordering::SeqCst);
-
-        if request.term < current_term {
-            tracing::info!(
-                vote_granted = false,
-                current_term = current_term,
-                request_term = request.term,
-                "requestvote received with stale term on election"
-            );
-            return Ok(Response::new(RequestVoteResponse {
-                term: current_term,
-                vote_granted: false,
-            }));
-        }
-
-        if request.term > current_term {
-            consensus.current_term.store(request.term, Ordering::SeqCst);
-            *consensus.voted_for.lock().await = None;
-            consensus.set_role(Role::Follower);
-        }
-
-        let mut voted_for = consensus.voted_for.lock().await;
-        let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
-        if voted_for.is_none() {
-            consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
-            *voted_for = Some(candidate_address.clone());
-            tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
-            return Ok(Response::new(RequestVoteResponse {
-                term: request.term,
-                vote_granted: true,
-            }));
-        }
-
-        tracing::info!(vote_granted = false, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "already voted for another candidate on election");
-        Ok(Response::new(RequestVoteResponse {
-            term: request.term,
-            vote_granted: false,
-        }))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    pub mod factories;
 
     #[test]
     fn test_peer_address_from_string_valid_http() {

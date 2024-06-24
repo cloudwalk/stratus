@@ -96,19 +96,9 @@ impl BlockMiner {
         self.storage.save_execution(tx_execution.clone())?;
 
         // decide what to do based on mining mode
-        match self.mode {
-            // * do not consensus transactions
-            // * notify pending transactions
-            // * mine block immediately
-            BlockMinerMode::Automine => {
-                let _ = self.notifier_pending_txs.send(tx_execution);
-                self.mine_local_and_commit()?;
-            }
-            // * consensus transactions
-            // * notify pending transactions
-            BlockMinerMode::Interval(_) | BlockMinerMode::External => {
-                let _ = self.notifier_pending_txs.send(tx_execution);
-            }
+        let _ = self.notifier_pending_txs.send(tx_execution);
+        if self.mode.is_automine() {
+            self.mine_local_and_commit()?;
         }
 
         Ok(())

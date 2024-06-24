@@ -35,7 +35,7 @@ impl RocksPermanentStorage {
                 tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
             }
 
-            let path = format!("data/{prefix}-rocksdb");
+            let path = format!("{prefix}-rocksdb");
             tracing::info!("starting rocksdb storage - at custom path: '{:?}'", path);
             path
         } else {
@@ -85,7 +85,6 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        tracing::debug!(%address, %index, ?point_in_time, "reading slot");
         Ok(self.state.read_slot(address, index, point_in_time))
     }
 
@@ -94,12 +93,10 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        tracing::debug!(%hash, "reading transaction");
         self.state.read_transaction(hash)
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        tracing::debug!(?filter, "reading logs");
         self.state.read_logs(filter)
     }
 
@@ -112,14 +109,12 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        tracing::debug!(?accounts, "saving initial accounts");
         self.state.save_accounts(accounts);
         Ok(())
     }
 
     fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let block_number_u64 = block_number.as_u64();
-        tracing::info!(?block_number, "resetting Rocks DB to given block number");
 
         // reset block number
         let _ = self.block_number.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
@@ -138,7 +133,6 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        tracing::info!(?address, "reading all slots");
         self.state.read_all_slots(address)
     }
 }

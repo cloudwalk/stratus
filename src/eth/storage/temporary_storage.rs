@@ -10,7 +10,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
 
 /// Temporary storage (in-between blocks) operations
-pub trait TemporaryStorage: Send + Sync {
+pub trait TemporaryStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
