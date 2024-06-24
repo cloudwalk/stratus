@@ -1,3 +1,4 @@
+use crate::eth::consensus::LogEntryData;
 use core::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -40,7 +41,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         let executions = request_inner.executions;
-        //TODO save the transaction executions here
+        let index = request_inner.prev_log_index + 1;
+        let term = request_inner.prev_log_term;
+        let data = LogEntryData::TransactionExecutionEntries(executions.clone());
+
+        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
+            tracing::error!("Failed to save log entry: {:?}", e);
+            return Err(Status::internal("Failed to save log entry"));
+        }
+
         //TODO send the executions to the Storage
         tracing::info!(executions = executions.len(), "appending executions");
 
