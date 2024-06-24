@@ -85,10 +85,11 @@ impl AppendLogEntriesStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::eth::consensus::LogEntryData;
     use tempfile::TempDir;
+
+    use super::*;
     use crate::eth::consensus::tests::factories::*;
+    use crate::eth::consensus::LogEntryData;
 
     fn setup_storage() -> AppendLogEntriesStorage {
         let temp_dir = TempDir::new().unwrap();

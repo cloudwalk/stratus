@@ -1,8 +1,12 @@
+use ethereum_types::H256;
+use ethereum_types::U256;
 use rand::Rng;
-use ethereum_types::{H256, U256};
-use crate::eth::consensus::{BlockEntry, TransactionExecutionEntry, LogEntryData};
-use crate::eth::consensus::log_entry::LogEntry;
+
 use crate::eth::consensus::append_entry::Log;
+use crate::eth::consensus::log_entry::LogEntry;
+use crate::eth::consensus::BlockEntry;
+use crate::eth::consensus::LogEntryData;
+use crate::eth::consensus::TransactionExecutionEntry;
 
 pub fn create_mock_block_entry() -> BlockEntry {
     BlockEntry {
@@ -69,16 +73,9 @@ pub fn create_mock_log_entry_data_block() -> LogEntryData {
 }
 
 pub fn create_mock_log_entry_data_transactions() -> LogEntryData {
-    LogEntryData::TransactionExecutionEntries(vec![
-        create_mock_transaction_execution_entry(),
-        create_mock_transaction_execution_entry(),
-    ])
+    LogEntryData::TransactionExecutionEntries(vec![create_mock_transaction_execution_entry(), create_mock_transaction_execution_entry()])
 }
 
 pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEntry {
-    LogEntry {
-        index,
-        term,
-        data,
-    }
+    LogEntry { index, term, data }
 }
