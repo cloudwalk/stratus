@@ -60,3 +60,29 @@ jobs:
 
       - name: Just lint-check
         run: just lint-check -2024-01-01
+
+  e2e_lint:
+    name: E2E Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    concurrency:
+      group: ${{ github.workflow }}-e2e-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
+      - name: Just e2e-lint
+        run: |
+          npm --prefix ./e2e --silent install
+          just e2e-lint --check
