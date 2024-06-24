@@ -14,6 +14,7 @@ use super::append_entry::RequestVoteRequest;
 use super::append_entry::RequestVoteResponse;
 use super::append_entry::StatusCode;
 use crate::eth::consensus::AppendEntryService;
+use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::Consensus;
@@ -40,7 +41,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         let executions = request_inner.executions;
-        //TODO save the transaction executions here
+        let index = request_inner.prev_log_index + 1;
+        let term = request_inner.prev_log_term;
+        let data = LogEntryData::TransactionExecutionEntries(executions.clone());
+
+        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
+            tracing::error!("Failed to save log entry: {:?}", e);
+            return Err(Status::internal("Failed to save log entry"));
+        }
+
         //TODO send the executions to the Storage
         tracing::info!(executions = executions.len(), "appending executions");
 
@@ -160,12 +169,14 @@ mod tests {
     use std::net::Ipv4Addr;
     use std::net::SocketAddr;
 
+    use ethereum_types::H256;
     use tokio::sync::broadcast;
     use tokio::sync::Mutex;
     use tonic::Request;
 
     use super::*;
     use crate::eth::consensus::BlockEntry;
+    use crate::eth::consensus::TransactionExecutionEntry;
     use crate::eth::storage::StratusStorage;
 
     // Helper function to create a mock consensus instance
@@ -192,6 +203,69 @@ mod tests {
             tx_blocks.subscribe(),
         )
         .await
+    }
+
+    fn create_mock_transaction_execution_entry() -> TransactionExecutionEntry {
+        TransactionExecutionEntry {
+            hash: H256::zero().to_string(),
+            nonce: 0,
+            value: vec![0u8; 32],
+            gas_price: vec![0u8; 32],
+            input: vec![0u8; 32],
+            v: 27,
+            r: vec![0u8; 32],
+            s: vec![0u8; 32],
+            chain_id: 1,
+            result: vec![0u8; 32],
+            output: vec![0u8; 32],
+            from: "0x0000000000000000000000000000000000000000".to_string(),
+            to: "0x0000000000000000000000000000000000000000".to_string(),
+            block_hash: H256::zero().to_string(),
+            block_number: 1,
+            transaction_index: 0,
+            logs: vec![],
+            gas: vec![0u8; 32],
+            receipt_cumulative_gas_used: vec![0u8; 32],
+            receipt_gas_used: vec![0u8; 32],
+            receipt_contract_address: vec![],
+            receipt_status: 1,
+            receipt_logs_bloom: vec![0u8; 256],
+            receipt_effective_gas_price: vec![0u8; 32],
+        }
+    }
+
+    #[tokio::test]
+    async fn test_append_transaction_executions_insert() {
+        let consensus = create_mock_consensus().await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(Arc::clone(&consensus)),
+        };
+
+        consensus.set_role(Role::Follower);
+
+        let executions = vec![create_mock_transaction_execution_entry()];
+
+        let request = Request::new(AppendTransactionExecutionsRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            executions: executions.clone(),
+        });
+
+        let response = service.append_transaction_executions(request).await;
+        assert!(response.is_ok());
+
+        // Check if the log entry was inserted correctly
+        let log_entries_storage = &consensus.log_entries_storage;
+        let last_index = log_entries_storage.get_last_index().unwrap();
+        let saved_entry = log_entries_storage.get_entry(last_index).unwrap().unwrap();
+
+        if let LogEntryData::TransactionExecutionEntries(saved_executions) = saved_entry.data {
+            assert_eq!(saved_executions, executions);
+        } else {
+            panic!("Expected transaction execution entries in the log entry");
+        }
     }
 
     #[tokio::test]
