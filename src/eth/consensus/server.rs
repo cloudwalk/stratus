@@ -44,7 +44,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO send the executions to the Storage
         tracing::info!(executions = executions.len(), "appending executions");
 
+        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+            consensus.update_leader(leader_peer_address).await;
+        }
         consensus.reset_heartbeat_signal.notify_waiters();
+        //TODO change cached index from consensus after the storage is implemented
 
         Ok(Response::new(AppendTransactionExecutionsResponse {
             status: StatusCode::AppendSuccess as i32,
@@ -87,10 +91,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
-        consensus.reset_heartbeat_signal.notify_waiters();
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
         }
+        consensus.reset_heartbeat_signal.notify_waiters();
         consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
 
         tracing::info!(
@@ -165,6 +169,7 @@ mod tests {
     use tonic::Request;
 
     use super::*;
+    use crate::eth::consensus::tests::factories::create_follower_consensus_with_leader;
     use crate::eth::consensus::BlockEntry;
     use crate::eth::storage::StratusStorage;
 
@@ -245,17 +250,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_block_commit_not_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_follower_consensus_with_leader().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
-        // Simulate the node as not a leader
-        consensus.set_role(Role::Follower);
+        let leader_id = {
+            let peers = consensus.peers.read().await;
+            let (leader_address, _) = peers.iter().find(|&(_, (peer, _))| peer.role == Role::Leader).expect("Leader peer not found");
+            leader_address.to_string()
+        };
 
         let request = Request::new(AppendBlockCommitRequest {
             term: 1,
-            leader_id: "leader_id".to_string(),
+            leader_id,
             prev_log_index: 0,
             prev_log_term: 0,
             block_entry: Some(BlockEntry {
@@ -265,6 +273,7 @@ mod tests {
         });
 
         let response = service.append_block_commit(request).await;
+
         assert!(response.is_ok());
 
         let response = response.unwrap().into_inner();
