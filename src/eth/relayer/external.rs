@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
+use ethers_core::types::Transaction;
 use ::metrics::atomics::AtomicU64;
 use anyhow::anyhow;
 use anyhow::Context;
@@ -74,13 +75,21 @@ impl TxSigner {
         })
     }
 
-    pub fn sign_transaction(&self, tx: TransactionInput) -> (H256, Bytes) {
+
+    pub fn sign_transaction_input(&self, mut tx_input: TransactionInput) -> TransactionInput {
         let tx: TransactionRequest =
-            <TransactionRequest as From<TransactionInput>>::from(tx).nonce(self.nonce.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
+            <TransactionRequest as From<TransactionInput>>::from(tx_input.clone()).nonce(self.nonce.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
         let req = TypedTransaction::Legacy(tx);
         let new_hash = req.sighash();
         let signature = self.wallet.sign_transaction_sync(&req).unwrap();
-        (new_hash, req.rlp_signed(&signature))
+
+        tx_input.signer = self.wallet.address().into();
+        tx_input.hash = new_hash.into();
+        tx_input.r = signature.r;
+        tx_input.s = signature.s;
+        tx_input.v = signature.v.into();
+
+        tx_input
     }
 }
 
@@ -185,7 +194,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 100
+                LIMIT 10
             )
             UPDATE relayer_blocks r
                 SET started = true
@@ -217,7 +226,13 @@ impl ExternalRelayer {
             return Err(anyhow!("some blocks in this batch have not been mined in stratus"));
         }
 
-        let combined_transactions = Self::combine_transactions(blocks);
+        let combined_transactions = Self::combine_transactions(blocks)
+            .into_iter()
+            .map(|mut tx| {
+                tx.input = self.signer.sign_transaction_input(tx.input);
+                tx
+            })
+            .collect();
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
@@ -396,33 +411,30 @@ impl ExternalRelayer {
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
 
-        let (new_hash, rlp) = self.signer.sign_transaction(tx_mined.input.clone());
-
+        let rlp = Transaction::from(tx_mined.input.clone()).rlp();
         let tx = loop {
-            match self.substrate_chain.send_raw_transaction(new_hash.into(), rlp.clone()).await {
+            match self.substrate_chain.send_raw_transaction(tx_hash, rlp.clone()).await {
                 Ok(tx) => break tx,
                 Err(err) => {
                     tracing::warn!(
-                        ?new_hash,
+                        ?tx_hash,
                         "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
                     );
-                    if self.substrate_chain.fetch_transaction(new_hash.into()).await.unwrap_or(None).is_some() {
-                        tracing::info!(?new_hash, "transaction found on substrate");
-                        return self
-                            .compare_receipt(tx_mined, PendingTransaction::new(new_hash.into(), &self.substrate_chain))
-                            .await;
+                    if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
+                        tracing::info!(?tx_hash, "transaction found on substrate");
+                        return self.compare_receipt(tx_mined, PendingTransaction::new(tx_hash, &self.substrate_chain)).await;
                     }
-                    tracing::warn!(?new_hash, ?err, "failed to send raw transaction, retrying...");
+                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
                     continue;
                 }
             }
         };
 
         // this is probably redundant since send_raw_transaction probably only succeeds if the transaction was added to the mempool already.
-        tracing::info!(?new_hash, "polling eth_getTransactionByHash");
+        tracing::info!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
         let mut tries = 0;
-        while self.substrate_chain.fetch_transaction(new_hash.into()).await.unwrap_or(None).is_none() {
-            tracing::warn!(?new_hash, ?tries, "transaction not found, retrying...");
+        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
+            tracing::warn!(?tx_mined.input.hash, ?tries, "transaction not found, retrying...");
             traced_sleep(Duration::from_millis(100), SleepReason::SyncData).await;
             tries += 1;
         }
