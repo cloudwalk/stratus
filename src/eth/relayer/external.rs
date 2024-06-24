@@ -81,7 +81,8 @@ impl TxSigner {
         let signature = self.wallet.sign_transaction_sync(&req).unwrap();
 
         tx_input.signer = self.wallet.address().into();
-        tx_input.tx_type = Some(0.into());
+        // None is Legacy
+        tx_input.tx_type = None;
         tx_input.hash = new_hash.into();
         tx_input.r = signature.r;
         tx_input.s = signature.s;
