@@ -21,12 +21,12 @@ use stratus::ext::spawn_named;
 use stratus::ext::traced_sleep;
 use stratus::ext::DisplayExt;
 use stratus::ext::SleepReason;
-use stratus::ext::SpanExt;
 use stratus::if_else;
 #[cfg(feature = "metrics")]
 use stratus::infra::metrics;
 use stratus::infra::tracing::warn_task_rx_closed;
 use stratus::infra::tracing::warn_task_tx_closed;
+use stratus::infra::tracing::SpanExt;
 use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
 #[cfg(feature = "metrics")]

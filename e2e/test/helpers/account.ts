@@ -6,7 +6,7 @@ export class Account implements Addressable {
     constructor(
         readonly address: string,
         readonly privateKey: string,
-    ) { }
+    ) {}
 
     getAddress(): Promise<string> {
         return Promise.resolve(this.address);

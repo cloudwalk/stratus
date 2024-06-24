@@ -1,16 +1,25 @@
-import axios from "axios";
-import axiosRetry from 'axios-retry';
-import { ContractFactory, ContractTransactionReceipt, ContractTransactionResponse, JsonRpcProvider } from "ethers"
-import { upgrades, ethers, config, network } from "hardhat";
-import { BRLCToken, BalanceTracker, CardPaymentProcessor, CashbackDistributor, IERC20Hookable, PixCashier, YieldStreamer } from "../../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import axios from "axios";
+import axiosRetry from "axios-retry";
+import { ContractFactory, ContractTransactionReceipt, ContractTransactionResponse, JsonRpcProvider } from "ethers";
+import { config, ethers, network, upgrades } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
+
+import {
+    BRLCToken,
+    BalanceTracker,
+    CardPaymentProcessor,
+    CashbackDistributor,
+    IERC20Hookable,
+    PixCashier,
+    YieldStreamer,
+} from "../../typechain-types";
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./recompile";
 
 /* Constants */
-export const FAKE_32_BYTES = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-export const FAKE_16_BYTES = "0xabcdef1234567890abcdef1234567890"
-export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+export const FAKE_32_BYTES = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+export const FAKE_16_BYTES = "0xabcdef1234567890abcdef1234567890";
+export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /* Contracts instances */
 export let brlcToken: BRLCToken;
@@ -31,18 +40,15 @@ if (!providerUrl) {
     providerUrl = "http://localhost:8545";
 }
 
-export let ETHERJS = new JsonRpcProvider(
-    providerUrl,
-    undefined
-);
+export let ETHERJS = new JsonRpcProvider(providerUrl, undefined);
 
 export function updateProviderUrl(providerName: string) {
     switch (providerName) {
-        case 'stratus':
-            providerUrl = 'http://localhost:3000?app=e2e';
+        case "stratus":
+            providerUrl = "http://localhost:3000?app=e2e";
             break;
-        case 'hardhat':
-            providerUrl = 'http://localhost:8545';
+        case "hardhat":
+            providerUrl = "http://localhost:8545";
             break;
         default:
             throw new Error(`Unknown provider name: ${providerName}`);
@@ -60,7 +66,9 @@ export async function setDeployer() {
     [deployer] = await ethers.getSigners();
 }
 
-export async function waitReceipt(txResponsePromise: Promise<ContractTransactionResponse>): Promise<ContractTransactionReceipt> {
+export async function waitReceipt(
+    txResponsePromise: Promise<ContractTransactionResponse>,
+): Promise<ContractTransactionReceipt> {
     const txReceipt = await txResponsePromise;
     return txReceipt.wait() as Promise<ContractTransactionReceipt>;
 }
@@ -75,8 +83,10 @@ export async function deployBRLC() {
 }
 
 export async function configureBRLC() {
-    await waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress(), { gasLimit: GAS_LIMIT_OVERRIDE}));
-    await waitReceipt(brlcToken.configureMinter(await deployer.getAddress(), 1000000000, { gasLimit: GAS_LIMIT_OVERRIDE}));
+    await waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress(), { gasLimit: GAS_LIMIT_OVERRIDE }));
+    await waitReceipt(
+        brlcToken.configureMinter(await deployer.getAddress(), 1000000000, { gasLimit: GAS_LIMIT_OVERRIDE }),
+    );
 }
 
 export async function deployPixCashier() {
@@ -99,26 +109,37 @@ export async function deployCashbackDistributor() {
 }
 
 export async function configureCashbackDistributor() {
-    waitReceipt(cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await deployer.getAddress()));
+    waitReceipt(
+        cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await deployer.getAddress()),
+    );
     waitReceipt(cashbackDistributor.enable());
 }
 
 export async function deployCardPaymentProcessor() {
     let cardPaymentProcessorFactory: ContractFactory = await ethers.getContractFactory("CardPaymentProcessor");
-    let deployedProxy = await upgrades.deployProxy(cardPaymentProcessorFactory.connect(deployer), [await brlcToken.getAddress()]);
+    let deployedProxy = await upgrades.deployProxy(cardPaymentProcessorFactory.connect(deployer), [
+        await brlcToken.getAddress(),
+    ]);
     await deployedProxy.waitForDeployment();
     cardPaymentProcessor = deployedProxy.connect(deployer) as CardPaymentProcessor;
 }
 
 export async function configureCardPaymentProcessor() {
     const rateFactor = 10;
-    waitReceipt(cardPaymentProcessor.grantRole(await cardPaymentProcessor.EXECUTOR_ROLE(), await deployer.getAddress()));
+    waitReceipt(
+        cardPaymentProcessor.grantRole(await cardPaymentProcessor.EXECUTOR_ROLE(), await deployer.getAddress()),
+    );
     waitReceipt(cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress()));
     waitReceipt(cardPaymentProcessor.setRevocationLimit(255));
     waitReceipt(cardPaymentProcessor.setCashbackRate(1.5 * rateFactor));
     waitReceipt(cardPaymentProcessor.setCashOutAccount(await deployer.getAddress()));
     waitReceipt(brlcToken.approve(await cardPaymentProcessor.getAddress(), 0xfffffffffffff));
-    waitReceipt(cashbackDistributor.grantRole(await cashbackDistributor.DISTRIBUTOR_ROLE(), await cardPaymentProcessor.getAddress()));
+    waitReceipt(
+        cashbackDistributor.grantRole(
+            await cashbackDistributor.DISTRIBUTOR_ROLE(),
+            await cardPaymentProcessor.getAddress(),
+        ),
+    );
     waitReceipt(cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress()));
     waitReceipt(cardPaymentProcessor.enableCashback());
     waitReceipt(cardPaymentProcessor.setCashOutAccount(ZERO_ADDRESS));
@@ -126,7 +147,7 @@ export async function configureCardPaymentProcessor() {
 
 export async function deployBalanceTracker() {
     const tokenAddressInSource = readTokenAddressFromSource();
-    if (tokenAddressInSource !== await brlcToken.getAddress()) {
+    if (tokenAddressInSource !== (await brlcToken.getAddress())) {
         replaceTokenAddress(tokenAddressInSource, await brlcToken.getAddress());
         recompile();
     }
@@ -197,11 +218,11 @@ export async function sendWithRetry(methodName: string, params: any[], maxAttemp
                 return result;
             }
             if (attempt < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, delay));
+                await new Promise((resolve) => setTimeout(resolve, delay));
             }
         } catch (error) {
             if (attempt < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, delay));
+                await new Promise((resolve) => setTimeout(resolve, delay));
             } else {
                 throw error;
             }
