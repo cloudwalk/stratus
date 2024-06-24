@@ -396,11 +396,9 @@ impl Consensus {
                     {
                         tracing::debug!(executions_len = executions.len(), "Processing transaction executions");
                         if !executions.is_empty() {
-                            tracing::debug!("Fetching last index from log entries storage");
                             let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
                             tracing::debug!(last_index, "Last index fetched");
 
-                            tracing::debug!("Loading current term");
                             let current_term = consensus.current_term.load(Ordering::SeqCst);
                             tracing::debug!(current_term, "Current term loaded");
 
