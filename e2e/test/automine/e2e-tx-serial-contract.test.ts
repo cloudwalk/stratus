@@ -165,7 +165,7 @@ describe("Transaction: serial TestContractBalances", () => {
         (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 1) }])).length(3);
         (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 2) }])).length(2);
         (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 3) }])).length(1);
-        (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 4) }])).length(1);
+        (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 4) }])).length(0);
 
         // filter topics
         (await sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_ADD] }])).length(2);

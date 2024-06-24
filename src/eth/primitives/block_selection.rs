@@ -1,9 +1,10 @@
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 pub enum BlockSelection {
     /// Retrieve the most recent block.
+    #[default]
     Latest,
 
     /// Retrieve the most early block.
@@ -16,11 +17,9 @@ pub enum BlockSelection {
     Number(BlockNumber),
 }
 
-impl Default for BlockSelection {
-    fn default() -> Self {
-        Self::Latest
-    }
-}
+// -----------------------------------------------------------------------------
+// Serialization / Deserilization
+// -----------------------------------------------------------------------------
 
 impl<'de> serde::Deserialize<'de> for BlockSelection {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -47,6 +46,10 @@ impl<'de> serde::Deserialize<'de> for BlockSelection {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Tests
+// -----------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
