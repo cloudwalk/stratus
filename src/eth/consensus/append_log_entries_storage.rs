@@ -127,8 +127,8 @@ mod tests {
 
     fn setup_storage() -> AppendLogEntriesStorage {
         let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path();
-        AppendLogEntriesStorage::new(temp_path).unwrap()
+        let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
+        AppendLogEntriesStorage::new(Some(temp_path)).unwrap()
     }
 
     #[test]
