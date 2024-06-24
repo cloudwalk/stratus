@@ -1,12 +1,6 @@
-//! Metrics services.
-#![cfg(feature = "metrics")]
-
 use std::net::SocketAddr;
 use std::stringify;
 
-use metrics_exporter_prometheus::PrometheusBuilder;
-
-use crate::infra::build_info;
 use crate::infra::metrics::metrics_for_consensus;
 use crate::infra::metrics::metrics_for_evm;
 use crate::infra::metrics::metrics_for_executor;
@@ -35,15 +29,8 @@ pub fn init_metrics(address: SocketAddr) -> anyhow::Result<()> {
     metrics.extend(metrics_for_consensus());
     metrics.extend(metrics_for_external_relayer());
 
-    // init exporter
-    if let Err(e) = PrometheusBuilder::new()
-        .add_global_label("service", build_info::service_name())
-        .add_global_label("version", build_info::version())
-        .with_http_listener(address)
-        .install()
-    {
-        tracing::error!(reason = ?e, %address, "failed to create metrics exporter");
-    }
+    // init metric exporter
+    init_metrics_exporter(address);
 
     // init metric description (always after provider started)
     for metric in &metrics {
@@ -51,4 +38,22 @@ pub fn init_metrics(address: SocketAddr) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "metrics")]
+fn init_metrics_exporter(address: SocketAddr) {
+    tracing::info!(%address, "creating prometheus metrics exporter");
+    if let Err(e) = metrics_exporter_prometheus::PrometheusBuilder::new()
+        .add_global_label("service", crate::infra::build_info::service_name())
+        .add_global_label("version", crate::infra::build_info::version())
+        .with_http_listener(address)
+        .install()
+    {
+        tracing::error!(reason = ?e, %address, "failed to create metrics exporter");
+    }
+}
+
+#[cfg(not(feature = "metrics"))]
+fn init_metrics_exporter(_: SocketAddr) {
+    tracing::info!("creating noop metrics exporter");
 }

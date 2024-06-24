@@ -33,9 +33,10 @@ impl DbConfig {
 
         // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
         #[cfg(feature = "metrics")]
-        opts.enable_statistics();
-        #[cfg(feature = "metrics")]
-        opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
+        {
+            opts.enable_statistics();
+            opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
+        }
 
         match self {
             DbConfig::LargeSSTFiles => {
