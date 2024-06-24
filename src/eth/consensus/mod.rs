@@ -499,7 +499,6 @@ impl Consensus {
                         }
                     }
                     else => {
-                        tracing::debug!("No transactions or blocks received, yielding");
                         tokio::task::yield_now().await;
                     }
                 }
