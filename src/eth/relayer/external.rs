@@ -404,7 +404,7 @@ impl ExternalRelayer {
         let start = metrics::now();
 
         let tx_hash = tx_mined.input.hash;
-        tracing::info!(?tx_hash, "relaying transaction");
+        tracing::info!(?tx_mined.input.nonce, ?tx_hash, "relaying transaction");
 
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
@@ -415,6 +415,7 @@ impl ExternalRelayer {
                 Ok(tx) => break tx,
                 Err(err) => {
                     tracing::warn!(
+                        ?tx_mined.input.nonce,
                         ?tx_hash,
                         "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
                     );
