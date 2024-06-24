@@ -461,6 +461,7 @@ pub trait SpanExt {
     }
 
     #[cfg(not(feature = "tracing"))]
+    /// Do nothing because the `tracing` function is disabled.
     fn with<F>(_: F)
     where
         F: Fn(Span),

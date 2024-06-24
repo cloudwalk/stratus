@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::time::Duration;
 
 use metrics::describe_counter;
 use metrics::describe_gauge;
@@ -94,4 +95,64 @@ pub(super) fn into_labels(labels: Vec<(&'static str, MetricLabelValue)>) -> Vec<
         })
         .map(|(key, value)| Label::new(key, value))
         .collect()
+}
+
+// -----------------------------------------------------------------------------
+// Timed
+// -----------------------------------------------------------------------------
+#[cfg(feature = "metrics")]
+/// Measures how long the provided function takes to execute.
+///
+/// Returns a wrapper that allows to using it to record metrics if the `metrics` feature is enabled.
+pub fn timed<F, T>(f: F) -> Timed<T>
+where
+    F: FnOnce() -> T,
+{
+    let start = crate::infra::metrics::now();
+    let result = f();
+    Timed {
+        elapsed: start.elapsed(),
+        result,
+    }
+}
+
+#[cfg(not(feature = "metrics"))]
+/// Executes the provided function
+pub fn metrify<F, T>(f: F) -> Timed<T>
+where
+    F: FnOnce() -> T,
+{
+    let result = f();
+    Timed {
+        elapsed: Duration::default(),
+        result,
+    }
+}
+
+pub struct Timed<T> {
+    pub elapsed: Duration,
+    pub result: T,
+}
+
+impl<T> Timed<T> {
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    /// Applies the provided function to the current metrified execution.
+    pub fn with<F>(self, f: F) -> T
+    where
+        F: FnOnce(&Timed<T>),
+    {
+        f(&self);
+        self.result
+    }
+
+    #[cfg(not(feature = "metrics"))]
+    #[inline(always)]
+    /// Do nothing because the `metrics` function is disabled.
+    pub fn with<F>(self, _: F) -> T
+    where
+        F: FnOnce(&Timed<T>),
+    {
+        self.result
+    }
 }
