@@ -196,7 +196,7 @@ impl From<TransactionInput> for TransactionRequest {
             value: Some(input.value.into()),
             gas_price: Some(input.gas_price.into()),
             gas: Some(input.gas_limit.into()),
-            data: Some(input.input.into())
+            data: Some(input.input.into()),
         }
     }
 }

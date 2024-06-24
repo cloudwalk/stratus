@@ -1,9 +1,13 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
+use ::metrics::atomics::AtomicU64;
 use anyhow::anyhow;
 use anyhow::Context;
+use ethereum_types::H256;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
+use ethers_core::types::Bytes;
+use ethers_core::types::TransactionRequest;
 use ethers_signers::LocalWallet;
 use ethers_signers::Signer;
 use futures::future::join_all;
@@ -28,6 +32,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
@@ -52,6 +57,33 @@ pub enum RelayError {
     CompareTimeout(BlockNumber, anyhow::Error),
 }
 
+struct TxSigner {
+    wallet: LocalWallet,
+    nonce: AtomicU64,
+}
+
+impl TxSigner {
+    pub async fn new(private_key: String, chain: &BlockchainClient) -> anyhow::Result<Self> {
+        let private_key = const_hex::decode(private_key)?;
+        let wallet = LocalWallet::from_bytes(&private_key)?;
+        let addr = wallet.address().into();
+        let nonce = chain.fetch_transaction_count(&addr).await?;
+        Ok(Self {
+            wallet,
+            nonce: u64::from(nonce).into(),
+        })
+    }
+
+    pub async fn sign_transaction(&self, tx: TransactionInput) -> (H256, Bytes) {
+        let tx: TransactionRequest =
+            <TransactionRequest as From<TransactionInput>>::from(tx).nonce(self.nonce.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
+        let req = TypedTransaction::Legacy(tx);
+        let new_hash = req.sighash();
+        let signature = self.wallet.sign_transaction(&req).await.unwrap();
+        (new_hash, req.rlp_signed(&signature))
+    }
+}
+
 pub struct ExternalRelayer {
     pool: PgPool,
 
@@ -61,7 +93,7 @@ pub struct ExternalRelayer {
     /// RPC client that will submit transactions.
     stratus_chain: BlockchainClient,
 
-    signer: LocalWallet,
+    signer: TxSigner,
 }
 
 impl ExternalRelayer {
@@ -76,11 +108,14 @@ impl ExternalRelayer {
             .await
             .expect("should not fail to create pgpool");
 
+        let substrate_chain = BlockchainClient::new_http(&config.forward_to, config.rpc_timeout).await?;
+        let signer = TxSigner::new(config.signer, &substrate_chain).await?;
+
         Ok(Self {
-            substrate_chain: BlockchainClient::new_http(&config.forward_to, config.rpc_timeout).await?,
+            substrate_chain,
             stratus_chain: BlockchainClient::new_http(&config.stratus_rpc, config.rpc_timeout).await?,
             pool,
-            signer: LocalWallet::from_bytes(&const_hex::decode(config.signer).unwrap()).unwrap(),
+            signer,
         })
     }
 
@@ -360,13 +395,11 @@ impl ExternalRelayer {
 
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
-        let req = TypedTransaction::Legacy(tx_mined.input.clone().into());
-        let new_hash = req.sighash();
-        let signature = self.signer
-            .sign_transaction(&req).await.unwrap();
+
+        let (new_hash, rlp) = self.signer.sign_transaction(tx_mined.input.clone()).await;
 
         let tx = loop {
-            match self.substrate_chain.send_raw_transaction(tx_hash, req.rlp_signed(&signature)).await {
+            match self.substrate_chain.send_raw_transaction(tx_hash, rlp.clone()).await {
                 Ok(tx) => break tx,
                 Err(err) => {
                     tracing::info!(
@@ -375,7 +408,9 @@ impl ExternalRelayer {
                     );
                     if self.substrate_chain.fetch_transaction(new_hash.into()).await.unwrap_or(None).is_some() {
                         tracing::info!(?new_hash, "transaction found on substrate");
-                        return self.compare_receipt(tx_mined, PendingTransaction::new(new_hash.into(), &self.substrate_chain)).await;
+                        return self
+                            .compare_receipt(tx_mined, PendingTransaction::new(new_hash.into(), &self.substrate_chain))
+                            .await;
                     }
                     tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
                     continue;

@@ -156,6 +156,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_method("stratus_liveness", stratus_liveness)?;
     module.register_method("stratus_version", stratus_version)?;
+    module.register_blocking_method("stratus_getSlots", stratus_get_slots)?;
 
     // blockchain
     module.register_method("net_version", net_version)?;
@@ -300,6 +301,26 @@ fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Re
 
 fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
     Ok(build_info::as_json())
+}
+
+#[tracing::instrument(name = "rpc::stratus_getSlots", skip_all, fields(address, indexes))]
+fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let (params, indexes) = next_rpc_param::<Vec<SlotIndex>>(params)?;
+    let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
+
+    Span::with(|s| {
+        s.rec_str("address", &address);
+        s.rec_str("index", &format!("{:?}", indexes));
+    });
+
+    let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
+    let slots = indexes
+        .into_iter()
+        .map(|index| ctx.storage.read_slot(&address, &index, &point_in_time))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(serde_json::to_value(slots).expect_infallible())
 }
 
 // -----------------------------------------------------------------------------
