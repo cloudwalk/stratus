@@ -523,14 +523,7 @@ impl StratusStorage {
     pub fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
         match block_selection {
             BlockSelection::Latest => Ok(StoragePointInTime::Present),
-            BlockSelection::Number(number) => {
-                let current_block = self.perm.read_mined_block_number()?;
-                if number <= &current_block {
-                    Ok(StoragePointInTime::Past(*number))
-                } else {
-                    Ok(StoragePointInTime::Past(current_block))
-                }
-            }
+            BlockSelection::Number(number) => Ok(StoragePointInTime::Past(*number)),
             BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection)? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
                 None => Err(anyhow!(

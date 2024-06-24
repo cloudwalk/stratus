@@ -78,14 +78,12 @@ describe("Relayer integration test", function () {
                     const amount = Math.floor(Math.random() * 10) + 1;
 
                     try {
-                        const tx = await brlcToken
-                            .connect(sender)
-                            .transfer(receiver.address, amount, {
-                                gasPrice: 0,
-                                gasLimit: GAS_LIMIT_OVERRIDE,
-                                type: 0,
-                                nonce: nonces[senderIndex],
-                            });
+                        const tx = await brlcToken.connect(sender).transfer(receiver.address, amount, {
+                            gasPrice: 0,
+                            gasLimit: GAS_LIMIT_OVERRIDE,
+                            type: 0,
+                            nonce: nonces[senderIndex],
+                        });
                         txHashList.push(tx.hash);
                     } catch (error) {}
 
@@ -210,14 +208,12 @@ describe("Relayer integration test", function () {
                 let sender = wallets[i % 2];
                 let receiver = wallets[(i + 1) % 2];
 
-                const tx = await brlcToken
-                    .connect(sender)
-                    .transfer(receiver.address, 10, {
-                        gasPrice: 0,
-                        gasLimit: GAS_LIMIT_OVERRIDE,
-                        type: 0,
-                        nonce: nonces[i % 2],
-                    });
+                const tx = await brlcToken.connect(sender).transfer(receiver.address, 10, {
+                    gasPrice: 0,
+                    gasLimit: GAS_LIMIT_OVERRIDE,
+                    type: 0,
+                    nonce: nonces[i % 2],
+                });
 
                 txHashList.push(tx.transactionHash);
 
