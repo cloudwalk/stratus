@@ -469,7 +469,7 @@ impl Consensus {
                                 tracing::debug!(current_term, "Current term loaded");
 
                                 let transaction_hashes: Vec<String> = block.transactions.iter().map(|tx| tx.input.hash.to_string()).collect();
-                                
+
                                 match consensus.log_entries_storage.save_log_entry(
                                     last_index + 1,
                                     current_term,
@@ -726,12 +726,13 @@ impl Consensus {
             });
 
             match peer.client.append_transaction_executions(request).await {
-                Ok(response) =>
+                Ok(response) => {
                     if response.into_inner().status == StatusCode::AppendSuccess as i32 {
                         tracing::info!("Successfully appended transaction executions to peer: {:?}", peer.client);
                     } else {
                         tracing::warn!("Failed to append transaction executions to peer: {:?}", peer.client);
-                    },
+                    }
+                }
                 Err(e) => {
                     tracing::warn!("Error appending transaction executions to peer {:?}: {:?}", peer.client, e);
                 }

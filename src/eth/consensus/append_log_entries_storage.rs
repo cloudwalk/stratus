@@ -103,12 +103,15 @@ impl AppendLogEntriesStorage {
         tracing::debug!(index, term, "Creating {} log entry", entry_type);
         let log_entry = LogEntry { term, index, data };
         tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
-    
+
         tracing::debug!("Checking for existing {} entry at new index", entry_type);
         match self.get_entry(log_entry.index) {
             Ok(Some(existing_entry)) => {
                 if existing_entry.term != log_entry.term {
-                    tracing::warn!(index = log_entry.index, "Conflicting entry found, deleting existing entry and all that follow it");
+                    tracing::warn!(
+                        index = log_entry.index,
+                        "Conflicting entry found, deleting existing entry and all that follow it"
+                    );
                     self.delete_entries_from(log_entry.index)?;
                 }
             }
@@ -120,12 +123,11 @@ impl AppendLogEntriesStorage {
                 return Err(anyhow::anyhow!("Error retrieving entry: {}", e));
             }
         }
-    
+
         tracing::debug!("Appending new {} log entry", entry_type);
         self.save_entry(&log_entry)
             .map_err(|e| anyhow::anyhow!("Failed to append {} log entry: {}", entry_type, e))
     }
-    
 }
 
 #[cfg(test)]
