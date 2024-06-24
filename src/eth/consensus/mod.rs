@@ -492,7 +492,7 @@ impl Consensus {
                             {
                                 let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
                                 if consensus.broadcast_sender.send(block_entry).is_err() {
-                                    tracing::error!("failed to broadcast block");
+                                    tracing::error!("Failed to broadcast block");
                                 }
                             }
                         }
