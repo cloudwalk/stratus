@@ -409,11 +409,10 @@ impl Consensus {
                                 "transaction",
                             ) {
                                 Ok(_) => {
-                                    tracing::debug!("Log entry saved successfully");
+                                    tracing::debug!("Transaction execution entry saved successfully");
                                 }
                                 Err(e) => {
-                                    tracing::error!("Failed to save log entry: {:?}", e);
-                                    //TODO: handle error
+                                    tracing::error!("Failed to save transaction execution entry: {:?}", e);
                                 }
                             }
                         }
@@ -457,7 +456,6 @@ impl Consensus {
                         }
                     }
                     Ok(block) = rx_blocks.recv() => {
-                        tracing::debug!("Attempting to receive block");
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
@@ -479,15 +477,14 @@ impl Consensus {
                                     "block",
                                 ) {
                                     Ok(_) => {
-                                        tracing::debug!("Block log entry saved successfully");
+                                        tracing::debug!("Block entry saved successfully");
                                         let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
                                         if consensus.broadcast_sender.send(block_entry).is_err() {
                                             tracing::error!("Failed to broadcast block");
                                         }
                                     }
                                     Err(e) => {
-                                        tracing::error!("Failed to save block log entry: {:?}", e);
-                                        // TODO: handle error
+                                        tracing::error!("Failed to save block entry: {:?}", e);
                                     }
                                 }
                             }
