@@ -168,8 +168,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
 mod tests {
     use std::net::Ipv4Addr;
     use std::net::SocketAddr;
-    use ethereum_types::H256;
 
+    use ethereum_types::H256;
     use tokio::sync::broadcast;
     use tokio::sync::Mutex;
     use tonic::Request;
