@@ -21,7 +21,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
-use crate::ext::SpanExt;
+use crate::infra::tracing::SpanExt;
 
 cfg_if::cfg_if! {
     if #[cfg(test)] {
