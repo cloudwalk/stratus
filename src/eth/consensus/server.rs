@@ -1,4 +1,3 @@
-use crate::eth::consensus::LogEntryData;
 use core::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -15,6 +14,7 @@ use super::append_entry::RequestVoteRequest;
 use super::append_entry::RequestVoteResponse;
 use super::append_entry::StatusCode;
 use crate::eth::consensus::AppendEntryService;
+use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::Consensus;

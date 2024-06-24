@@ -108,12 +108,11 @@ impl AppendLogEntriesStorage {
         if let Some(existing_entry) = self.get_entry(log_entry.index).unwrap_or(None) {
             if existing_entry.term != log_entry.term {
                 tracing::error!(index = log_entry.index, "duplicated entries from index due to term mismatch");
-                 return Err(anyhow::anyhow!("Duplicated entries from index due to term mismatch"));
+                return Err(anyhow::anyhow!("Duplicated entries from index due to term mismatch"));
             }
         }
 
         tracing::debug!("Saving new {} log entry", entry_type);
-        self.save_entry(&log_entry)
-            .map_err(|_| anyhow::anyhow!("Failed to save {}", entry_type))
+        self.save_entry(&log_entry).map_err(|_| anyhow::anyhow!("Failed to save {}", entry_type))
     }
 }
