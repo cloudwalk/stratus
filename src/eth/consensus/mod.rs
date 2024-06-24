@@ -464,18 +464,30 @@ impl Consensus {
                             #[cfg(feature = "rocks")]
                             {
                                 //TODO: before saving check if all transaction_hashes are already in the log
-                                tracing::debug!("Fetching last index from log entries storage for block");
                                 let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                                tracing::debug!(last_index, "Last index for block fetched");
+                                tracing::debug!(last_index, "Last index fetched");
 
-                                tracing::debug!("Loading current term for block");
                                 let current_term = consensus.current_term.load(Ordering::SeqCst);
-                                tracing::debug!(current_term, "Current term for block loaded");
+                                tracing::debug!(current_term, "Current term loaded");
 
-                                if consensus.log_entries_storage.save_log_entry(last_index + 1, current_term, LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new())), "block").is_ok() {
-                                    let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
-                                    if consensus.broadcast_sender.send(block_entry).is_err() {
-                                        tracing::error!("failed to broadcast block");
+                                let transaction_hashes: Vec<String> = block.transactions.iter().map(|tx| tx.input.hash.to_string()).collect();
+                                
+                                match consensus.log_entries_storage.save_log_entry(
+                                    last_index + 1,
+                                    current_term,
+                                    LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes.clone())),
+                                    "block",
+                                ) {
+                                    Ok(_) => {
+                                        tracing::debug!("Block log entry saved successfully");
+                                        let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
+                                        if consensus.broadcast_sender.send(block_entry).is_err() {
+                                            tracing::error!("Failed to broadcast block");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to save block log entry: {:?}", e);
+                                        // TODO: handle error
                                     }
                                 }
                             }
