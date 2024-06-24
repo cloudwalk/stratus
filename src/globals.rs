@@ -56,7 +56,6 @@ where
             .expect("failed to init tracing");
 
         // init metrics
-        #[cfg(feature = "metrics")]
         infra::init_metrics(common.metrics_exporter_address).expect("failed to init metrics");
 
         // init sentry

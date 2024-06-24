@@ -84,7 +84,7 @@ tower = "=0.4.13"
 
 # observability
 console-subscriber = "=0.2.0"
-metrics = { version = "=0.23.0", optional = true }
+metrics = "=0.23.0"
 metrics-exporter-prometheus = { version = "=0.15.0", optional = true }
 opentelemetry = "=0.23.0"
 opentelemetry_sdk = { version = "=0.23.0", features = ["rt-tokio"] }
@@ -187,7 +187,7 @@ default = ["bg-threads", "metrics", "tracing", "rocks"]
 dev  = []
 
 # Enable runtime metrics collection.
-metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
+metrics = ["dep:metrics-exporter-prometheus"]
 
 # Enable runtime tracing/spans collection.
 tracing = []
