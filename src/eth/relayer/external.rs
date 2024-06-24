@@ -1,13 +1,11 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use ethers_core::types::Transaction;
 use ::metrics::atomics::AtomicU64;
 use anyhow::anyhow;
 use anyhow::Context;
-use ethereum_types::H256;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::Bytes;
+use ethers_core::types::Transaction;
 use ethers_core::types::TransactionRequest;
 use ethers_signers::LocalWallet;
 use ethers_signers::Signer;
@@ -74,7 +72,6 @@ impl TxSigner {
             nonce: u64::from(nonce).into(),
         })
     }
-
 
     pub fn sign_transaction_input(&self, mut tx_input: TransactionInput) -> TransactionInput {
         let tx: TransactionRequest =
@@ -173,13 +170,13 @@ impl ExternalRelayer {
                 )
                 .execute(&self.pool)
                 .await {
-                    tracing::warn!(?e, "failed to insert slot mismatch, retrying...")
+                    tracing::warn!(?e, "failed to insert slot mismatch, retrying...");
                 }
-            }})
+            }});
         }
 
         let mut buffer = futures::stream::iter(futures).buffer_unordered(100);
-        while let Some(_) = buffer.next().await {}
+        while buffer.next().await.is_some() {}
 
         #[cfg(feature = "metrics")]
         inc_compare_final_state(start.elapsed());
@@ -206,7 +203,7 @@ impl ExternalRelayer {
         .fetch_all(&self.pool)
         .await?;
 
-        if block_rows.len() == 0 {
+        if block_rows.is_empty() {
             tracing::info!("no blocks to relay");
             return Ok(vec![]);
         }
@@ -234,7 +231,7 @@ impl ExternalRelayer {
                 tx.input = self.signer.sign_transaction_input(tx.input);
                 tx
             })
-            .collect();
+            .collect_vec();
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
@@ -320,7 +317,7 @@ impl ExternalRelayer {
                         break Ok(());
                     }
                 }
-                Ok(None) => {
+                Ok(None) =>
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
@@ -329,8 +326,7 @@ impl ExternalRelayer {
                             block_number,
                             anyhow!("no receipt returned by substrate for more than 30 seconds"),
                         ));
-                    }
-                }
+                    },
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -384,7 +380,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) => {
+            Ok(res) =>
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -392,8 +388,7 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                }
-            }
+                },
         }
 
         #[cfg(feature = "metrics")]

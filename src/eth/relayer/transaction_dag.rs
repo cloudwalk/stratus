@@ -19,7 +19,7 @@ pub struct TransactionDag {
 }
 
 impl TransactionDag {
-    pub fn get_slot_writes(block_transactions: &Vec<TransactionMined>) -> HashSet<(Address, SlotIndex)> {
+    pub fn get_slot_writes(block_transactions: &[TransactionMined]) -> HashSet<(Address, SlotIndex)> {
         block_transactions
             .iter()
             .flat_map(|tx| {
@@ -33,7 +33,7 @@ impl TransactionDag {
             .collect()
     }
 
-    pub fn get_balance_writes(block_transactions: &Vec<TransactionMined>) -> HashSet<Address> {
+    pub fn get_balance_writes(block_transactions: &[TransactionMined]) -> HashSet<Address> {
         block_transactions
             .iter()
             .flat_map(|tx| {
