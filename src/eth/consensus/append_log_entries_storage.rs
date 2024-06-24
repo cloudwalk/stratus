@@ -106,15 +106,14 @@ impl AppendLogEntriesStorage {
 
         tracing::debug!("Checking for existing {} entry at new index", entry_type);
         match self.get_entry(log_entry.index) {
-            Ok(Some(existing_entry)) => {
+            Ok(Some(existing_entry)) =>
                 if existing_entry.term != log_entry.term {
                     tracing::warn!(
                         index = log_entry.index,
                         "Conflicting entry found, deleting existing entry and all that follow it"
                     );
                     self.delete_entries_from(log_entry.index)?;
-                }
-            }
+                },
             Ok(None) => {
                 // No existing entry at this index, proceed to save the new entry
             }

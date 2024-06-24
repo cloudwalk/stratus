@@ -726,13 +726,12 @@ impl Consensus {
             });
 
             match peer.client.append_transaction_executions(request).await {
-                Ok(response) => {
+                Ok(response) =>
                     if response.into_inner().status == StatusCode::AppendSuccess as i32 {
                         tracing::info!("Successfully appended transaction executions to peer: {:?}", peer.client);
                     } else {
                         tracing::warn!("Failed to append transaction executions to peer: {:?}", peer.client);
-                    }
-                }
+                    },
                 Err(e) => {
                     tracing::warn!("Error appending transaction executions to peer {:?}: {:?}", peer.client, e);
                 }

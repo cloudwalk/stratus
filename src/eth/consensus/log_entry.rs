@@ -32,11 +32,10 @@ impl Message for LogEntryData {
             LogEntryData::BlockEntry(header) => {
                 prost::encoding::message::encode(1, header, buf);
             }
-            LogEntryData::TransactionExecutionEntries(executions) => {
+            LogEntryData::TransactionExecutionEntries(executions) =>
                 for execution in executions {
                     prost::encoding::message::encode(2, execution, buf);
-                }
-            }
+                },
             LogEntryData::EmptyData => {}
         }
     }
@@ -52,7 +51,7 @@ impl Message for LogEntryData {
         B: bytes::Buf,
     {
         match tag {
-            1 => {
+            1 =>
                 if let LogEntryData::BlockEntry(ref mut header) = self {
                     prost::encoding::message::merge(wire_type, header, buf, ctx)
                 } else {
@@ -60,8 +59,7 @@ impl Message for LogEntryData {
                     prost::encoding::message::merge(wire_type, &mut header, buf, ctx)?;
                     *self = LogEntryData::BlockEntry(header);
                     Ok(())
-                }
-            }
+                },
             2 => {
                 let mut execution = TransactionExecutionEntry::default();
                 prost::encoding::message::merge(wire_type, &mut execution, buf, ctx)?;
@@ -79,9 +77,8 @@ impl Message for LogEntryData {
     fn encoded_len(&self) -> usize {
         match self {
             LogEntryData::BlockEntry(header) => prost::encoding::message::encoded_len(1, header),
-            LogEntryData::TransactionExecutionEntries(executions) => {
-                executions.iter().map(|execution| prost::encoding::message::encoded_len(2, execution)).sum()
-            }
+            LogEntryData::TransactionExecutionEntries(executions) =>
+                executions.iter().map(|execution| prost::encoding::message::encoded_len(2, execution)).sum(),
             LogEntryData::EmptyData => 0,
         }
     }
