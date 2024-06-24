@@ -301,7 +301,7 @@ mod tests {
         // Save conflicting log entry at the same index but with a different term
         storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block").unwrap();
 
-        // Assert no entries exist after the conflicting entry's index
+        // Assert no entries exist after the conflicting entry's index, confirming that the conflicting entry and all that follow it were deleted
         assert!(storage.get_entry(index + 1).unwrap().is_none());
 
         // Retrieve the entry at the index and assert it matches the conflicting term entry
