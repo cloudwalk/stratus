@@ -45,6 +45,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.prev_log_term;
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
 
+        #[cfg(feature = "rocks")]
         if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
             tracing::error!("Failed to save log entry: {:?}", e);
             return Err(Status::internal("Failed to save log entry"));
