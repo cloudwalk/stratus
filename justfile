@@ -257,12 +257,12 @@ e2e-clock-stratus-rocks:
     exit $result_code
 
 # E2E: Lint and format code
-e2e-lint:
+e2e-lint mode="--write":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
-    node_modules/.bin/prettier . --write
+    node_modules/.bin/prettier . {{ mode }} --ignore-unknown
 
 # E2E: profiles rpc sync and generates a flamegraph
 e2e-flamegraph:
