@@ -94,8 +94,8 @@ impl TransactionDag {
             node_indexes.insert((tx_bnum, tx_idx), node_idx);
         }
 
-        //Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
-        //Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
+        Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
+        Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
 
         #[cfg(feature = "metrics")]
         metrics::inc_compute_tx_dag(start.elapsed());

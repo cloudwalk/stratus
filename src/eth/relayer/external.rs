@@ -228,6 +228,7 @@ impl ExternalRelayer {
 
         let combined_transactions = Self::combine_transactions(blocks)
             .into_iter()
+            .sorted()
             .map(|mut tx| {
                 tx.input = self.signer.sign_transaction_input(tx.input);
                 tx
