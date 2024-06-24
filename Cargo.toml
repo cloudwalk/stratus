@@ -78,7 +78,6 @@ triehash = "=0.8.4"
 jsonrpsee = { version = "=0.23.1", features = ["server", "client"] }
 k8s-openapi = { version = "=0.21.1", optional = true, features = ["v1_27"] }
 kube = { version = "=0.90.0", optional = true, features = ["runtime", "derive"] }
-raft = { version = "=0.7.0", optional = true }
 reqwest = { version = "=0.12.4", features = ["json"] }
 tonic = "=0.11.0"
 tower = "=0.4.13"
