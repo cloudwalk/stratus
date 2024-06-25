@@ -586,7 +586,7 @@ impl Consensus {
             #[cfg(feature = "metrics")]
             self.emit_readiness_status(is_ready);
 
-            return is_ready;
+            is_ready
         } else {
             let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
             tracing::warn!(diff = diff, "should not serve request");
@@ -594,7 +594,7 @@ impl Consensus {
             #[cfg(feature = "metrics")]
             self.emit_readiness_status(is_ready);
 
-            return is_ready;
+            is_ready
         }
     }
 
