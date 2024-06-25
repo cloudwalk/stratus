@@ -19,6 +19,7 @@ use crate::eth::consensus::Role;
 use crate::eth::Consensus;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::metrics::timed;
 
 #[cfg(feature = "metrics")]
 mod label {
@@ -39,7 +40,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
     ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
-
+        
         let consensus = self.consensus.lock().await;
         let request_inner = request.into_inner();
 
@@ -116,7 +117,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
 
         tracing::info!(
-            last_last_arrived_block_number = last_last_arrived_block_number.clone(),
+            last_last_arrived_block_number = last_last_arrived_block_number,
             new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
             "last arrived block number set",
         );
