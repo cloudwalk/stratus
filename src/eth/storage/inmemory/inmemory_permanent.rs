@@ -199,7 +199,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         let state_lock = self.lock_read();
 
         match state_lock.transactions.get(hash) {

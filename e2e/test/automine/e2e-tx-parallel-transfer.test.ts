@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { TEST_ACCOUNTS, randomAccounts } from "../helpers/account";
-import { sendGetBalance, sendRawTransactions, sendReset, send } from "../helpers/rpc";
+import { send, sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
 
 describe("Transaction: parallel transfer", () => {
     it("Resets blockchain", async () => {

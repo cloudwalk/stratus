@@ -36,7 +36,6 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 #[cfg(feature = "kubernetes")]
 use tokio::time::sleep;
-use tonic::transport::Channel;
 use tonic::transport::Server;
 use tonic::Request;
 
@@ -52,7 +51,7 @@ use crate::GlobalState;
 pub mod append_entry {
     tonic::include_proto!("append_entry");
 }
-
+#[allow(unused_imports)]
 use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
@@ -81,7 +80,7 @@ enum Role {
     _Candidate = 3,
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 struct PeerAddress {
     address: String,
     jsonrpc_port: u16,
@@ -101,9 +100,9 @@ impl PeerAddress {
         format!("{}:{}", self.address, self.grpc_port)
     }
 
-    //TODO FIXME move this code back when we have propagation: fn full_jsonrpc_address(&self) -> String {
-    //TODO FIXME move this code back when we have propagation:     format!("http://{}:{}", self.address, self.jsonrpc_port)
-    //TODO FIXME move this code back when we have propagation: }
+    fn full_jsonrpc_address(&self) -> String {
+        format!("http://{}:{}", self.address, self.jsonrpc_port)
+    }
 
     fn from_string(s: String) -> Result<Self, anyhow::Error> {
         let (scheme, address_part) = if let Some(address) = s.strip_prefix("http://") {
@@ -141,9 +140,17 @@ impl fmt::Display for PeerAddress {
     }
 }
 
+#[cfg(test)]
+use crate::eth::consensus::tests::factories::MockAppendEntryServiceClient;
+
+#[cfg(not(test))]
+type ClientType = AppendEntryServiceClient<tonic::transport::Channel>;
+#[cfg(test)]
+type ClientType = MockAppendEntryServiceClient;
+
 #[derive(Clone)]
 struct Peer {
-    client: AppendEntryServiceClient<Channel>,
+    client: ClientType,
     match_index: u64,
     next_index: u64,
     role: Role,
@@ -157,6 +164,7 @@ pub struct Consensus {
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
+    #[allow(dead_code)]
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
@@ -339,21 +347,29 @@ impl Consensus {
         metrics::inc_consensus_start_election(start.elapsed());
     }
 
+    /// When importer config is set, it will refresh the blockchain client (substrate or any other blockchain client)
+    /// however, if stratus is on miner mode, it will clear the blockchain client for safety reasons, so it has no chance to forward anything to a follower node
     async fn become_leader(&self) {
         // checks if it's running on importer-online mode
         if self.importer_config.is_some() {
-            let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
+            self.refresh_blockchain_client().await;
+        } else {
             let mut blockchain_client_lock = self.blockchain_client.lock().await;
-            *blockchain_client_lock = Some(
-                BlockchainClient::new_http(&http_url, Duration::from_secs(2))
-                    .await
-                    .expect("failed to create blockchain client")
-                    .into(),
-            );
-            drop(blockchain_client_lock);
+            *blockchain_client_lock = None; // clear the blockchain client for safety reasons when not running on importer-online mode
         }
 
         self.set_role(Role::Leader);
+    }
+
+    async fn refresh_blockchain_client(&self) {
+        let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
+        let mut blockchain_client_lock = self.blockchain_client.lock().await;
+        *blockchain_client_lock = Some(
+            BlockchainClient::new_http(&http_url, Duration::from_secs(2))
+                .await
+                .expect("failed to create blockchain client")
+                .into(),
+        );
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
@@ -553,46 +569,43 @@ impl Consensus {
         Some(namespace.trim().to_string())
     }
 
-    //TODO FIXME move this code back when we have propagation: async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
-    //TODO FIXME move this code back when we have propagation:     let peers = self.peers.read().await;
-    //TODO FIXME move this code back when we have propagation:     for (address, (peer, _)) in peers.iter() {
-    //TODO FIXME move this code back when we have propagation:         if peer.role == Role::Leader {
-    //TODO FIXME move this code back when we have propagation:             return Ok(address.clone());
-    //TODO FIXME move this code back when we have propagation:         }
-    //TODO FIXME move this code back when we have propagation:     }
-    //TODO FIXME move this code back when we have propagation:     Err(anyhow!("Leader not found"))
-    //TODO FIXME move this code back when we have propagation: }
+    async fn leader_address(&self) -> anyhow::Result<PeerAddress> {
+        let peers = self.peers.read().await;
+        for (address, (peer, _)) in peers.iter() {
+            if peer.role == Role::Leader {
+                return Ok(address.clone());
+            }
+        }
+        Err(anyhow!("Leader not found"))
+    }
 
     pub async fn get_chain_url(&self) -> anyhow::Result<(String, Option<String>)> {
-        //TODO FIXME move this code back when we have propagation: if self.is_follower().await {
-        //TODO FIXME move this code back when we have propagation:     if let Ok(leader_address) = self.leader_address().await {
-        //TODO FIXME move this code back when we have propagation:         return Some((leader_address.full_jsonrpc_address(), None));
-        //TODO FIXME move this code back when we have propagation:     }
-        //TODO FIXME move this code back when we have propagation: }
-
-        match self.importer_config.clone() {
-            Some(importer_config) => Ok((importer_config.online.external_rpc, importer_config.online.external_rpc_ws)),
-            None => Err(anyhow!("tried to get chain url as a leader and while running on miner mode")),
+        if let Some(importer_config) = self.importer_config.clone() {
+            return Ok((importer_config.online.external_rpc, importer_config.online.external_rpc_ws));
         }
+
+        if self.is_follower().await {
+            if let Ok(leader_address) = self.leader_address().await {
+                return Ok((leader_address.full_jsonrpc_address(), None));
+            }
+        }
+
+        Err(anyhow!("tried to get chain url as a leader and while running on miner mode"))
     }
 
     async fn update_leader(&self, leader_address: PeerAddress) {
+        if leader_address == self.leader_address().await.unwrap_or_default() {
+            tracing::info!("leader is the same as before");
+            return;
+        }
+
         let mut peers = self.peers.write().await;
 
         for (address, (peer, _)) in peers.iter_mut() {
             if *address == leader_address {
-                //IMPORTANT, as the leader changes, we need to update the blockchain client with its address
-                let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
-                let mut blockchain_client_lock = self.blockchain_client.lock().await;
-                *blockchain_client_lock = Some(
-                    BlockchainClient::new_http(&http_url, Duration::from_secs(2))
-                        .await
-                        .expect("failed to create blockchain client")
-                        .into(),
-                );
-                drop(blockchain_client_lock);
-
                 peer.role = Role::Leader;
+
+                self.refresh_blockchain_client().await;
             } else {
                 peer.role = Role::Follower;
             }

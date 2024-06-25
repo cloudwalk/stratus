@@ -46,11 +46,11 @@ use crate::eth::BlockMiner;
 use crate::ext::spawn_blocking_named;
 use crate::ext::spawn_blocking_named_or_thread;
 use crate::ext::ResultExt;
-use crate::ext::SpanExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
+use crate::infra::tracing::SpanExt;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 

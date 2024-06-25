@@ -19,7 +19,7 @@ ENV CARGO_PROFILE_RELEASE_DEBUG=1
 ENV LOG_FORMAT=json
 ENV NO_COLOR=1
 
-RUN cargo build --release --bin stratus --features metrics,kubernetes
+RUN cargo build --release --bin stratus --features kubernetes
 
 
 # Runtime
@@ -28,4 +28,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/stratus /app/stratus
 COPY --from=builder /app/config/* /app/config/
 
-CMD ["sh", "-c", "tail --follow=name --retry data/rocksdb/LOG & /app/stratus"]
+CMD sh -c "tail --follow=name --retry data/rocksdb/LOG & /app/stratus"

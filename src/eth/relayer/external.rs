@@ -37,11 +37,11 @@ use crate::eth::primitives::TransactionMined;
 use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
 use crate::ext::SleepReason;
-use crate::ext::SpanExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::metrics::inc_compare_final_state;
+use crate::infra::tracing::SpanExt;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
 

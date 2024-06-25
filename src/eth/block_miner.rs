@@ -28,7 +28,7 @@ use crate::ext::parse_duration;
 use crate::ext::spawn_blocking_named_or_thread;
 use crate::ext::spawn_named;
 use crate::ext::DisplayExt;
-use crate::ext::SpanExt;
+use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 
 pub struct BlockMiner {

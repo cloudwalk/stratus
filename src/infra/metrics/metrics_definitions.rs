@@ -22,28 +22,28 @@ metrics! {
     group: storage_read,
 
     "Time to execute storage check_conflicts operation."
-    histogram_duration storage_check_conflicts{success, conflicted},
+    histogram_duration storage_check_conflicts{storage, success, conflicted},
 
     "Time to execute storage read_active_block_number operation."
-    histogram_duration storage_read_active_block_number{success},
+    histogram_duration storage_read_active_block_number{storage, success},
 
     "Time to execute storage read_mined_block_number operation."
-    histogram_duration storage_read_mined_block_number{success},
+    histogram_duration storage_read_mined_block_number{storage, success},
 
     "Time to execute storage read_account operation."
-    histogram_duration storage_read_account{found_at, point_in_time, success},
+    histogram_duration storage_read_account{storage, point_in_time, success},
 
     "Time to execute storage read_block operation."
-    histogram_duration storage_read_block{success},
+    histogram_duration storage_read_block{storage, success},
 
     "Time to execute storage read_logs operation."
-    histogram_duration storage_read_logs{success},
+    histogram_duration storage_read_logs{storage, success},
 
     "Time to execute storage read_slot operation."
-    histogram_duration storage_read_slot{found_at, point_in_time, success},
+    histogram_duration storage_read_slot{storage, point_in_time, success},
 
     "Time to execute storage read_mined_transaction operation."
-    histogram_duration storage_read_mined_transaction{success}
+    histogram_duration storage_read_mined_transaction{storage, success}
 }
 
 // Storage writes.
@@ -51,31 +51,28 @@ metrics! {
     group: storage_write,
 
     "Time to execute storage set_active_block_number operation."
-    histogram_duration storage_set_active_block_number{success},
+    histogram_duration storage_set_active_block_number{storage, success},
 
     "Time to execute storage set_mined_block_number operation."
-    histogram_duration storage_set_mined_block_number{success},
+    histogram_duration storage_set_mined_block_number{storage, success},
 
     "Time to execute storage save_accounts operation."
-    histogram_duration storage_save_accounts{success},
+    histogram_duration storage_save_accounts{storage, success},
 
     "Time to execute storage save_account_changes operation."
-    histogram_duration storage_save_execution{success},
-
-    "Time to execute storage flush operation."
-    histogram_duration storage_flush{kind, success},
+    histogram_duration storage_save_execution{storage, success},
 
     "Time to execute storage set_active_external_block operation."
-    histogram_duration storage_set_active_external_block{success},
+    histogram_duration storage_set_active_external_block{storage, success},
 
     "Time to execute storage finish_block operation."
-    histogram_duration storage_finish_block{success},
+    histogram_duration storage_finish_block{storage, success},
 
     "Time to execute storage save_block operation."
-    histogram_duration storage_save_block{size_by_tx, size_by_gas, success},
+    histogram_duration storage_save_block{storage, size_by_tx, size_by_gas, success},
 
     "Time to execute storage reset operation."
-    histogram_duration storage_reset{kind, success}
+    histogram_duration storage_reset{storage, success}
 }
 
 // Importer online metrics.

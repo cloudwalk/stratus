@@ -9,9 +9,9 @@ use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
 use tracing::info_span;
 use tracing::Instrument;
-use tracing::Span;
 
 use crate::infra::tracing::info_task_spawn;
+use crate::log_and_err;
 use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
@@ -219,95 +219,6 @@ macro_rules! channel_read_sync_impl {
             }
         }
     }};
-}
-
-// -----------------------------------------------------------------------------
-// Tracing
-// -----------------------------------------------------------------------------
-
-/// Extensions for `tracing::Span`.
-pub trait SpanExt {
-    #[cfg(feature = "tracing")]
-    /// Applies the provided function to the current span.
-    fn with<F>(fill: F)
-    where
-        F: Fn(Span),
-    {
-        let span = Span::current();
-        fill(span);
-    }
-
-    #[cfg(not(feature = "tracing"))]
-    fn with<F>(_: F)
-    where
-        F: Fn(Span),
-    {
-    }
-
-    /// Records a value using `ToString` implementation.
-    fn rec_str<T>(&self, field: &'static str, value: &T)
-    where
-        T: ToString;
-
-    /// Records a value using `ToString` implementation if the option value is present.
-    fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
-    where
-        T: ToString;
-}
-
-impl SpanExt for Span {
-    fn rec_str<T>(&self, field: &'static str, value: &T)
-    where
-        T: ToString,
-    {
-        self.record(field, value.to_string().as_str());
-    }
-
-    fn rec_opt<T>(&self, field: &'static str, value: &Option<T>)
-    where
-        T: ToString,
-    {
-        if let Some(ref value) = value {
-            self.record(field, value.to_string().as_str());
-        }
-    }
-}
-
-/// Logs an error and also wrap the existing error with the provided message.
-#[macro_export]
-macro_rules! log_and_err {
-    // with reason: wrap the original error with provided message
-    (reason = $error:ident, payload = $payload:expr, $msg:expr) => {
-        {
-            use anyhow::Context;
-            tracing::error!(reason = ?$error, payload = ?$payload, message = %$msg);
-            Err($error).context($msg)
-        }
-    };
-    (reason = $error:ident, $msg:expr) => {
-        {
-            use anyhow::Context;
-            tracing::error!(reason = ?$error, message = %$msg);
-            Err($error).context($msg)
-        }
-    };
-    // without reason: generate a new error using provided message
-    (payload = $payload:expr, $msg:expr) => {
-        {
-            use anyhow::Context;
-            use anyhow::anyhow;
-            tracing::error!(payload = ?$payload, message = %$msg);
-            let message = format!("{} | payload={:?}", $msg, $payload);
-            Err(anyhow!(message))
-        }
-    };
-    ($msg:expr) => {
-        {
-            use anyhow::anyhow;
-            tracing::error!(message = %$msg);
-            Err(anyhow!($msg))
-        }
-    };
 }
 
 // -----------------------------------------------------------------------------
