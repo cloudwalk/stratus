@@ -165,8 +165,6 @@ mod tests {
     use std::net::SocketAddr;
 
     use tokio::sync::broadcast;
-    use tokio::sync::Mutex;
-    use tonic::Request;
 
     use super::*;
     use crate::eth::consensus::tests::factories::*;

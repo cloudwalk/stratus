@@ -602,7 +602,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
     use std::fs;
 
     use fake::Fake;
