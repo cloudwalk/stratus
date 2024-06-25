@@ -135,7 +135,6 @@ mod tests {
 
     use super::*;
     use crate::eth::consensus::tests::factories::*;
-    use crate::eth::consensus::LogEntryData;
 
     fn setup_storage() -> AppendLogEntriesStorage {
         let temp_dir = TempDir::new().unwrap();
