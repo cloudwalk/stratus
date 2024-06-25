@@ -18,6 +18,7 @@ pub struct RpcContext {
 
     // services
     pub executor: Arc<Executor>,
+    #[allow(dead_code)] // HACK this was triggered in Rust 1.79
     pub miner: Arc<BlockMiner>,
     pub storage: Arc<StratusStorage>,
     pub consensus: Arc<Consensus>,

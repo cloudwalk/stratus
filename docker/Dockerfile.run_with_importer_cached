@@ -20,7 +20,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 # This layer caches dependencies
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release --bin run-with-importer --features metrics,rocks || true
+    cargo build --release --bin run-with-importer || true
 
 # Remove the dummy main.rs
 RUN rm -rf src
@@ -42,7 +42,7 @@ ENV NO_COLOR=1
 ENV ENABLE_TEST_ACCOUNTS=1
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release --bin run-with-importer --features metrics,rocks,dev
+    cargo build --release --bin run-with-importer --features dev
 
 # Runtime
 FROM rust:1.75 as runtime
@@ -50,4 +50,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/run-with-importer /app/run-with-importer
 COPY --from=builder /app/config/* /app/config/
 
-CMD ["sh", "-c", "/app/run-with-importer"]
+CMD sh -c /app/run-with-importer
