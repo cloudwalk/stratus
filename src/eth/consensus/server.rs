@@ -118,10 +118,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         );
 
         #[cfg(feature = "metrics")]
-        {
-            metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
-            metrics::set_consensus_last_committed_block_number(last_last_arrived_block_number);
-        }
+        metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
 
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,

@@ -180,9 +180,6 @@ metrics! {
     "The diff between what is on the follower database and what it received from Append Entries."
     gauge append_entries_block_number_diff{},
 
-    "The last committed block number."
-    gauge consensus_last_committed_block_number{},
-
     "If the node is the leader or not."
     gauge consensus_is_leader{},
 
