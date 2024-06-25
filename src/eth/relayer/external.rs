@@ -90,6 +90,7 @@ impl TxSigner {
         // None is Legacy
         tx_input.tx_type = None;
         tx_input.hash = new_hash.into();
+        tx_input.nonce = self.nonce;
         tx_input.r = signature.r;
         tx_input.s = signature.s;
         tx_input.v = signature.v.into();
