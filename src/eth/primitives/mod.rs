@@ -43,6 +43,7 @@ mod storage_point_in_time;
 mod transaction_execution;
 mod transaction_input;
 mod transaction_mined;
+mod transaction_stage;
 mod unix_time;
 mod wei;
 
@@ -98,6 +99,7 @@ pub use transaction_execution::LocalTransactionExecution;
 pub use transaction_execution::TransactionExecution;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
+pub use transaction_stage::TransactionStage;
 pub use unix_time::UnixTime;
 pub use wei::Wei;
 
