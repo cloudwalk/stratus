@@ -350,6 +350,25 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
 }
 
 // -----------------------------------------------------------------------------
+// serde_json
+// -----------------------------------------------------------------------------
+
+/// Serializes any serializable value to non-formatted [`String`] without having to check for errors.
+pub fn to_json_string<V: serde::Serialize>(value: &V) -> String {
+    serde_json::to_string(value).expect_infallible()
+}
+
+/// Serializes any serializable value to formatted [`String`] without having to check for errors.
+pub fn to_json_string_pretty<V: serde::Serialize>(value: &V) -> String {
+    serde_json::to_string_pretty(value).expect_infallible()
+}
+
+/// Serializes any serializable value to [`serde_json::Value`] without having to check for errors.
+pub fn to_json_value<V: serde::Serialize>(value: V) -> serde_json::Value {
+    serde_json::to_value(value).expect_infallible()
+}
+
+// -----------------------------------------------------------------------------
 // Tests
 // -----------------------------------------------------------------------------
 

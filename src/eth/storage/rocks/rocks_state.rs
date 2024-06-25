@@ -4,9 +4,6 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use std::sync::mpsc;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -23,7 +20,6 @@ use sugars::hmap;
 use super::rocks_cf::RocksCf;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
-use super::rocks_db::create_new_backup;
 use super::rocks_db::create_or_open_db;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -46,7 +42,6 @@ use crate::eth::storage::rocks::types::HashRocksdb;
 use crate::eth::storage::rocks::types::IndexRocksdb;
 use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
-use crate::ext::spawn_blocking_named;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 use crate::utils::GIGABYTE;
@@ -61,8 +56,6 @@ cfg_if::cfg_if! {
         use crate::infra::metrics::{self, Count, HistogramInt, Sum};
     }
 }
-
-const BACKUP_TRANSACTION_COUNT_THRESHOLD: usize = 120_000;
 
 lazy_static! {
     /// Map setting presets for each Column Family
@@ -80,8 +73,7 @@ lazy_static! {
 
 /// State handler for our RocksDB storage, separating "tables" by column families.
 ///
-/// With data separated by column families, writing and reading should be done via the `RocksCf` fields,
-/// while operations that include the whole database (e.g. backup) should refer to the inner `DB` directly.
+/// With data separated by column families, writing and reading should be done via the `RocksCf` fields.
 pub struct RocksStorageState {
     db: Arc<DB>,
     db_path: PathBuf,
@@ -93,9 +85,6 @@ pub struct RocksStorageState {
     blocks_by_number: RocksCf<BlockNumberRocksdb, BlockRocksdb>,
     blocks_by_hash: RocksCf<HashRocksdb, BlockNumberRocksdb>,
     logs: RocksCf<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
-    backup_trigger: mpsc::SyncSender<()>,
-    /// Used to trigger backup after threshold is hit
-    transactions_processed: AtomicUsize,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -110,7 +99,6 @@ pub struct RocksStorageState {
 impl RocksStorageState {
     pub fn new(path: impl AsRef<Path>) -> Self {
         let db_path = path.as_ref().to_path_buf();
-        let (backup_trigger_tx, backup_trigger_rx) = mpsc::sync_channel::<()>(1);
         tracing::debug!("initializing RocksStorageState");
 
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
@@ -127,8 +115,6 @@ impl RocksStorageState {
             blocks_by_number: new_cf(&db, "blocks_by_number"),
             blocks_by_hash: new_cf(&db, "blocks_by_hash"), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
             logs: new_cf(&db, "logs"),
-            backup_trigger: backup_trigger_tx,
-            transactions_processed: AtomicUsize::new(0),
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
             #[cfg(feature = "metrics")]
@@ -136,26 +122,8 @@ impl RocksStorageState {
             db,
         };
 
-        tracing::debug!("initializing backup trigger");
-        state.listen_for_backup_trigger(backup_trigger_rx).unwrap();
-
         tracing::debug!("returning RocksStorageState");
         state
-    }
-
-    fn listen_for_backup_trigger(&self, rx: mpsc::Receiver<()>) -> anyhow::Result<()> {
-        tracing::info!("starting rocksdb backup trigger listener");
-
-        let db = Arc::clone(&self.db);
-        spawn_blocking_named("storage::listen_backup_trigger", move || {
-            while rx.recv().is_ok() {
-                if let Err(err) = create_new_backup(&db) {
-                    tracing::error!(?err, "failed to backup DB");
-                }
-            }
-        });
-
-        Ok(())
     }
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
@@ -427,7 +395,7 @@ impl RocksStorageState {
         }
     }
 
-    pub fn save_block(&self, block: Block, enable_backups: bool) -> anyhow::Result<()> {
+    pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
         let account_changes = block.compact_account_changes();
 
         let mut txs_batch = vec![];
@@ -445,7 +413,6 @@ impl RocksStorageState {
 
         let number = block.number();
         let block_hash = block.hash();
-        let txs_len = block.transactions.len();
 
         // this is an optimization, instead of saving the entire block into the database,
         // remove all discardable account changes
@@ -467,28 +434,8 @@ impl RocksStorageState {
 
         self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
 
-        if enable_backups {
-            self.check_backup_threshold_trigger(txs_len);
-        }
-
         self.write_batch(batch).unwrap();
         Ok(())
-    }
-
-    fn check_backup_threshold_trigger(&self, transactions_just_processed: usize) {
-        let previous = self.transactions_processed.fetch_add(transactions_just_processed, Ordering::Relaxed);
-        let current = previous + transactions_just_processed;
-
-        // threshold hit, trigger backup and reset value
-        if current > BACKUP_TRANSACTION_COUNT_THRESHOLD {
-            if let Err(err) = self.backup_trigger.try_send(()) {
-                tracing::error!(
-                    reason = ?err,
-                    "Failed to trigger backup signal, either listener panicked or signal was triggered while another backup was in progress"
-                );
-            }
-            self.transactions_processed.store(0, Ordering::Relaxed);
-        }
     }
 
     /// Writes accounts to state (does not write to account history)

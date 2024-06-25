@@ -18,7 +18,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::TransactionStage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::TemporaryStorage;
 use crate::infra::metrics;
@@ -71,8 +71,7 @@ impl StratusStorage {
         let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
         let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
 
-        let rocks_permanent_storage =
-            crate::eth::storage::RocksPermanentStorage::new(false, Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
+        let rocks_permanent_storage = crate::eth::storage::RocksPermanentStorage::new(Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
 
         (
             Self {
@@ -226,10 +225,10 @@ impl StratusStorage {
         // read from temp only if present
         if point_in_time.is_present() {
             tracing::debug!(storage = %label::TEMP, %address, "reading account");
-            let result = timed(|| self.temp.read_account(address)).with(|m| {
+            let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
                 metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
-            });
-            if let Some(account) = result? {
+            })?;
+            if let Some(account) = temp_account {
                 tracing::debug!(storage = %label::TEMP, %address, "account found in temporary storage");
                 return Ok(account);
             }
@@ -237,10 +236,10 @@ impl StratusStorage {
 
         // always read from perm if necessary
         tracing::debug!(storage = %label::PERM, %address, "reading account");
-        let result = timed(|| self.perm.read_account(address, point_in_time)).with(|m| {
+        let perm_account = timed(|| self.perm.read_account(address, point_in_time)).with(|m| {
             metrics::inc_storage_read_account(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
-        });
-        match result? {
+        })?;
+        match perm_account {
             Some(account) => {
                 tracing::debug!(%address, "account found in permanent storage");
                 Ok(account)
@@ -263,10 +262,10 @@ impl StratusStorage {
         // read from temp only if present
         if point_in_time.is_present() {
             tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
-            let result = timed(|| self.temp.read_slot(address, index)).with(|m| {
+            let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
                 metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
-            });
-            if let Some(slot) = result? {
+            })?;
+            if let Some(slot) = temp_slot {
                 tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
                 return Ok(slot);
             }
@@ -274,10 +273,10 @@ impl StratusStorage {
 
         // always read from perm if necessary
         tracing::debug!(storage = %label::PERM, %address, %index, ?point_in_time, "reading slot");
-        let result = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
+        let perm_slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
             metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
-        });
-        match result? {
+        })?;
+        match perm_slot {
             Some(slot) => {
                 tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
                 Ok(slot)
@@ -347,13 +346,27 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
-    pub fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    pub fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionStage>> {
         Span::with(|s| s.rec_str("hash", hash));
-        tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
 
-        timed(|| self.perm.read_mined_transaction(hash)).with(|m| {
-            metrics::inc_storage_read_mined_transaction(m.elapsed, label::PERM, m.result.is_ok());
-        })
+        // read from temp
+        tracing::debug!(storage = %label::TEMP, %hash, "reading transaction");
+        let temp_tx = timed(|| self.temp.read_transaction(hash)).with(|m| {
+            metrics::inc_storage_read_transaction(m.elapsed, label::TEMP, m.result.is_ok());
+        })?;
+        if let Some(tx_temp) = temp_tx {
+            return Ok(Some(TransactionStage::new_executed(tx_temp)));
+        }
+
+        // read from perm
+        tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
+        let perm_tx = timed(|| self.perm.read_transaction(hash)).with(|m| {
+            metrics::inc_storage_read_transaction(m.elapsed, label::PERM, m.result.is_ok());
+        })?;
+        match perm_tx {
+            Some(tx) => Ok(Some(TransactionStage::new_mined(tx))),
+            None => Ok(None),
+        }
     }
 
     #[tracing::instrument(name = "storage::read_logs", skip_all)]

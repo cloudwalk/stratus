@@ -28,7 +28,7 @@ use stratus::eth::BlockMiner;
 use stratus::eth::Executor;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
-use stratus::ext::ResultExt;
+use stratus::ext::to_json_string_pretty;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
@@ -256,15 +256,9 @@ fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalR
     fs::create_dir_all(&dir)?;
 
     // write json
-    fs::write(format!("{}/block.json", dir), serde_json::to_string_pretty(external_block).expect_infallible())?;
-    fs::write(
-        format!("{}/receipts.json", dir),
-        serde_json::to_string_pretty(&receipts_snapshot).expect_infallible(),
-    )?;
-    fs::write(
-        format!("{}/snapshot.json", dir),
-        serde_json::to_string_pretty(&state_snapshot).expect_infallible(),
-    )?;
+    fs::write(format!("{}/block.json", dir), to_json_string_pretty(external_block))?;
+    fs::write(format!("{}/receipts.json", dir), to_json_string_pretty(&receipts_snapshot))?;
+    fs::write(format!("{}/snapshot.json", dir), to_json_string_pretty(&state_snapshot))?;
 
     Ok(())
 }

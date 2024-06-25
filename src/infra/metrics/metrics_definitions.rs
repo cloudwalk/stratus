@@ -42,8 +42,8 @@ metrics! {
     "Time to execute storage read_slot operation."
     histogram_duration storage_read_slot{storage, point_in_time, success},
 
-    "Time to execute storage read_mined_transaction operation."
-    histogram_duration storage_read_mined_transaction{storage, success}
+    "Time to execute storage read_transaction operation."
+    histogram_duration storage_read_transaction{storage, success}
 }
 
 // Storage writes.

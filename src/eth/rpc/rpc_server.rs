@@ -50,7 +50,7 @@ use crate::eth::BlockMiner;
 use crate::eth::Consensus;
 use crate::eth::Executor;
 use crate::ext::not;
-use crate::ext::ResultExt;
+use crate::ext::to_json_value;
 use crate::infra::build_info;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -207,13 +207,13 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number)?;
-    Ok(serde_json::to_value(number).expect_infallible())
+    Ok(to_json_value(number))
 }
 
 #[cfg(feature = "dev")]
 fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     ctx.miner.mine_local_and_commit()?;
-    Ok(serde_json::to_value(true).expect_infallible())
+    Ok(to_json_value(true))
 }
 
 #[cfg(feature = "dev")]
@@ -227,14 +227,14 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
         Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
         None => return log_and_err!("reading latest block returned None")?,
     }
-    Ok(serde_json::to_value(timestamp).expect_infallible())
+    Ok(to_json_value(timestamp))
 }
 
 #[cfg(feature = "dev")]
 fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, address) = next_rpc_param::<Address>(params.sequence())?;
     let slots = ctx.storage.read_all_slots(&address)?;
-    Ok(serde_json::to_value(slots).expect_infallible())
+    Ok(to_json_value(slots))
 }
 
 async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> JsonValue {
@@ -347,7 +347,7 @@ fn eth_gas_price(_: Params<'_>, _: &RpcContext, _: &Extensions) -> String {
 #[tracing::instrument(name = "rpc::eth_blockNumber", skip_all)]
 fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let number = ctx.storage.read_mined_block_number()?;
-    Ok(serde_json::to_value(number).expect_infallible())
+    Ok(to_json_value(number))
 }
 
 #[tracing::instrument(name = "rpc::eth_getBlockByHash", skip_all, fields(filter, found, number))]
@@ -399,19 +399,18 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 // Transaction
 // -----------------------------------------------------------------------------
 
-#[tracing::instrument(name = "rpc::eth_getTransactionByHash", skip_all, fields(hash))]
+#[tracing::instrument(name = "rpc::eth_getTransactionByHash", skip_all, fields(hash, found))]
 fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
-
     Span::with(|s| s.rec_str("hash", &hash));
 
-    let mined = ctx.storage.read_mined_transaction(&hash)?;
+    let tx = ctx.storage.read_transaction(&hash)?;
     Span::with(|s| {
-        s.record("found", mined.is_some());
+        s.record("found", tx.is_some());
     });
 
-    match mined {
-        Some(mined) => Ok(mined.to_json_rpc_transaction()),
+    match tx {
+        Some(tx) => Ok(tx.to_json_rpc_transaction()),
         None => Ok(JsonValue::Null),
     }
 }
@@ -421,12 +420,12 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     Span::with(|s| s.rec_str("hash", &hash));
 
-    let mined = ctx.storage.read_mined_transaction(&hash)?;
+    let tx = ctx.storage.read_transaction(&hash)?;
     Span::with(|s| {
-        s.record("found", mined.is_some());
+        s.record("found", tx.is_some());
     });
 
-    match mined {
+    match tx {
         Some(mined_transaction) => Ok(mined_transaction.to_json_rpc_receipt()),
         None => Ok(JsonValue::Null),
     }
