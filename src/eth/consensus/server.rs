@@ -161,9 +161,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::Mutex;
-    use tonic::Request;
-
     use super::*;
     use crate::eth::consensus::tests::factories::*;
     use crate::eth::consensus::BlockEntry;
