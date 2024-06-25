@@ -465,10 +465,10 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         {
             if role == Role::Leader {
-                metrics::set_consensus_is_leader(1 as u64);
+                metrics::set_consensus_is_leader(1_u64);
                 metrics::inc_consensus_leadership_change();
             } else {
-                metrics::set_consensus_is_leader(0 as u64);
+                metrics::set_consensus_is_leader(0_u64);
             }
         }
     }
