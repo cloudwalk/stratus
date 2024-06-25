@@ -239,10 +239,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         state.head.reset();
         Ok(())
     }
-
-    fn flush(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
 }
 
 // -----------------------------------------------------------------------------

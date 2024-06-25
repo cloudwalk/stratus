@@ -53,7 +53,4 @@ pub trait TemporaryStorage: Send + Sync + 'static {
 
     /// Resets to default empty state.
     fn reset(&self) -> anyhow::Result<()>;
-
-    /// If necessary, flushes temporary state to durable storage.
-    fn flush(&self) -> anyhow::Result<()>;
 }
