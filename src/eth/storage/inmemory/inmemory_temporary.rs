@@ -114,20 +114,6 @@ impl InMemoryTemporaryAccount {
 
 impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
-    // Accounts and Slots
-    // -------------------------------------------------------------------------
-
-    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
-        let states = self.lock_read();
-        Ok(read_account(&states, address))
-    }
-
-    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
-        let states = self.lock_read();
-        Ok(read_slot(&states, address, index))
-    }
-
-    // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
 
@@ -151,7 +137,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     // -------------------------------------------------------------------------
-    // External block
+    // Block and executions
     // -------------------------------------------------------------------------
 
     fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
@@ -159,10 +145,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         states.head.require_active_block_mut()?.external_block = Some(block);
         Ok(())
     }
-
-    // -------------------------------------------------------------------------
-    // Executions
-    // -------------------------------------------------------------------------
 
     fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         // check conflicts
@@ -207,15 +189,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    // -------------------------------------------------------------------------
-    // General state
-    // -------------------------------------------------------------------------
-
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let states = self.lock_read();
-        Ok(check_conflicts(&states, execution))
-    }
-
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
@@ -233,6 +206,28 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(finished_block)
     }
 
+    // -------------------------------------------------------------------------
+    // Accounts and Slots
+    // -------------------------------------------------------------------------
+
+    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        let states = self.lock_read();
+        Ok(check_conflicts(&states, execution))
+    }
+
+    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+        let states = self.lock_read();
+        Ok(read_account(&states, address))
+    }
+
+    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+        let states = self.lock_read();
+        Ok(read_slot(&states, address, index))
+    }
+
+    // -------------------------------------------------------------------------
+    // Global state
+    // -------------------------------------------------------------------------
     fn reset(&self) -> anyhow::Result<()> {
         let mut state = self.lock_write();
         state.tail.clear();
