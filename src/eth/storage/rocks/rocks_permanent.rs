@@ -22,11 +22,10 @@ use crate::eth::storage::PermanentStorage;
 pub struct RocksPermanentStorage {
     pub state: RocksStorageState,
     block_number: AtomicU64,
-    enable_backups: bool,
 }
 
 impl RocksPermanentStorage {
-    pub fn new(enable_backups: bool, rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
+    pub fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
         let path = if let Some(prefix) = rocks_path_prefix {
             // run some checks on the given prefix
@@ -45,11 +44,7 @@ impl RocksPermanentStorage {
 
         let state = RocksStorageState::new(path);
         let block_number = state.preload_block_number()?;
-        Ok(Self {
-            state,
-            block_number,
-            enable_backups,
-        })
+        Ok(Self { state, block_number })
     }
 
     // -------------------------------------------------------------------------
@@ -92,7 +87,7 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(self.state.read_block(selection))
     }
 
-    fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         self.state.read_transaction(hash)
     }
 
@@ -105,7 +100,7 @@ impl PermanentStorage for RocksPermanentStorage {
         {
             self.state.export_metrics();
         }
-        self.state.save_block(block, self.enable_backups)
+        self.state.save_block(block)
     }
 
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {

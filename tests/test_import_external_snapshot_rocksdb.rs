@@ -17,7 +17,7 @@ pub mod rocks_test {
 
             let (accounts, slots) = common::filter_accounts_and_slots(snapshot);
 
-            let rocks = RocksPermanentStorage::new(false, Some("test_import_external_snapshot_with_rocksdb".to_string())).unwrap();
+            let rocks = RocksPermanentStorage::new(Some("test_import_external_snapshot_with_rocksdb".to_string())).unwrap();
             rocks.save_accounts(accounts).unwrap();
             rocks.state.write_slots(slots);
 

@@ -15,8 +15,8 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
+use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
-use crate::ext::ResultExt;
 use crate::ext::SleepReason;
 use crate::log_and_err;
 
@@ -205,7 +205,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
         // insert receipts
         for (hash, receipt) in receipts {
-            let receipt_json = serde_json::to_value(&receipt).expect_infallible();
+            let receipt_json = to_json_value(&receipt);
             let result = sqlx::query_file!(
                 "src/eth/storage/postgres_external_rpc/sql/insert_external_receipt.sql",
                 hash.as_ref(),

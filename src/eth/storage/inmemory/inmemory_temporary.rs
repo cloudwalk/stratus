@@ -16,6 +16,7 @@ use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -114,20 +115,6 @@ impl InMemoryTemporaryAccount {
 
 impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
-    // Accounts and Slots
-    // -------------------------------------------------------------------------
-
-    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
-        let states = self.lock_read();
-        Ok(read_account(&states, address))
-    }
-
-    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
-        let states = self.lock_read();
-        Ok(read_slot(&states, address, index))
-    }
-
-    // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
 
@@ -151,7 +138,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     // -------------------------------------------------------------------------
-    // External block
+    // Block and executions
     // -------------------------------------------------------------------------
 
     fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
@@ -159,10 +146,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         states.head.require_active_block_mut()?.external_block = Some(block);
         Ok(())
     }
-
-    // -------------------------------------------------------------------------
-    // Executions
-    // -------------------------------------------------------------------------
 
     fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         // check conflicts
@@ -202,18 +185,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.require_active_block_mut()?.tx_executions.push(tx);
+        states.head.require_active_block_mut()?.push_transaction(tx);
 
         Ok(())
-    }
-
-    // -------------------------------------------------------------------------
-    // General state
-    // -------------------------------------------------------------------------
-
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let states = self.lock_read();
-        Ok(check_conflicts(&states, execution))
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
@@ -233,14 +207,41 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(finished_block)
     }
 
+    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
+        let states = self.lock_read();
+        let Some(ref pending_block) = states.head.block else { return Ok(None) };
+        match pending_block.tx_executions.get(hash) {
+            Some(tx) => Ok(Some(tx.clone())),
+            None => Ok(None),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Accounts and Slots
+    // -------------------------------------------------------------------------
+
+    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        let states = self.lock_read();
+        Ok(check_conflicts(&states, execution))
+    }
+
+    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+        let states = self.lock_read();
+        Ok(read_account(&states, address))
+    }
+
+    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+        let states = self.lock_read();
+        Ok(read_slot(&states, address, index))
+    }
+
+    // -------------------------------------------------------------------------
+    // Global state
+    // -------------------------------------------------------------------------
     fn reset(&self) -> anyhow::Result<()> {
         let mut state = self.lock_write();
         state.tail.clear();
         state.head.reset();
-        Ok(())
-    }
-
-    fn flush(&self) -> anyhow::Result<()> {
         Ok(())
     }
 }
