@@ -161,17 +161,12 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
-    use std::net::SocketAddr;
-
-    use tokio::sync::broadcast;
     use tokio::sync::Mutex;
     use tonic::Request;
 
     use super::*;
     use crate::eth::consensus::tests::factories::*;
     use crate::eth::consensus::BlockEntry;
-    use crate::eth::storage::StratusStorage;
 
     #[tokio::test]
     async fn test_append_transaction_executions_not_leader() {
