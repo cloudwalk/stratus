@@ -187,7 +187,10 @@ metrics! {
     histogram_duration consensus_grpc_requests_finished{method, success},
 
     "The amount of available peers."
-    gauge consensus_available_peers{}
+    gauge consensus_available_peers{},
+
+    "The readiness of Stratus."
+    gauge consensus_readiness_status{}
 }
 
 metrics! {

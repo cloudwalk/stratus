@@ -533,12 +533,18 @@ impl Consensus {
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
         if self.is_leader() {
+            #[cfg(feature = "metrics")]
+            metrics::set_consensus_readiness_status(1_u64);
+
             return true;
         }
 
         let blockchain_client_lock = self.blockchain_client.lock().await;
         if blockchain_client_lock.is_none() {
             tracing::warn!("blockchain client is not set, cannot serve requests because they cant be forwarded");
+            #[cfg(feature = "metrics")]
+            metrics::set_consensus_readiness_status(0_u64);
+
             return false;
         }
 
@@ -546,6 +552,9 @@ impl Consensus {
 
         if last_arrived_block_number == 0 {
             tracing::warn!("no appendEntry has been received yet");
+            #[cfg(feature = "metrics")]
+            metrics::set_consensus_readiness_status(0_u64);
+
             return false;
         }
 
@@ -559,10 +568,16 @@ impl Consensus {
 
         if (last_arrived_block_number - 3) <= storage_block_number {
             tracing::info!("should serve request");
+            #[cfg(feature = "metrics")]
+            metrics::set_consensus_readiness_status(1_u64);
+
             true
         } else {
             let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
             tracing::warn!(diff = diff, "should not serve request");
+            #[cfg(feature = "metrics")]
+            metrics::set_consensus_readiness_status(0_u64);
+            
             false
         }
     }
