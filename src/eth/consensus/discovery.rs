@@ -11,7 +11,11 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
 #[cfg(feature = "kubernetes")]
 use kube::Client;
+#[cfg(not(test))]
+use tokio::sync::Mutex;
 
+#[cfg(not(test))]
+use super::append_entry::append_entry_service_client::AppendEntryServiceClient;
 #[cfg(feature = "kubernetes")]
 use super::sleep;
 use super::Consensus;
@@ -21,10 +25,9 @@ use super::Duration;
 use super::GlobalState;
 use super::Peer;
 use super::PeerAddress;
-use crate::ext::spawn_named;
-use tokio::sync::Mutex;
-use super::append_entry::append_entry_service_client::AppendEntryServiceClient;
+#[cfg(not(test))]
 use super::Role;
+use crate::ext::spawn_named;
 
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
