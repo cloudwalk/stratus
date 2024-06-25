@@ -45,7 +45,7 @@ impl Block {
         Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
-    /// Pushes a single transaction execution to the blocks transactions
+    /// Pushes a single transaction execution to the blocks transactions.
     pub fn push_execution(&mut self, input: TransactionInput, evm_result: EvmExecutionResult) {
         let transaction_index = (self.transactions.len() as u64).into();
         self.transactions.push(TransactionMined {
