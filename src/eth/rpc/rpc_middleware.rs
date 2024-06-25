@@ -25,11 +25,11 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
-use crate::ext::SpanExt;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::new_cid;
+use crate::infra::tracing::SpanExt;
 
 // -----------------------------------------------------------------------------
 // Active requests tracking

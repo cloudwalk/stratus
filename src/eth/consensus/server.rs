@@ -172,8 +172,6 @@ mod tests {
 
     use ethereum_types::H256;
     use tokio::sync::broadcast;
-    use tokio::sync::Mutex;
-    use tonic::Request;
 
     use super::*;
     use crate::eth::consensus::BlockEntry;

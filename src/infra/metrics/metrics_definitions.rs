@@ -31,7 +31,7 @@ metrics! {
     histogram_duration storage_read_mined_block_number{success},
 
     "Time to execute storage read_account operation."
-    histogram_duration storage_read_account{found_at, point_in_time, success},
+    histogram_duration storage_read_account{storage, point_in_time, success},
 
     "Time to execute storage read_block operation."
     histogram_duration storage_read_block{success},
@@ -40,7 +40,7 @@ metrics! {
     histogram_duration storage_read_logs{success},
 
     "Time to execute storage read_slot operation."
-    histogram_duration storage_read_slot{found_at, point_in_time, success},
+    histogram_duration storage_read_slot{storage, point_in_time, success},
 
     "Time to execute storage read_mined_transaction operation."
     histogram_duration storage_read_mined_transaction{success}

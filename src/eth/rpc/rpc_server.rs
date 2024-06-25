@@ -51,9 +51,9 @@ use crate::eth::Consensus;
 use crate::eth::Executor;
 use crate::ext::not;
 use crate::ext::ResultExt;
-use crate::ext::SpanExt;
 use crate::infra::build_info;
 use crate::infra::tracing::warn_task_cancellation;
+use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
