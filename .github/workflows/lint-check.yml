@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Rust Nightly
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-06-10
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
