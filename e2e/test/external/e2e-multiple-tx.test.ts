@@ -1,9 +1,14 @@
 import { expect } from "chai";
 
 import { TEST_ACCOUNTS, randomAccounts } from "../helpers/account";
+import { BlockMode, currentBlockMode } from "../helpers/network";
 import { send, sendEvmMine, sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
 
 describe("Multiple Transactions Per Block", () => {
+    before(() => {
+        expect(currentBlockMode()).eq(BlockMode.External, "Wrong block mining mode is used");
+    });
+
     it("Resets blockchain", async () => {
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
