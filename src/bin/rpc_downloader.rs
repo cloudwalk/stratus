@@ -80,6 +80,13 @@ async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<Bl
 
     tracing::info!(blocks_by_taks = %BLOCKS_BY_TASK, %start, %end, "preparing block downloads");
 
+    let last_block_in_rpc_storage = rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await?;
+
+    // skip block ranges that were downloaded already in previous runs
+    while start <= end && last_block_in_rpc_storage.is_some_and(|number| start + BLOCKS_BY_TASK < number) {
+        start += BLOCKS_BY_TASK;
+    }
+
     let mut tasks = Vec::new();
     while start <= end {
         let end = min(start + (BLOCKS_BY_TASK - 1), end);
