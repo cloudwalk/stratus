@@ -51,7 +51,7 @@ jobs:
 
       - name: Generate docs
         run: |
-          just doc -2024-01-01
+          just doc -2024-06-10
           echo "<meta http-equiv='refresh' content='0; URL=./stratus/'>" >> target/doc/index.html
           chmod -c -R +rX target/doc/
 

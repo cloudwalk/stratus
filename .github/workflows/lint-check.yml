@@ -59,7 +59,7 @@ jobs:
         uses: extractions/setup-just@v2
 
       - name: Just lint-check
-        run: just lint-check -2024-01-01
+        run: just lint-check -2024-06-10
 
   e2e_lint:
     name: E2E Lint
