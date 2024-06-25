@@ -530,30 +530,44 @@ impl Consensus {
         Ok(result.tx_hash) //XXX HEX
     }
 
+    #[cfg(feature = "metrics")]
+    fn emit_readiness_status(&self, is_ready: bool) {
+        if is_ready {
+            metrics::set_consensus_readiness_status(1_u64);
+        } else {
+            metrics::set_consensus_readiness_status(0_u64);
+        }
+    }
+
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
-        if self.is_leader() {
-            #[cfg(feature = "metrics")]
-            metrics::set_consensus_readiness_status(1_u64);
+        let is_ready;
 
-            return true;
+        if self.is_leader() {
+            is_ready = true;
+            #[cfg(feature = "metrics")]
+            self.emit_readiness_status(is_ready);
+
+            return is_ready;
         }
 
         let blockchain_client_lock = self.blockchain_client.lock().await;
         if blockchain_client_lock.is_none() {
             tracing::warn!("blockchain client is not set, cannot serve requests because they cant be forwarded");
+            is_ready = false;
             #[cfg(feature = "metrics")]
-            metrics::set_consensus_readiness_status(0_u64);
+            self.emit_readiness_status(is_ready);
 
-            return false;
+            return is_ready;
         }
 
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
 
         if last_arrived_block_number == 0 {
             tracing::warn!("no appendEntry has been received yet");
+            is_ready = false;
             #[cfg(feature = "metrics")]
-            metrics::set_consensus_readiness_status(0_u64);
+            self.emit_readiness_status(is_ready);
 
             return false;
         }
@@ -568,17 +582,19 @@ impl Consensus {
 
         if (last_arrived_block_number - 3) <= storage_block_number {
             tracing::info!("should serve request");
+            is_ready = true;
             #[cfg(feature = "metrics")]
-            metrics::set_consensus_readiness_status(1_u64);
+            self.emit_readiness_status(is_ready);
 
-            true
+            is_ready
         } else {
             let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
             tracing::warn!(diff = diff, "should not serve request");
+            is_ready = false;
             #[cfg(feature = "metrics")]
-            metrics::set_consensus_readiness_status(0_u64);
+            self.emit_readiness_status(is_ready);
 
-            false
+            is_ready
         }
     }
 
