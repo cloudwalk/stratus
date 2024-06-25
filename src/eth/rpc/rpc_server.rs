@@ -54,6 +54,8 @@ use crate::ext::ResultExt;
 use crate::infra::build_info;
 use crate::infra::tracing::warn_task_cancellation;
 use crate::infra::tracing::SpanExt;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
@@ -284,8 +286,12 @@ async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extension
     tracing::info!("stratus_readiness: {}", should_serve);
 
     if should_serve {
+        #[cfg(feature = "metrics")]
+        metrics::set_consensus_is_ready(1_u64);
         Ok(json!(true))
     } else {
+        #[cfg(feature = "metrics")]
+        metrics::set_consensus_is_ready(0_u64);
         Err(rpc_internal_error("Service Not Ready".to_string()).into())
     }
 }

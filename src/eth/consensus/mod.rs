@@ -176,8 +176,6 @@ pub struct Consensus {
     grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
     blockchain_client: Mutex<Option<Arc<BlockchainClient>>>,
-    is_ready: tokio::sync::Mutex<bool>,
-    last_ready_status_change: tokio::sync::Mutex<std::time::Instant>,
 }
 
 impl Consensus {
@@ -211,8 +209,6 @@ impl Consensus {
             grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
             blockchain_client: Mutex::new(None),
-            is_ready: tokio::sync::Mutex::new(false),
-            last_ready_status_change: tokio::sync::Mutex::new(std::time::Instant::now()),
         };
         let consensus = Arc::new(consensus);
 
@@ -534,59 +530,23 @@ impl Consensus {
         Ok(result.tx_hash) //XXX HEX
     }
 
-    #[cfg(feature = "metrics")]
-    async fn emit_readiness_status(&self, is_ready: bool) {
-        let now = std::time::Instant::now();
-        let mut last_status_change = self.last_ready_status_change.lock().await;
-        let mut current_status = self.is_ready.lock().await;
-
-        if *current_status != is_ready {
-            let duration = now.duration_since(*last_status_change);
-            if *current_status {
-                metrics::inc_consensus_ready_duration(duration);
-            }
-            *last_status_change = now;
-            *current_status = is_ready;
-        }
-
-        if is_ready {
-            metrics::set_consensus_readiness_status(1_u64);
-        } else {
-            metrics::set_consensus_readiness_status(0_u64);
-        }
-    }
-
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
-        let is_ready;
-
         if self.is_leader() {
-            is_ready = true;
-            #[cfg(feature = "metrics")]
-            self.emit_readiness_status(is_ready).await;
-
-            return is_ready;
+            return true;
         }
 
         let blockchain_client_lock = self.blockchain_client.lock().await;
         if blockchain_client_lock.is_none() {
             tracing::warn!("blockchain client is not set, cannot serve requests because they cant be forwarded");
-            is_ready = false;
-            #[cfg(feature = "metrics")]
-            self.emit_readiness_status(is_ready).await;
-
-            return is_ready;
+            return false;
         }
 
         let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
 
         if last_arrived_block_number == 0 {
             tracing::warn!("no appendEntry has been received yet");
-            is_ready = false;
-            #[cfg(feature = "metrics")]
-            self.emit_readiness_status(is_ready).await;
-
-            return is_ready;
+            return false;
         }
 
         let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or(BlockNumber::from(0)).into();
@@ -599,19 +559,11 @@ impl Consensus {
 
         if (last_arrived_block_number - 3) <= storage_block_number {
             tracing::info!("should serve request");
-            is_ready = true;
-            #[cfg(feature = "metrics")]
-            self.emit_readiness_status(is_ready).await;
-
-            is_ready
+            true
         } else {
             let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
             tracing::warn!(diff = diff, "should not serve request");
-            is_ready = false;
-            #[cfg(feature = "metrics")]
-            self.emit_readiness_status(is_ready).await;
-
-            is_ready
+            false
         }
     }
 

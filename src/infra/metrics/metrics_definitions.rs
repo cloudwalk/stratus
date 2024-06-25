@@ -190,11 +190,7 @@ metrics! {
     gauge consensus_available_peers{},
 
     "The readiness of Stratus."
-    gauge consensus_readiness_status{},
-
-    "How long has Stratus been in ready status."
-    histogram_duration consensus_ready_duration{}
-
+    gauge consensus_is_ready{}
 }
 
 metrics! {
