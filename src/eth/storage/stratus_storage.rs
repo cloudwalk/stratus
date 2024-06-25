@@ -123,7 +123,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::TEMP, "reading active block number");
 
         timed(|| self.temp.read_active_block_number()).with(|m| {
-            metrics::inc_storage_read_active_block_number(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_read_active_block_number(m.elapsed, label::TEMP, m.result.is_ok());
         })
     }
 
@@ -132,7 +132,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, "reading mined block number");
 
         timed(|| self.perm.read_mined_block_number()).with(|m| {
-            metrics::inc_storage_read_mined_block_number(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
 
@@ -144,7 +144,7 @@ impl StratusStorage {
         tracing::debug!(storage = &label::TEMP, %number, "setting active block number");
 
         timed(|| self.temp.set_active_block_number(number)).with(|m| {
-            metrics::inc_storage_set_active_block_number(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_set_active_block_number(m.elapsed, label::TEMP, m.result.is_ok());
         })
     }
 
@@ -169,7 +169,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %number, "setting mined block number");
 
         timed(|| self.perm.set_mined_block_number(number)).with(|m| {
-            metrics::inc_storage_set_mined_block_number(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
 
@@ -181,7 +181,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::TEMP, number = %block.number(), "setting active external block");
 
         timed(|| self.temp.set_active_external_block(block)).with(|m| {
-            metrics::inc_storage_set_active_external_block(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_set_active_external_block(m.elapsed, label::TEMP, m.result.is_ok());
         })
     }
 
@@ -198,7 +198,7 @@ impl StratusStorage {
 
         tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
         timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
-            metrics::inc_storage_save_accounts(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
 
@@ -207,7 +207,12 @@ impl StratusStorage {
         tracing::debug!(storage = %label::TEMP, "checking conflicts");
 
         timed(|| self.temp.check_conflicts(execution)).with(|m| {
-            metrics::inc_storage_check_conflicts(m.elapsed, m.result.is_ok(), m.result.as_ref().is_ok_and(|conflicts| conflicts.is_some()));
+            metrics::inc_storage_check_conflicts(
+                m.elapsed,
+                label::TEMP,
+                m.result.is_ok(),
+                m.result.as_ref().is_ok_and(|conflicts| conflicts.is_some()),
+            );
         })
     }
 
@@ -302,7 +307,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::TEMP, hash = %tx.hash(), "saving execution");
 
         timed(|| self.temp.save_execution(tx)).with(|m| {
-            metrics::inc_storage_save_execution(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
         })
     }
 
@@ -311,7 +316,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::TEMP, "finishing active block");
 
         let result = timed(|| self.temp.finish_block()).with(|m| {
-            metrics::inc_storage_finish_block(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_finish_block(m.elapsed, label::TEMP, m.result.is_ok());
         });
 
         if let Ok(ref block) = result {
@@ -328,7 +333,7 @@ impl StratusStorage {
 
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| self.perm.save_block(block)).with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label_size_by_tx, label_size_by_gas, m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
         })
     }
 
@@ -337,7 +342,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, ?selection, "reading block");
 
         timed(|| self.perm.read_block(selection)).with(|m| {
-            metrics::inc_storage_read_block(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
 
@@ -347,7 +352,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
 
         timed(|| self.perm.read_mined_transaction(hash)).with(|m| {
-            metrics::inc_storage_read_mined_transaction(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_read_mined_transaction(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
 
@@ -356,7 +361,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, ?filter, "reading logs");
 
         timed(|| self.perm.read_logs(filter)).with(|m| {
-            metrics::inc_storage_read_logs(m.elapsed, m.result.is_ok());
+            metrics::inc_storage_read_logs(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
 
