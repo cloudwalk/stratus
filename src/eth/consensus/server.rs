@@ -56,7 +56,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO send the executions to the Storage
         tracing::info!(executions = executions.len(), "appending executions");
 
+        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+            consensus.update_leader(leader_peer_address).await;
+        }
         consensus.reset_heartbeat_signal.notify_waiters();
+        //TODO change cached index from consensus after the storage is implemented
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
@@ -105,10 +109,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
-        consensus.reset_heartbeat_signal.notify_waiters();
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
         }
+        consensus.reset_heartbeat_signal.notify_waiters();
         consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
 
         tracing::info!(
@@ -184,40 +188,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
-    use std::net::SocketAddr;
-
-    use tokio::sync::broadcast;
-
     use super::*;
+    use crate::eth::consensus::tests::factories::*;
     use crate::eth::consensus::BlockEntry;
-    use crate::eth::storage::StratusStorage;
-
-    // Helper function to create a mock consensus instance
-    async fn create_mock_consensus() -> Arc<Consensus> {
-        let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
-        let direct_peers = Vec::new();
-        let importer_config = None;
-        let jsonrpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
-        let grpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
-        let (tx_pending_txs, _) = broadcast::channel(10);
-        let (tx_blocks, _) = broadcast::channel(10);
-
-        Consensus::new(
-            storage.into(),
-            direct_peers,
-            importer_config,
-            jsonrpc_address,
-            grpc_address,
-            tx_pending_txs.subscribe(),
-            tx_blocks.subscribe(),
-        )
-        .await
-    }
 
     #[tokio::test]
     async fn test_append_transaction_executions_not_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -244,7 +221,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_transaction_executions_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -270,17 +247,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_block_commit_not_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_follower_consensus_with_leader().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
-        // Simulate the node as not a leader
-        consensus.set_role(Role::Follower);
+        let leader_id = {
+            let peers = consensus.peers.read().await;
+            let (leader_address, _) = peers.iter().find(|&(_, (peer, _))| peer.role == Role::Leader).expect("Leader peer not found");
+            leader_address.to_string()
+        };
 
         let request = Request::new(AppendBlockCommitRequest {
             term: 1,
-            leader_id: "leader_id".to_string(),
+            leader_id,
             prev_log_index: 0,
             prev_log_term: 0,
             block_entry: Some(BlockEntry {
@@ -290,6 +270,7 @@ mod tests {
         });
 
         let response = service.append_block_commit(request).await;
+
         assert!(response.is_ok());
 
         let response = response.unwrap().into_inner();
@@ -300,7 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_block_commit_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -329,7 +310,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_request_vote() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
