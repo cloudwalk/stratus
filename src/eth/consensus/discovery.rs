@@ -11,11 +11,13 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
 #[cfg(feature = "kubernetes")]
 use kube::Client;
+#[cfg(not(test))]
 use tokio::sync::Mutex;
 
+#[cfg(not(test))]
+use super::append_entry::append_entry_service_client::AppendEntryServiceClient;
 #[cfg(feature = "kubernetes")]
 use super::sleep;
-use super::AppendEntryServiceClient;
 use super::Consensus;
 #[cfg(feature = "kubernetes")]
 use super::Duration;
@@ -23,11 +25,13 @@ use super::Duration;
 use super::GlobalState;
 use super::Peer;
 use super::PeerAddress;
+#[cfg(not(test))]
 use super::Role;
 use crate::ext::spawn_named;
 
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
+    #[allow(unused_mut)]
     let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
     #[cfg(feature = "kubernetes")]
@@ -36,6 +40,7 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
         let max_attempts = 100;
 
         while attempts < max_attempts {
+            #[cfg(not(test))] // FIXME: This is a workaround to avoid running this code in tests we need a proper Tonic mock
             match discover_peers_kubernetes(Arc::clone(&consensus)).await {
                 Ok(k8s_peers) => {
                     new_peers.extend(k8s_peers);
@@ -57,6 +62,7 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
         }
     }
 
+    #[cfg(not(test))] // FIXME: This is a workaround to avoid running this code in tests we need a proper Tonic mock
     match discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
         Ok(env_peers) => {
             tracing::info!("discovered {} peers from env", env_peers.len());
@@ -108,7 +114,9 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
     );
 }
 
+#[cfg(not(test))] // FIXME: This is a workaround to avoid running this code in tests we need a proper Tonic mock
 async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
+    #[allow(unused_mut)]
     let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
     for address in addresses {
@@ -145,6 +153,7 @@ async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> 
 }
 
 #[cfg(feature = "kubernetes")]
+#[cfg(not(test))] // FIXME: This is a workaround to avoid running this code in tests we need a proper Tonic mock
 async fn discover_peers_kubernetes(consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
     let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
