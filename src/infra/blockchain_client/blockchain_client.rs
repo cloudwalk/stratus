@@ -255,7 +255,7 @@ impl BlockchainClient {
 
         match result {
             Ok(number) => Ok(number),
-            Err(e) => log_and_err!(reason = e, "failed to fetch transaction"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch transaction count"),
         }
     }
 

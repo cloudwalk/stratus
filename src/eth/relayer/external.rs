@@ -74,7 +74,7 @@ impl TxSigner {
         })
     }
 
-    pub async fn _sync_nonce(&mut self, chain: &BlockchainClient) -> anyhow::Result<()> {
+    pub async fn sync_nonce(&mut self, chain: &BlockchainClient) -> anyhow::Result<()> {
         self.nonce = chain.fetch_transaction_count(&self.wallet.address().into()).await?;
         Ok(())
     }
@@ -234,6 +234,7 @@ impl ExternalRelayer {
             return Err(anyhow!("some blocks in this batch have not been mined in stratus"));
         }
 
+        self.signer.sync_nonce(&self.substrate_chain).await?;
         let combined_transactions = Self::combine_transactions(blocks)
             .into_iter()
             .sorted()
