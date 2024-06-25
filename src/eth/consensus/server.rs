@@ -17,9 +17,10 @@ use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::Consensus;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
-use crate::infra::metrics::timed_async;
 
+#[cfg(feature = "metrics")]
 mod label {
     pub(super) const APPEND_TRANSACTION_EXECUTIONS: &str = "append_transaction_executions";
     pub(super) const APPEND_BLOCK_COMMIT: &str = "append_block_commit";
@@ -36,6 +37,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
         &self,
         request: Request<AppendTransactionExecutionsRequest>,
     ) -> Result<Response<AppendTransactionExecutionsResponse>, Status> {
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+
         let consensus = self.consensus.lock().await;
         let request_inner = request.into_inner();
 
@@ -58,20 +62,20 @@ impl AppendEntryService for AppendEntryServiceImpl {
         consensus.reset_heartbeat_signal.notify_waiters();
         //TODO change cached index from consensus after the storage is implemented
 
-        timed_async(async {
-            Ok(Response::new(AppendTransactionExecutionsResponse {
-                status: StatusCode::AppendSuccess as i32,
-                message: "transaction Executions appended successfully".into(),
-                last_committed_block_number: 0,
-            }))
-        })
-        .await
-        .with(|m| {
-            metrics::inc_consensus_grpc_requests_finished(m.elapsed, label::APPEND_TRANSACTION_EXECUTIONS, m.result.is_ok());
-        })
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
+
+        Ok(Response::new(AppendTransactionExecutionsResponse {
+            status: StatusCode::AppendSuccess as i32,
+            message: "transaction Executions appended successfully".into(),
+            last_committed_block_number: 0,
+        }))
     }
 
     async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+
         let consensus = self.consensus.lock().await;
         let request_inner = request.into_inner();
 
@@ -117,20 +121,20 @@ impl AppendEntryService for AppendEntryServiceImpl {
             "last arrived block number set",
         );
 
-        timed_async(async {
-            Ok(Response::new(AppendBlockCommitResponse {
-                status: StatusCode::AppendSuccess as i32,
-                message: "Block Commit appended successfully".into(),
-                last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
-            }))
-        })
-        .await
-        .with(|m| {
-            metrics::inc_consensus_grpc_requests_finished(m.elapsed, label::APPEND_BLOCK_COMMIT, m.result.is_ok());
-        })
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
+
+        Ok(Response::new(AppendBlockCommitResponse {
+            status: StatusCode::AppendSuccess as i32,
+            message: "Block Commit appended successfully".into(),
+            last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
+        }))
     }
 
     async fn request_vote(&self, request: Request<RequestVoteRequest>) -> Result<Response<RequestVoteResponse>, Status> {
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+
         let request = request.into_inner();
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);
@@ -167,21 +171,18 @@ impl AppendEntryService for AppendEntryServiceImpl {
             }));
         }
 
-        timed_async(async {
-            Ok(Response::new(RequestVoteResponse {
-                term: request.term,
-                vote_granted: false,
-                message: format!(
-                    "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
-                    request.last_log_index,
-                    consensus.last_arrived_block_number.load(Ordering::SeqCst)
-                ),
-            }))
-        })
-        .await
-        .with(|m| {
-            metrics::inc_consensus_grpc_requests_finished(m.elapsed, label::REQUEST_VOTE, m.result.is_ok());
-        })
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::REQUEST_VOTE);
+
+        Ok(Response::new(RequestVoteResponse {
+            term: request.term,
+            vote_granted: false,
+            message: format!(
+                "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
+                request.last_log_index,
+                consensus.last_arrived_block_number.load(Ordering::SeqCst)
+            ),
+        }))
     }
 }
 

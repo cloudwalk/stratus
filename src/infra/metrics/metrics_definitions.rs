@@ -184,7 +184,7 @@ metrics! {
     counter consensus_leadership_change{},
 
     "Time to run gRPC requests that finished."
-    histogram_duration consensus_grpc_requests_finished{method, success},
+    histogram_duration consensus_grpc_requests_finished{method},
 
     "The amount of available peers."
     gauge consensus_available_peers{},
