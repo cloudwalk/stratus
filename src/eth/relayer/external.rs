@@ -29,6 +29,7 @@ use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Signature;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -192,7 +193,7 @@ impl ExternalRelayer {
     }
 
     /// Polls the next block to be relayed and relays it to Substrate.
-    #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all, fields(block_number))]
+    #[tracing::instrument(name = "external_relayer::relay_blocks", skip_all, fields(block_number))]
     pub async fn relay_blocks(&mut self) -> anyhow::Result<Vec<BlockNumber>> {
         let block_rows = sqlx::query!(
             r#"
@@ -237,7 +238,9 @@ impl ExternalRelayer {
             .into_iter()
             .sorted()
             .map(|mut tx| {
-                tx.input = self.signer.sign_transaction_input(tx.input);
+                if tx.input.extract_function().is_some_and(|sig| sig.contains("PixCashier")) {
+                    tx.input = self.signer.sign_transaction_input(tx.input);
+                }
                 tx
             })
             .collect_vec();
