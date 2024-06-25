@@ -17,11 +17,9 @@ use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::Consensus;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::metrics::timed_async;
 
-#[cfg(feature = "metrics")]
 mod label {
     pub(super) const APPEND_TRANSACTION_EXECUTIONS: &str = "append_transaction_executions";
     pub(super) const APPEND_BLOCK_COMMIT: &str = "append_block_commit";
