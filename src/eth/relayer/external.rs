@@ -83,8 +83,8 @@ impl TxSigner {
             <TransactionRequest as From<TransactionInput>>::from(tx_input.clone()).nonce(self.nonce);
 
         let req = TypedTransaction::Legacy(tx);
-        let new_hash = req.sighash();
         let signature = self.wallet.sign_transaction_sync(&req).unwrap();
+        let new_hash = req.hash(&signature);
 
         tx_input.signer = self.wallet.address().into();
         // None is Legacy
