@@ -461,6 +461,16 @@ impl Consensus {
 
     fn set_role(&self, role: Role) {
         self.role.store(role as u8, Ordering::SeqCst);
+
+        #[cfg(feature = "metrics")]
+        {
+            if role == Role::Leader {
+                metrics::set_consensus_is_leader(1 as u64);
+                metrics::inc_consensus_leadership_change();
+            } else {
+                metrics::set_consensus_is_leader(0 as u64);
+            }
+        }
     }
 
     //FIXME TODO automate the way we gather the leader, instead of using a env var
