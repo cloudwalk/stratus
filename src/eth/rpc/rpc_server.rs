@@ -393,19 +393,18 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 // Transaction
 // -----------------------------------------------------------------------------
 
-#[tracing::instrument(name = "rpc::eth_getTransactionByHash", skip_all, fields(hash))]
+#[tracing::instrument(name = "rpc::eth_getTransactionByHash", skip_all, fields(hash, found))]
 fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
-
     Span::with(|s| s.rec_str("hash", &hash));
 
-    let mined = ctx.storage.read_mined_transaction(&hash)?;
+    let tx = ctx.storage.read_transaction(&hash)?;
     Span::with(|s| {
-        s.record("found", mined.is_some());
+        s.record("found", tx.is_some());
     });
 
-    match mined {
-        Some(mined) => Ok(mined.to_json_rpc_transaction()),
+    match tx {
+        Some(tx) => Ok(tx.to_json_rpc_transaction()),
         None => Ok(JsonValue::Null),
     }
 }
@@ -415,12 +414,12 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
     Span::with(|s| s.rec_str("hash", &hash));
 
-    let mined = ctx.storage.read_mined_transaction(&hash)?;
+    let tx = ctx.storage.read_transaction(&hash)?;
     Span::with(|s| {
-        s.record("found", mined.is_some());
+        s.record("found", tx.is_some());
     });
 
-    match mined {
+    match tx {
         Some(mined_transaction) => Ok(mined_transaction.to_json_rpc_receipt()),
         None => Ok(JsonValue::Null),
     }
