@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::future::Future;
 use std::time::Duration;
 
 use metrics::describe_counter;
@@ -154,5 +155,65 @@ impl<T> Timed<T> {
         F: FnOnce(&Timed<T>),
     {
         self.result
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TimedAsync
+// -----------------------------------------------------------------------------
+pub struct TimedAsync<T> {
+    pub elapsed: Duration,
+    pub result: T,
+}
+
+impl<T> TimedAsync<T> {
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    /// Applies the provided function to the current metrified execution.
+    pub fn with<F>(self, f: F) -> T
+    where
+        F: FnOnce(&TimedAsync<T>),
+    {
+        f(&self);
+        self.result
+    }
+
+    #[cfg(not(feature = "metrics"))]
+    #[inline(always)]
+    /// Do nothing because the `metrics` function is disabled.
+    pub fn with<F>(self, _: F) -> T
+    where
+        F: FnOnce(&TimedAsync<T>),
+    {
+        self.result
+    }
+}
+
+#[cfg(feature = "metrics")]
+/// Measures how long the provided async function takes to execute.
+///
+/// Returns a wrapper that allows using it to record metrics if the `metrics` feature is enabled.
+pub async fn timed_async<Fut, T>(future: Fut) -> TimedAsync<T>
+where
+    Fut: Future<Output = T>,
+{
+    let start = crate::infra::metrics::now();
+    let result = future.await;
+    TimedAsync {
+        elapsed: start.elapsed(),
+        result,
+    }
+}
+
+#[cfg(not(feature = "metrics"))]
+/// Executes the provided async function
+pub async fn timed_async<Fut, T>(future: Fut) -> TimedAsync<T>
+where
+    Fut: Future<Output = T>,
+{
+    let result = future.await;
+    TimedAsync {
+        elapsed: Duration::default(),
+        result,
     }
 }
