@@ -443,15 +443,6 @@ impl ExternalRelayer {
             }
         };
 
-        // this is probably redundant since send_raw_transaction probably only succeeds if the transaction was added to the mempool already.
-        tracing::info!(?tx_mined.input.hash, "polling eth_getTransactionByHash");
-        let mut tries = 0;
-        while self.substrate_chain.fetch_transaction(tx_mined.input.hash).await.unwrap_or(None).is_none() {
-            tracing::warn!(?tx_mined.input.hash, ?tries, "transaction not found, retrying...");
-            traced_sleep(Duration::from_millis(100), SleepReason::SyncData).await;
-            tries += 1;
-        }
-
         #[cfg(feature = "metrics")]
         metrics::inc_relay_and_check_mempool(start.elapsed());
         self.compare_receipt(tx_mined, tx).await
