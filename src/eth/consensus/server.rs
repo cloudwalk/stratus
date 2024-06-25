@@ -66,7 +66,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 message: "transaction Executions appended successfully".into(),
                 last_committed_block_number: 0,
             }))
-        }).await.with(|m| {
+        })
+        .await
+        .with(|m| {
             metrics::inc_consensus_grpc_requests_finished(m.elapsed, label::APPEND_TRANSACTION_EXECUTIONS, m.result.is_ok());
         })
     }
@@ -123,7 +125,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 message: "Block Commit appended successfully".into(),
                 last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
             }))
-        }).await.with(|m| {
+        })
+        .await
+        .with(|m| {
             metrics::inc_consensus_grpc_requests_finished(m.elapsed, label::APPEND_BLOCK_COMMIT, m.result.is_ok());
         })
     }
@@ -175,7 +179,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     consensus.last_arrived_block_number.load(Ordering::SeqCst)
                 ),
             }))
-        }).await.with(|m| {
+        })
+        .await
+        .with(|m| {
             metrics::inc_consensus_grpc_requests_finished(m.elapsed, label::REQUEST_VOTE, m.result.is_ok());
         })
     }
