@@ -202,7 +202,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 10
+                LIMIT 5
             )
             UPDATE relayer_blocks r
                 SET started = true
@@ -416,6 +416,8 @@ impl ExternalRelayer {
         let start = metrics::now();
 
         let tx_hash = tx_mined.input.hash;
+        let nonce = tx_mined.input.nonce;
+
         tracing::info!(?tx_mined.input.nonce, ?tx_hash, "relaying transaction");
 
         // fill span
@@ -437,7 +439,7 @@ impl ExternalRelayer {
                         return self.compare_receipt(tx_mined, PendingTransaction::new(tx_hash, &self.substrate_chain)).await;
                     }
 
-                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, syncing nonce and retrying...");
+                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
                     continue;
                 }
             }
@@ -460,6 +462,7 @@ impl ExternalRelayer {
 
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
+            tracing::info!(elapsed=?start.elapsed().as_secs(), transaction_num=roots.len(), remaining=dag.txs_remaining(),"forwarding");
             let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
             results.extend(join_all(futures).await);
         }

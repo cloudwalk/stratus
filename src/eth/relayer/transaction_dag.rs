@@ -33,6 +33,10 @@ impl TransactionDag {
             .collect()
     }
 
+    pub fn txs_remaining(&self) -> usize {
+        self.dag.node_count()
+    }
+
     pub fn get_balance_writes(block_transactions: &[TransactionMined]) -> HashSet<Address> {
         block_transactions
             .iter()
