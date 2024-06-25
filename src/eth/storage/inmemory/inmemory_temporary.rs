@@ -16,6 +16,7 @@ use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -184,7 +185,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.require_active_block_mut()?.tx_executions.push(tx);
+        states.head.require_active_block_mut()?.push_transaction(tx);
 
         Ok(())
     }
@@ -204,6 +205,15 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         states.head.block = Some(PendingBlock::new(finished_block.number.next()));
 
         Ok(finished_block)
+    }
+
+    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
+        let states = self.lock_read();
+        let Some(ref pending_block) = states.head.block else { return Ok(None) };
+        match pending_block.tx_executions.get(hash) {
+            Some(tx) => Ok(Some(tx.clone())),
+            None => Ok(None),
+        }
     }
 
     // -------------------------------------------------------------------------

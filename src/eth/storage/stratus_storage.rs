@@ -351,7 +351,7 @@ impl StratusStorage {
         Span::with(|s| s.rec_str("hash", hash));
         tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
 
-        timed(|| self.perm.read_mined_transaction(hash)).with(|m| {
+        timed(|| self.perm.read_transaction(hash)).with(|m| {
             metrics::inc_storage_read_mined_transaction(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
