@@ -22,6 +22,9 @@ use super::GlobalState;
 use super::Peer;
 use super::PeerAddress;
 use crate::ext::spawn_named;
+use tokio::sync::Mutex;
+use super::append_entry::append_entry_service_client::AppendEntryServiceClient;
+use super::Role;
 
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
@@ -110,11 +113,6 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
 
 #[cfg(not(test))] // FIXME: This is a workaround to avoid running this code in tests we need a proper Tonic mock
 async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> Result<Vec<(PeerAddress, Peer)>, anyhow::Error> {
-    use tokio::sync::Mutex;
-
-    use super::append_entry::append_entry_service_client::AppendEntryServiceClient;
-    use super::Role;
-
     #[allow(unused_mut)]
     let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
