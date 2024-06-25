@@ -51,7 +51,7 @@ use crate::GlobalState;
 pub mod append_entry {
     tonic::include_proto!("append_entry");
 }
-
+#[allow(unused_imports)]
 use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
@@ -164,6 +164,7 @@ pub struct Consensus {
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
+    #[allow(dead_code)]
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,

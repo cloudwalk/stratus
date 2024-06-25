@@ -25,6 +25,7 @@ use crate::ext::spawn_named;
 
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
+    #[allow(unused_mut)]
     let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
     #[cfg(feature = "kubernetes")]
@@ -114,6 +115,7 @@ async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> 
     use super::append_entry::append_entry_service_client::AppendEntryServiceClient;
     use super::Role;
 
+    #[allow(unused_mut)]
     let mut peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
     for address in addresses {

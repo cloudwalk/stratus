@@ -169,35 +169,13 @@ mod tests {
     use tonic::Request;
 
     use super::*;
-    use crate::eth::consensus::tests::factories::create_follower_consensus_with_leader;
+    use crate::eth::consensus::tests::factories::*;
     use crate::eth::consensus::BlockEntry;
     use crate::eth::storage::StratusStorage;
 
-    // Helper function to create a mock consensus instance
-    async fn create_mock_consensus() -> Arc<Consensus> {
-        let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
-        let direct_peers = Vec::new();
-        let importer_config = None;
-        let jsonrpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
-        let grpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
-        let (tx_pending_txs, _) = broadcast::channel(10);
-        let (tx_blocks, _) = broadcast::channel(10);
-
-        Consensus::new(
-            storage.into(),
-            direct_peers,
-            importer_config,
-            jsonrpc_address,
-            grpc_address,
-            tx_pending_txs.subscribe(),
-            tx_blocks.subscribe(),
-        )
-        .await
-    }
-
     #[tokio::test]
     async fn test_append_transaction_executions_not_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -224,7 +202,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_transaction_executions_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -284,7 +262,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_block_commit_leader() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -313,7 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_request_vote() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_leader_consensus().await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
