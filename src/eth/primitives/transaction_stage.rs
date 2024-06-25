@@ -4,7 +4,7 @@ use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
-use crate::ext::ResultExt;
+use crate::ext::to_json_value;
 
 /// Stages that a transaction can be in.
 #[allow(clippy::large_enum_variant)]
@@ -23,18 +23,18 @@ impl TransactionStage {
         match self {
             TransactionStage::Executed(TransactionExecution::Local(tx)) => {
                 let json_rpc_payload: EthersTransaction = tx.input.into();
-                serde_json::to_value(json_rpc_payload).expect_infallible()
+                to_json_value(json_rpc_payload)
             }
             TransactionStage::Executed(TransactionExecution::External(tx)) => {
                 // remove block information because we don't know to which local block the transaction will be added to.
                 let mut ethers_tx = tx.tx.0;
                 ethers_tx.block_number = None;
                 ethers_tx.block_hash = None;
-                serde_json::to_value(ethers_tx).expect_infallible()
+                to_json_value(ethers_tx)
             }
             TransactionStage::Mined(tx) => {
                 let json_rpc_payload: EthersTransaction = tx.into();
-                serde_json::to_value(json_rpc_payload).expect_infallible()
+                to_json_value(json_rpc_payload)
             }
         }
     }
@@ -45,7 +45,7 @@ impl TransactionStage {
             TransactionStage::Executed(_) => JsonValue::Null,
             TransactionStage::Mined(tx) => {
                 let json_rpc_format: EthersReceipt = tx.into();
-                serde_json::to_value(json_rpc_format).expect_infallible()
+                to_json_value(json_rpc_format)
             }
         }
     }

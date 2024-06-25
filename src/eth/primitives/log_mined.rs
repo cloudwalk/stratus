@@ -9,7 +9,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogTopic;
-use crate::ext::ResultExt;
+use crate::ext::to_json_value;
 
 /// Log that was emitted by the EVM and added to a block.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -46,8 +46,8 @@ impl LogMined {
 
     /// Serializes itself to JSON-RPC log format.
     pub fn to_json_rpc_log(self) -> JsonValue {
-        let json_rpc_format: EthersLog = self.into();
-        serde_json::to_value(json_rpc_format).expect_infallible()
+        let ethers_log: EthersLog = self.into();
+        to_json_value(ethers_log)
     }
 }
 
