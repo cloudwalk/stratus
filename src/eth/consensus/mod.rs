@@ -577,7 +577,7 @@ impl Consensus {
             tracing::warn!(diff = diff, "should not serve request");
             #[cfg(feature = "metrics")]
             metrics::set_consensus_readiness_status(0_u64);
-            
+
             false
         }
     }
