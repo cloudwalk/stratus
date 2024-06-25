@@ -96,6 +96,7 @@ pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEn
 
 pub async fn create_mock_consensus() -> Arc<Consensus> {
     let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
+    let (_log_entries_storage, tmpdir_log_entries) = StratusStorage::mock_new_rocksdb();
     let direct_peers = Vec::new();
     let importer_config = None;
     let jsonrpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
@@ -103,8 +104,11 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
     let (tx_pending_txs, _) = broadcast::channel(10);
     let (tx_blocks, _) = broadcast::channel(10);
 
+    let tmpdir_log_entries_path = tmpdir_log_entries.path().to_str().map(|s| s.to_owned());
+
     Consensus::new(
         storage.into(),
+        tmpdir_log_entries_path,
         direct_peers,
         importer_config,
         jsonrpc_address,
