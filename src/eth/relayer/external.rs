@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use ::metrics::atomics::AtomicU64;
 use anyhow::anyhow;
 use anyhow::Context;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
@@ -29,6 +28,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -58,7 +58,7 @@ pub enum RelayError {
 
 struct TxSigner {
     wallet: LocalWallet,
-    nonce: AtomicU64,
+    nonce: Nonce,
 }
 
 impl TxSigner {
@@ -69,13 +69,19 @@ impl TxSigner {
         let nonce = chain.fetch_transaction_count(&addr).await?;
         Ok(Self {
             wallet,
-            nonce: u64::from(nonce).into(),
+            nonce,
         })
     }
 
-    pub fn sign_transaction_input(&self, mut tx_input: TransactionInput) -> TransactionInput {
+    pub async fn _sync_nonce(&mut self, chain: &BlockchainClient) -> anyhow::Result<()> {
+        self.nonce = chain.fetch_transaction_count(&self.wallet.address().into()).await?;
+        Ok(())
+    }
+
+    pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
         let tx: TransactionRequest =
-            <TransactionRequest as From<TransactionInput>>::from(tx_input.clone()).nonce(self.nonce.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
+            <TransactionRequest as From<TransactionInput>>::from(tx_input.clone()).nonce(self.nonce);
+
         let req = TypedTransaction::Legacy(tx);
         let new_hash = req.sighash();
         let signature = self.wallet.sign_transaction_sync(&req).unwrap();
@@ -88,6 +94,7 @@ impl TxSigner {
         tx_input.s = signature.s;
         tx_input.v = signature.v.into();
 
+        self.nonce = self.nonce.next();
         tx_input
     }
 }
@@ -185,7 +192,7 @@ impl ExternalRelayer {
 
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all, fields(block_number))]
-    pub async fn relay_blocks(&self) -> anyhow::Result<Vec<BlockNumber>> {
+    pub async fn relay_blocks(&mut self) -> anyhow::Result<Vec<BlockNumber>> {
         let block_rows = sqlx::query!(
             r#"
             WITH cte AS (
@@ -419,11 +426,13 @@ impl ExternalRelayer {
                         ?tx_hash,
                         "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
                     );
+
                     if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
                         tracing::info!(?tx_hash, "transaction found on substrate");
                         return self.compare_receipt(tx_mined, PendingTransaction::new(tx_hash, &self.substrate_chain)).await;
                     }
-                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
+
+                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, syncing nonce and retrying...");
                     continue;
                 }
             }
