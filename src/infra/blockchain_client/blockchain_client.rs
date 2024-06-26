@@ -264,8 +264,8 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Sends a signed transaction.
-    pub async fn send_raw_transaction(&self, hash: Hash, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
-        tracing::debug!(%hash, "sending raw transaction");
+    pub async fn send_raw_transaction(&self, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
+        tracing::debug!("sending raw transaction");
 
         let tx = serde_json::to_value(tx).expect_infallible();
         let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await;

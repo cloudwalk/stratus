@@ -295,7 +295,7 @@ impl ExternalRelayer {
         let tx_hash: Hash = stratus_tx.input.hash;
         let block_number: BlockNumber = stratus_tx.block_number;
 
-        tracing::info!(?block_number, ?tx_hash, "comparing receipts");
+        tracing::info!(?block_number, ?tx_hash, ?substrate_pending_transaction.tx_hash, "comparing receipts");
 
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
@@ -412,7 +412,7 @@ impl ExternalRelayer {
 
         let rlp = Transaction::from(tx_mined.input.clone()).rlp();
         let tx = loop {
-            match self.substrate_chain.send_raw_transaction(tx_hash, rlp.clone()).await {
+            match self.substrate_chain.send_raw_transaction(rlp.clone()).await {
                 Ok(tx) => break tx,
                 Err(err) => {
                     tracing::warn!(

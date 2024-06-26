@@ -25,7 +25,7 @@ impl TransactionRelayer {
 
         let tx = self
             .chain
-            .send_raw_transaction(tx_input.hash, Transaction::from(tx_input.clone()).rlp())
+            .send_raw_transaction(Transaction::from(tx_input.clone()).rlp())
             .await?;
 
         Ok(tx)
