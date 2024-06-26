@@ -112,15 +112,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         tracing::info!(number = block_entry.number, "appending new block");
 
         // TODO: resolve log inconsistency instead?
-        let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
-        if request_inner.prev_log_index != last_last_arrived_block_number {
-            tracing::error!(
-                "prevLogIndex mismatch: expected {}, got {}",
-                last_last_arrived_block_number,
-                request_inner.prev_log_index
-            );
-            return Err(Status::invalid_argument("empty block entry"));
-        }
+        //let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
+        //if request_inner.prev_log_index != last_last_arrived_block_number {
+        //    tracing::error!(
+        //        "prevLogIndex mismatch: expected {}, got {}",
+        //        last_last_arrived_block_number,
+        //        request_inner.prev_log_index
+        //    );
+        //    return Err(Status::invalid_argument("empty block entry"));
+        //}
 
         let index = request_inner.prev_log_index + 1;
         let term = request_inner.prev_log_term;
