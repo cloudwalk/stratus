@@ -76,6 +76,7 @@ compound=0
 yield=0
 pix=0
 pixv3=0
+cppv2=0
 
 # Help function
 print_help() {
@@ -88,6 +89,7 @@ print_help() {
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
     echo "  -3, --pixv3       for brlc-pix-cashier-v3"
+    echo "  -2, --cppv2       for brlc-periphery-v2"
     echo "  -h, --help        display this help and exit"
 }
 
@@ -111,6 +113,7 @@ while [[ "$#" -gt 0 ]]; do
         -i|--yield) yield=1; shift ;;
         -x|--pix) pix=1; shift ;;
         -3|--pixv3) pixv3=1; shift ;;
+        -2|--cppv2) cppv2=1; shift ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
 done
@@ -145,4 +148,8 @@ fi
 
 if [ "$pixv3" == 1 ]; then
     clone_alternative brlc-pix-cashier 2b1e7b3 pix-cashier-v3 brlc-pix-cashier-v3
+fi
+
+if [ "$cppv2" == 1 ]; then
+    clone_alternative brlc-periphery 1e5344f cpp2 brlc-periphery-v2
 fi
