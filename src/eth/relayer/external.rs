@@ -303,20 +303,19 @@ impl ExternalRelayer {
         let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
         let _res = loop {
-            let Ok(receipt) = timeout(Duration::from_secs(30), substrate_receipt).await else {
-                tracing::error!(
-                    ?block_number,
-                    ?tx_hash,
-                    "no receipt returned by substrate for more than 30 seconds, retrying block"
-                );
-                break Err(RelayError::CompareTimeout(
-                    block_number,
-                    anyhow!("no receipt returned by substrate for more than 30 seconds"),
-                ));
+            let receipt = loop {
+                match substrate_receipt.await {
+                    Ok(r) => break r,
+                    Err(err) => {
+                        substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
+                        tracing::warn!(?err);
+                        continue;
+                    }
+                }
             };
 
             match receipt {
-                Ok(Some(substrate_receipt)) => {
+                Some(substrate_receipt) => {
                     let _ = stratus_tx.execution.apply_receipt(&substrate_receipt);
                     if let Err(compare_error) = stratus_tx.execution.compare_with_receipt(&substrate_receipt) {
                         let err_string = compare_error.to_string();
@@ -327,19 +326,8 @@ impl ExternalRelayer {
                         break Ok(());
                     }
                 }
-                Ok(None) => {
-                    if start.elapsed().as_secs() <= 30 {
-                        tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
-                    } else {
-                        tracing::error!(?tx_hash, "no receipt returned by substrate for more than 30 seconds, retrying block");
-                        break Err(RelayError::CompareTimeout(
-                            block_number,
-                            anyhow!("no receipt returned by substrate for more than 30 seconds"),
-                        ));
-                    }
-                }
-                Err(error) => {
-                    tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
+                None => {
+                    tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                 }
             }
             substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
