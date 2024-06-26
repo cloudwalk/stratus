@@ -76,6 +76,7 @@ multisig=0
 compound=0
 yield=0
 pix=0
+pixv3=0
 
 # Help function
 print_help() {
@@ -87,6 +88,7 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
+    echo "  -3, --pixv3       for brlc-pix-cashier-v3"
     echo "  -h, --help        display this help and exit"
 }
 
@@ -109,6 +111,7 @@ while [[ "$#" -gt 0 ]]; do
         -c|--compound) compound=1; shift ;;
         -i|--yield) yield=1; shift ;;
         -x|--pix) pix=1; shift ;;
+        -3|--pixv3) pixv3=1; shift ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
 done
@@ -121,6 +124,10 @@ fi
 
 if [ "$pix" == 1 ]; then
     clone brlc-pix-cashier fe9343c
+fi
+
+if [ "$pixv3" == 1 ]; then
+    clone_alternative brlc-pix-cashier-v3 2b1e7b3 pix-cashier-v3 repos/brlc-pix-cashier-v3
 fi
 
 if [ "$yield" == 1 ]; then
