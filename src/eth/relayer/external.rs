@@ -29,7 +29,6 @@ use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Signature;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -68,10 +67,7 @@ impl TxSigner {
         let wallet = LocalWallet::from_bytes(&private_key)?;
         let addr = wallet.address().into();
         let nonce = chain.fetch_transaction_count(&addr).await?;
-        Ok(Self {
-            wallet,
-            nonce,
-        })
+        Ok(Self { wallet, nonce })
     }
 
     pub async fn sync_nonce(&mut self, chain: &BlockchainClient) -> anyhow::Result<()> {
@@ -80,8 +76,9 @@ impl TxSigner {
     }
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
-        let tx: TransactionRequest =
-            <TransactionRequest as From<TransactionInput>>::from(tx_input.clone()).nonce(self.nonce);
+        let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
+            .nonce(self.nonce)
+            .gas(tx_input.gas_limit.as_u64() * 10);
 
         let req = TypedTransaction::Legacy(tx);
         let signature = self.wallet.sign_transaction_sync(&req).unwrap();
@@ -330,7 +327,7 @@ impl ExternalRelayer {
                         break Ok(());
                     }
                 }
-                Ok(None) =>
+                Ok(None) => {
                     if start.elapsed().as_secs() <= 30 {
                         tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
                     } else {
@@ -339,7 +336,8 @@ impl ExternalRelayer {
                             block_number,
                             anyhow!("no receipt returned by substrate for more than 30 seconds"),
                         ));
-                    },
+                    }
+                }
                 Err(error) => {
                     tracing::error!(?tx_hash, ?error, "failed to fetch substrate receipt, retrying...");
                 }
@@ -393,7 +391,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) =>
+            Ok(res) => {
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -401,7 +399,8 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                },
+                }
+            }
         }
 
         #[cfg(feature = "metrics")]
