@@ -122,15 +122,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //    return Err(Status::invalid_argument("empty block entry"));
         //}
 
-        let index = request_inner.prev_log_index + 1;
-        let term = request_inner.prev_log_term;
-        let data = LogEntryData::BlockEntry(block_entry.clone());
+        //let index = request_inner.prev_log_index + 1;
+        //let term = request_inner.prev_log_term;
+        //let data = LogEntryData::BlockEntry(block_entry.clone());
 
-        #[cfg(feature = "rocks")]
-        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
-            tracing::error!("Failed to save log entry: {:?}", e);
-            return Err(Status::internal("Failed to save log entry"));
-        }
+        //#[cfg(feature = "rocks")]
+        //if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
+        //    tracing::error!("Failed to save log entry: {:?}", e);
+        //    return Err(Status::internal("Failed to save log entry"));
+        //}
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
         //TODO FIXME move this code back when we have propagation:      tracing::error!(
