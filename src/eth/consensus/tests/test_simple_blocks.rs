@@ -1,11 +1,16 @@
 use std::sync::Arc;
+
 use tokio::sync::Mutex;
 use tonic::Request;
-use crate::eth::consensus::append_entry::{AppendTransactionExecutionsRequest, AppendBlockCommitRequest};
-use crate::eth::consensus::{Consensus, Role, AppendEntryServiceImpl, LogEntryData};
-use crate::eth::primitives::{TransactionExecution, Hash};
+
+use super::factories::create_follower_consensus_with_leader;
+use super::factories::create_mock_block_entry;
+use super::factories::create_mock_transaction_execution_entry;
 use crate::eth::consensus::append_entry::append_entry_service_server::AppendEntryService;
-use super::factories::{create_follower_consensus_with_leader, create_mock_transaction_execution_entry, create_mock_block_entry};
+use crate::eth::consensus::append_entry::AppendBlockCommitRequest;
+use crate::eth::consensus::append_entry::AppendTransactionExecutionsRequest;
+use crate::eth::consensus::AppendEntryServiceImpl;
+use crate::eth::consensus::Role;
 use crate::eth::consensus::TransactionExecutionEntry;
 
 #[tokio::test]
@@ -27,9 +32,7 @@ async fn test_append_entries_transaction_executions_and_block() {
     let mut prev_log_index = 0;
 
     for _ in 0..total_requests {
-        let executions: Vec<TransactionExecutionEntry> = (0..transactions_per_request)
-            .map(|_| create_mock_transaction_execution_entry())
-            .collect();
+        let executions: Vec<TransactionExecutionEntry> = (0..transactions_per_request).map(|_| create_mock_transaction_execution_entry()).collect();
 
         // Store all executions for later verification
         all_executions.extend(executions.clone());
