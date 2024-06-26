@@ -804,6 +804,7 @@ impl Consensus {
 mod tests {
     use super::*;
     pub mod factories;
+    mod test_simple_blocks;
 
     #[test]
     fn test_peer_address_from_string_valid_http() {
