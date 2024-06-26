@@ -17,6 +17,7 @@ use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
+use crate::eth::primitives::Block;
 use crate::eth::Consensus;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -118,6 +119,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: };
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
+
+
+
+        //TODO send the executions to the Storage
+        //assemble_block(&block_entry, &consensus).await;
+        let block: Block = assemble(block_entry, executions);
+        consensus.storage.save_block(block).await;
 
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
