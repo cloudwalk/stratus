@@ -136,12 +136,12 @@ impl AppendEntryService for AppendEntryServiceImpl {
         // TODO: resolve log inconsistency instead?
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
         if request_inner.prev_log_index != last_last_arrived_block_number {
-            tracing::error!(
+            let error_message = format!(
                 "prevLogIndex mismatch: expected {}, got {}",
-                last_last_arrived_block_number,
-                request_inner.prev_log_index
+                last_last_arrived_block_number, request_inner.prev_log_index
             );
-            return Err(Status::invalid_argument("empty block entry"));
+            tracing::error!("{}", &error_message);
+            return Err(Status::invalid_argument(error_message));
         }
 
         let index = request_inner.prev_log_index + 1;
