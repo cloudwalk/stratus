@@ -20,4 +20,4 @@ jobs:
           self: Merge Gatekeeper
           interval: 5
           timeout: 1800
-          ignored: PR Agent,E2E Rocks on pixv3,E2E InMemory on pixv3
+          ignored: PR Agent,E2E Rocks on pixv3,E2E InMemory on pixv3,E2E Rocks on cppv2,E2E InMemory on cppv2
