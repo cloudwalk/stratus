@@ -85,6 +85,7 @@ impl TxSigner {
         let new_hash = req.hash(&signature);
 
         tx_input.signer = self.wallet.address().into();
+        tx_input.gas_limit = (tx_input.gas_limit.as_u64() * 10).into();
         // None is Legacy
         tx_input.tx_type = None;
         tx_input.hash = new_hash.into();
