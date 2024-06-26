@@ -6,6 +6,7 @@ import {
     TX_PARAMS,
     deployTestContractBalances,
     deployTestContractCounter,
+    pollForTransactions,
     send,
     sendGetNonce,
     sendRawTransactions,
@@ -87,8 +88,9 @@ describe("Transaction: parallel TestContractBalances", async () => {
         }
 
         // send transactions in parallel
-        let hashes = await sendRawTransactions(signedTxs);
-        let failed = hashes.filter((x) => x === undefined).length;
+        const hashes = await sendRawTransactions(signedTxs);
+        const receipts = await pollForTransactions(hashes);
+        let failed = receipts.filter((r) => r.status == 0).length;
 
         // check remaining balance
         expect(await _contract.get(ALICE.address)).eq(15);
