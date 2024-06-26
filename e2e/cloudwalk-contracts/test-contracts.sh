@@ -54,6 +54,7 @@ multisig=0
 compound=0
 yield=0
 pix=0
+pixv3=0
 
 # Help function
 print_help() {
@@ -65,6 +66,7 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
+    echo "  -3, --pixv3       for brlc-pix-cashier-v3"
     echo "  -h, --help        display this help and exit"
 }
 
@@ -87,6 +89,7 @@ if [[ "$#" -gt 0 ]]; then
         -c|--compound) compound=1; shift ;;
         -i|--yield) yield=1; shift ;;
         -x|--pix) pix=1; shift ;;
+        -3|--pixv3) pixv3=1; shift ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
 fi
@@ -122,3 +125,10 @@ fi
 if [ "$compound" == 1 ]; then
     test compound-periphery CompoundAgent $@
 fi
+
+# Alternative versions
+
+if [ "$pixv3" == 1 ]; then
+    test brlc-pix-cashier-v3 PixCashier $@
+fi
+
