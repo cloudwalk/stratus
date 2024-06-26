@@ -243,6 +243,7 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
         "newPendingTransactions":
             pending_txs.values().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed())
@@ -252,6 +253,7 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
         "newHeads":
             new_heads.values().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed())
@@ -259,8 +261,9 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
             ).collect_vec()
         ,
         "logs":
-            logs.values().map(|s|
+            logs.iter().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed()),
