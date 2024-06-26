@@ -95,11 +95,9 @@ impl TransactionExecution {
                     .iter()
                     .map(|log| append_entry::Log {
                         address: log.address.to_string(),
-                        topics: log.topics.iter().map(|topic| topic.to_string()).collect(),
+                        topics: log.topics.iter().map(|topic| topic.into()).collect(),
                         data: log.data.to_vec(),
                         log_index: log.log_index.unwrap_or_default().as_u64(),
-                        transaction_log_index: log.transaction_log_index.unwrap_or_default().as_u64(),
-                        removed: log.removed.unwrap_or(false),
                     })
                     .collect(),
                 gas: u256_to_bytes(tx.gas),

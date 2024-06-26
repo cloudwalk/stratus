@@ -17,6 +17,7 @@ use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+//XXX this is the one!
 pub struct TransactionMined {
     /// Transaction input received through RPC.
     pub input: TransactionInput,
