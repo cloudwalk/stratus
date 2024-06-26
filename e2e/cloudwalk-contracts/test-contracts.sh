@@ -96,39 +96,39 @@ fi
 
 # Execute
 if [ "$token" == 1 ]; then
-    test brlc-token BRLCToken $@
-    test brlc-token base/CWToken.complex $@
-    test brlc-token BRLCTokenBridgeable $@
-    test brlc-token USJimToken $@
+    test brlc-token BRLCToken "$@"
+    test brlc-token base/CWToken.complex "$@"
+    test brlc-token BRLCTokenBridgeable "$@"
+    test brlc-token USJimToken "$@"
 fi
 
 if [ "$pix" == 1 ]; then
-    test brlc-pix-cashier PixCashier $@
+    test brlc-pix-cashier PixCashier "$@"
 fi
 
 if [ "$yield" == 1 ]; then
-    test brlc-yield-streamer BalanceTracker $@
-    test brlc-yield-streamer YieldStreamer $@
+    test brlc-yield-streamer BalanceTracker "$@"
+    test brlc-yield-streamer YieldStreamer "$@"
 fi
 
 if [ "$periphery" == 1 ]; then
-    test brlc-periphery CardPaymentProcessor $@
-    test brlc-periphery CashbackDistributor $@
+    test brlc-periphery CardPaymentProcessor "$@"
+    test brlc-periphery CashbackDistributor "$@"
 fi
 
 if [ "$multisig" == 1 ]; then
-    test brlc-multisig MultiSigWallet $@
-    test brlc-multisig MultiSigWalletFactory $@
-    test brlc-multisig MultiSigWalletUpgradeable $@
+    test brlc-multisig MultiSigWallet "$@"
+    test brlc-multisig MultiSigWalletFactory "$@"
+    test brlc-multisig MultiSigWalletUpgradeable "$@"
 fi
 
 if [ "$compound" == 1 ]; then
-    test compound-periphery CompoundAgent $@
+    test compound-periphery CompoundAgent "$@"
 fi
 
 # Alternative versions
 
 if [ "$pixv3" == 1 ]; then
-    test brlc-pix-cashier-v3 PixCashier $@
+    test brlc-pix-cashier-v3 PixCashier "$@"
 fi
 
