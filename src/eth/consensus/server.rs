@@ -87,7 +87,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let start = std::time::Instant::now();
 
         let consensus = self.consensus.lock().await;
+        let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
+
+        // Return error if request term < current term
+        if request_inner.term < current_term {
+            let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
+            tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
+            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+        }
 
         if consensus.is_leader() {
             tracing::error!(sender = request_inner.leader_id, "append_block_commit called on leader node");
@@ -103,7 +111,48 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         tracing::info!(number = block_entry.number, "appending new block");
 
+        // Return error if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
+        if let Some(prev_entry) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index).ok().flatten() {
+            if prev_entry.term != request_inner.prev_log_term {
+                let error_message = format!(
+                    "prevLogIndex term mismatch: expected {}, found {} at index {}",
+                    request_inner.prev_log_term, prev_entry.term, request_inner.prev_log_index
+                );
+                tracing::error!(
+                    prev_log_index = request_inner.prev_log_index,
+                    expected_term = request_inner.prev_log_term,
+                    actual_term = prev_entry.term,
+                    "{}",
+                    &error_message
+                );
+                return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+            }
+        } else {
+            let error_message = format!("No entry found at prevLogIndex {}", request_inner.prev_log_index);
+            tracing::error!(prev_log_index = request_inner.prev_log_index, "{}", &error_message);
+            return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+        }
+
+        // TODO: resolve log inconsistency instead?
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
+        if request_inner.prev_log_index != last_last_arrived_block_number {
+            tracing::error!(
+                "prevLogIndex mismatch: expected {}, got {}",
+                last_last_arrived_block_number,
+                request_inner.prev_log_index
+            );
+            return Err(Status::invalid_argument("empty block entry"));
+        }
+
+        let index = request_inner.prev_log_index + 1;
+        let term = request_inner.prev_log_term;
+        let data = LogEntryData::BlockEntry(block_entry.clone());
+
+        #[cfg(feature = "rocks")]
+        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
+            tracing::error!("Failed to save log entry: {:?}", e);
+            return Err(Status::internal("Failed to save log entry"));
+        }
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
         //TODO FIXME move this code back when we have propagation:      tracing::error!(
