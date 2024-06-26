@@ -41,15 +41,16 @@ clone_alternative() {
     repo=$1
     commit=$2
     branch=$3
-    target=$4
+    folder=$4
+    target=repos/$folder
 
     mkdir -p repos
 
     if [ -d $target ]; then
-        log "Updating: $repo in $target"
+        log "Updating: $repo in $folder"
         git -C $target pull
     else
-        log "Cloning: $branch branch of $repo in $target"
+        log "Cloning: $branch branch of $repo in $folder"
         # git clone git@github.com:cloudwalk/$repo.git $target
         git clone --branch $branch https://github.com/cloudwalk/$repo.git $target
         
@@ -127,7 +128,7 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$pixv3" == 1 ]; then
-    clone_alternative brlc-pix-cashier-v3 2b1e7b3 pix-cashier-v3 repos/brlc-pix-cashier-v3
+    clone_alternative brlc-pix-cashier-v3 2b1e7b3 pix-cashier-v3 brlc-pix-cashier-v3
 fi
 
 if [ "$yield" == 1 ]; then
