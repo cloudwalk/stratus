@@ -4,6 +4,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -34,6 +35,9 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     /// Finishes the mining of the active block and starts a new block.
     fn finish_block(&self) -> anyhow::Result<PendingBlock>;
 
+    /// Retrieves a transaction from the storage.
+    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>>;
+
     // -------------------------------------------------------------------------
     // Accounts and slots
     // -------------------------------------------------------------------------
@@ -53,7 +57,4 @@ pub trait TemporaryStorage: Send + Sync + 'static {
 
     /// Resets to default empty state.
     fn reset(&self) -> anyhow::Result<()>;
-
-    /// If necessary, flushes temporary state to durable storage.
-    fn flush(&self) -> anyhow::Result<()>;
 }

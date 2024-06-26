@@ -17,7 +17,7 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
-use crate::ext::ResultExt;
+use crate::ext::to_json_value;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -45,7 +45,7 @@ impl Block {
         Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
-    /// Pushes a single transaction execution to the blocks transactions
+    /// Pushes a single transaction execution to the blocks transactions.
     pub fn push_execution(&mut self, input: TransactionInput, evm_result: EvmExecutionResult) {
         let transaction_index = (self.transactions.len() as u64).into();
         self.transactions.push(TransactionMined {
@@ -104,14 +104,14 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let json_rpc_format: EthersBlock<EthersTransaction> = self.into();
-        serde_json::to_value(json_rpc_format).expect_infallible()
+        let ethers_block: EthersBlock<EthersTransaction> = self.into();
+        to_json_value(ethers_block)
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let json_rpc_format: EthersBlock<H256> = self.into();
-        serde_json::to_value(json_rpc_format).expect_infallible()
+        let ethers_block: EthersBlock<H256> = self.into();
+        to_json_value(ethers_block)
     }
 
     /// Returns the block number.

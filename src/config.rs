@@ -38,7 +38,6 @@ use crate::eth::BlockMiner;
 use crate::eth::BlockMinerMode;
 use crate::eth::Executor;
 use crate::eth::TransactionRelayer;
-use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::tracing::TracingLogFormat;
@@ -847,10 +846,6 @@ pub struct PermanentStorageConfig {
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
-
-    // Disable RocksDB backups
-    #[arg(long = "perm-storage-disable-backups", env = "PERM_STORAGE_DISABLE_BACKUPS")]
-    pub perm_storage_disable_backups: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -869,9 +864,8 @@ impl PermanentStorageConfig {
             PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
             #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => {
-                let enable_backups = not(self.perm_storage_disable_backups);
                 let prefix = self.rocks_path_prefix.clone();
-                Box::new(RocksPermanentStorage::new(enable_backups, prefix)?)
+                Box::new(RocksPermanentStorage::new(prefix)?)
             }
         };
         Ok(perm)

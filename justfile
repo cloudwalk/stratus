@@ -152,9 +152,9 @@ e2e network="stratus" block-mode="automine" test="":
     fi
 
     if [ -z "{{test}}" ]; then
-        npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}}
+        BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}}
     else
-        npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}} --grep "{{test}}"
+        BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}} --grep "{{test}}"
     fi
 
 # E2E: Starts and execute Hardhat tests in Hardhat

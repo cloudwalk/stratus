@@ -25,8 +25,8 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
+use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
-use crate::ext::ResultExt;
 use crate::log_and_err;
 
 #[derive(Debug)]
@@ -146,7 +146,7 @@ impl BlockchainClient {
     pub async fn fetch_block(&self, number: BlockNumber) -> anyhow::Result<JsonValue> {
         tracing::debug!(%number, "fetching block");
 
-        let number = serde_json::to_value(number).expect_infallible();
+        let number = to_json_value(number);
         let result = self
             .http
             .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number, JsonValue::Bool(true)])
@@ -162,7 +162,7 @@ impl BlockchainClient {
     pub async fn fetch_block_by_hash(&self, hash: Hash, tx_detail: bool) -> anyhow::Result<JsonValue> {
         tracing::debug!(%hash, "fetching block");
 
-        let hash = serde_json::to_value(hash).expect_infallible();
+        let hash = to_json_value(hash);
         let result = self
             .http
             .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByHash", vec![hash, JsonValue::Bool(tx_detail)])
@@ -178,7 +178,7 @@ impl BlockchainClient {
     pub async fn fetch_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
         tracing::debug!(%hash, "fetching transaction");
 
-        let hash = serde_json::to_value(hash).expect_infallible();
+        let hash = to_json_value(hash);
 
         let result = self
             .http
@@ -195,7 +195,7 @@ impl BlockchainClient {
     pub async fn fetch_receipt(&self, hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
         tracing::debug!(%hash, "fetching transaction receipt");
 
-        let hash = serde_json::to_value(hash).expect_infallible();
+        let hash = to_json_value(hash);
         let result = self
             .http
             .request::<Option<ExternalReceipt>, Vec<JsonValue>>("eth_getTransactionReceipt", vec![hash])
@@ -211,8 +211,8 @@ impl BlockchainClient {
     pub async fn fetch_balance(&self, address: &Address, number: Option<BlockNumber>) -> anyhow::Result<Wei> {
         tracing::debug!(%address, ?number, "fetching account balance");
 
-        let address = serde_json::to_value(address).expect_infallible();
-        let number = serde_json::to_value(number).expect_infallible();
+        let address = to_json_value(address);
+        let number = to_json_value(number);
         let result = self.http.request::<Wei, Vec<JsonValue>>("eth_getBalance", vec![address, number]).await;
 
         match result {
@@ -225,11 +225,11 @@ impl BlockchainClient {
     pub async fn fetch_storage_at(&self, address: &Address, index: &SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<SlotValue> {
         tracing::debug!(%address, ?point_in_time, "fetching account balance");
 
-        let address = serde_json::to_value(address).expect_infallible();
-        let index = serde_json::to_value(index).expect_infallible();
+        let address = to_json_value(address);
+        let index = to_json_value(index);
         let number = match point_in_time {
-            StoragePointInTime::Present => serde_json::to_value("latest").expect_infallible(),
-            StoragePointInTime::Past(number) => serde_json::to_value(number).expect_infallible(),
+            StoragePointInTime::Present => to_json_value("latest"),
+            StoragePointInTime::Past(number) => to_json_value(number),
         };
         let result = self
             .http
@@ -250,7 +250,7 @@ impl BlockchainClient {
     pub async fn send_raw_transaction(&self, hash: Hash, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
         tracing::debug!(%hash, "sending raw transaction");
 
-        let tx = serde_json::to_value(tx).expect_infallible();
+        let tx = to_json_value(tx);
         let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await;
 
         match result {

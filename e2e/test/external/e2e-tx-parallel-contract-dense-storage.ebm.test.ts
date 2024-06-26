@@ -1,3 +1,5 @@
+import { expect } from "chai";
+
 import { ALICE, Account, BOB, randomAccounts } from "../helpers/account";
 import {
     AccountRecord,
@@ -8,9 +10,14 @@ import {
     inverseRecordChange,
     prepareSignedTxOfRecordChange,
 } from "../helpers/contract-dense-storage";
+import { BlockMode, currentBlockMode } from "../helpers/network";
 import { deployTestContractDenseStorage, sendEvmMine, sendRawTransactions } from "../helpers/rpc";
 
 describe("Transaction: parallel for the 'TestContractDenseStorage' contract", async () => {
+    before(() => {
+        expect(currentBlockMode()).eq(BlockMode.External, "Wrong block mining mode is used");
+    });
+
     it("Parallel transactions execute properly when no reverts are expected", async () => {
         const contract = await deployTestContractDenseStorage();
         await sendEvmMine();

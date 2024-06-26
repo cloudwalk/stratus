@@ -51,7 +51,8 @@ use ulid::Ulid;
 use crate::config::TracingConfig;
 use crate::ext::not;
 use crate::ext::spawn_named;
-use crate::ext::ResultExt;
+use crate::ext::to_json_string;
+use crate::ext::to_json_value;
 use crate::infra::build_info;
 
 /// Init application tracing.
@@ -319,12 +320,12 @@ struct SpanFields(#[deref] JsonValue);
 
 impl SpanFields {
     fn new(fields: SerializeFieldMap<'_, Attributes>) -> Self {
-        let fields = serde_json::to_value(fields).expect_infallible();
+        let fields = to_json_value(fields);
         Self(fields)
     }
 
     fn record(&mut self, fields: SerializeFieldMap<'_, span::Record>) {
-        let mut new_fields = serde_json::to_value(fields).expect_infallible();
+        let mut new_fields = to_json_value(fields);
         let Some(new_fields) = new_fields.as_object_mut() else { return };
 
         let Some(current_fields) = self.as_object_mut() else { return };
@@ -389,7 +390,7 @@ where
             context,
         };
 
-        writeln!(writer, "{}", serde_json::to_string(&log).expect_infallible())
+        writeln!(writer, "{}", to_json_string(&log))
     }
 }
 
