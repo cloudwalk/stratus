@@ -103,6 +103,16 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         tracing::info!(number = block_entry.number, "appending new block");
 
+        let index = request_inner.prev_log_index + 1;
+        let term = request_inner.prev_log_term;
+        let data = LogEntryData::BlockEntry(block_entry.clone());
+
+        #[cfg(feature = "rocks")]
+        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
+            tracing::error!("Failed to save log entry: {:?}", e);
+            return Err(Status::internal("Failed to save log entry"));
+        }
+
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
