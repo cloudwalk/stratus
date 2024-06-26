@@ -1,9 +1,8 @@
 use std::collections::HashSet;
-use std::time::Duration;
-
 use anyhow::anyhow;
 use anyhow::Context;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
+use ethers_core::types::Bytes;
 use ethers_core::types::Transaction;
 use ethers_core::types::TransactionRequest;
 use ethers_signers::LocalWallet;
@@ -15,8 +14,6 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tokio::time::timeout;
-use tokio::time::Instant;
 use tracing::Span;
 
 use super::transaction_dag::TransactionDag;
@@ -54,6 +51,9 @@ pub enum RelayError {
 
     #[error("Compare Timeout: {1}")]
     CompareTimeout(BlockNumber, anyhow::Error),
+
+    #[error("Transaction not found")]
+    TransactionNotFound,
 }
 
 struct TxSigner {
@@ -301,9 +301,8 @@ impl ExternalRelayer {
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
 
-        let start = Instant::now();
         let mut substrate_receipt = substrate_pending_transaction;
-        let _res = loop {
+        let _res = {
             let receipt = loop {
                 match substrate_receipt.await {
                     Ok(r) => break r,
@@ -314,25 +313,19 @@ impl ExternalRelayer {
                     }
                 }
             };
-
-            match receipt {
-                Some(substrate_receipt) => {
-                    let _ = stratus_tx.execution.apply_receipt(&substrate_receipt);
-                    if let Err(compare_error) = stratus_tx.execution.compare_with_receipt(&substrate_receipt) {
-                        let err_string = compare_error.to_string();
-                        let error = log_and_err!("transaction mismatch!").context(err_string.clone());
-                        self.save_mismatch(stratus_tx, substrate_receipt, &err_string).await;
-                        break error.map_err(|err| RelayError::Mismatch(block_number, err));
-                    } else {
-                        break Ok(());
-                    }
+            if let Some(substrate_receipt) = receipt {
+                let _ = stratus_tx.execution.apply_receipt(&substrate_receipt);
+                if let Err(compare_error) = stratus_tx.execution.compare_with_receipt(&substrate_receipt) {
+                    let err_string = compare_error.to_string();
+                    let error = log_and_err!("transaction mismatch!").context(err_string.clone());
+                    self.save_mismatch(stratus_tx, substrate_receipt, &err_string).await;
+                    error.map_err(|err| RelayError::Mismatch(block_number, err))
+                } else {
+                    Ok(())
                 }
-                None => {
-                    tracing::warn!(?tx_hash, "no receipt returned by substrate, retrying...");
-                }
+            } else {
+                Err(RelayError::TransactionNotFound)
             }
-            substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
-            traced_sleep(Duration::from_millis(50), SleepReason::SyncData).await;
         };
 
         #[cfg(feature = "metrics")]
@@ -396,6 +389,30 @@ impl ExternalRelayer {
         metrics::inc_save_mismatch(start.elapsed());
     }
 
+    pub async fn send_transaction(&self, tx_mined: TransactionMined, rlp: Bytes) -> PendingTransaction {
+        let tx_hash = tx_mined.input.hash;
+        loop {
+            match self.substrate_chain.send_raw_transaction(rlp.clone()).await {
+                Ok(tx) => break tx,
+                Err(err) => {
+                    tracing::warn!(
+                        ?tx_mined.input.nonce,
+                        ?tx_hash,
+                        "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
+                    );
+
+                    if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
+                        tracing::info!(?tx_hash, "transaction found on substrate");
+                        return PendingTransaction::new(tx_hash, &self.substrate_chain);
+                    }
+
+                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
+                    continue;
+                }
+            }
+        }
+    }
+
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
     /// calling eth_getTransactionByHash. (infallible)
     #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(hash))]
@@ -412,30 +429,19 @@ impl ExternalRelayer {
         Span::with(|s| s.rec_str("hash", &tx_hash));
 
         let rlp = Transaction::from(tx_mined.input.clone()).rlp();
-        let tx = loop {
-            match self.substrate_chain.send_raw_transaction(rlp.clone()).await {
-                Ok(tx) => break tx,
-                Err(err) => {
-                    tracing::warn!(
-                        ?tx_mined.input.nonce,
-                        ?tx_hash,
-                        "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
-                    );
-
-                    if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
-                        tracing::info!(?tx_hash, "transaction found on substrate");
-                        return self.compare_receipt(tx_mined, PendingTransaction::new(tx_hash, &self.substrate_chain)).await;
-                    }
-
-                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
-                    continue;
-                }
-            }
-        };
+        let mut tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_and_check_mempool(start.elapsed());
-        self.compare_receipt(tx_mined, tx).await
+        loop {
+            if let Err(error) = self.compare_receipt(tx_mined.clone(), tx).await {
+                match error {
+                    RelayError::TransactionNotFound => tracing::warn!(?tx_hash, "transaction not found in substrate, trying to resend"),
+                    err => break Err(err),
+                }
+            }
+            tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
+        }
     }
 
     /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
@@ -464,6 +470,7 @@ impl ExternalRelayer {
             match error {
                 RelayError::CompareTimeout(number, _) => timedout_blocks.insert(number),
                 RelayError::Mismatch(number, _) => mismatched_blocks.insert(number),
+                _ => panic!("unexpected error"),
             };
         }
 
