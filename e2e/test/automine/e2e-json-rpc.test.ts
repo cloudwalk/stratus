@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { keccak256 } from "ethers";
 import { Block, Bytes, TransactionReceipt } from "web3-types";
 
 import { ALICE, BOB } from "../helpers/account";
@@ -13,10 +14,12 @@ import {
     TEST_BALANCE,
     ZERO,
     deployTestContractBalances,
+    prepareSignedTx,
     send,
     sendAndGetError,
     sendEvmMine,
     sendExpect,
+    sendRawTransaction,
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
@@ -31,11 +34,6 @@ describe("JSON-RPC", () => {
             } else {
                 (await sendExpect("hardhat_reset", [])).eq(true);
             }
-        });
-
-        it("Code for non-existent contract is 0x", async () => {
-            const addressWithNothingDeployed = ALICE.address;
-            (await sendExpect("eth_getCode", [addressWithNothingDeployed, "latest"])).eq("0x");
         });
     });
 
@@ -80,10 +78,16 @@ describe("JSON-RPC", () => {
         it("eth_getTransactionCount", async () => {
             (await sendExpect("eth_getTransactionCount", [ALICE])).eq(ZERO);
             (await sendExpect("eth_getTransactionCount", [ALICE, "latest"])).eq(ZERO);
+            (await sendExpect("eth_getTransactionCount", [ALICE, "pending"])).eq(ZERO);
         });
         it("eth_getBalance", async () => {
             (await sendExpect("eth_getBalance", [ALICE])).eq(TEST_BALANCE);
             (await sendExpect("eth_getBalance", [ALICE, "latest"])).eq(TEST_BALANCE);
+        });
+        it("eth_getCode", () => {
+            it("code for non-existent contract is 0x", async () => {
+                (await sendExpect("eth_getCode", [ALICE.address, "latest"])).eq("0x");
+            });
         });
     });
 
@@ -96,25 +100,25 @@ describe("JSON-RPC", () => {
         });
         let hash: Bytes;
         describe("eth_getBlockByNumber", () => {
-            it("should fetch the genesis correctly", async () => {
+            it("fetches genesis block correctly", async () => {
                 let block: Block = await send("eth_getBlockByNumber", [ZERO, true]);
                 expect(block.hash).to.not.be.undefined;
                 hash = block.hash as Bytes; // get the genesis hash to use on the next test
                 expect(block.transactions.length).eq(0);
             });
-            it("should return null if the block doesn't exist", async () => {
+            it("returns null if block does not exist", async () => {
                 const NON_EXISTANT_BLOCK = "0xfffffff";
                 let block = await send("eth_getBlockByNumber", [NON_EXISTANT_BLOCK, true]);
                 expect(block).to.be.null;
             });
         });
         describe("eth_getBlockByHash", () => {
-            it("should fetch the genesis correctly", async () => {
+            it("fetches genesis block correctly", async () => {
                 let block: Block = await send("eth_getBlockByHash", [hash, true]);
                 expect(block.number).eq("0x0");
                 expect(block.transactions.length).eq(0);
             });
-            it("should return null if the block doesn't exist", async () => {
+            it("returns null if block does not exist", async () => {
                 let block = await send("eth_getBlockByHash", [HASH_ZERO, true]);
                 expect(block).to.be.null;
             });
@@ -128,7 +132,7 @@ describe("JSON-RPC", () => {
 
     describe("Logs", () => {
         describe("eth_getLogs", () => {
-            it("return no logs for queries after the last mined block", async () => {
+            it("returns no logs for queries after last mined block", async () => {
                 // mine a test transaction
                 const contract = await deployTestContractBalances();
                 const txResponse = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
@@ -142,6 +146,33 @@ describe("JSON-RPC", () => {
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber) }])).length(1); // last mined block
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 1) }])).length(0); // 1 after mined block
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 2) }])).length(0); // 2 after mined block
+            });
+        });
+    });
+
+    describe("Transaction", () => {
+        describe("eth_sendRawTransaction", () => {
+            it("Returns an expected result when a contract transaction fails", async () => {
+                // deploy
+                const contract = await deployTestContractBalances();
+                await sendEvmMine();
+
+                // send a transaction that will fail
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "sub",
+                    methodParameters: [ALICE.address, 1],
+                });
+                const expectedTxHash = keccak256(signedTx);
+                const actualTxHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+
+                // validate
+                const txReceipt = await ETHERJS.getTransactionReceipt(expectedTxHash);
+                expect(txReceipt).exist;
+                expect(txReceipt?.status).eq(0); // The transaction really failed
+                expect(actualTxHash).eq(expectedTxHash); // The transaction sending function returned the expected result
             });
         });
     });
@@ -160,19 +191,19 @@ describe("JSON-RPC", () => {
 
         describe("evm_setNextBlockTimestamp", () => {
             let target = Math.floor(Date.now() / 1000) + 10;
-            it("Should set the next block timestamp", async () => {
+            it("sets the next block timestamp", async () => {
                 await send("evm_setNextBlockTimestamp", [target]);
                 await sendEvmMine();
                 expect((await latest()).timestamp).eq(target);
             });
 
-            it("Should offset subsequent timestamps", async () => {
+            it("offsets subsequent timestamps", async () => {
                 await new Promise((resolve) => setTimeout(resolve, 1000));
                 await sendEvmMine();
                 expect((await latest()).timestamp).to.be.greaterThan(target);
             });
 
-            it("Should reset the changes when sending 0", async () => {
+            it("resets the changes when sending 0", async () => {
                 await send("evm_setNextBlockTimestamp", [0]);
                 let mined_timestamp = Math.floor(Date.now() / 1000);
                 await sendEvmMine();
@@ -182,7 +213,7 @@ describe("JSON-RPC", () => {
                     .lte(Math.floor(Date.now() / 1000));
             });
 
-            it("Should handle negative offsets", async () => {
+            it("handle negative offsets", async () => {
                 const past = Math.floor(Date.now() / 1000);
                 await new Promise((resolve) => setTimeout(resolve, 2000));
                 await send("evm_setNextBlockTimestamp", [past]);
@@ -200,16 +231,13 @@ describe("JSON-RPC", () => {
     });
 
     describe("Subscription", () => {
-        describe("HTTP", () => {
-            it("eth_subscribe fails with code 32603", async () => {
+        describe("eth_subscribe", () => {
+            it("fails on HTTP", async () => {
                 const error = await sendAndGetError("eth_subscribe", ["newHeads"]);
                 expect(error).to.not.be.null;
                 expect(error.code).eq(-32603); // Internal error
             });
-        });
-
-        describe("WebSocket", () => {
-            it("Subscribe to newHeads receives success subscription event", async () => {
+            it("subscribes to newHeads receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("newHeads", waitTimeInMilliseconds);
                 expect(response).to.not.be.undefined;
@@ -217,7 +245,7 @@ describe("JSON-RPC", () => {
                 expect(response.result).to.not.be.undefined;
             });
 
-            it("Subscribe to logs receives success subscription event", async () => {
+            it("subscribes to logs receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("logs", waitTimeInMilliseconds);
                 expect(response).to.not.be.undefined;
@@ -225,7 +253,7 @@ describe("JSON-RPC", () => {
                 expect(response.result).to.not.be.undefined;
             });
 
-            it("Subscribe to newPendingTransactions receives success subscription event", async () => {
+            it("subscribes to newPendingTransactions receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("newPendingTransactions", waitTimeInMilliseconds);
                 expect(response).to.not.be.undefined;
@@ -233,7 +261,7 @@ describe("JSON-RPC", () => {
                 expect(response.result).to.not.be.undefined;
             });
 
-            it("Subscribe to unsupported receives error subscription event", async () => {
+            it("subscribes to unsupported receives error subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("unsupportedSubscription", waitTimeInMilliseconds);
                 expect(response).to.not.be.undefined;
@@ -244,7 +272,7 @@ describe("JSON-RPC", () => {
                 expect(response.error.code).eq(-32602);
             });
 
-            it("Validate newHeads event", async () => {
+            it("validates newHeads event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("newHeads", waitTimeInMilliseconds, 2);
                 expect(response).to.not.be.undefined;
@@ -276,7 +304,7 @@ describe("JSON-RPC", () => {
                 expect(result).to.have.property("baseFeePerGas").that.is.a("string");
             });
 
-            it("Validate logs event", async () => {
+            it("validates logs event", async () => {
                 await sendReset();
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEventWithContract("logs", waitTimeInMilliseconds, 2);
@@ -298,7 +326,7 @@ describe("JSON-RPC", () => {
                 expect(result).to.have.property("removed").that.is.a("boolean");
             });
 
-            it("Validate newPendingTransactions event", async () => {
+            it("validates newPendingTransactions event", async () => {
                 await sendReset();
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEventWithContract(

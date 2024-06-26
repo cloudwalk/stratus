@@ -500,13 +500,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensi
     // execute
     let tx_hash = tx.hash;
     match ctx.executor.execute_local_transaction(tx) {
-        // result is success
-        Ok(evm_result) if evm_result.is_success() => Ok(hex_data(tx_hash)),
-
-        // result is failure
-        Ok(evm_result) => Err(rpc_internal_error(hex_data(evm_result.execution().output.clone())).into()),
-
-        // internal error
+        Ok(_) => Ok(hex_data(tx_hash)),
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
             Err(error_with_source(e, "failed to execute eth_sendRawTransaction"))
