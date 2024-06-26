@@ -175,7 +175,22 @@ metrics! {
     histogram_duration consensus_forward{},
 
     "The diff between what is on the follower database and what it received from Append Entries."
-    gauge append_entries_block_number_diff{}
+    gauge append_entries_block_number_diff{},
+
+    "If the node is the leader or not."
+    gauge consensus_is_leader{},
+
+    "Counter of leadership changes."
+    counter consensus_leadership_change{},
+
+    "Time to run gRPC requests that finished."
+    histogram_duration consensus_grpc_requests_finished{method},
+
+    "The amount of available peers."
+    gauge consensus_available_peers{},
+
+    "The readiness of Stratus."
+    gauge consensus_is_ready{}
 }
 
 metrics! {
