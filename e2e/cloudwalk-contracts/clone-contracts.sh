@@ -62,7 +62,7 @@ clone_alternative() {
         fi
     fi
 
-    log "Installing dependencies: $repo"
+    log "Installing dependencies: $folder"
     npm --prefix $target --silent install
 }
 
@@ -127,10 +127,6 @@ if [ "$pix" == 1 ]; then
     clone brlc-pix-cashier fe9343c
 fi
 
-if [ "$pixv3" == 1 ]; then
-    clone_alternative brlc-pix-cashier-v3 2b1e7b3 pix-cashier-v3 brlc-pix-cashier-v3
-fi
-
 if [ "$yield" == 1 ]; then
     clone brlc-yield-streamer 236dbcb
 fi
@@ -145,4 +141,10 @@ fi
 
 if [ "$compound" == 1 ]; then
     clone compound-periphery c3ca5df
+fi
+
+# Alternative versions
+
+if [ "$pixv3" == 1 ]; then
+    clone_alternative brlc-pix-cashier 2b1e7b3 pix-cashier-v3 brlc-pix-cashier-v3
 fi
