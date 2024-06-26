@@ -36,6 +36,35 @@ clone() {
     npm --prefix $target --silent install
 }
 
+# Clone an alternative version of a project to the projects directory.
+clone_alternative() {
+    repo=$1
+    commit=$2
+    branch=$3
+    target=$4
+
+    mkdir -p repos
+
+    if [ -d $target ]; then
+        log "Updating: $repo in $target"
+        git -C $target pull
+    else
+        log "Cloning: $branch branch of $repo in $target"
+        # git clone git@github.com:cloudwalk/$repo.git $target
+        git clone --branch $branch https://github.com/cloudwalk/$repo.git $target
+        
+        # checkout commit if specified and it's different from HEAD
+        head_commit=$(git -C $target rev-parse --short HEAD)
+        if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
+            log "Checking out commit: $commit"
+            git -C $target checkout $commit --quiet
+        fi
+    fi
+
+    log "Installing dependencies: $repo"
+    npm --prefix $target --silent install
+}
+
 # ------------------------------------------------------------------------------
 # Execution
 # ------------------------------------------------------------------------------
