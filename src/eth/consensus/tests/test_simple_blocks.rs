@@ -15,7 +15,7 @@ use crate::eth::consensus::TransactionExecutionEntry;
 
 #[tokio::test]
 async fn test_append_entries_transaction_executions_and_block() {
-    let consensus = create_follower_consensus_with_leader().await;
+    let consensus = create_follower_consensus_with_leader(None).await;
     let service = AppendEntryServiceImpl {
         consensus: Mutex::new(Arc::clone(&consensus)),
     };
