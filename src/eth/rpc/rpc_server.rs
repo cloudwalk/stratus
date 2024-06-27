@@ -329,7 +329,7 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) ->
         .map(|index| ctx.storage.read_slot(&address, &index, &point_in_time))
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(serde_json::to_value(slots).expect_infallible())
+    Ok(to_json_value(slots))
 }
 
 // -----------------------------------------------------------------------------

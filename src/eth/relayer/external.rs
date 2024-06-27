@@ -31,13 +31,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
-
-use crate::ext::ResultExt;
-
 use crate::ext::to_json_value;
-use crate::ext::traced_sleep;
-use crate::ext::SleepReason;
-
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -197,7 +191,7 @@ impl ExternalRelayer {
 
     pub async fn insert_transaction_mapping(&self, stratus_hash: Hash, new_transaction: &TransactionInput) {
         let new_hash = new_transaction.hash;
-        let transaction_json = serde_json::to_value(new_transaction).expect_infallible();
+        let transaction_json = to_json_value(new_transaction);
         while let Err(e) = sqlx::query!(
             "INSERT INTO tx_hash_map (stratus_hash, substrate_hash, resigned_transaction) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
             stratus_hash as _,

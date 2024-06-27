@@ -246,11 +246,11 @@ impl BlockchainClient {
     /// Fetches the current transaction count (nonce) for an account.
     pub async fn fetch_transaction_count(&self, address: &Address) -> anyhow::Result<Nonce> {
         tracing::debug!("fetching block number");
-        let address = serde_json::to_value(address).expect_infallible();
+        let address = to_json_value(address);
 
         let result = self
             .http
-            .request::<Nonce, Vec<JsonValue>>("eth_getTransactionCount", vec![address, serde_json::to_value("latest").expect_infallible()])
+            .request::<Nonce, Vec<JsonValue>>("eth_getTransactionCount", vec![address, to_json_value("latest")])
             .await;
 
         match result {
