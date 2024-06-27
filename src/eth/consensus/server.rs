@@ -53,13 +53,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             ));
         }
 
-        // Return error if request term < current term
-        if request_inner.term < current_term {
-            let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
-            tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
-            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
-        }
-
         let executions = request_inner.executions;
         let index = request_inner.prev_log_index + 1;
         let term = request_inner.prev_log_term;
@@ -107,11 +100,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         // Return error if request term < current term
-        if request_inner.term < current_term {
-            let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
-            tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
-            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
-        }
+        //if request_inner.term < current_term {
+        //    let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
+        //    tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
+        //    return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+        //}
 
         let Some(block_entry) = request_inner.block_entry else {
             return Err(Status::invalid_argument("empty block entry"));
