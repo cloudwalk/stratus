@@ -42,7 +42,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let start = std::time::Instant::now();
 
         let consensus = self.consensus.lock().await;
-        let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
         if consensus.is_leader() {
@@ -88,7 +87,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let start = std::time::Instant::now();
 
         let consensus = self.consensus.lock().await;
-        let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
         if consensus.is_leader() {
@@ -98,13 +96,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 "append_block_commit called on leader node".to_string(),
             ));
         }
-
-        // Return error if request term < current term
-        //if request_inner.term < current_term {
-        //    let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
-        //    tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
-        //    return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
-        //}
 
         let Some(block_entry) = request_inner.block_entry else {
             return Err(Status::invalid_argument("empty block entry"));
