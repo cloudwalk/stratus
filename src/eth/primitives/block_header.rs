@@ -73,26 +73,23 @@ impl BlockHeader {
         }
     }
 
-    pub fn to_append_entry_block_header(&self, transaction_hashes: Vec<String>) -> append_entry::BlockEntry {
+    pub fn to_append_entry_block_header(&self, transaction_hashes: Vec<Vec<u8>>) -> append_entry::BlockEntry {
         append_entry::BlockEntry {
             number: self.number.into(),
-            hash: self.hash.to_string(),
-            transactions_root: self.transactions_root.to_string(),
-            gas_used: self.gas_used.to_string(),
-            gas_limit: self.gas_limit.to_string(),
-            bloom: self.bloom.to_string(),
+            hash: self.hash.as_fixed_bytes().to_vec(),
+            transactions_root: self.transactions_root.as_fixed_bytes().to_vec(),
+            gas_used: self.gas_used.as_u64(),
+            gas_limit: self.gas_limit.as_u64(),
+            bloom: self.bloom.as_bytes().to_vec(),
             timestamp: self.timestamp.as_u64(),
-            parent_hash: self.parent_hash.to_string(),
-            author: self.author.to_string(),
+            parent_hash: self.parent_hash.as_fixed_bytes().to_vec(),
+            author: self.author.to_fixed_bytes().to_vec(),
             extra_data: self.extra_data.clone().0,
-            miner: self.miner.to_string(),
-            difficulty: self.difficulty.to_string(),
-            receipts_root: self.receipts_root.to_string(),
-            uncle_hash: self.uncle_hash.to_string(),
+            miner: self.miner.to_fixed_bytes().to_vec(),
+            receipts_root: self.receipts_root.as_fixed_bytes().to_vec(),
+            uncle_hash: self.uncle_hash.as_fixed_bytes().to_vec(),
             size: self.size.into(),
-            state_root: self.state_root.to_string(),
-            total_difficulty: self.total_difficulty.to_string(),
-            nonce: self.nonce.to_string(),
+            state_root: self.state_root.as_fixed_bytes().to_vec(),
             transaction_hashes,
         }
     }

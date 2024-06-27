@@ -13,6 +13,7 @@ use tokio::time::Duration;
 
 use crate::channel_read;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::DateTimeNow;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
@@ -79,7 +80,7 @@ impl RpcSubscriptions {
                 // remove closed subscriptions
                 subs.pending_txs.write().await.retain(|_, s| not(s.sink.is_closed()));
                 subs.new_heads.write().await.retain(|_, s| not(s.sink.is_closed()));
-                subs.logs.write().await.retain(|_, s| not(s.sink.is_closed()));
+                subs.logs.write().await.retain(|s| not(s.sink.is_closed()));
 
                 // update metrics
                 #[cfg(feature = "metrics")]
@@ -156,7 +157,7 @@ impl RpcSubscriptions {
 
                 let subs = subs.logs.read().await;
                 let interested_subs = subs
-                    .values()
+                    .iter()
                     .filter_map(|s| if_else!(s.filter.matches(&log), Some(Arc::clone(&s.sink)), None))
                     .collect_vec();
 
@@ -214,18 +215,24 @@ impl RpcSubscriptionsHandles {
 
 #[derive(Debug, derive_new::new)]
 pub struct PendingTransactionSubscription {
+    #[new(default)]
+    pub created_at: DateTimeNow,
     pub client: RpcClientApp,
     pub sink: Arc<SubscriptionSink>,
 }
 
 #[derive(Debug, derive_new::new)]
 pub struct NewHeadsSubscription {
+    #[new(default)]
+    pub created_at: DateTimeNow,
     pub client: RpcClientApp,
     pub sink: Arc<SubscriptionSink>,
 }
 
 #[derive(Debug, derive_new::new)]
 pub struct LogsSubscription {
+    #[new(default)]
+    pub created_at: DateTimeNow,
     pub client: RpcClientApp,
     pub filter: LogFilter,
     pub sink: Arc<SubscriptionSink>,
@@ -236,7 +243,7 @@ pub struct LogsSubscription {
 pub struct RpcSubscriptionsConnected {
     pub pending_txs: RwLock<HashMap<ConnectionId, PendingTransactionSubscription>>,
     pub new_heads: RwLock<HashMap<ConnectionId, NewHeadsSubscription>>,
-    pub logs: RwLock<HashMap<ConnectionId, LogsSubscription>>,
+    pub logs: RwLock<Vec<LogsSubscription>>,
 }
 
 impl RpcSubscriptionsConnected {
@@ -276,7 +283,7 @@ impl RpcSubscriptionsConnected {
             "subscribing to logs event"
         );
         let mut subs = self.logs.write().await;
-        subs.insert(sink.connection_id(), LogsSubscription::new(rpc_client, filter, sink.into()));
+        subs.push(LogsSubscription::new(rpc_client, filter, sink.into()));
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);
