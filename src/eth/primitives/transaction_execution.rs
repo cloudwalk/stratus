@@ -1,6 +1,7 @@
 use display_json::DebugAsJson;
 
 use crate::eth::consensus::append_entry;
+use crate::eth::consensus::utils::*;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalReceipt;
@@ -66,15 +67,9 @@ impl TransactionExecution {
 
     /// TODO: use From or TryFrom trait instead of this function
     pub fn to_append_entry_transaction(&self) -> append_entry::TransactionExecutionEntry {
-        fn u256_to_bytes(u: ethereum_types::U256) -> Vec<u8> {
-            let mut bytes = [0u8; 32];
-            u.to_big_endian(&mut bytes);
-            bytes.to_vec()
-        }
-
         match self {
             Self::External(ExternalTransactionExecution { tx, receipt, result }) => append_entry::TransactionExecutionEntry {
-                hash: tx.hash.to_string(),
+                hash: tx.hash.to_fixed_bytes().to_vec(),
                 nonce: tx.nonce.as_u64(),
                 value: u256_to_bytes(tx.value),
                 gas_price: tx.gas_price.map_or(vec![], u256_to_bytes),
@@ -82,20 +77,19 @@ impl TransactionExecution {
                 v: tx.v.as_u64(),
                 r: u256_to_bytes(tx.r),
                 s: u256_to_bytes(tx.s),
-                chain_id: tx.chain_id.unwrap_or_default().as_u64(),
-                result: result.execution.output.to_vec(),
+                chain_id: Some(tx.chain_id.unwrap_or_default().as_u64()),
+                result: result.execution.result.to_string(),
                 output: result.execution.output.to_vec(),
-                from: tx.from.to_string(),
-                to: tx.to.unwrap_or_default().to_string(),
-                block_hash: receipt.block_hash().to_string(),
+                from: tx.from.as_bytes().to_vec(),
+                to: tx.to.map(|to| to.as_bytes().to_vec()),
                 block_number: receipt.block_number().as_u64(),
                 transaction_index: receipt.transaction_index.as_u64(),
                 logs: receipt
                     .logs
                     .iter()
                     .map(|log| append_entry::Log {
-                        address: log.address.to_string(),
-                        topics: log.topics.iter().map(|topic| topic.into()).collect(),
+                        address: log.address.as_bytes().to_vec(),
+                        topics: log.topics.iter().map(|topic| topic.as_bytes().to_vec()).collect(),
                         data: log.data.to_vec(),
                         log_index: log.log_index.unwrap_or_default().as_u64(),
                     })
@@ -107,6 +101,11 @@ impl TransactionExecution {
                 receipt_status: receipt.status.unwrap_or_default().as_u32(),
                 receipt_logs_bloom: receipt.logs_bloom.as_bytes().to_vec(),
                 receipt_effective_gas_price: receipt.effective_gas_price.map_or(vec![], u256_to_bytes),
+                deployed_contract_address: None,
+                gas_limit: u256_to_bytes(tx.gas),
+                signer: vec![],
+                receipt_applied: true,
+                tx_type: None,
             },
             // TODO: no need to panic here, this could be implemented
             _ => panic!("Only ExternalTransactionExecution is supported"),

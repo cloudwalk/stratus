@@ -22,19 +22,9 @@ enum StatusCode {
     ENTRY_ALREADY_EXISTS = 14; // Entry already exists. Verify log consistency.
 }
 
-message OptionalBytes {
-    bool has_value = 1; // Indicates if the value is present
-    bytes value = 2;    // The actual value if present
-}
-
-message OptionalUint64 {
-    bool has_value = 1; // Indicates if the value is present
-    uint64 value = 2;   // The actual value if present
-}
-
 message Log {
     bytes address = 1;
-    repeated OptionalBytes topics = 2;
+    repeated bytes topics = 2;
     bytes data = 3;
     uint64 log_index = 4;
 }
@@ -48,11 +38,11 @@ message TransactionExecutionEntry {
     uint64 v = 6;
     bytes r = 7;
     bytes s = 8;
-    OptionalUint64 chain_id = 9;
+    optional uint64 chain_id = 9;
     string result = 10;
     bytes output = 11;
     bytes from = 12;
-    OptionalBytes to = 13;
+    optional bytes to = 13;
     uint64 transaction_index = 16;
     repeated Log logs = 17;
     bytes gas = 18;
@@ -63,11 +53,11 @@ message TransactionExecutionEntry {
     bytes receipt_logs_bloom = 23;
     bytes receipt_effective_gas_price = 24;
     uint64 block_number = 25;
-    OptionalUint64 tx_type = 26;
+    optional uint64 tx_type = 26;
     bytes signer = 27;
-    uint64 gas_limit = 28; //U64
+    bytes gas_limit = 28;
     bool receipt_applied = 29;
-    OptionalBytes deployed_contract_address = 30;
+    optional bytes deployed_contract_address = 30;
 }
 
 message AppendTransactionExecutionsRequest {
@@ -89,7 +79,7 @@ message BlockEntry {
     bytes hash = 2; //H256
     bytes transactions_root = 3; //H256
     uint64 gas_used = 4; //U64
-    uint64 gas_limit = 5; //U64
+    bytes gas_limit = 5;
     bytes bloom = 6; //[u8]
     uint64 timestamp = 7; //UnixTime
     bytes parent_hash = 8; //H256
