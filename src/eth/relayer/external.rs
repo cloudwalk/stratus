@@ -14,8 +14,6 @@ use futures::StreamExt;
 use itertools::Itertools;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
 use tracing::Span;
 
 use super::transaction_dag::TransactionDag;
@@ -42,15 +40,11 @@ use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
 type MismatchedBlocks = HashSet<BlockNumber>;
-type TimedoutBlocks = HashSet<BlockNumber>;
 
 #[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum RelayError {
     #[error("Transaction Mismatch: {1}")]
     Mismatch(BlockNumber, anyhow::Error),
-
-    #[error("Compare Timeout: {1}")]
-    CompareTimeout(BlockNumber, anyhow::Error),
 
     #[error("Transaction not found")]
     TransactionNotFound,
@@ -134,8 +128,22 @@ impl ExternalRelayer {
         })
     }
 
-    fn combine_transactions(blocks: Vec<Block>) -> Vec<TransactionMined> {
-        blocks.into_iter().flat_map(|block| block.transactions).collect()
+    async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
+        let mut combined_transactions = vec![];
+        for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
+            if tx.input.extract_function().is_some_and(|sig| sig.contains("PixCashier")) {
+                let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
+                if let Some(transaction) = transaction_signed {
+                    tx.input = transaction;
+                } else {
+                    let prev_hash = tx.input.hash;
+                    tx.input = self.signer.sign_transaction_input(tx.input);
+                    self.insert_transaction_mapping(prev_hash, &tx.input).await;
+                }
+            }
+            combined_transactions.push(tx);
+        }
+        Ok(combined_transactions)
     }
 
     async fn blocks_have_been_mined(&self, blocks: Vec<Hash>) -> bool {
@@ -220,9 +228,7 @@ impl ExternalRelayer {
         .transpose()
     }
 
-    /// Polls the next block to be relayed and relays it to Substrate.
-    #[tracing::instrument(name = "external_relayer::relay_blocks", skip_all, fields(block_number))]
-    pub async fn relay_blocks(&mut self) -> anyhow::Result<Vec<BlockNumber>> {
+    pub async fn fetch_blocks(&self) -> anyhow::Result<Vec<Block>> {
         let block_rows = sqlx::query!(
             r#"
             WITH cte AS (
@@ -241,65 +247,55 @@ impl ExternalRelayer {
         .fetch_all(&self.pool)
         .await?;
 
-        if block_rows.is_empty() {
+        block_rows
+            .into_iter()
+            .sorted_by_key(|row| row.number)
+            .map(|row| row.payload.try_into())
+            .collect::<Result<_, _>>()
+    }
+
+    /// Polls the next block to be relayed and relays it to Substrate.
+    #[tracing::instrument(name = "external_relayer::relay_blocks", skip_all, fields(block_number))]
+    pub async fn relay_blocks(&mut self) -> anyhow::Result<Vec<BlockNumber>> {
+        let blocks = self.fetch_blocks().await?;
+
+        if blocks.is_empty() {
             tracing::info!("no blocks to relay");
             return Ok(vec![]);
         }
 
-        let block_numbers: HashSet<BlockNumber> = block_rows.iter().map(|row| row.number.into()).collect();
+        let block_numbers: HashSet<BlockNumber> = blocks.iter().map(|block| block.number()).collect();
         let max_number = block_numbers.iter().max().cloned().unwrap();
 
         // fill span
         Span::with(|s| s.rec_str("block_number", &max_number));
-
-        let blocks: Vec<Block> = block_rows
-            .into_iter()
-            .sorted_by_key(|row| row.number)
-            .map(|row| row.payload.try_into())
-            .collect::<Result<_, _>>()?;
 
         if !self.blocks_have_been_mined(blocks.iter().map(|block| block.hash()).collect()).await {
             return Err(anyhow!("some blocks in this batch have not been mined in stratus"));
         }
 
         self.signer.sync_nonce(&self.substrate_chain).await?;
-        let mut combined_transactions = vec![];
-        for mut tx in Self::combine_transactions(blocks).into_iter().sorted() {
-            if tx.input.extract_function().is_some_and(|sig| sig.contains("PixCashier")) {
-                let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
-                if let Some(transaction) = transaction_signed {
-                    tx.input = transaction;
-                } else {
-                    let prev_hash = tx.input.hash;
-                    tx.input = self.signer.sign_transaction_input(tx.input);
-                    self.insert_transaction_mapping(prev_hash, &tx.input).await;
-                }
-            }
-            combined_transactions.push(tx);
-        }
+        let combined_transactions = self.combine_transactions(blocks).await?;
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
 
-        // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
-        let dag = TransactionDag::new(combined_transactions);
-        let (mismatched_blocks, timedout_blocks) = self.relay_dag(dag).await;
-
-        let non_ok_blocks: HashSet<BlockNumber> = mismatched_blocks.union(&timedout_blocks).cloned().collect();
-
-        let only_mismatched_blocks: Vec<BlockNumber> = mismatched_blocks.difference(&timedout_blocks).cloned().collect();
-        let ok_blocks: Vec<BlockNumber> = block_numbers.difference(&non_ok_blocks).cloned().collect();
-
-        if !timedout_blocks.is_empty() {
-            tracing::warn!(?timedout_blocks, "some blocks timed-out");
+        if combined_transactions.is_empty() {
+            tracing::info!("no transactions to relay");
+            return Ok(block_numbers.into_iter().collect_vec());
         }
 
-        if !only_mismatched_blocks.is_empty() {
-            tracing::warn!(?only_mismatched_blocks, "some transactions mismatched");
+        let dag = TransactionDag::new(combined_transactions);
+
+        let mismatched_blocks = self.relay_dag(dag).await;
+        let ok_blocks: Vec<BlockNumber> = block_numbers.difference(&mismatched_blocks).cloned().collect();
+
+        if !mismatched_blocks.is_empty() {
+            tracing::warn!(?mismatched_blocks, "some transactions mismatched");
 
             sqlx::query!(
                 r#"UPDATE relayer_blocks
                 SET finished = true, mismatched = true
                 WHERE number = ANY($1)"#,
-                &only_mismatched_blocks[..] as _
+                &mismatched_blocks.iter().cloned().collect_vec()[..] as _
             )
             .execute(&self.pool)
             .await?;
@@ -317,7 +313,7 @@ impl ExternalRelayer {
         }
 
         self.compare_final_state(modified_slots, max_number).await;
-        Ok(ok_blocks.into_iter().chain(only_mismatched_blocks.into_iter()).collect())
+        Ok(ok_blocks.into_iter().chain(mismatched_blocks.into_iter()).collect())
     }
 
     /// Compares the given receipt to the receipt returned by the pending transaction, retries until a receipt is returned
@@ -381,42 +377,30 @@ impl ExternalRelayer {
 
         let stratus_json = to_json_value(stratus_receipt);
         let substrate_json = to_json_value(substrate_receipt);
-        let res = sqlx::query!(
-            "INSERT INTO mismatches (hash, block_number, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
-            &hash as _,
-            block_number as _,
-            &stratus_json,
-            &substrate_json,
-            err_string
-        )
-        .execute(&self.pool)
-        .await;
-
-        match res {
-            Err(err) => {
-                tracing::error!(?block_number, ?hash, "failed to insert row in pgsql, saving mismatche to json");
-                let mut file = File::create(format!("data/{}.json", hash)).await.expect("opening the file should not fail");
-                let json = serde_json::json!(
-                    {
-                        "stratus_receipt": stratus_json,
-                        "substrate_receipt": substrate_json,
-                    }
-                );
-                file.write_all(json.to_string().as_bytes())
-                    .await
-                    .expect("writing the mismatch to a file should not fail");
-                tracing::error!(?err, "failed to save mismatch, saving to file");
+        let res = loop {
+            match sqlx::query!(
+                "INSERT INTO mismatches (hash, block_number, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+                &hash as _,
+                block_number as _,
+                &stratus_json,
+                &substrate_json,
+                err_string
+            )
+            .execute(&self.pool)
+            .await
+            {
+                Ok(res) => break res,
+                Err(err) => tracing::error!(?block_number, ?hash, ?err, "failed to insert row in pgsql, retrying"),
             }
-            Ok(res) =>
-                if res.rows_affected() == 0 {
-                    tracing::info!(
-                        ?block_number,
-                        ?hash,
-                        "transaction mismatch already in database (this should only happen if this block is being retried)."
-                    );
-                    return;
-                },
-        }
+        };
+
+        if res.rows_affected() == 0 {
+            tracing::info!(
+                ?block_number,
+                ?hash,
+                "transaction mismatch already in database (this should only happen if this block is being retried)."
+            );
+        };
 
         #[cfg(feature = "metrics")]
         metrics::inc_save_mismatch(start.elapsed());
@@ -482,7 +466,7 @@ impl ExternalRelayer {
     /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
     /// on the `mismatches` table in pgsql, or in ./data as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
-    async fn relay_dag(&self, mut dag: TransactionDag) -> (MismatchedBlocks, TimedoutBlocks) {
+    async fn relay_dag(&self, mut dag: TransactionDag) -> MismatchedBlocks {
         let start = Instant::now();
 
         tracing::debug!("relaying transactions");
@@ -497,11 +481,9 @@ impl ExternalRelayer {
         let errors = results.into_iter().filter_map(Result::err);
 
         let mut mismatched_blocks: MismatchedBlocks = HashSet::new();
-        let mut timedout_blocks: TimedoutBlocks = HashSet::new();
 
         for error in errors {
             match error {
-                RelayError::CompareTimeout(number, _) => timedout_blocks.insert(number),
                 RelayError::Mismatch(number, _) => mismatched_blocks.insert(number),
                 _ => panic!("unexpected error"),
             };
@@ -510,7 +492,7 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         metrics::inc_relay_dag(start.elapsed());
 
-        (mismatched_blocks, timedout_blocks)
+        mismatched_blocks
     }
 }
 
