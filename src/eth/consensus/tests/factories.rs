@@ -2,17 +2,24 @@ use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use ethereum_types::{H256, H160, U256};
+use ethereum_types::H160;
+use ethereum_types::H256;
 use rand::Rng;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 
-use crate::eth::consensus::append_entry::{
-    AppendBlockCommitResponse, AppendTransactionExecutionsResponse, Log, RequestVoteResponse,
-    TransactionExecutionEntry,
-};
-use crate::eth::consensus::{BlockEntry, Consensus, LogEntryData, Peer, PeerAddress, Role};
+use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
+use crate::eth::consensus::append_entry::AppendTransactionExecutionsResponse;
+use crate::eth::consensus::append_entry::Log;
+use crate::eth::consensus::append_entry::RequestVoteResponse;
+use crate::eth::consensus::append_entry::TransactionExecutionEntry;
 use crate::eth::consensus::log_entry::LogEntry;
+use crate::eth::consensus::BlockEntry;
+use crate::eth::consensus::Consensus;
+use crate::eth::consensus::LogEntryData;
+use crate::eth::consensus::Peer;
+use crate::eth::consensus::PeerAddress;
+use crate::eth::consensus::Role;
 use crate::eth::storage::StratusStorage;
 
 pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>) -> BlockEntry {
@@ -32,7 +39,7 @@ pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>) -> BlockEntry {
         gas_used: rand::thread_rng().gen(),
         timestamp: rand::thread_rng().gen(),
         bloom: H256::random().as_bytes().to_vec(),
-        transaction_hashes
+        transaction_hashes,
     }
 }
 
@@ -79,10 +86,7 @@ pub fn create_mock_log_entry_data_block() -> LogEntryData {
 }
 
 pub fn create_mock_log_entry_data_transactions() -> LogEntryData {
-    LogEntryData::TransactionExecutionEntries(vec![
-        create_mock_transaction_execution_entry(),
-        create_mock_transaction_execution_entry(),
-    ])
+    LogEntryData::TransactionExecutionEntries(vec![create_mock_transaction_execution_entry(), create_mock_transaction_execution_entry()])
 }
 
 pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEntry {

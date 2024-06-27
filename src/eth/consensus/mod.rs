@@ -3,9 +3,9 @@
 mod append_log_entries_storage;
 mod discovery;
 pub mod forward_to;
-pub mod utils;
 #[allow(dead_code)]
 mod log_entry;
+pub mod utils;
 
 mod server;
 
