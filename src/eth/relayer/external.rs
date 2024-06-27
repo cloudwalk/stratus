@@ -439,8 +439,10 @@ impl ExternalRelayer {
                     RelayError::TransactionNotFound => tracing::warn!(?tx_hash, "transaction not found in substrate, trying to resend"),
                     err => break Err(err),
                 }
+                tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
+            } else {
+                break Ok(())
             }
-            tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
         }
     }
 
