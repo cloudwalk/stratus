@@ -417,7 +417,7 @@ mod tests {
         assert!(response.is_err());
 
         let status = response.unwrap_err();
-        assert_eq!(status.code(), tonic::Code::Unknown);
+        assert_eq!(status.code(), tonic::Code::NotFound);
         assert_eq!(status.message(), "Request term 1 is less than current term 2");
     }
 
@@ -443,7 +443,7 @@ mod tests {
         assert!(response.is_err());
 
         let status = response.unwrap_err();
-        assert_eq!(status.code(), tonic::Code::Unknown);
+        assert_eq!(status.code(), tonic::Code::NotFound);
         assert_eq!(status.message(), "Request term 1 is less than current term 2");
     }
 }
