@@ -23,10 +23,7 @@ impl TransactionRelayer {
     pub async fn forward(&self, tx_input: TransactionInput) -> anyhow::Result<PendingTransaction> {
         tracing::debug!(hash = %tx_input.hash, "forwarding transaction");
 
-        let tx = self
-            .chain
-            .send_raw_transaction(Transaction::from(tx_input.clone()).rlp())
-            .await?;
+        let tx = self.chain.send_raw_transaction(Transaction::from(tx_input.clone()).rlp()).await?;
 
         Ok(tx)
     }

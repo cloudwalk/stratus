@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+
 use anyhow::anyhow;
 use anyhow::Context;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
@@ -30,9 +31,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
-use crate::ext::traced_sleep;
 use crate::ext::ResultExt;
-use crate::ext::SleepReason;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -190,6 +189,36 @@ impl ExternalRelayer {
         inc_compare_final_state(start.elapsed());
     }
 
+    pub async fn insert_transaction_mapping(&self, stratus_hash: Hash, new_transaction: &TransactionInput) {
+        let new_hash = new_transaction.hash;
+        let transaction_json = serde_json::to_value(new_transaction).expect_infallible();
+        while let Err(e) = sqlx::query!(
+            "INSERT INTO tx_hash_map (stratus_hash, substrate_hash, resigned_transaction) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+            stratus_hash as _,
+            new_hash as _,
+            transaction_json as _,
+        )
+        .execute(&self.pool)
+        .await
+        {
+            tracing::warn!(?e, "failed to insert transaction, retrying...");
+        }
+    }
+
+    pub async fn get_mapped_transaction(&self, stratus_hash: Hash) -> anyhow::Result<Option<TransactionInput>> {
+        sqlx::query!(
+            r#"
+            SELECT resigned_transaction
+            FROM tx_hash_map
+            WHERE stratus_hash=$1"#,
+            stratus_hash as _
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|row| row.resigned_transaction.try_into())
+        .transpose()
+    }
+
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(name = "external_relayer::relay_blocks", skip_all, fields(block_number))]
     pub async fn relay_blocks(&mut self) -> anyhow::Result<Vec<BlockNumber>> {
@@ -233,16 +262,20 @@ impl ExternalRelayer {
         }
 
         self.signer.sync_nonce(&self.substrate_chain).await?;
-        let combined_transactions = Self::combine_transactions(blocks)
-            .into_iter()
-            .sorted()
-            .map(|mut tx| {
-                if tx.input.extract_function().is_some_and(|sig| sig.contains("PixCashier")) {
+        let mut combined_transactions = vec![];
+        for mut tx in Self::combine_transactions(blocks).into_iter().sorted() {
+            if tx.input.extract_function().is_some_and(|sig| sig.contains("PixCashier")) {
+                let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
+                if let Some(transaction) = transaction_signed {
+                    tx.input = transaction;
+                } else {
+                    let prev_hash = tx.input.hash;
                     tx.input = self.signer.sign_transaction_input(tx.input);
+                    self.insert_transaction_mapping(prev_hash, &tx.input).await;
                 }
-                tx
-            })
-            .collect_vec();
+            }
+            combined_transactions.push(tx);
+        }
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
 
         // TODO: Replace failed transactions with transactions that will for sure fail in substrate (need access to primary keys)
@@ -373,7 +406,7 @@ impl ExternalRelayer {
                     .expect("writing the mismatch to a file should not fail");
                 tracing::error!(?err, "failed to save mismatch, saving to file");
             }
-            Ok(res) => {
+            Ok(res) =>
                 if res.rows_affected() == 0 {
                     tracing::info!(
                         ?block_number,
@@ -381,8 +414,7 @@ impl ExternalRelayer {
                         "transaction mismatch already in database (this should only happen if this block is being retried)."
                     );
                     return;
-                }
-            }
+                },
         }
 
         #[cfg(feature = "metrics")]
@@ -421,7 +453,6 @@ impl ExternalRelayer {
         let start = metrics::now();
 
         let tx_hash = tx_mined.input.hash;
-        let nonce = tx_mined.input.nonce;
 
         tracing::info!(?tx_mined.input.nonce, ?tx_hash, "relaying transaction");
 
@@ -441,7 +472,7 @@ impl ExternalRelayer {
                 }
                 tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
             } else {
-                break Ok(())
+                break Ok(());
             }
         }
     }
