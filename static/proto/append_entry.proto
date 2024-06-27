@@ -32,7 +32,7 @@ message Log {
 message TransactionExecutionEntry {
     bytes hash = 1; //H256
     uint64 nonce = 2;
-    bytes value = 3; //
+    bytes value = 3;
     bytes gas_price = 4;
     bytes input = 5;
     uint64 v = 6;
