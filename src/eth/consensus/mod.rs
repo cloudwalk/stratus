@@ -5,6 +5,7 @@ mod discovery;
 pub mod forward_to;
 #[allow(dead_code)]
 mod log_entry;
+pub mod utils;
 
 mod server;
 

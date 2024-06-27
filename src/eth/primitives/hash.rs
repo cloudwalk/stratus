@@ -43,6 +43,10 @@ impl Hash {
     pub fn inner_value(&self) -> H256 {
         self.0
     }
+
+    pub fn as_fixed_bytes(&self) -> &[u8; 32] {
+        self.0.as_fixed_bytes()
+    }
 }
 
 impl Display for Hash {

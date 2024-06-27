@@ -55,7 +55,7 @@ async fn test_append_entries_transaction_executions_and_block() {
     }
 
     // Create and append block with transaction hashes
-    let transaction_hashes: Vec<String> = all_executions.iter().map(|e| e.hash.clone()).collect();
+    let transaction_hashes: Vec<Vec<u8>> = all_executions.iter().map(|e| e.hash.clone()).collect();
 
     let block_entry = create_mock_block_entry(transaction_hashes.clone());
 
