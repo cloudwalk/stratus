@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        contract: [token, pix, periphery, compound, yield, multisig]
+        contract: [token, pix, periphery, compound, yield, multisig, pixv3, cppv2]
     name: E2E Rocks on ${{ matrix.contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 45

@@ -21,7 +21,6 @@ clone() {
         git -C $target pull
     else
         log "Cloning: $repo"
-        # git clone git@github.com:cloudwalk/$repo.git $target
         git clone https://github.com/cloudwalk/$repo.git $target
         
         # checkout commit if specified and it's different from HEAD
@@ -36,6 +35,35 @@ clone() {
     npm --prefix $target --silent install
 }
 
+# Clone an alternative version of a project to the projects directory.
+clone_alternative() {
+    repo=$1
+    commit=$2
+    branch=$3
+    folder=$4
+    target=repos/$folder
+
+    mkdir -p repos
+
+    if [ -d $target ]; then
+        log "Updating: $repo in $folder"
+        git -C $target pull
+    else
+        log "Cloning: $branch branch of $repo in $folder"
+        git clone --branch $branch https://github.com/cloudwalk/$repo.git $target
+        
+        # checkout commit if specified and it's different from HEAD
+        head_commit=$(git -C $target rev-parse --short HEAD)
+        if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
+            log "Checking out commit: $commit"
+            git -C $target checkout $commit --quiet
+        fi
+    fi
+
+    log "Installing dependencies: $folder"
+    npm --prefix $target --silent install
+}
+
 # ------------------------------------------------------------------------------
 # Execution
 # ------------------------------------------------------------------------------
@@ -47,6 +75,8 @@ multisig=0
 compound=0
 yield=0
 pix=0
+pixv3=0
+cppv2=0
 
 # Help function
 print_help() {
@@ -58,6 +88,8 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
+    echo "  -3, --pixv3       for brlc-pix-cashier-v3"
+    echo "  -2, --cppv2       for brlc-periphery-v2"
     echo "  -h, --help        display this help and exit"
 }
 
@@ -80,6 +112,8 @@ while [[ "$#" -gt 0 ]]; do
         -c|--compound) compound=1; shift ;;
         -i|--yield) yield=1; shift ;;
         -x|--pix) pix=1; shift ;;
+        -3|--pixv3) pixv3=1; shift ;;
+        -2|--cppv2) cppv2=1; shift ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
 done
@@ -108,4 +142,14 @@ fi
 
 if [ "$compound" == 1 ]; then
     clone compound-periphery c3ca5df
+fi
+
+# Alternative versions
+
+if [ "$pixv3" == 1 ]; then
+    clone_alternative brlc-pix-cashier 2b1e7b3 pix-cashier-v3 brlc-pix-cashier-v3
+fi
+
+if [ "$cppv2" == 1 ]; then
+    clone_alternative brlc-periphery 1e5344f cpp2 brlc-periphery-v2
 fi

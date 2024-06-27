@@ -477,6 +477,16 @@ impl Consensus {
 
     fn set_role(&self, role: Role) {
         self.role.store(role as u8, Ordering::SeqCst);
+
+        #[cfg(feature = "metrics")]
+        {
+            if role == Role::Leader {
+                metrics::set_consensus_is_leader(1_u64);
+                metrics::inc_consensus_leadership_change();
+            } else {
+                metrics::set_consensus_is_leader(0_u64);
+            }
+        }
     }
 
     //FIXME TODO automate the way we gather the leader, instead of using a env var
@@ -726,6 +736,7 @@ impl Consensus {
 mod tests {
     use super::*;
     pub mod factories;
+    mod test_simple_blocks;
 
     #[test]
     fn test_peer_address_from_string_valid_http() {

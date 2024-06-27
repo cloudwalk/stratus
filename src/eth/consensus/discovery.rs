@@ -28,6 +28,8 @@ use super::PeerAddress;
 #[cfg(not(test))]
 use super::Role;
 use crate::ext::spawn_named;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 
 #[tracing::instrument(skip_all)]
 pub async fn discover_peers(consensus: Arc<Consensus>) {
@@ -107,6 +109,9 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
         tracing::info!("consensus module adding new peer: {}", address.address);
         peers_lock.insert(address, (peer, handle));
     }
+
+    #[cfg(feature = "metrics")]
+    metrics::set_consensus_available_peers(peers_lock.len() as u64);
 
     tracing::info!(
         peers = peers_lock.keys().map(|p| p.to_string()).collect::<Vec<String>>().join(", "),

@@ -50,8 +50,10 @@ use crate::eth::BlockMiner;
 use crate::eth::Consensus;
 use crate::eth::Executor;
 use crate::ext::not;
-use crate::ext::ResultExt;
+use crate::ext::to_json_value;
 use crate::infra::build_info;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 use crate::infra::tracing::warn_task_cancellation;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
@@ -206,13 +208,13 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number)?;
-    Ok(serde_json::to_value(number).expect_infallible())
+    Ok(to_json_value(number))
 }
 
 #[cfg(feature = "dev")]
 fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     ctx.miner.mine_local_and_commit()?;
-    Ok(serde_json::to_value(true).expect_infallible())
+    Ok(to_json_value(true))
 }
 
 #[cfg(feature = "dev")]
@@ -226,14 +228,14 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
         Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
         None => return log_and_err!("reading latest block returned None")?,
     }
-    Ok(serde_json::to_value(timestamp).expect_infallible())
+    Ok(to_json_value(timestamp))
 }
 
 #[cfg(feature = "dev")]
 fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, address) = next_rpc_param::<Address>(params.sequence())?;
     let slots = ctx.storage.read_all_slots(&address)?;
-    Ok(serde_json::to_value(slots).expect_infallible())
+    Ok(to_json_value(slots))
 }
 
 async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> JsonValue {
@@ -242,6 +244,7 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
         "newPendingTransactions":
             pending_txs.values().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed())
@@ -251,6 +254,7 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
         "newHeads":
             new_heads.values().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed())
@@ -258,8 +262,9 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
             ).collect_vec()
         ,
         "logs":
-            logs.values().map(|s|
+            logs.iter().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed()),
@@ -285,8 +290,12 @@ async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extension
     tracing::info!("stratus_readiness: {}", should_serve);
 
     if should_serve {
+        #[cfg(feature = "metrics")]
+        metrics::set_consensus_is_ready(1_u64);
         Ok(json!(true))
     } else {
+        #[cfg(feature = "metrics")]
+        metrics::set_consensus_is_ready(0_u64);
         Err(rpc_internal_error("Service Not Ready".to_string()).into())
     }
 }
@@ -362,7 +371,7 @@ fn eth_gas_price(_: Params<'_>, _: &RpcContext, _: &Extensions) -> String {
 #[tracing::instrument(name = "rpc::eth_blockNumber", skip_all)]
 fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let number = ctx.storage.read_mined_block_number()?;
-    Ok(serde_json::to_value(number).expect_infallible())
+    Ok(to_json_value(number))
 }
 
 #[tracing::instrument(name = "rpc::eth_getBlockByHash", skip_all, fields(filter, found, number))]
@@ -515,13 +524,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensi
     // execute
     let tx_hash = tx.hash;
     match ctx.executor.execute_local_transaction(tx) {
-        // result is success
-        Ok(evm_result) if evm_result.is_success() => Ok(hex_data(tx_hash)),
-
-        // result is failure
-        Ok(evm_result) => Err(rpc_internal_error(hex_data(evm_result.execution().output.clone())).into()),
-
-        // internal error
+        Ok(_) => Ok(hex_data(tx_hash)),
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
             Err(error_with_source(e, "failed to execute eth_sendRawTransaction"))

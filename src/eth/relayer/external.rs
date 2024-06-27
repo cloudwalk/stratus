@@ -31,7 +31,13 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
+
 use crate::ext::ResultExt;
+
+use crate::ext::to_json_value;
+use crate::ext::traced_sleep;
+use crate::ext::SleepReason;
+
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -378,8 +384,8 @@ impl ExternalRelayer {
 
         tracing::info!(?block_number, ?hash, "saving transaction mismatch");
 
-        let stratus_json = serde_json::to_value(stratus_receipt).expect_infallible();
-        let substrate_json = serde_json::to_value(substrate_receipt).expect_infallible();
+        let stratus_json = to_json_value(stratus_receipt);
+        let substrate_json = to_json_value(substrate_receipt);
         let res = sqlx::query!(
             "INSERT INTO mismatches (hash, block_number, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
             &hash as _,
@@ -550,7 +556,7 @@ impl ExternalRelayerClient {
             }
         }
 
-        let block_json = serde_json::to_value(block)?;
+        let block_json = to_json_value(block);
         // fill span
         Span::with(|s| s.rec_str("block_number", &block_number));
         let mut remaining_tries = 5;

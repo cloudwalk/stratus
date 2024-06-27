@@ -22,7 +22,7 @@ use crate::eth::consensus::Role;
 use crate::eth::consensus::TransactionExecutionEntry;
 use crate::eth::storage::StratusStorage;
 
-pub fn create_mock_block_entry() -> BlockEntry {
+pub fn create_mock_block_entry(transaction_hashes: Vec<String>) -> BlockEntry {
     BlockEntry {
         number: rand::thread_rng().gen(),
         hash: H256::random().to_string(),
@@ -42,7 +42,7 @@ pub fn create_mock_block_entry() -> BlockEntry {
         timestamp: rand::thread_rng().gen(),
         bloom: H256::random().to_string(),
         author: H256::random().to_string(),
-        transaction_hashes: vec![H256::random().to_string()],
+        transaction_hashes,
     }
 }
 
@@ -83,7 +83,7 @@ pub fn create_mock_transaction_execution_entry() -> TransactionExecutionEntry {
 }
 
 pub fn create_mock_log_entry_data_block() -> LogEntryData {
-    LogEntryData::BlockEntry(create_mock_block_entry())
+    LogEntryData::BlockEntry(create_mock_block_entry(vec![]))
 }
 
 pub fn create_mock_log_entry_data_transactions() -> LogEntryData {

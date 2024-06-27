@@ -54,6 +54,8 @@ multisig=0
 compound=0
 yield=0
 pix=0
+pixv3=0
+cppv2=0
 
 # Help function
 print_help() {
@@ -65,6 +67,8 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
+    echo "  -3, --pixv3       for brlc-pix-cashier-v3"
+    echo "  -2, --cppv2       for brlc-periphery-v2"
     echo "  -h, --help        display this help and exit"
 }
 
@@ -87,38 +91,50 @@ if [[ "$#" -gt 0 ]]; then
         -c|--compound) compound=1; shift ;;
         -i|--yield) yield=1; shift ;;
         -x|--pix) pix=1; shift ;;
+        -3|--pixv3) pixv3=1; shift ;;
+        -2|--cppv2) cppv2=1; shift ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
     esac
 fi
 
 # Execute
 if [ "$token" == 1 ]; then
-    test brlc-token BRLCToken $@
-    test brlc-token base/CWToken.complex $@
-    test brlc-token BRLCTokenBridgeable $@
-    test brlc-token USJimToken $@
+    test brlc-token BRLCToken "$@"
+    test brlc-token base/CWToken.complex "$@"
+    test brlc-token BRLCTokenBridgeable "$@"
+    test brlc-token USJimToken "$@"
 fi
 
 if [ "$pix" == 1 ]; then
-    test brlc-pix-cashier PixCashier $@
+    test brlc-pix-cashier PixCashier "$@"
 fi
 
 if [ "$yield" == 1 ]; then
-    test brlc-yield-streamer BalanceTracker $@
-    test brlc-yield-streamer YieldStreamer $@
+    test brlc-yield-streamer BalanceTracker "$@"
+    test brlc-yield-streamer YieldStreamer "$@"
 fi
 
 if [ "$periphery" == 1 ]; then
-    test brlc-periphery CardPaymentProcessor $@
-    test brlc-periphery CashbackDistributor $@
+    test brlc-periphery CardPaymentProcessor "$@"
+    test brlc-periphery CashbackDistributor "$@"
 fi
 
 if [ "$multisig" == 1 ]; then
-    test brlc-multisig MultiSigWallet $@
-    test brlc-multisig MultiSigWalletFactory $@
-    test brlc-multisig MultiSigWalletUpgradeable $@
+    test brlc-multisig MultiSigWallet "$@"
+    test brlc-multisig MultiSigWalletFactory "$@"
+    test brlc-multisig MultiSigWalletUpgradeable "$@"
 fi
 
 if [ "$compound" == 1 ]; then
-    test compound-periphery CompoundAgent $@
+    test compound-periphery CompoundAgent "$@"
+fi
+
+# Alternative versions
+
+if [ "$pixv3" == 1 ]; then
+    test brlc-pix-cashier-v3 PixCashier "$@"
+fi
+
+if [ "$cppv2" == 1 ]; then
+    test brlc-periphery-v2 CardPaymentProcessor "$@"
 fi
