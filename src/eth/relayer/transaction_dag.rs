@@ -120,7 +120,7 @@ impl TransactionDag {
                 let tx2_from = dag.node_weight(tx2_node_index).unwrap().input.signer;
 
                 if tx1_from != tx2_from && !set1.is_disjoint(set2) {
-                    tracing::info!(?tx1, ?tx2, "adding edge");
+                    tracing::debug!(?tx1, ?tx2, "adding edge");
                     dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
                 }
             }

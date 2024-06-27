@@ -36,7 +36,7 @@ const config: HardhatUserConfig = {
             mining: {
                 auto: process.env.BLOCK_MODE === "automine",
                 interval:
-                    process.env.BLOCK_MODE === "automine" ? undefined : process.env.BLOCK_MODE === "1s" ? 1000 : 0,
+                    process.env.BLOCK_MODE === "automine" ? undefined : process.env.BLOCK_MODE === "1s" ? 1000 : Number(process.env.BLOCK_MODE),
             },
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,

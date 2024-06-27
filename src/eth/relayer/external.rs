@@ -70,6 +70,8 @@ impl TxSigner {
     }
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
+        tracing::info!(?tx_input.hash, "signing transaction");
+
         let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
             .nonce(self.nonce)
             .gas(tx_input.gas_limit.as_u64() * 10);
@@ -277,11 +279,6 @@ impl ExternalRelayer {
         self.signer.sync_nonce(&self.substrate_chain).await?;
         let combined_transactions = self.combine_transactions(blocks).await?;
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
-
-        if combined_transactions.is_empty() {
-            tracing::info!("no transactions to relay");
-            return Ok(block_numbers.into_iter().collect_vec());
-        }
 
         let dag = TransactionDag::new(combined_transactions);
 
