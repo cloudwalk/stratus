@@ -36,7 +36,10 @@ fn print_build_directives() {
 // Code generation: Proto files
 // -----------------------------------------------------------------------------
 fn generate_proto_structs() {
-    tonic_build::configure().protoc_arg("--experimental_allow_proto3_optional").compile(&["static/proto/append_entry.proto"], &["static/proto"]).unwrap();
+    tonic_build::configure()
+        .protoc_arg("--experimental_allow_proto3_optional")
+        .compile(&["static/proto/append_entry.proto"], &["static/proto"])
+        .unwrap();
 }
 
 // -----------------------------------------------------------------------------
