@@ -400,11 +400,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_transaction_executions_not_leader_term_mismatch() {
+        // Create follower with term 2
         let consensus = create_follower_consensus_with_leader(Some(2)).await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
+        // Send gRPC with term 1, which is less than the current term to force an error response
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
             leader_id: "leader_id".to_string(),
@@ -423,11 +425,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_block_commit_not_leader_term_mismatch() {
+        // Create follower with term 2
         let consensus = create_follower_consensus_with_leader(Some(2)).await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
+        // Send gRPC with term 1, which is less than the current term to force an error response
         let request = Request::new(AppendBlockCommitRequest {
             term: 1,
             leader_id: "leader_id".to_string(),
