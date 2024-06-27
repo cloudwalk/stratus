@@ -116,14 +116,11 @@ mod tests {
                 assert_eq!(block.hash, expected_block.hash);
                 assert_eq!(block.number, expected_block.number);
                 assert_eq!(block.parent_hash, expected_block.parent_hash);
-                assert_eq!(block.nonce, expected_block.nonce);
                 assert_eq!(block.uncle_hash, expected_block.uncle_hash);
                 assert_eq!(block.transactions_root, expected_block.transactions_root);
                 assert_eq!(block.state_root, expected_block.state_root);
                 assert_eq!(block.receipts_root, expected_block.receipts_root);
                 assert_eq!(block.miner, expected_block.miner);
-                assert_eq!(block.difficulty, expected_block.difficulty);
-                assert_eq!(block.total_difficulty, expected_block.total_difficulty);
                 assert_eq!(block.extra_data, expected_block.extra_data);
                 assert_eq!(block.size, expected_block.size);
                 assert_eq!(block.gas_limit, expected_block.gas_limit);
@@ -171,7 +168,6 @@ mod tests {
                     assert_eq!(execution.output, expected_execution.output);
                     assert_eq!(execution.from, expected_execution.from);
                     assert_eq!(execution.to, expected_execution.to);
-                    assert_eq!(execution.block_hash, expected_execution.block_hash);
                     assert_eq!(execution.block_number, expected_execution.block_number);
                     assert_eq!(execution.transaction_index, expected_execution.transaction_index);
                     assert_eq!(execution.logs.len(), expected_execution.logs.len());
@@ -180,8 +176,6 @@ mod tests {
                         assert_eq!(log.topics, expected_log.topics);
                         assert_eq!(log.data, expected_log.data);
                         assert_eq!(log.log_index, expected_log.log_index);
-                        assert_eq!(log.removed, expected_log.removed);
-                        assert_eq!(log.transaction_log_index, expected_log.transaction_log_index);
                     }
                     assert_eq!(execution.gas, expected_execution.gas);
                     assert_eq!(execution.receipt_cumulative_gas_used, expected_execution.receipt_cumulative_gas_used);

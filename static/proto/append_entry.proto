@@ -23,16 +23,14 @@ enum StatusCode {
 }
 
 message Log {
-    string address = 1;
-    repeated string topics = 2;
+    bytes address = 1;
+    repeated bytes topics = 2;
     bytes data = 3;
     uint64 log_index = 4;
-    uint64 transaction_log_index = 5;
-    bool removed = 6;
 }
 
 message TransactionExecutionEntry {
-    string hash = 1;
+    bytes hash = 1; //H256
     uint64 nonce = 2;
     bytes value = 3;
     bytes gas_price = 4;
@@ -40,13 +38,11 @@ message TransactionExecutionEntry {
     uint64 v = 6;
     bytes r = 7;
     bytes s = 8;
-    uint64 chain_id = 9;
-    bytes result = 10;
+    optional uint64 chain_id = 9;
+    string result = 10;
     bytes output = 11;
-    string from = 12;
-    string to = 13;
-    string block_hash = 14;
-    uint64 block_number = 15;
+    bytes from = 12;
+    optional bytes to = 13;
     uint64 transaction_index = 16;
     repeated Log logs = 17;
     bytes gas = 18;
@@ -56,6 +52,12 @@ message TransactionExecutionEntry {
     uint32 receipt_status = 22;
     bytes receipt_logs_bloom = 23;
     bytes receipt_effective_gas_price = 24;
+    uint64 block_number = 25;
+    optional uint64 tx_type = 26;
+    bytes signer = 27;
+    bytes gas_limit = 28;
+    bool receipt_applied = 29;
+    optional bytes deployed_contract_address = 30;
 }
 
 message AppendTransactionExecutionsRequest {
@@ -72,27 +74,23 @@ message AppendTransactionExecutionsResponse {
     uint64 last_committed_block_number = 3;
 }
 
-//TODO use eth friendly types
 message BlockEntry {
-    uint64 number = 1;
-    string hash = 2;
-    string transactions_root = 3;
-    string gas_used = 4;
-    string gas_limit = 5;
-    string bloom = 6;
-    uint64 timestamp = 7;
-    string parent_hash = 8;
-    string author = 9;
-    bytes extra_data = 10;
-    string miner = 11;
-    string difficulty = 12;
-    string receipts_root = 13;
-    string uncle_hash = 14;
-    uint64 size = 15;
-    string state_root = 16;
-    string total_difficulty = 17;
-    string nonce = 18;
-    repeated string transaction_hashes = 19;
+    uint64 number = 1; //U64
+    bytes hash = 2; //H256
+    bytes transactions_root = 3; //H256
+    uint64 gas_used = 4; //U64
+    uint64 gas_limit = 5;
+    bytes bloom = 6; //[u8]
+    uint64 timestamp = 7; //UnixTime
+    bytes parent_hash = 8; //H256
+    bytes author = 9; //H160
+    bytes extra_data = 10; //bytes
+    bytes miner = 11; //H160
+    bytes receipts_root = 12; //H256
+    bytes uncle_hash = 13; //H256
+    uint64 size = 14;
+    bytes state_root = 15; //H256
+    repeated bytes transaction_hashes = 16; //H256
 }
 
 message AppendBlockCommitRequest {
