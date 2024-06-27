@@ -9,6 +9,12 @@ use crate::gen_newtype_from;
 #[serde(transparent)]
 pub struct LogsBloom(Bloom);
 
+impl LogsBloom {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
 impl Deref for LogsBloom {
     type Target = Bloom;
 

@@ -243,6 +243,7 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
         "newPendingTransactions":
             pending_txs.values().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed())
@@ -252,6 +253,7 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
         "newHeads":
             new_heads.values().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed())
@@ -259,8 +261,9 @@ async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extens
             ).collect_vec()
         ,
         "logs":
-            logs.values().map(|s|
+            logs.iter().map(|s|
                 json!({
+                    "created_at": s.created_at,
                     "client": s.client,
                     "id": s.sink.subscription_id(),
                     "active": not(s.sink.is_closed()),
@@ -500,13 +503,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensi
     // execute
     let tx_hash = tx.hash;
     match ctx.executor.execute_local_transaction(tx) {
-        // result is success
-        Ok(evm_result) if evm_result.is_success() => Ok(hex_data(tx_hash)),
-
-        // result is failure
-        Ok(evm_result) => Err(rpc_internal_error(hex_data(evm_result.execution().output.clone())).into()),
-
-        // internal error
+        Ok(_) => Ok(hex_data(tx_hash)),
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
             Err(error_with_source(e, "failed to execute eth_sendRawTransaction"))

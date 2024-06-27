@@ -96,6 +96,7 @@ impl BlockMiner {
         self.storage.save_execution(tx_execution.clone())?;
 
         // decide what to do based on mining mode
+        // FIXME consensus should be synchronous here and wait for the confirmation from the majority
         let _ = self.notifier_pending_txs.send(tx_execution);
         if self.mode.is_automine() {
             self.mine_local_and_commit()?;
