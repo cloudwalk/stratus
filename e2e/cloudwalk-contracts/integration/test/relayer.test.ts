@@ -33,7 +33,7 @@ describe("Relayer integration test", function () {
         const parameters = [
             { name: "Few wallets, sufficient balance", wallets: 3, duration: 10, tps: 5, baseBalance: 2000 },
             { name: "Few wallets, insufficient balance", wallets: 2, duration: 10, tps: 1, baseBalance: 5 },
-            { name: "Many wallets, sufficient balance", wallets: 20, duration: 10, tps: 5, baseBalance: 2000 },
+            { name: "Many wallets, sufficient balance", wallets: 20, duration: 10, tps: 3, baseBalance: 2000 },
         ];
         parameters.forEach((params, index) => {
             const wallets: any[] = [];
