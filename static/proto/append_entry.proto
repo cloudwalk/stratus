@@ -79,7 +79,7 @@ message BlockEntry {
     bytes hash = 2; //H256
     bytes transactions_root = 3; //H256
     uint64 gas_used = 4; //U64
-    bytes gas_limit = 5;
+    uint64 gas_limit = 5;
     bytes bloom = 6; //[u8]
     uint64 timestamp = 7; //UnixTime
     bytes parent_hash = 8; //H256
