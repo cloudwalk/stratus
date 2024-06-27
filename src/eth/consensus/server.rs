@@ -43,6 +43,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let start = std::time::Instant::now();
 
         let consensus = self.consensus.lock().await;
+        let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
         if consensus.is_leader() {
@@ -51,6 +52,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 (StatusCode::NotLeader as i32).into(),
                 "append_transaction_executions called on leader node".to_string(),
             ));
+        }
+
+        // Return error if request term < current term
+        if request_inner.term < current_term {
+            let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
+            tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
+            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
         }
 
         let executions = request_inner.executions;
@@ -88,6 +96,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let start = std::time::Instant::now();
 
         let consensus = self.consensus.lock().await;
+        let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
         if consensus.is_leader() {
@@ -98,11 +107,28 @@ impl AppendEntryService for AppendEntryServiceImpl {
             ));
         }
 
+        // Return error if request term < current term
+        if request_inner.term < current_term {
+            let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
+            tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
+            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+        }
+
         let Some(block_entry) = request_inner.block_entry else {
             return Err(Status::invalid_argument("empty block entry"));
         };
 
         tracing::info!(number = block_entry.number, "appending new block");
+
+        let index = request_inner.prev_log_index + 1;
+        let term = request_inner.prev_log_term;
+        let data = LogEntryData::BlockEntry(block_entry.clone());
+
+        #[cfg(feature = "rocks")]
+        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
+            tracing::error!("Failed to save log entry: {:?}", e);
+            return Err(Status::internal("Failed to save log entry"));
+        }
 
         let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
