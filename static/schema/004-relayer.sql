@@ -18,7 +18,7 @@ create table slot_mismatches(
     block_number bigint not null,
     stratus_value bytea not null,
     substrate_value bytea not null,
-    primary key (address, index)
+    primary key (block_number, address, index)
 );
 create table tx_hash_map(
     stratus_hash bytea primary key not null,
