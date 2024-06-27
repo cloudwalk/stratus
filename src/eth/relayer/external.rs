@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::time::Instant;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -482,8 +483,7 @@ impl ExternalRelayer {
     /// on the `mismatches` table in pgsql, or in ./data as a fallback.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, mut dag: TransactionDag) -> (MismatchedBlocks, TimedoutBlocks) {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        let start = Instant::now();
 
         tracing::debug!("relaying transactions");
 
