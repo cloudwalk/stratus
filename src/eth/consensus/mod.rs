@@ -485,7 +485,7 @@ impl Consensus {
                                 let current_term = consensus.current_term.load(Ordering::SeqCst);
                                 tracing::debug!(current_term, "Current term loaded");
 
-                                let transaction_hashes: Vec<String> = block.transactions.iter().map(|tx| tx.input.hash.to_string()).collect();
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.to_string().into_bytes()).collect();
 
                                 match consensus.log_entries_storage.save_log_entry(
                                     last_index + 1,
