@@ -172,7 +172,7 @@ async fn start_block_executor(
             tracing::info!(
                 tps,
                 duraton = %duration.to_string_ext(),
-                block_number = ?block.number(),
+                block_number = %block.number(),
                 receipts = receipts.len(),
                 "reexecuted external block",
             );
@@ -234,7 +234,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
             tracing::info!("{} awaiting block number from newHeads subscription", TASK_NAME);
             let resubscribe_ws = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                 Ok(Some(Ok(block))) => {
-                    tracing::info!(number = %block.number(), "{} received newHeads event", TASK_NAME);
+                    tracing::info!(block_number = %block.number(), "{} received newHeads event", TASK_NAME);
                     set_external_rpc_current_block(block.number());
                     continue;
                 }
@@ -271,13 +271,13 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
         // fallback to polling
         tracing::warn!("{} falling back to http polling because subscription failed or it is not enabled", TASK_NAME);
         match chain.fetch_block_number().await {
-            Ok(number) => {
+            Ok(block_number) => {
                 tracing::info!(
-                    %number,
+                    %block_number,
                     sync_interval = %sync_interval.to_string_ext(),
                     "fetched current block number via http. awaiting sync interval to retrieve again."
                 );
-                set_external_rpc_current_block(number);
+                set_external_rpc_current_block(block_number);
                 traced_sleep(sync_interval, SleepReason::SyncData).await;
             }
             Err(e) => {
@@ -334,14 +334,14 @@ async fn start_block_fetcher(
     }
 }
 
-#[tracing::instrument(name = "importer::fetch_block_and_receipts", skip_all, fields(number))]
-async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
+#[tracing::instrument(name = "importer::fetch_block_and_receipts", skip_all, fields(block_number))]
+async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
     Span::with(|s| {
-        s.rec_str("number", &number);
+        s.rec_str("block_number", &block_number);
     });
 
     // fetch block
-    let block = fetch_block(Arc::clone(&chain), number).await;
+    let block = fetch_block(Arc::clone(&chain), block_number).await;
 
     // wait some time until receipts are available
     let _ = traced_sleep(INTERVAL_FETCH_RECEIPTS, SleepReason::SyncData).await;
@@ -349,33 +349,33 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, number: BlockNum
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
     for hash in block.transactions.iter().map(|tx| tx.hash()) {
-        receipts_tasks.push(fetch_receipt(Arc::clone(&chain), number, hash));
+        receipts_tasks.push(fetch_receipt(Arc::clone(&chain), block_number, hash));
     }
     let receipts = futures::stream::iter(receipts_tasks).buffer_unordered(PARALLEL_RECEIPTS).collect().await;
 
     (block, receipts)
 }
 
-#[tracing::instrument(name = "importer::fetch_block", skip_all, fields(number))]
-async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> ExternalBlock {
+#[tracing::instrument(name = "importer::fetch_block", skip_all, fields(block_number))]
+async fn fetch_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalBlock {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
-        s.rec_str("number", &number);
+        s.rec_str("block_number", &block_number);
     });
 
     loop {
-        tracing::info!(%number, "fetching block");
-        let block = match chain.fetch_block(number).await {
+        tracing::info!(%block_number, "fetching block");
+        let block = match chain.fetch_block(block_number).await {
             Ok(json) => json,
             Err(e) => {
-                tracing::warn!(reason = ?e, %number, delay_ms=%RETRY_DELAY.as_millis(), "failed to retrieve block. retrying with delay.");
+                tracing::warn!(reason = ?e, %block_number, delay_ms=%RETRY_DELAY.as_millis(), "failed to retrieve block. retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                 continue;
             }
         };
 
         if block.is_null() {
-            tracing::warn!(%number, delay_ms=%RETRY_DELAY.as_millis(), "block not mined yet. retrying with delay.");
+            tracing::warn!(%block_number, delay_ms=%RETRY_DELAY.as_millis(), "block not mined yet. retrying with delay.");
             traced_sleep(RETRY_DELAY, SleepReason::SyncData).await;
             continue;
         }
@@ -384,24 +384,24 @@ async fn fetch_block(chain: Arc<BlockchainClient>, number: BlockNumber) -> Exter
     }
 }
 
-#[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(number, hash))]
-async fn fetch_receipt(chain: Arc<BlockchainClient>, number: BlockNumber, hash: Hash) -> ExternalReceipt {
+#[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(block_number, tx_hash))]
+async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, tx_hash: Hash) -> ExternalReceipt {
     Span::with(|s| {
-        s.rec_str("number", &number);
-        s.rec_str("hash", &hash);
+        s.rec_str("block_number", &block_number);
+        s.rec_str("tx_hash", &tx_hash);
     });
 
     loop {
-        tracing::info!(%number, %hash, "fetching receipt");
+        tracing::info!(%block_number, %tx_hash, "fetching receipt");
 
-        match chain.fetch_receipt(hash).await {
+        match chain.fetch_receipt(tx_hash).await {
             Ok(Some(receipt)) => return receipt,
             Ok(None) => {
-                tracing::warn!(%number, %hash, "receipt not available yet because block is not mined. retrying now.");
+                tracing::warn!(%block_number, %tx_hash, "receipt not available yet because block is not mined. retrying now.");
                 continue;
             }
             Err(e) => {
-                tracing::error!(reason = ?e, %number, %hash, "failed to fetch receipt. retrying now.");
+                tracing::error!(reason = ?e, %block_number, %tx_hash, "failed to fetch receipt. retrying now.");
             }
         }
     }

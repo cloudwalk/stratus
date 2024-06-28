@@ -23,7 +23,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
 
     // init services
     let backoff = config.relayer.backoff;
-    let relayer = config.relayer.init().await?;
+    let mut relayer = config.relayer.init().await?;
 
     loop {
         if GlobalState::warn_if_shutdown(TASK_NAME) {
@@ -38,8 +38,8 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
                 metrics::inc_relay_next_block(start.elapsed());
                 block_number
             }
-            Err(err) => {
-                tracing::error!(?err, "error relaying next block");
+            Err(e) => {
+                tracing::error!(reason = ?e, "error relaying next block");
                 continue;
             }
         };

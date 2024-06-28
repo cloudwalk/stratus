@@ -20,14 +20,11 @@ impl TransactionRelayer {
 
     /// Forwards the transaction to the external blockchain if the execution was successful on our side.
     #[tracing::instrument(skip_all)]
-    pub async fn forward(&self, tx_input: TransactionInput) -> anyhow::Result<PendingTransaction> {
-        tracing::debug!(hash = %tx_input.hash, "forwarding transaction");
+    pub async fn forward(&self, tx_input: TransactionInput) -> anyhow::Result<(PendingTransaction, String)> {
+        tracing::debug!(tx_hash = %tx_input.hash, "forwarding transaction");
 
-        let tx = self
-            .chain
-            .send_raw_transaction(tx_input.hash, Transaction::from(tx_input.clone()).rlp())
-            .await?;
+        let tx = self.chain.send_raw_transaction(Transaction::from(tx_input.clone()).rlp()).await?;
 
-        Ok(tx)
+        Ok((tx, self.chain.http_url.clone()))
     }
 }

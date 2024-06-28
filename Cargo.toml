@@ -75,7 +75,7 @@ rlp = "=0.5.2"
 triehash = "=0.8.4"
 
 # network
-jsonrpsee = { version = "=0.23.1", features = ["server", "client"] }
+jsonrpsee = { version = "=0.23.2", features = ["server", "client"] }
 k8s-openapi = { version = "=0.21.1", optional = true, features = ["v1_27"] }
 kube = { version = "=0.90.0", optional = true, features = ["runtime", "derive"] }
 reqwest = { version = "=0.12.4", features = ["json"] }
@@ -109,6 +109,7 @@ fake = { version = "=2.9.2", features = ["derive"] }
 
 # relayer
 petgraph = "=0.6.5"
+ethers-signers = "2.0.14"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies

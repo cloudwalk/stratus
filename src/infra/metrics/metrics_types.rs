@@ -58,6 +58,12 @@ impl From<Option<Cow<'static, str>>> for MetricLabelValue {
     }
 }
 
+impl From<&String> for MetricLabelValue {
+    fn from(value: &String) -> Self {
+        Self::Some(value.to_owned())
+    }
+}
+
 impl From<&str> for MetricLabelValue {
     fn from(value: &str) -> Self {
         Self::Some(value.to_owned())

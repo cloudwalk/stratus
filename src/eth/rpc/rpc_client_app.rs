@@ -22,6 +22,21 @@ impl Display for RpcClientApp {
     }
 }
 
+impl RpcClientApp {
+    /// Parse known client application name to groups.
+    pub fn parse(name: &str) -> RpcClientApp {
+        let name = name.trim().trim_end_matches('/').to_ascii_lowercase();
+        let name = match name {
+            n if n.starts_with("banking") => format!("banking::{}", n),
+            n if n.starts_with("issuing") || n.starts_with("infinitecard") => format!("issuing::{}", n),
+            n if n.starts_with("lending") => format!("lending::{}", n),
+            n if n == "blockscout" || n == "golani" || n == "tx-replayer" => format!("infra::{}", n),
+            n => format!("other::{}", n),
+        };
+        RpcClientApp::Identified(name)
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------

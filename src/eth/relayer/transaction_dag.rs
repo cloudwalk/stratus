@@ -19,6 +19,36 @@ pub struct TransactionDag {
 }
 
 impl TransactionDag {
+    pub fn get_slot_writes(block_transactions: &[TransactionMined]) -> HashSet<(Address, SlotIndex)> {
+        block_transactions
+            .iter()
+            .flat_map(|tx| {
+                tx.execution.changes.iter().flat_map(|(address, change)| {
+                    change
+                        .slots
+                        .iter()
+                        .filter_map(|(idx, slot_change)| slot_change.is_modified().then_some((*address, *idx)))
+                })
+            })
+            .collect()
+    }
+
+    pub fn txs_remaining(&self) -> usize {
+        self.dag.node_count()
+    }
+
+    pub fn get_balance_writes(block_transactions: &[TransactionMined]) -> HashSet<Address> {
+        block_transactions
+            .iter()
+            .flat_map(|tx| {
+                tx.execution
+                    .changes
+                    .iter()
+                    .filter_map(|(address, change)| change.balance.is_modified().then_some(*address))
+            })
+            .collect()
+    }
+
     /// Uses the transactions and produces a Dependency DAG (Directed Acyclical Graph).
     /// Each vertex of the graph is a transaction, and two vertices are connected iff they conflict
     /// on either a slot or balance and they don't have the same "from" field (since those transactions will
@@ -40,27 +70,8 @@ impl TransactionDag {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let slot_writes: HashSet<(Address, SlotIndex)> = block_transactions
-            .iter()
-            .flat_map(|tx| {
-                tx.execution.changes.iter().flat_map(|(address, change)| {
-                    change
-                        .slots
-                        .iter()
-                        .filter_map(|(idx, slot_change)| slot_change.is_modified().then_some((*address, *idx)))
-                })
-            })
-            .collect();
-
-        let balance_writes: HashSet<Address> = block_transactions
-            .iter()
-            .flat_map(|tx| {
-                tx.execution
-                    .changes
-                    .iter()
-                    .filter_map(|(address, change)| change.balance.is_modified().then_some(*address))
-            })
-            .collect();
+        let slot_writes: HashSet<(Address, SlotIndex)> = Self::get_slot_writes(&block_transactions);
+        let balance_writes: HashSet<Address> = Self::get_balance_writes(&block_transactions);
 
         let mut slot_conflicts: HashMap<(BlockNumber, Index), HashSet<(Address, SlotIndex)>> = HashMap::new();
         let mut balance_conflicts: HashMap<(BlockNumber, Index), HashSet<Address>> = HashMap::new();
@@ -109,7 +120,7 @@ impl TransactionDag {
                 let tx2_from = dag.node_weight(tx2_node_index).unwrap().input.signer;
 
                 if tx1_from != tx2_from && !set1.is_disjoint(set2) {
-                    tracing::info!(?tx1, ?tx2, "adding edge");
+                    tracing::debug!(?tx1, ?tx2, "adding edge");
                     dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
                 }
             }

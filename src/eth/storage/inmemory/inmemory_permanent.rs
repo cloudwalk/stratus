@@ -16,8 +16,8 @@ use rand::SeedableRng;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
@@ -175,23 +175,28 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
         let state = self.lock_read();
 
         let Some(account) = state.accounts.get(address) else {
             return Ok(Default::default());
         };
 
-        Ok(account.slots.clone().into_values().map(|slot| slot.get_current()).collect())
+        Ok(account
+            .slots
+            .clone()
+            .into_values()
+            .map(|slot| slot.get_at_point(point_in_time).unwrap_or_default())
+            .collect())
     }
 
-    fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
         let state_lock = self.lock_read();
         let block = match selection {
-            BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
-            BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
-            BlockSelection::Number(number) => state_lock.blocks_by_number.get(number).cloned(),
-            BlockSelection::Hash(hash) => state_lock.blocks_by_hash.get(hash).cloned(),
+            BlockFilter::Latest => state_lock.blocks_by_number.values().last().cloned(),
+            BlockFilter::Earliest => state_lock.blocks_by_number.values().next().cloned(),
+            BlockFilter::Number(block_number) => state_lock.blocks_by_number.get(block_number).cloned(),
+            BlockFilter::Hash(block_hash) => state_lock.blocks_by_hash.get(block_hash).cloned(),
         };
         match block {
             Some(block) => Ok(Some((*block).clone())),

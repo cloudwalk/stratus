@@ -340,7 +340,7 @@ e2e-relayer-external-up:
         (
             cd e2e/cloudwalk-contracts/integration
             npm install
-            BLOCK_MODE=1s npx hardhat node > ../../../e2e_logs/hardhat.log &
+            BLOCK_MODE=50 npx hardhat node > ../../../e2e_logs/hardhat.log &
         )
     fi
 
@@ -349,12 +349,12 @@ e2e-relayer-external-up:
     sleep 5
 
     # Start Relayer External binary
-    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --stratus-rpc http://0.0.0.0:3000 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 > e2e_logs/relayer.log &
+    cargo run --release --bin relayer --features dev -- --db-url postgres://postgres:123@0.0.0.0:5432/stratus --db-connections 5 --db-timeout 1s --forward-to http://0.0.0.0:8545 --stratus-rpc http://0.0.0.0:3000 --backoff 10ms --tokio-console-address 0.0.0.0:6979 --metrics-exporter-address 0.0.0.0:9001 --signer "0x426e24d88dfc9d624cc4ca3f148a4b9cd3135f584ec8ae7f7ff3b5ca7e90f291" > e2e_logs/relayer.log &
 
     if [ -d e2e/cloudwalk-contracts ]; then
     (
         cd e2e/cloudwalk-contracts/integration
-        npx hardhat test test/*.test.ts --network stratus
+        npx hardhat test test/*.test.ts --network stratus --bail
         if [ $? -ne 0 ]; then
             echo "Hardhat tests failed"
             exit 1
