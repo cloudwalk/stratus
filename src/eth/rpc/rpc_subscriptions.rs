@@ -113,8 +113,12 @@ impl RpcSubscriptions {
                     break;
                 };
 
-                let subs = subs.pending_txs.read().await;
-                Self::notify(subs.values().map(|s| Arc::clone(&s.sink)), tx.hash().to_string()).await;
+                let interested_subs = {
+                    let subs_lock = subs.pending_txs.read().await;
+                    subs_lock.values().map(|s| Arc::clone(&s.sink)).collect_vec()
+                };
+
+                Self::notify(interested_subs, tx.hash().to_string()).await;
             }
             Ok(())
         })
@@ -134,8 +138,12 @@ impl RpcSubscriptions {
                     break;
                 };
 
-                let subs = subs.new_heads.read().await;
-                Self::notify(subs.values().map(|s| Arc::clone(&s.sink)), block.header).await;
+                let interested_subs = {
+                    let subs_lock = subs.new_heads.read().await;
+                    subs_lock.values().map(|s| Arc::clone(&s.sink)).collect_vec()
+                };
+
+                Self::notify(interested_subs, block.header).await;
             }
             Ok(())
         })
@@ -155,13 +163,15 @@ impl RpcSubscriptions {
                     break;
                 };
 
-                let subs = subs.logs.read().await;
-                let interested_subs = subs
-                    .iter()
-                    .filter_map(|s| if_else!(s.filter.matches(&log), Some(Arc::clone(&s.sink)), None))
-                    .collect_vec();
+                let interested_subs = {
+                    let subs_lock = subs.logs.read().await;
+                    subs_lock
+                        .iter()
+                        .filter_map(|s| if_else!(s.filter.matches(&log), Some(Arc::clone(&s.sink)), None))
+                        .collect_vec()
+                };
 
-                Self::notify(interested_subs.into_iter(), log).await;
+                Self::notify(interested_subs, log).await;
             }
             Ok(())
         })
@@ -171,8 +181,8 @@ impl RpcSubscriptions {
     // Helpers
     // -------------------------------------------------------------------------
 
-    async fn notify(subs: impl ExactSizeIterator<Item = Arc<SubscriptionSink>>, msg: impl Into<SubscriptionMessage>) {
-        if subs.len() == 0 {
+    async fn notify(subs: Vec<Arc<SubscriptionSink>>, msg: impl Into<SubscriptionMessage>) {
+        if subs.is_empty() {
             return;
         }
 
