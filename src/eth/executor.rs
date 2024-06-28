@@ -1,57 +1,33 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-// TODO: Remove clippy `allow` after feature-flags are enabled.
-
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use futures::StreamExt;
-use itertools::Itertools;
-use revm::primitives::bitvec::vec;
-use tokio::sync::broadcast;
-use tokio::sync::mpsc;
-use tokio::sync::Mutex;
-use tracing::info_span;
-use tracing::span::Id;
 use tracing::Span;
 
-use crate::eth::consensus::forward_to::TransactionRelayer;
-use crate::eth::consensus::Consensus;
-use crate::eth::evm;
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmConfig;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
-use crate::eth::primitives::LocalTransactionExecution;
-use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-use crate::ext::spawn_blocking_named;
 use crate::ext::spawn_blocking_named_or_thread;
 use crate::ext::to_json_string;
-use crate::ext::ResultExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-use crate::infra::tracing::info_task_spawn;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
-use crate::infra::BlockchainClient;
 use crate::GlobalState;
 
 #[derive(Debug)]
@@ -76,6 +52,7 @@ pub struct Executor {
     evm_tx: crossbeam_channel::Sender<EvmTask>,
 
     // Number of running EVMs.
+    #[allow(unused)]
     config: EvmConfig,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
