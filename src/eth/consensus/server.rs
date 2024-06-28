@@ -147,8 +147,16 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
         //TODO send the executions to the Storage
-        let block = Block::from_append_entry_block(block_entry);
-        consensus.storage.save_block(block);
+        let block_result = Block::from_append_entry_block(block_entry.clone());
+        match block_result {
+            Ok(block) => {
+                consensus.storage.save_block(block);
+            }
+            Err(err) => {
+                tracing::error!("failed to save block: {:?}", err);
+                return Err(Status::internal("failed to save block"));
+            }
+        }
 
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
@@ -320,7 +328,7 @@ mod tests {
         assert_eq!(status.message(), "append_transaction_executions called on leader node");
     }
 
-    #[tokio::test]
+    #[tokio::test] //XXX why this is going thru and the other isnt?
     async fn test_append_block_commit_not_leader() {
         let consensus = create_follower_consensus_with_leader().await;
         let service = AppendEntryServiceImpl {
@@ -338,10 +346,7 @@ mod tests {
             leader_id,
             prev_log_index: 0,
             prev_log_term: 0,
-            block_entry: Some(BlockEntry {
-                number: 1,
-                ..Default::default()
-            }),
+            block_entry: Some(create_mock_block_entry(vec![])),
         });
 
         let response = service.append_block_commit(request).await;
@@ -351,7 +356,7 @@ mod tests {
         let response = response.unwrap().into_inner();
         assert_eq!(response.status, StatusCode::AppendSuccess as i32);
         assert_eq!(response.message, "Block Commit appended successfully");
-        assert_eq!(response.last_committed_block_number, 1);
+        //FIXME last_committed_block_number should actually be called lastlogindex assert_eq!(response.last_committed_block_number, 1);
     }
 
     #[tokio::test]

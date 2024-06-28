@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-
+use crate::eth::consensus::append_entry;
 use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;

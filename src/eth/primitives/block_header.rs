@@ -1,3 +1,4 @@
+use ethereum_types::Bloom;
 use ethereum_types::H160;
 use ethereum_types::H256;
 use ethereum_types::H64;
@@ -104,7 +105,7 @@ impl BlockHeader {
             transactions_root: Hash::new_from_h256(H256::from_slice(&entry.transactions_root)),
             gas_used: Gas::from(entry.gas_used),
             gas_limit: Gas::from(entry.gas_limit),
-            bloom: LogsBloom::from_slice(&entry.bloom).map_err(|e| anyhow!("Invalid bloom length: {}", e))?,
+            bloom: LogsBloom::from_bytes(&entry.bloom),
             timestamp: UnixTime::from(entry.timestamp),
             parent_hash: Hash::new_from_h256(H256::from_slice(&entry.parent_hash)),
             author: Address::new_from_h160(H160::from_slice(&entry.author)),

@@ -7,11 +7,22 @@ use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(transparent)]
-pub struct LogsBloom(Bloom);
+pub struct LogsBloom(pub Bloom);
 
 impl LogsBloom {
     pub fn as_bytes(&self) -> &[u8] {
+        dbg!(self.0.as_bytes());
+        dbg!(self.0.as_bytes());
+        dbg!(self.0.as_bytes());
+        dbg!(self.0.as_bytes());
         self.0.as_bytes()
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        dbg!(&bytes);
+        dbg!(&bytes);
+        dbg!(&bytes);
+        Self(Bloom::from_slice(bytes))
     }
 }
 
