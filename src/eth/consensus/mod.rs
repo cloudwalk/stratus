@@ -41,7 +41,6 @@ use tonic::transport::Server;
 use tonic::Request;
 
 use crate::eth::primitives::Hash;
-use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
@@ -164,7 +163,6 @@ type PeerTuple = (Peer, JoinHandle<()>);
 pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
-    storage: Arc<StratusStorage>,
     #[cfg(feature = "rocks")]
     log_entries_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
@@ -183,9 +181,7 @@ pub struct Consensus {
 }
 
 impl Consensus {
-    #[allow(clippy::too_many_arguments)] //TODO: refactor into consensus config
     pub async fn new(
-        storage: Arc<StratusStorage>,
         log_storage_path: Option<String>,
         direct_peers: Vec<String>,
         importer_config: Option<RunWithImporterConfig>,
@@ -200,7 +196,6 @@ impl Consensus {
 
         let consensus = Self {
             broadcast_sender,
-            storage,
             #[cfg(feature = "rocks")]
             log_entries_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
             peers,
