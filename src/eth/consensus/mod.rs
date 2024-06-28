@@ -507,7 +507,7 @@ impl Consensus {
                             }
                             #[cfg(not(feature = "rocks"))]
                             {
-                                let transaction_hashes: Vec<String> = block.transactions.iter().map(|tx| tx.input.hash.to_string()).collect();
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
                                 let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
                                 if consensus.broadcast_sender.send(block_entry).is_err() {
                                     tracing::error!("Failed to broadcast block");

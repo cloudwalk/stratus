@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -142,9 +143,13 @@ async fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Pee
     (leader_address, leader_peer)
 }
 
-pub async fn create_follower_consensus_with_leader() -> Arc<Consensus> {
+pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Consensus> {
     let consensus = create_mock_consensus().await;
     consensus.set_role(Role::Follower);
+
+    if let Some(term) = term {
+        consensus.current_term.store(term, Ordering::SeqCst);
+    }
 
     let (leader_address, leader_peer) = create_mock_leader_peer(Arc::clone(&consensus)).await;
 

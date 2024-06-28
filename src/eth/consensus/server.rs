@@ -54,7 +54,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             ));
         }
 
-        // Return error if request term < current term
         if request_inner.term < current_term {
             let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
             tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
@@ -107,7 +106,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             ));
         }
 
-        // Return error if request term < current term
         if request_inner.term < current_term {
             let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
             tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
@@ -336,7 +334,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_block_commit_not_leader() {
-        let consensus = create_follower_consensus_with_leader().await;
+        let consensus = create_follower_consensus_with_leader(None).await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -414,5 +412,58 @@ mod tests {
         let response = response.unwrap().into_inner();
         assert_eq!(response.term, 1);
         assert!(response.vote_granted);
+    }
+
+    #[tokio::test]
+    async fn test_append_transaction_executions_not_leader_term_mismatch() {
+        // Create follower with term 2
+        let consensus = create_follower_consensus_with_leader(Some(2)).await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(Arc::clone(&consensus)),
+        };
+
+        // Send gRPC with term 1, which is less than the current term to force an error response
+        let request = Request::new(AppendTransactionExecutionsRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            executions: vec![],
+        });
+
+        let response = service.append_transaction_executions(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::NotFound);
+        assert_eq!(status.message(), "Request term 1 is less than current term 2");
+    }
+
+    #[tokio::test]
+    async fn test_append_block_commit_not_leader_term_mismatch() {
+        // Create follower with term 2
+        let consensus = create_follower_consensus_with_leader(Some(2)).await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(Arc::clone(&consensus)),
+        };
+
+        // Send gRPC with term 1, which is less than the current term to force an error response
+        let request = Request::new(AppendBlockCommitRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            block_entry: Some(BlockEntry {
+                number: 1,
+                ..Default::default()
+            }),
+        });
+
+        let response = service.append_block_commit(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::NotFound);
+        assert_eq!(status.message(), "Request term 1 is less than current term 2");
     }
 }
