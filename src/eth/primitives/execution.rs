@@ -181,10 +181,10 @@ impl EvmExecution {
                 continue;
             }
 
-            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data.get(0..32)) else {
+            let (Some(_), Some(source)) = (execution_log.topic3, receipt_log.topics.get(3)) else {
                 continue;
             };
-            destination.copy_from_slice(source);
+            execution_log.topic3 = Some(source.clone().into());
         }
     }
 
