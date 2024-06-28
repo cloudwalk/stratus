@@ -115,11 +115,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::invalid_argument("empty block entry"));
         };
 
-        tracing::info!(number = block_entry.number, "appending new block");
-
         let index = request_inner.prev_log_index + 1;
         let term = request_inner.prev_log_term;
         let data = LogEntryData::BlockEntry(block_entry.clone());
+
+        tracing::info!(number = block_entry.number, "appending new block");
 
         #[cfg(feature = "rocks")]
         if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
@@ -189,7 +189,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
 
-        let candidate_last_log_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+        let candidate_last_log_index = consensus.log_entries_storage.get_last_index().unwrap();
 
         if request.last_log_index >= candidate_last_log_index {
             consensus.current_term.store(request.term, Ordering::SeqCst);
