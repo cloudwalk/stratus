@@ -1,5 +1,6 @@
 //! RPC server for HTTP and WS.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -332,7 +333,7 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Exten
             ).collect_vec()
         ,
         "logs":
-            logs.iter().map(|s|
+            logs.values().flat_map(HashMap::values).map(|s|
                 json!({
                     "created_at": s.created_at,
                     "client": s.client,

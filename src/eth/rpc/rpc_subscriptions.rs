@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -80,7 +81,10 @@ impl RpcSubscriptions {
                 // remove closed subscriptions
                 subs.pending_txs.write().await.retain(|_, s| not(s.sink.is_closed()));
                 subs.new_heads.write().await.retain(|_, s| not(s.sink.is_closed()));
-                subs.logs.write().await.retain(|s| not(s.sink.is_closed()));
+                subs.logs.write().await.retain(|_, inner_map| {
+                    inner_map.retain(|_, s| not(s.sink.is_closed()));
+                    inner_map.is_empty()
+                });
 
                 // update metrics
                 #[cfg(feature = "metrics")]
@@ -166,7 +170,8 @@ impl RpcSubscriptions {
                 let interested_subs = {
                     let subs_lock = subs.logs.read().await;
                     subs_lock
-                        .iter()
+                        .values()
+                        .flat_map(HashMap::values)
                         .filter_map(|s| if_else!(s.filter.matches(&log), Some(Arc::clone(&s.sink)), None))
                         .collect_vec()
                 };
@@ -253,7 +258,7 @@ pub struct LogsSubscription {
 pub struct RpcSubscriptionsConnected {
     pub pending_txs: RwLock<HashMap<ConnectionId, PendingTransactionSubscription>>,
     pub new_heads: RwLock<HashMap<ConnectionId, NewHeadsSubscription>>,
-    pub logs: RwLock<Vec<LogsSubscription>>,
+    pub logs: RwLock<HashMap<ConnectionId, HashMap<LogFilter, LogsSubscription>>>,
 }
 
 impl RpcSubscriptionsConnected {
@@ -286,6 +291,9 @@ impl RpcSubscriptionsConnected {
     }
 
     /// Adds a new subscriber to `logs` event.
+    ///
+    /// If the same connection is asking to subscribe with the same filter (which is redundant),
+    /// the new subscription will overwrite the newest one.
     pub async fn add_logs(&self, rpc_client: RpcClientApp, filter: LogFilter, sink: SubscriptionSink) {
         tracing::info!(
             id = sink.subscription_id().to_string_ext(), ?filter,
@@ -293,7 +301,18 @@ impl RpcSubscriptionsConnected {
             "subscribing to logs event"
         );
         let mut subs = self.logs.write().await;
-        subs.push(LogsSubscription::new(rpc_client, filter, sink.into()));
+        let filter_to_subscription_map = subs.entry(sink.connection_id()).or_default();
+
+        // Insert the new subscription, if it already existed with the provided filter, overwrite
+        // the previous sink with the newest
+        match filter_to_subscription_map.entry(filter.clone()) {
+            Entry::Occupied(occupied) => {
+                occupied.into_mut().sink = sink.into();
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(LogsSubscription::new(rpc_client, filter, sink.into()));
+            }
+        }
 
         #[cfg(feature = "metrics")]
         metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);

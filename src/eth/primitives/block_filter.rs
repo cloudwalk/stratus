@@ -3,7 +3,7 @@ use std::fmt::Display;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
 pub enum BlockFilter {
     /// Retrieve the most recent block.
     #[default]
