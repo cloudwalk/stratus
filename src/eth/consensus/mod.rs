@@ -605,24 +605,26 @@ impl Consensus {
 
         if prev_log_index == 0 {
             tracing::warn!("no appendEntry has been received yet");
-            return false;
-        }
+            false
+        } else {
+            #[cfg(feature = "rocks")]
+            {
+                let log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
 
-        #[cfg(feature = "rocks")]
-        {
-            let log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+                tracing::info!("last arrived log index: {}, current log index: {}", prev_log_index, log_index);
 
-            tracing::info!("last arrived log index: {}, current log index: {}", prev_log_index, log_index);
-
-            if (prev_log_index - 3) <= log_index {
-                // TODO Should adjust hardcoded value?
-                tracing::info!("should serve request");
-                true
-            } else {
-                let diff = (prev_log_index as i128) - (log_index as i128);
-                tracing::warn!(diff = diff, "should not serve request");
-                false
+                if (prev_log_index - 3) <= log_index {
+                    // TODO Should adjust hardcoded value?
+                    tracing::info!("should serve request");
+                    true
+                } else {
+                    let diff = (prev_log_index as i128) - (log_index as i128);
+                    tracing::warn!(diff = diff, "should not serve request");
+                    false
+                }
             }
+            #[cfg(not(feature = "rocks"))] // TODO remove this branch when rocksdb is not optional in consensus
+            true
         }
     }
 
