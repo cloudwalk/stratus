@@ -561,7 +561,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, field = field::Empty).entered();
+    let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
 
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
