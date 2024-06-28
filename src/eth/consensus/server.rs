@@ -101,7 +101,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.reset_heartbeat_signal.notify_waiters();
-        consensus.log_index.store(index, Ordering::SeqCst);
+        consensus.prev_log_index.store(index, Ordering::SeqCst);
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
@@ -193,7 +193,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.reset_heartbeat_signal.notify_waiters();
-        consensus.log_index.store(index, Ordering::SeqCst);
+        consensus.prev_log_index.store(index, Ordering::SeqCst);
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
@@ -201,7 +201,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
             message: "Block Commit appended successfully".into(),
-            last_committed_block_number: consensus.log_index.load(Ordering::SeqCst),
+            last_committed_block_number: consensus.prev_log_index.load(Ordering::SeqCst),
         }))
     }
 
