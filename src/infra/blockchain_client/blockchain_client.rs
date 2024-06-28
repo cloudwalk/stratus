@@ -28,6 +28,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
+use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
 
 #[derive(Debug)]
@@ -144,10 +145,10 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number.
-    pub async fn fetch_block(&self, number: BlockNumber) -> anyhow::Result<JsonValue> {
-        tracing::debug!(%number, "fetching block");
+    pub async fn fetch_block(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
+        tracing::debug!(%block_number, "fetching block");
 
-        let number = to_json_value(number);
+        let number = to_json_value(block_number);
         let result = self
             .http
             .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number, JsonValue::Bool(true)])
@@ -209,11 +210,11 @@ impl BlockchainClient {
     }
 
     /// Fetches account balance by address and block number.
-    pub async fn fetch_balance(&self, address: &Address, number: Option<BlockNumber>) -> anyhow::Result<Wei> {
-        tracing::debug!(%address, ?number, "fetching account balance");
+    pub async fn fetch_balance(&self, address: &Address, block_number: Option<BlockNumber>) -> anyhow::Result<Wei> {
+        tracing::debug!(%address, block_number = %block_number.or_empty(), "fetching account balance");
 
         let address = to_json_value(address);
-        let number = to_json_value(number);
+        let number = to_json_value(block_number);
         let result = self.http.request::<Wei, Vec<JsonValue>>("eth_getBalance", vec![address, number]).await;
 
         match result {

@@ -323,7 +323,7 @@ impl ExternalRelayer {
         let tx_hash: Hash = stratus_tx.input.hash;
         let block_number: BlockNumber = stratus_tx.block_number;
 
-        tracing::info!(?block_number, ?tx_hash, ?substrate_pending_transaction.tx_hash, "comparing receipts");
+        tracing::info!(%block_number, %tx_hash, ?substrate_pending_transaction.tx_hash, "comparing receipts");
 
         // fill span
         Span::with(|s| s.rec_str("hash", &tx_hash));
@@ -370,7 +370,7 @@ impl ExternalRelayer {
         let hash = stratus_receipt.input.hash;
         let block_number = stratus_receipt.block_number;
 
-        tracing::info!(?block_number, ?hash, "saving transaction mismatch");
+        tracing::info!(%block_number, ?hash, "saving transaction mismatch");
 
         let stratus_json = to_json_value(stratus_receipt);
         let substrate_json = to_json_value(substrate_receipt);
@@ -387,14 +387,14 @@ impl ExternalRelayer {
             .await
             {
                 Ok(res) => break res,
-                Err(err) => tracing::error!(?block_number, ?hash, ?err, "failed to insert row in pgsql, retrying"),
+                Err(err) => tracing::error!(%block_number, ?hash, ?err, "failed to insert row in pgsql, retrying"),
             }
         };
 
         if res.rows_affected() == 0 {
             tracing::info!(
-                ?block_number,
-                ?hash,
+                %block_number,
+                %hash,
                 "transaction mismatch already in database (this should only happen if this block is being retried)."
             );
         };
@@ -520,7 +520,7 @@ impl ExternalRelayerClient {
         let start = metrics::now();
 
         let block_number = block.header.number;
-        tracing::info!(?block_number, "sending block to relayer");
+        tracing::info!(%block_number, "sending block to relayer");
 
         // strip bytecode
         for tx in block.transactions.iter_mut() {

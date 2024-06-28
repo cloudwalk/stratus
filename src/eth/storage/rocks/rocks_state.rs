@@ -128,7 +128,7 @@ impl RocksStorageState {
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
         let block_number = self.blocks_by_number.last_key().unwrap_or_default();
-        tracing::info!(number = %block_number, "preloaded block_number");
+        tracing::info!(%block_number, "preloaded block_number");
         Ok((u64::from(block_number)).into())
     }
 

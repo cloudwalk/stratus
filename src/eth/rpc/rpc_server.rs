@@ -376,12 +376,12 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) ->
     Ok(to_json_value(number))
 }
 
-#[tracing::instrument(name = "rpc::eth_getBlockByHash", skip_all, fields(filter, found, number))]
+#[tracing::instrument(name = "rpc::eth_getBlockByHash", skip_all, fields(filter, block_number, found))]
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     eth_get_block_by_selector(params, ctx, ext)
 }
 
-#[tracing::instrument(name = "rpc::eth_getBlockByNumber", skip_all, fields(filter, found, number))]
+#[tracing::instrument(name = "rpc::eth_getBlockByNumber", skip_all, fields(filter, block_number, found))]
 fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     eth_get_block_by_selector(params, ctx, ext)
 }
@@ -404,7 +404,7 @@ fn eth_get_block_by_selector(params: Params<'_>, ctx: Arc<RpcContext>, _: Extens
     Span::with(|s| {
         s.record("found", block.is_some());
         if let Some(ref block) = block {
-            s.rec_str("number", &block.number());
+            s.rec_str("block_number", &block.number());
         }
     });
 

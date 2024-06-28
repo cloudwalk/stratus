@@ -116,7 +116,7 @@ async fn download(
 
     // download blocks
     while current <= end_inclusive {
-        tracing::info!(number = %current, "downloading");
+        tracing::info!(block_number = %current, "downloading");
 
         loop {
             // retrieve block
@@ -132,7 +132,7 @@ async fn download(
             let block: ImporterBlock = match ImporterBlock::deserialize(&block_json) {
                 Ok(block) => block,
                 Err(e) => {
-                    tracing::error!(reason = ?e, number = %current, payload = ?block_json, "block does not match expected format");
+                    tracing::error!(reason = ?e, block_number = %current, payload = ?block_json, "block does not match expected format");
                     return Err(e).context(format!("block does not match expected format for block {}", current));
                 }
             };
