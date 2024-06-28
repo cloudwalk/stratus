@@ -93,6 +93,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
             }
+
+            if request_inner.term > current_term {
+                consensus.current_term.store(request_inner.term, Ordering::SeqCst);
+            }
         }
 
         //TODO send the executions to the Storage
@@ -173,6 +177,10 @@ impl AppendEntryService for AppendEntryServiceImpl {
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
+            }
+
+            if request_inner.term > current_term {
+                consensus.current_term.store(request_inner.term, Ordering::SeqCst);
             }
         }
 
