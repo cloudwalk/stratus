@@ -196,6 +196,7 @@ impl<'a> Future for RpcResponse<'a> {
         // when ready, track response
         if let Poll::Ready(response) = &response {
             let elapsed = resp.start.elapsed();
+            let _enter = response.extensions().enter_middleware_span();
 
             // trace response
             let response_success = response.is_success();
