@@ -623,21 +623,21 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
 
     // forward transaction to the leader
     if ctx.consensus.should_forward() {
-        tracing::info!(%tx_hash, "forwarding local transaction");
+        tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
         return match Handle::current().block_on(ctx.consensus.forward(tx)) {
             Ok((hash, url)) => {
-                tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction");
+                tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
                 Ok(hex_data(hash))
             }
             Err(e) => {
-                tracing::error!(reason = ?e, %tx_hash, "failed to forward transaction");
+                tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
                 Err(rpc_internal_error(e.to_string()).into())
             }
         };
     }
 
     // execute locally if leader
-    tracing::info!(%tx_hash, "executing local transaction");
+    tracing::info!(%tx_hash, "executing eth_sendRawTransaction locally");
     match ctx.executor.execute_local_transaction(tx) {
         Ok(tx) => {
             if tx.is_success() {
