@@ -1,4 +1,3 @@
-use ethereum_types::Bloom;
 use ethereum_types::H160;
 use ethereum_types::H256;
 use ethereum_types::H64;
@@ -98,7 +97,6 @@ impl BlockHeader {
     }
 
     pub fn from_append_entry_block(entry: append_entry::BlockEntry) -> anyhow::Result<Self> {
-        type Error = anyhow::Error;
         Ok(BlockHeader {
             number: entry.number.into(),
             hash: Hash::new_from_h256(H256::from_slice(&entry.hash)),

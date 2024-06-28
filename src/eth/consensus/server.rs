@@ -149,11 +149,17 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO send the executions to the Storage
         let block_result = Block::from_append_entry_block(block_entry.clone());
         match block_result {
-            Ok(block) => {
-                consensus.storage.save_block(block);
-            }
+            Ok(block) => match consensus.storage.save_block(block) {
+                Ok(_) => {
+                    tracing::info!(block_number = block_entry.number, "block saved successfully");
+                }
+                Err(err) => {
+                    tracing::error!("failed to save block: {:?}", err);
+                    return Err(Status::internal("failed to save block"));
+                }
+            },
             Err(err) => {
-                tracing::error!("failed to save block: {:?}", err);
+                tracing::error!("failed to parse block: {:?}", err);
                 return Err(Status::internal("failed to save block"));
             }
         }
@@ -328,7 +334,7 @@ mod tests {
         assert_eq!(status.message(), "append_transaction_executions called on leader node");
     }
 
-    #[tokio::test] //XXX why this is going thru and the other isnt?
+    #[tokio::test]
     async fn test_append_block_commit_not_leader() {
         let consensus = create_follower_consensus_with_leader().await;
         let service = AppendEntryServiceImpl {
