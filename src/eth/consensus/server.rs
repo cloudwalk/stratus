@@ -189,7 +189,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
 
-        if request.last_log_index >= consensus.last_arrived_block_number.load(Ordering::SeqCst) {
+        let candidate_last_log_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+
+        if request.last_log_index >= candidate_last_log_index {
             consensus.current_term.store(request.term, Ordering::SeqCst);
             consensus.set_role(Role::Follower);
             consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
@@ -214,7 +216,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             message: format!(
                 "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
                 request.last_log_index,
-                consensus.last_arrived_block_number.load(Ordering::SeqCst)
+                candidate_last_log_index
             ),
         }))
     }
