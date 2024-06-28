@@ -846,7 +846,6 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
-    #[cfg(feature = "rocks")]
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
