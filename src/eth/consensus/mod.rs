@@ -66,8 +66,8 @@ use append_entry::TransactionExecutionEntry;
 #[cfg(feature = "rocks")]
 use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
+use super::primitives::Bytes;
 use super::primitives::TransactionExecution;
-use super::primitives::TransactionInput;
 use crate::config::RunWithImporterConfig;
 use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
@@ -578,7 +578,7 @@ impl Consensus {
         true
     }
 
-    pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<(Hash, String)> {
+    pub async fn forward(&self, transaction: Bytes) -> anyhow::Result<Hash> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -588,13 +588,12 @@ impl Consensus {
             return Err(anyhow::anyhow!("blockchain client is not set, cannot forward transaction"));
         };
 
-        let forward_to = forward_to::TransactionRelayer::new(Arc::clone(blockchain_client));
-        let (result, target_url) = forward_to.forward(transaction).await?;
+        let result = blockchain_client.send_raw_transaction(transaction.into()).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok((result.tx_hash, target_url)) //XXX HEX
+        Ok(result.tx_hash) //XXX HEX
     }
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
