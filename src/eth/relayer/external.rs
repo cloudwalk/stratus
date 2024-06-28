@@ -342,6 +342,7 @@ impl ExternalRelayer {
             };
             if let Some(substrate_receipt) = receipt {
                 let _ = stratus_tx.execution.apply_receipt(&substrate_receipt);
+                stratus_tx.execution.fix_logs_relayer_signer(&substrate_receipt);
                 if let Err(compare_error) = stratus_tx.execution.compare_with_receipt(&substrate_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
