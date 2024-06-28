@@ -115,7 +115,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             rpc_tx_nonce = field::Empty,
             rpc_tx_function = field::Empty
         );
-        let enter = span.enter();
+        let middleware_enter = span.enter();
 
         // extract request data
         let client = request.extensions.rpc_client();
@@ -154,7 +154,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             active_requests::COUNTERS.inc(&client, &method);
             metrics::inc_rpc_requests_started(&client, &method, tx.as_ref().and_then(|tx| tx.function.clone()));
         }
-        drop(enter);
+        drop(middleware_enter);
 
         // make span available to rpc-server
         request.extensions_mut().insert(span);
@@ -196,7 +196,7 @@ impl<'a> Future for RpcResponse<'a> {
         // when ready, track response
         if let Poll::Ready(response) = &response {
             let elapsed = resp.start.elapsed();
-            let _enter = response.extensions().enter_middleware_span();
+            let _middleware_enter = response.extensions().enter_middleware_span();
 
             // trace response
             let response_success = response.is_success();

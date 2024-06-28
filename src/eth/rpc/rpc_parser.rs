@@ -18,7 +18,7 @@ pub trait RpcExtensionsExt {
     /// Returns the client performing the JSON-RPC request.
     fn rpc_client(&self) -> RpcClientApp;
 
-    /// Enters the RpcMiddleware request span if present.
+    /// Enters RpcMiddleware request span if present.
     fn enter_middleware_span(&self) -> Option<tracing::span::Entered<'_>>;
 }
 
