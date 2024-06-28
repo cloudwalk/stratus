@@ -4,8 +4,8 @@ use tracing::Span;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
@@ -89,29 +89,29 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::read_block_number_to_resume_import", skip_all)]
     pub fn read_block_number_to_resume_import(&self) -> anyhow::Result<BlockNumber> {
         // if does not have the zero block present, should resume from zero
-        let zero = self.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
+        let zero = self.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
         if zero.is_none() {
-            tracing::info!(number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
+            tracing::info!(block_number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
             return Ok(BlockNumber::ZERO);
         }
 
         // try to resume from active block number
         let active_number = self.read_active_block_number()?;
         if let Some(active_number) = active_number {
-            tracing::info!(number = %active_number, reason = %"set in storage", "resume from ACTIVE");
+            tracing::info!(block_number = %active_number, reason = %"set in storage", "resume from ACTIVE");
             return Ok(active_number);
         }
 
         // fallback to last mined block number
         let mined_number = self.read_mined_block_number()?;
-        let mined_block = self.read_block(&BlockSelection::Number(mined_number))?;
+        let mined_block = self.read_block(&BlockFilter::Number(mined_number))?;
         match mined_block {
             Some(_) => {
-                tracing::info!(number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
+                tracing::info!(block_number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
                 Ok(mined_number.next())
             }
             None => {
-                tracing::info!(number = %mined_number, reason = %"set in storage but block does not exist", "resume from MINED");
+                tracing::info!(block_number = %mined_number, reason = %"set in storage but block does not exist", "resume from MINED");
                 Ok(mined_number)
             }
         }
@@ -135,14 +135,14 @@ impl StratusStorage {
         })
     }
 
-    #[tracing::instrument(name = "storage::set_active_block_number", skip_all, fields(number))]
-    pub fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    #[tracing::instrument(name = "storage::set_active_block_number", skip_all, fields(block_number))]
+    pub fn set_active_block_number(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         Span::with(|s| {
-            s.rec_str("number", &number);
+            s.rec_str("block_number", &block_number);
         });
-        tracing::debug!(storage = &label::TEMP, %number, "setting active block number");
+        tracing::debug!(storage = &label::TEMP, %block_number, "setting active block number");
 
-        timed(|| self.temp.set_active_block_number(number)).with(|m| {
+        timed(|| self.temp.set_active_block_number(block_number)).with(|m| {
             metrics::inc_storage_set_active_block_number(m.elapsed, label::TEMP, m.result.is_ok());
         })
     }
@@ -162,12 +162,12 @@ impl StratusStorage {
         Ok(())
     }
 
-    #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(number))]
-    pub fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        Span::with(|s| s.rec_str("number", &number));
-        tracing::debug!(storage = %label::PERM, %number, "setting mined block number");
+    #[tracing::instrument(name = "storage::set_mined_block_number", skip_all, fields(block_number))]
+    pub fn set_mined_block_number(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        Span::with(|s| s.rec_str("block_number", &block_number));
+        tracing::debug!(storage = %label::PERM, %block_number, "setting mined block number");
 
-        timed(|| self.perm.set_mined_block_number(number)).with(|m| {
+        timed(|| self.perm.set_mined_block_number(block_number)).with(|m| {
             metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
         })
     }
@@ -177,7 +177,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     pub fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
-        tracing::debug!(storage = %label::TEMP, number = %block.number(), "setting active external block");
+        tracing::debug!(storage = %label::TEMP, block_number = %block.number(), "setting active external block");
 
         timed(|| self.temp.set_active_external_block(block)).with(|m| {
             metrics::inc_storage_set_active_external_block(m.elapsed, label::TEMP, m.result.is_ok());
@@ -272,7 +272,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
-        tracing::debug!(storage = %label::PERM, %address, %index, ?point_in_time, "reading slot");
+        tracing::debug!(storage = %label::PERM, %address, %index, %point_in_time, "reading slot");
         let perm_slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
             metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
         })?;
@@ -289,28 +289,28 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
-    pub fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        tracing::info!(storage = %label::PERM, %address, "reading all slots");
-        self.perm.read_all_slots(address)
+    pub fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+        tracing::info!(storage = %label::PERM, %address, %point_in_time, "reading all slots");
+        self.perm.read_all_slots(address, point_in_time)
     }
 
     // -------------------------------------------------------------------------
     // Blocks
     // -------------------------------------------------------------------------
 
-    #[tracing::instrument(name = "storage::save_execution", skip_all, fields(hash))]
+    #[tracing::instrument(name = "storage::save_execution", skip_all, fields(tx_hash))]
     pub fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         Span::with(|s| {
-            s.rec_str("hash", &tx.hash());
+            s.rec_str("tx_hash", &tx.hash());
         });
-        tracing::debug!(storage = %label::TEMP, hash = %tx.hash(), "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.hash(), "saving execution");
 
         timed(|| self.temp.save_execution(tx)).with(|m| {
             metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
         })
     }
 
-    #[tracing::instrument(name = "storage::finish_block", skip_all, fields(number))]
+    #[tracing::instrument(name = "storage::finish_block", skip_all, fields(block_number))]
     pub fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         tracing::debug!(storage = %label::TEMP, "finishing active block");
 
@@ -319,16 +319,16 @@ impl StratusStorage {
         });
 
         if let Ok(ref block) = result {
-            Span::with(|s| s.rec_str("number", &block.number));
+            Span::with(|s| s.rec_str("block_number", &block.number));
         }
 
         result
     }
 
-    #[tracing::instrument(name = "storage::save_block", skip_all, fields(number))]
+    #[tracing::instrument(name = "storage::save_block", skip_all, fields(block_number))]
     pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        Span::with(|s| s.rec_str("number", &block.number()));
-        tracing::debug!(storage = %label::PERM, number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
+        Span::with(|s| s.rec_str("block_number", &block.number()));
+        tracing::debug!(storage = %label::PERM, block_number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
 
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| self.perm.save_block(block)).with(|m| {
@@ -337,7 +337,7 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_block", skip_all)]
-    pub fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    pub fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
         tracing::debug!(storage = %label::PERM, ?selection, "reading block");
 
         timed(|| self.perm.read_block(selection)).with(|m| {
@@ -345,13 +345,13 @@ impl StratusStorage {
         })
     }
 
-    #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
-    pub fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionStage>> {
-        Span::with(|s| s.rec_str("hash", hash));
+    #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(tx_hash))]
+    pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionStage>> {
+        Span::with(|s| s.rec_str("tx_hash", tx_hash));
 
         // read from temp
-        tracing::debug!(storage = %label::TEMP, %hash, "reading transaction");
-        let temp_tx = timed(|| self.temp.read_transaction(hash)).with(|m| {
+        tracing::debug!(storage = %label::TEMP, %tx_hash, "reading transaction");
+        let temp_tx = timed(|| self.temp.read_transaction(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::TEMP, m.result.is_ok());
         })?;
         if let Some(tx_temp) = temp_tx {
@@ -359,8 +359,8 @@ impl StratusStorage {
         }
 
         // read from perm
-        tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
-        let perm_tx = timed(|| self.perm.read_transaction(hash)).with(|m| {
+        tracing::debug!(storage = %label::PERM, %tx_hash, "reading transaction");
+        let perm_tx = timed(|| self.perm.read_transaction(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::PERM, m.result.is_ok());
         })?;
         match perm_tx {
@@ -406,11 +406,11 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block selection to a specific storage point-in-time indicator.
-    pub fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
-        match block_selection {
-            BlockSelection::Latest => Ok(StoragePointInTime::Present),
-            BlockSelection::Number(number) => Ok(StoragePointInTime::Past(*number)),
-            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection)? {
+    pub fn translate_to_point_in_time(&self, block_filter: &BlockFilter) -> anyhow::Result<StoragePointInTime> {
+        match block_filter {
+            BlockFilter::Latest => Ok(StoragePointInTime::Present),
+            BlockFilter::Number(number) => Ok(StoragePointInTime::Past(*number)),
+            BlockFilter::Earliest | BlockFilter::Hash(_) => match self.read_block(block_filter)? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
                 None => Err(anyhow!(
                     "failed to select block because it is greater than current block number or block hash is invalid"

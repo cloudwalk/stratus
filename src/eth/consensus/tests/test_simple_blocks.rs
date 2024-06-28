@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::Request;
 
-use crate::eth::consensus::StatusCode;
 use super::factories::create_follower_consensus_with_leader;
 use super::factories::create_mock_block_entry;
 use super::factories::create_mock_transaction_execution_entry;
@@ -12,8 +11,10 @@ use crate::eth::consensus::append_entry::AppendBlockCommitRequest;
 use crate::eth::consensus::append_entry::AppendTransactionExecutionsRequest;
 use crate::eth::consensus::AppendEntryServiceImpl;
 use crate::eth::consensus::Role;
+use crate::eth::consensus::StatusCode;
 use crate::eth::consensus::TransactionExecutionEntry;
-use crate::eth::primitives::{BlockSelection, StoragePointInTime};
+use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::StoragePointInTime;
 
 #[tokio::test]
 async fn test_append_entries_transaction_executions_and_block() {

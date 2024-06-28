@@ -14,7 +14,7 @@ use serde_with::serde_as;
 use serde_with::OneOrMany;
 
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockSelection;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogTopic;
@@ -26,10 +26,10 @@ use crate::eth::storage::StratusStorage;
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq)]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
-    pub from_block: Option<BlockSelection>,
+    pub from_block: Option<BlockFilter>,
 
     #[serde(rename = "toBlock", default)]
-    pub to_block: Option<BlockSelection>,
+    pub to_block: Option<BlockFilter>,
 
     #[serde(rename = "blockHash", default)]
     pub block_hash: Option<Hash>,
@@ -51,12 +51,12 @@ impl LogFilterInput {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
-                let from_to = storage.translate_to_point_in_time(&BlockSelection::Hash(hash))?;
+                let from_to = storage.translate_to_point_in_time(&BlockFilter::Hash(hash))?;
                 (from_to, from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockSelection::Latest))?;
-                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockSelection::Latest))?;
+                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockFilter::Latest))?;
+                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockFilter::Latest))?;
                 (from, to)
             }
         };

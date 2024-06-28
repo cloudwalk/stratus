@@ -1,3 +1,5 @@
+use ethereum_types::H160;
+use ethereum_types::H256;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
@@ -92,6 +94,30 @@ impl BlockHeader {
             state_root: self.state_root.as_fixed_bytes().to_vec(),
             transaction_hashes,
         }
+    }
+
+    pub fn from_append_entry_block(entry: append_entry::BlockEntry) -> anyhow::Result<Self> {
+        type Error = anyhow::Error;
+        Ok(BlockHeader {
+            number: entry.number.into(),
+            hash: Hash::new_from_h256(H256::from_slice(&entry.hash)),
+            transactions_root: Hash::new_from_h256(H256::from_slice(&entry.transactions_root)),
+            gas_used: Gas::from(entry.gas_used),
+            gas_limit: Gas::from(entry.gas_limit),
+            bloom: LogsBloom::from_slice(&entry.bloom).map_err(|e| anyhow!("Invalid bloom length: {}", e))?,
+            timestamp: UnixTime::from(entry.timestamp),
+            parent_hash: Hash::new_from_h256(H256::from_slice(&entry.parent_hash)),
+            author: Address::new_from_h160(H160::from_slice(&entry.author)),
+            extra_data: Bytes(entry.extra_data),
+            miner: Address::new_from_h160(H160::from_slice(&entry.miner)),
+            difficulty: Difficulty::from(U256::zero()), // always 0x0
+            receipts_root: Hash::new_from_h256(H256::from_slice(&entry.receipts_root)),
+            uncle_hash: Hash::new_from_h256(H256::from_slice(&entry.uncle_hash)),
+            size: Size::from(entry.size),
+            state_root: Hash::new_from_h256(H256::from_slice(&entry.state_root)),
+            total_difficulty: Difficulty::from(U256::zero()), // always 0x0
+            nonce: MinerNonce::default(),                     // always 0x0000000000000000
+        })
     }
 }
 

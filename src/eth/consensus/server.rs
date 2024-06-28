@@ -146,12 +146,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
-
-
         //TODO send the executions to the Storage
-        //assemble_block(&block_entry, &consensus).await;
-        let block: Block = assemble(block_entry, executions);
-        consensus.storage.save_block(block).await;
+        let block = Block::from_append_entry_block(block_entry);
+        consensus.storage.save_block(block);
 
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;

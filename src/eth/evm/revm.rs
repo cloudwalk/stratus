@@ -274,16 +274,16 @@ impl Database for RevmSession {
 // -----------------------------------------------------------------------------
 
 fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> EvmExecution {
-    let (result, output, logs, gas) = parse_revm_result(revm_result.result);
+    let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
     let changes = parse_revm_state(revm_result.state, execution_changes);
 
-    tracing::info!(?result, %gas, output_len = %output.len(), %output, "evm executed");
+    tracing::info!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
 
     EvmExecution {
         block_timestamp: input.block_timestamp,
         receipt_applied: false,
         result,
-        output,
+        output: tx_output,
         logs,
         gas,
         changes,

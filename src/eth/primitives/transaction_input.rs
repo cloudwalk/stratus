@@ -4,11 +4,14 @@ use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
+use ethers_core::types::NameOrAddress;
 use ethers_core::types::Transaction as EthersTransaction;
+use ethers_core::types::TransactionRequest;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
+use serde::Deserialize;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -22,6 +25,7 @@ use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::log_and_err;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -172,6 +176,33 @@ impl From<TransactionInput> for EthersTransaction {
             s: value.s,
             transaction_type: value.tx_type,
             ..Default::default()
+        }
+    }
+}
+
+impl From<TransactionInput> for TransactionRequest {
+    fn from(value: TransactionInput) -> Self {
+        let input = value;
+        Self {
+            chain_id: input.chain_id.map(|id| id.inner_value()),
+            nonce: Some(input.nonce.into()),
+            from: Some(input.signer.into()),
+            to: input.to.map(|to| NameOrAddress::Address(to.into())),
+            value: Some(input.value.into()),
+            gas_price: Some(input.gas_price.into()),
+            gas: Some(input.gas_limit.into()),
+            data: Some(input.input.into()),
+        }
+    }
+}
+
+impl TryFrom<serde_json::Value> for TransactionInput {
+    type Error = anyhow::Error;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        match Self::deserialize(&value) {
+            Ok(v) => Ok(v),
+            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to TransactionInput"),
         }
     }
 }
