@@ -739,7 +739,7 @@ impl Consensus {
             let current_term = self.current_term.load(Ordering::SeqCst);
             let request = Request::new(AppendTransactionExecutionsRequest {
                 term: current_term,
-                prev_log_index: self.log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
+                prev_log_index: self.prev_log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
                 prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
                 executions,
                 leader_id: self.my_address.to_string(),
