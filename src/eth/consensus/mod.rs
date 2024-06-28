@@ -578,7 +578,7 @@ impl Consensus {
         true
     }
 
-    pub async fn forward(&self, transaction: Bytes) -> anyhow::Result<Hash> {
+    pub async fn forward(&self, transaction: Bytes) -> anyhow::Result<(Hash, String)> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -593,7 +593,7 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok(result.tx_hash) //XXX HEX
+        Ok((result.tx_hash, blockchain_client.http_url.clone())) //XXX HEX
     }
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
