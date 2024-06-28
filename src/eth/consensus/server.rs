@@ -64,6 +64,30 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.prev_log_term;
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
 
+        if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+            if log_entry.term != request_inner.prev_log_term {
+                let error_message = format!(
+                    "Log entry term {} does not match request term {} at index {}",
+                    log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+                );
+                tracing::error!(
+                    log_entry_term = log_entry.term,
+                    request_term = request_inner.prev_log_term,
+                    index = request_inner.prev_log_index,
+                    "{}",
+                    &error_message
+                );
+                return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+            }
+        } else {
+            let error_message = format!(
+                "No log entry found at index {}",
+                request_inner.prev_log_index
+            );
+            tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+            return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+        }
+
         #[cfg(feature = "rocks")]
         if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
             tracing::error!("Failed to save log entry: {:?}", e);
@@ -119,6 +143,30 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.prev_log_term;
         let data = LogEntryData::BlockEntry(block_entry.clone());
 
+        if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+            if log_entry.term != request_inner.prev_log_term {
+                let error_message = format!(
+                    "Log entry term {} does not match request term {} at index {}",
+                    log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+                );
+                tracing::error!(
+                    log_entry_term = log_entry.term,
+                    request_term = request_inner.prev_log_term,
+                    index = request_inner.prev_log_index,
+                    "{}",
+                    &error_message
+                );
+                return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+            }
+        } else {
+            let error_message = format!(
+                "No log entry found at index {}",
+                request_inner.prev_log_index
+            );
+            tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+            return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+        }
+
         tracing::info!(number = block_entry.number, "appending new block");
 
         #[cfg(feature = "rocks")]
@@ -127,7 +175,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::internal("Failed to save log entry"));
         }
 
-        let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
+        let prev_log_index = consensus.last_arrived_block_number.load(Ordering::SeqCst);
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
         //TODO FIXME move this code back when we have propagation:      tracing::error!(
@@ -150,8 +198,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
         consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
 
         tracing::info!(
-            last_last_arrived_block_number = last_last_arrived_block_number,
-            new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
+            prev_log_index = prev_log_index,
+            new_prev_log_index = consensus.last_arrived_block_number.load(Ordering::SeqCst),
             "last arrived block number set",
         );
 
