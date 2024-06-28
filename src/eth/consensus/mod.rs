@@ -616,13 +616,10 @@ impl Consensus {
 
         let log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
 
-        tracing::info!(
-            "last arrived log index: {}, current log index: {}",
-            prev_log_index,
-            log_index
-        );
+        tracing::info!("last arrived log index: {}, current log index: {}", prev_log_index, log_index);
 
-        if (prev_log_index - 3) <= log_index { // TODO Should adjust hardcoded value?
+        if (prev_log_index - 3) <= log_index {
+            // TODO Should adjust hardcoded value?
             tracing::info!("should serve request");
             true
         } else {
@@ -740,7 +737,7 @@ impl Consensus {
             let request = Request::new(AppendTransactionExecutionsRequest {
                 term: current_term,
                 prev_log_index: self.prev_log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
-                prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
+                prev_log_term: current_term,                                //FIXME we should gather it from the log entries
                 executions,
                 leader_id: self.my_address.to_string(),
             });
@@ -773,7 +770,7 @@ impl Consensus {
             let request = Request::new(AppendBlockCommitRequest {
                 term: current_term,
                 prev_log_index: self.prev_log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
-                prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
+                prev_log_term: current_term,                                //FIXME we should gather it from the log entries
                 block_entry: Some(block_entry.clone()),
                 leader_id: self.my_address.to_string(),
             });

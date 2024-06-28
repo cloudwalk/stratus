@@ -80,10 +80,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
             }
         } else {
-            let error_message = format!(
-                "No log entry found at index {}",
-                request_inner.prev_log_index
-            );
+            let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
             tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
             return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
         }
@@ -159,10 +156,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
             }
         } else {
-            let error_message = format!(
-                "No log entry found at index {}",
-                request_inner.prev_log_index
-            );
+            let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
             tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
             return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
         }
@@ -255,8 +249,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             vote_granted: false,
             message: format!(
                 "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
-                request.last_log_index,
-                candidate_last_log_index
+                request.last_log_index, candidate_last_log_index
             ),
         }))
     }
