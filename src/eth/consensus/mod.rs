@@ -198,17 +198,20 @@ impl Consensus {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
+        let log_entries_storage = Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap());
+        let current_term = log_entries_storage.get_last_term().unwrap_or(0);
+        let prev_log_index = log_entries_storage.get_last_index().unwrap_or(0);
 
         let consensus = Self {
             broadcast_sender,
             storage,
             #[cfg(feature = "rocks")]
-            log_entries_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
+            log_entries_storage,
             peers,
             direct_peers,
-            current_term: AtomicU64::new(0),
+            current_term: AtomicU64::new(current_term),
             voted_for: Mutex::new(None),
-            prev_log_index: AtomicU64::new(0),
+            prev_log_index: AtomicU64::new(prev_log_index),
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
             role: AtomicU8::new(Role::Follower as u8),
