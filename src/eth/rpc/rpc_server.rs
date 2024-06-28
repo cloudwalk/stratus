@@ -561,7 +561,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, field = field::Empty).entered();
+    let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
 
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
@@ -623,21 +623,21 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
 
     // forward transaction to the leader
     if ctx.consensus.should_forward() {
-        tracing::info!(%tx_hash, "forwarding local transaction");
-        return match Handle::current().block_on(ctx.consensus.forward(tx)) {
+        tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
+        return match Handle::current().block_on(ctx.consensus.forward(data)) {
             Ok((hash, url)) => {
-                tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction");
+                tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
                 Ok(hex_data(hash))
             }
             Err(e) => {
-                tracing::error!(reason = ?e, %tx_hash, "failed to forward transaction");
+                tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
                 Err(rpc_internal_error(e.to_string()).into())
             }
         };
     }
 
     // execute locally if leader
-    tracing::info!(%tx_hash, "executing local transaction");
+    tracing::info!(%tx_hash, "executing eth_sendRawTransaction locally");
     match ctx.executor.execute_local_transaction(tx) {
         Ok(tx) => {
             if tx.is_success() {
