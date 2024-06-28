@@ -425,10 +425,10 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 // Transaction
 // -----------------------------------------------------------------------------
 
-#[tracing::instrument(name = "rpc::eth_getTransactionByHash", skip_all, fields(hash, found))]
+#[tracing::instrument(name = "rpc::eth_getTransactionByHash", skip_all, fields(tx_hash, found))]
 fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
-    Span::with(|s| s.rec_str("hash", &hash));
+    Span::with(|s| s.rec_str("tx_hash", &hash));
 
     let tx = ctx.storage.read_transaction(&hash)?;
     Span::with(|s| {
@@ -441,10 +441,10 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     }
 }
 
-#[tracing::instrument(name = "rpc::eth_getTransactionReceipt", skip_all, fields(hash, found))]
+#[tracing::instrument(name = "rpc::eth_getTransactionReceipt", skip_all, fields(tx_hash, found))]
 fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
-    Span::with(|s| s.rec_str("hash", &hash));
+    Span::with(|s| s.rec_str("tx_hash", &hash));
 
     let tx = ctx.storage.read_transaction(&hash)?;
     Span::with(|s| {
@@ -499,15 +499,15 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::
     }
 }
 
-#[tracing::instrument(name = "rpc::eth_sendRawTransaction", skip_all, fields(hash, from, to))]
+#[tracing::instrument(name = "rpc::eth_sendRawTransaction", skip_all, fields(tx_hash, tx_from, tx_to))]
 fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<String, RpcError> {
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
 
     Span::with(|s| {
-        s.rec_str("hash", &tx.hash);
-        s.rec_str("from", &tx.signer);
-        s.rec_opt("to", &tx.to);
+        s.rec_str("tx_hash", &tx.hash);
+        s.rec_str("tx_from", &tx.signer);
+        s.rec_opt("tx_to", &tx.to);
     });
 
     // forward transaction to the leader

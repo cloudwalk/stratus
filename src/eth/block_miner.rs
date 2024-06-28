@@ -86,10 +86,10 @@ impl BlockMiner {
     }
 
     /// Persists a transaction execution.
-    #[tracing::instrument(name = "miner::save_execution", skip_all, fields(hash))]
+    #[tracing::instrument(name = "miner::save_execution", skip_all, fields(tx_hash))]
     pub fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
         Span::with(|s| {
-            s.rec_str("hash", &tx_execution.hash());
+            s.rec_str("tx_hash", &tx_execution.hash());
         });
 
         // save execution to temporary storage

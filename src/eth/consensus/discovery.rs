@@ -54,8 +54,7 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
                     tracing::warn!("failed to discover new peers from Kubernetes (attempt {}/{}): {:?}", attempts, max_attempts, e);
 
                     if attempts >= max_attempts {
-                        tracing::error!("exceeded maximum attempts to discover peers from kubernetes. initiating shutdown.");
-                        GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes");
+                        GlobalState::shutdown_from("consensus", "failed to discover peers from Kubernetes after maximum attempts");
                     }
 
                     sleep(Duration::from_millis(100)).await;

@@ -421,9 +421,9 @@ impl Consensus {
                 tokio::select! {
                     Ok(tx) = rx_pending_txs.recv() => {
                         if consensus.is_leader() {
-                            tracing::info!(hash = %tx.hash(), "received transaction execution to send to followers");
+                            tracing::info!(tx_hash = %tx.hash(), "received transaction execution to send to followers");
                             if tx.is_local() {
-                                tracing::debug!(hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
+                                tracing::debug!(tx_hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
                                 continue;
                             }
 

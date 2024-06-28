@@ -272,7 +272,7 @@ impl StratusStorage {
         }
 
         // always read from perm if necessary
-        tracing::debug!(storage = %label::PERM, %address, %index, ?point_in_time, "reading slot");
+        tracing::debug!(storage = %label::PERM, %address, %index, %point_in_time, "reading slot");
         let perm_slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
             metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
         })?;
@@ -290,7 +290,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
     pub fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
-        tracing::info!(storage = %label::PERM, %address, ?point_in_time, "reading all slots");
+        tracing::info!(storage = %label::PERM, %address, %point_in_time, "reading all slots");
         self.perm.read_all_slots(address, point_in_time)
     }
 
@@ -298,12 +298,12 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    #[tracing::instrument(name = "storage::save_execution", skip_all, fields(hash))]
+    #[tracing::instrument(name = "storage::save_execution", skip_all, fields(tx_hash))]
     pub fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         Span::with(|s| {
-            s.rec_str("hash", &tx.hash());
+            s.rec_str("tx_hash", &tx.hash());
         });
-        tracing::debug!(storage = %label::TEMP, hash = %tx.hash(), "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.hash(), "saving execution");
 
         timed(|| self.temp.save_execution(tx)).with(|m| {
             metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
@@ -345,13 +345,13 @@ impl StratusStorage {
         })
     }
 
-    #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(hash))]
-    pub fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionStage>> {
-        Span::with(|s| s.rec_str("hash", hash));
+    #[tracing::instrument(name = "storage::read_transaction", skip_all, fields(tx_hash))]
+    pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionStage>> {
+        Span::with(|s| s.rec_str("tx_hash", tx_hash));
 
         // read from temp
-        tracing::debug!(storage = %label::TEMP, %hash, "reading transaction");
-        let temp_tx = timed(|| self.temp.read_transaction(hash)).with(|m| {
+        tracing::debug!(storage = %label::TEMP, %tx_hash, "reading transaction");
+        let temp_tx = timed(|| self.temp.read_transaction(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::TEMP, m.result.is_ok());
         })?;
         if let Some(tx_temp) = temp_tx {
@@ -359,8 +359,8 @@ impl StratusStorage {
         }
 
         // read from perm
-        tracing::debug!(storage = %label::PERM, %hash, "reading transaction");
-        let perm_tx = timed(|| self.perm.read_transaction(hash)).with(|m| {
+        tracing::debug!(storage = %label::PERM, %tx_hash, "reading transaction");
+        let perm_tx = timed(|| self.perm.read_transaction(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::PERM, m.result.is_ok());
         })?;
         match perm_tx {

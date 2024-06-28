@@ -384,24 +384,24 @@ async fn fetch_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) ->
     }
 }
 
-#[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(block_number, hash))]
-async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, hash: Hash) -> ExternalReceipt {
+#[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(block_number, tx_hash))]
+async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, tx_hash: Hash) -> ExternalReceipt {
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
-        s.rec_str("hash", &hash);
+        s.rec_str("tx_hash", &tx_hash);
     });
 
     loop {
-        tracing::info!(%block_number, %hash, "fetching receipt");
+        tracing::info!(%block_number, %tx_hash, "fetching receipt");
 
-        match chain.fetch_receipt(hash).await {
+        match chain.fetch_receipt(tx_hash).await {
             Ok(Some(receipt)) => return receipt,
             Ok(None) => {
-                tracing::warn!(%block_number, %hash, "receipt not available yet because block is not mined. retrying now.");
+                tracing::warn!(%block_number, %tx_hash, "receipt not available yet because block is not mined. retrying now.");
                 continue;
             }
             Err(e) => {
-                tracing::error!(reason = ?e, %block_number, %hash, "failed to fetch receipt. retrying now.");
+                tracing::error!(reason = ?e, %block_number, %tx_hash, "failed to fetch receipt. retrying now.");
             }
         }
     }

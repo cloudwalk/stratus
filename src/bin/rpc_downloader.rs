@@ -140,9 +140,9 @@ async fn download(
 
             // retrieve receipts
             let mut receipts_json = Vec::with_capacity(hashes.len());
-            for hash in hashes {
+            for tx_hash in hashes {
                 loop {
-                    let receipt = match chain.fetch_receipt(hash).await {
+                    let receipt = match chain.fetch_receipt(tx_hash).await {
                         Ok(receipt) => receipt,
                         Err(e) => {
                             tracing::warn!(reason = ?e, "retrying receipt download");
@@ -152,12 +152,12 @@ async fn download(
 
                     match receipt {
                         Some(receipt) => {
-                            receipts_json.push((hash, receipt));
+                            receipts_json.push((tx_hash, receipt));
                             break;
                         }
                         None => {
-                            tracing::error!(%hash, payload = ?receipt, "receipt is null");
-                            return Err(anyhow!(format!("transaction receipt is null for hash {}", hash)));
+                            tracing::error!(%tx_hash, payload = ?receipt, "receipt is null");
+                            return Err(anyhow!(format!("transaction receipt is null for hash {}", tx_hash)));
                         }
                     }
                 }

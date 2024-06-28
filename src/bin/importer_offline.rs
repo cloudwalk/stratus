@@ -78,14 +78,14 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     let storage_loader = execute_external_rpc_storage_loader(rpc_storage, config.blocks_by_fetch, config.paralellism, block_start, block_end, backlog_tx);
     spawn_named("storage-loader", async move {
-        if let Err(err) = storage_loader.await {
-            tracing::error!(?err, "'storage-loader' task failed");
+        if let Err(e) = storage_loader.await {
+            tracing::error!(reason = ?e, "'storage-loader' task failed");
         }
     });
 
     let block_importer = spawn_thread("block-importer", || {
-        if let Err(err) = execute_block_importer(executor, miner, backlog_rx, block_snapshots) {
-            tracing::error!(?err, "'block-importer' task failed");
+        if let Err(e) = execute_block_importer(executor, miner, backlog_rx, block_snapshots) {
+            tracing::error!(reason = ?e, "'block-importer' task failed");
         }
     });
 
