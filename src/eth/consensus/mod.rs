@@ -412,25 +412,23 @@ impl Consensus {
                     #[cfg(feature = "rocks")]
                     {
                         tracing::debug!(executions_len = executions.len(), "Processing transaction executions");
-                        if !executions.is_empty() {
-                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                            tracing::debug!(last_index, "Last index fetched");
+                        let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                        tracing::debug!(last_index, "Last index fetched");
 
-                            let current_term = consensus.current_term.load(Ordering::SeqCst);
-                            tracing::debug!(current_term, "Current term loaded");
+                        let current_term = consensus.current_term.load(Ordering::SeqCst);
+                        tracing::debug!(current_term, "Current term loaded");
 
-                            match consensus.log_entries_storage.save_log_entry(
-                                last_index + 1,
-                                current_term,
-                                LogEntryData::TransactionExecutionEntries(executions.clone()),
-                                "transaction",
-                            ) {
-                                Ok(_) => {
-                                    tracing::debug!("Transaction execution entry saved successfully");
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to save transaction execution entry: {:?}", e);
-                                }
+                        match consensus.log_entries_storage.save_log_entry(
+                            last_index + 1,
+                            current_term,
+                            LogEntryData::TransactionExecutionEntries(executions.clone()),
+                            "transaction",
+                        ) {
+                            Ok(_) => {
+                                tracing::debug!("Transaction execution entry saved successfully");
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to save transaction execution entry: {:?}", e);
                             }
                         }
                     }
