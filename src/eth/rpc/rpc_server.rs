@@ -57,7 +57,6 @@ use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_cancellation;
 use crate::infra::tracing::SpanExt;
