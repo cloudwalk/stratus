@@ -133,7 +133,6 @@ impl<'a> Future for PendingTransaction<'a> {
                 // If it hasn't confirmed yet, poll again later
                 let tx = tx_opt.unwrap();
                 if tx.block_number.is_none() {
-                    tracing::info!(?tx, "BLOCK NOT MINED");
                     *this.state = PendingTxState::PausedGettingTx;
                     ctx.waker().wake_by_ref();
                     return Poll::Pending;
