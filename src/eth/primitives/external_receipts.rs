@@ -19,12 +19,12 @@ impl ExternalReceipts {
     }
 
     /// Tries to take a receipt by its hash.
-    pub fn try_get(&self, hash: &Hash) -> anyhow::Result<&ExternalReceipt> {
-        match self.get(hash) {
+    pub fn try_get(&self, tx_hash: &Hash) -> anyhow::Result<&ExternalReceipt> {
+        match self.get(tx_hash) {
             Some(receipt) => Ok(receipt),
             None => {
-                tracing::error!(%hash, "receipt is missing for hash");
-                Err(anyhow!("receipt missing for hash {}", hash))
+                tracing::error!(%tx_hash, "receipt is missing for hash");
+                Err(anyhow!("receipt missing for hash {}", tx_hash))
             }
         }
     }

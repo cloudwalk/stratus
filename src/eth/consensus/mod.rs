@@ -63,6 +63,8 @@ use append_entry::RequestVoteRequest;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
 
+#[cfg(feature = "rocks")]
+use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
 use super::primitives::TransactionExecution;
 use super::primitives::TransactionInput;
@@ -164,6 +166,8 @@ pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
+    #[cfg(feature = "rocks")]
+    log_entries_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     #[allow(dead_code)]
     direct_peers: Vec<String>,
@@ -180,8 +184,10 @@ pub struct Consensus {
 }
 
 impl Consensus {
+    #[allow(clippy::too_many_arguments)] //TODO: refactor into consensus config
     pub async fn new(
         storage: Arc<StratusStorage>,
+        log_storage_path: Option<String>,
         direct_peers: Vec<String>,
         importer_config: Option<RunWithImporterConfig>,
         jsonrpc_address: SocketAddr,
@@ -197,6 +203,8 @@ impl Consensus {
         let consensus = Self {
             broadcast_sender,
             storage,
+            #[cfg(feature = "rocks")]
+            log_entries_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
             peers,
             direct_peers,
             current_term: AtomicU64::new(0),
@@ -385,18 +393,47 @@ impl Consensus {
     }
 
     fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
-        //TODO add data to consensus-log-transactions
-        //TODO rediscover followers on comunication error
-        //XXX FIXME deal with the scenario where a transactionHash arrives after the block, in this case before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
-        //TODO maybe check if I'm currently the leader?
+        // TODO: add data to consensus-log-transactions
+        // TODO: rediscover followers on communication error
+        // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
+        // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
+        // TODO: maybe check if I'm currently the leader?
+
         spawn_named("consensus::transaction_execution_queue", async move {
             let interval = Duration::from_millis(40);
             loop {
                 tokio::time::sleep(interval).await;
+
                 if consensus.is_leader() {
                     let mut queue = consensus.transaction_execution_queue.lock().await;
                     let executions = queue.drain(..).collect::<Vec<_>>();
                     drop(queue);
+
+                    #[cfg(feature = "rocks")]
+                    {
+                        tracing::debug!(executions_len = executions.len(), "Processing transaction executions");
+                        if !executions.is_empty() {
+                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                            tracing::debug!(last_index, "Last index fetched");
+
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            tracing::debug!(current_term, "Current term loaded");
+
+                            match consensus.log_entries_storage.save_log_entry(
+                                last_index + 1,
+                                current_term,
+                                LogEntryData::TransactionExecutionEntries(executions.clone()),
+                                "transaction",
+                            ) {
+                                Ok(_) => {
+                                    tracing::debug!("Transaction execution entry saved successfully");
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to save transaction execution entry: {:?}", e);
+                                }
+                            }
+                        }
+                    }
 
                     let peers = consensus.peers.read().await;
                     for (_, (peer, _)) in peers.iter() {
@@ -420,14 +457,14 @@ impl Consensus {
             loop {
                 tokio::select! {
                     Ok(tx) = rx_pending_txs.recv() => {
+                        tracing::debug!("Attempting to receive transaction execution");
                         if consensus.is_leader() {
-                            tracing::info!(hash = %tx.hash(), "received transaction execution to send to followers");
+                            tracing::info!(tx_hash = %tx.hash(), "received transaction execution to send to followers");
                             if tx.is_local() {
-                                tracing::debug!(hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
+                                tracing::debug!(tx_hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
                                 continue;
                             }
 
-                            //TODO XXX save transaction to appendEntries log
                             let transaction = vec![tx.to_append_entry_transaction()];
                             let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
                             if consensus.broadcast_sender.send(transaction_entry).is_err() {
@@ -437,13 +474,44 @@ impl Consensus {
                     }
                     Ok(block) = rx_blocks.recv() => {
                         if consensus.is_leader() {
-                            tracing::info!(number = block.header.number.as_u64(), "received block to send to followers");
+                            tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
-                            //TODO save block to appendEntries log
-                            //TODO before saving check if all transaction_hashes are already in the log
-                            let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(Vec::new()));
-                            if consensus.broadcast_sender.send(block_entry).is_err() {
-                                tracing::error!("failed to broadcast block");
+                            #[cfg(feature = "rocks")]
+                            {
+                                //TODO: before saving check if all transaction_hashes are already in the log
+                                let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                                tracing::debug!(last_index, "Last index fetched");
+
+                                let current_term = consensus.current_term.load(Ordering::SeqCst);
+                                tracing::debug!(current_term, "Current term loaded");
+
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.to_string().into_bytes()).collect();
+
+                                match consensus.log_entries_storage.save_log_entry(
+                                    last_index + 1,
+                                    current_term,
+                                    LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes.clone())),
+                                    "block",
+                                ) {
+                                    Ok(_) => {
+                                        tracing::debug!("Block entry saved successfully");
+                                        let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
+                                        if consensus.broadcast_sender.send(block_entry).is_err() {
+                                            tracing::error!("Failed to broadcast block");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to save block entry: {:?}", e);
+                                    }
+                                }
+                            }
+                            #[cfg(not(feature = "rocks"))]
+                            {
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.to_string().into_bytes()).collect();
+                                let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
+                                if consensus.broadcast_sender.send(block_entry).is_err() {
+                                    tracing::error!("Failed to broadcast block");
+                                }
                             }
                         }
                     }
@@ -512,7 +580,7 @@ impl Consensus {
         true
     }
 
-    pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
+    pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<(Hash, String)> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -523,12 +591,12 @@ impl Consensus {
         };
 
         let forward_to = forward_to::TransactionRelayer::new(Arc::clone(blockchain_client));
-        let result = forward_to.forward(transaction).await?;
+        let (result, target_url) = forward_to.forward(transaction).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok(result.tx_hash) //XXX HEX
+        Ok((result.tx_hash, target_url)) //XXX HEX
     }
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block

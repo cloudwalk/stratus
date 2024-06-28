@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -95,6 +96,7 @@ pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEn
 
 pub async fn create_mock_consensus() -> Arc<Consensus> {
     let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
+    let (_log_entries_storage, tmpdir_log_entries) = StratusStorage::mock_new_rocksdb();
     let direct_peers = Vec::new();
     let importer_config = None;
     let jsonrpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
@@ -102,8 +104,11 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
     let (tx_pending_txs, _) = broadcast::channel(10);
     let (tx_blocks, _) = broadcast::channel(10);
 
+    let tmpdir_log_entries_path = tmpdir_log_entries.path().to_str().map(|s| s.to_owned());
+
     Consensus::new(
         storage.into(),
+        tmpdir_log_entries_path,
         direct_peers,
         importer_config,
         jsonrpc_address,
@@ -137,9 +142,13 @@ async fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Pee
     (leader_address, leader_peer)
 }
 
-pub async fn create_follower_consensus_with_leader() -> Arc<Consensus> {
+pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Consensus> {
     let consensus = create_mock_consensus().await;
     consensus.set_role(Role::Follower);
+
+    if let Some(term) = term {
+        consensus.current_term.store(term, Ordering::SeqCst);
+    }
 
     let (leader_address, leader_peer) = create_mock_leader_peer(Arc::clone(&consensus)).await;
 

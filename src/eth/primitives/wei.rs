@@ -78,8 +78,8 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
         match BigDecimal::try_from(*self) {
             Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode gas");
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to encode gas");
                 IsNull::Yes
             }
         }
@@ -91,8 +91,8 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
     {
         match BigDecimal::try_from(self) {
             Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode gas");
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to encode gas");
                 IsNull::Yes
             }
         }

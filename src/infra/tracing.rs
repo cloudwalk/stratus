@@ -1,6 +1,8 @@
 //! Tracing services.
 
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::fmt::Display;
 use std::io::stdout;
 use std::io::IsTerminal;
 use std::net::SocketAddr;
@@ -494,6 +496,28 @@ impl SpanExt for Span {
     {
         if let Some(ref value) = value {
             self.record(field, value.to_string().as_str());
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TracingExt
+// -----------------------------------------------------------------------------
+
+/// Extensions for values used as fields in `tracing` macros.
+pub trait TracingExt {
+    /// Returns the `Display` value of the inner value or an empty string.
+    fn or_empty(&self) -> String;
+}
+
+impl<T> TracingExt for Option<T>
+where
+    T: Display + Debug,
+{
+    fn or_empty(&self) -> String {
+        match self {
+            Some(value) => value.to_string(),
+            None => String::new(),
         }
     }
 }

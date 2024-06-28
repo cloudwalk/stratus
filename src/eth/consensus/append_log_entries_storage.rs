@@ -7,15 +7,32 @@ use rocksdb::Options;
 use rocksdb::DB;
 
 use super::log_entry::LogEntry;
+use super::log_entry::LogEntryData;
 
 pub struct AppendLogEntriesStorage {
     db: DB,
 }
 
 impl AppendLogEntriesStorage {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn new(path: Option<String>) -> Result<Self> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
+
+        let path = if let Some(prefix) = path {
+            // run some checks on the given prefix
+            assert!(!prefix.is_empty(), "given prefix for RocksDB is empty, try not providing the flag");
+            if Path::new(&prefix).is_dir() || Path::new(&prefix).iter().count() > 1 {
+                tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
+            }
+
+            let path = format!("{prefix}-log-entries-rocksdb");
+            tracing::info!("starting rocksdb log entries storage - at custom path: '{:?}'", path);
+            path
+        } else {
+            tracing::info!("starting rocksdb log entries storage - at default path: 'data/log-entries-rocksdb'"); // TODO: keep inside data?
+            "data/log-entries-rocksdb".to_string()
+        };
+
         let db = DB::open(&opts, path).context("Failed to open RocksDB")?;
         Ok(Self { db })
     }
@@ -81,6 +98,35 @@ impl AppendLogEntriesStorage {
             None => Ok(0), // Default to 0 if not set
         }
     }
+
+    pub fn save_log_entry(&self, index: u64, term: u64, data: LogEntryData, entry_type: &str) -> Result<()> {
+        tracing::debug!(index, term, "Creating {} log entry", entry_type);
+        let log_entry = LogEntry { term, index, data };
+        tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
+
+        tracing::debug!("Checking for existing {} entry at new index", entry_type);
+        match self.get_entry(log_entry.index) {
+            Ok(Some(existing_entry)) =>
+                if existing_entry.term != log_entry.term {
+                    tracing::warn!(
+                        index = log_entry.index,
+                        "Conflicting entry found, deleting existing entry and all that follow it"
+                    );
+                    self.delete_entries_from(log_entry.index)?;
+                },
+            Ok(None) => {
+                // No existing entry at this index, proceed to save the new entry
+            }
+            Err(e) => {
+                tracing::error!(index = log_entry.index, "Error retrieving entry: {}", e);
+                return Err(anyhow::anyhow!("Error retrieving entry: {}", e));
+            }
+        }
+
+        tracing::debug!("Appending new {} log entry", entry_type);
+        self.save_entry(&log_entry)
+            .map_err(|e| anyhow::anyhow!("Failed to append {} log entry: {}", entry_type, e))
+    }
 }
 
 #[cfg(test)]
@@ -89,12 +135,11 @@ mod tests {
 
     use super::*;
     use crate::eth::consensus::tests::factories::*;
-    use crate::eth::consensus::LogEntryData;
 
     fn setup_storage() -> AppendLogEntriesStorage {
         let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path();
-        AppendLogEntriesStorage::new(temp_path).unwrap()
+        let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
+        AppendLogEntriesStorage::new(Some(temp_path)).unwrap()
     }
 
     #[test]
@@ -190,6 +235,93 @@ mod tests {
             }
         } else {
             panic!("Expected TransactionExecutionEntries");
+        }
+    }
+
+    #[test]
+    fn test_save_log_entry_no_conflict() {
+        let storage = setup_storage();
+        let index = 1;
+        let term = 1;
+        let log_entry_data = create_mock_log_entry_data_block();
+
+        storage.save_log_entry(index, term, log_entry_data.clone(), "block").unwrap();
+        let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
+
+        assert_eq!(retrieved_entry.index, index);
+        assert_eq!(retrieved_entry.term, term);
+
+        if let LogEntryData::BlockEntry(ref block) = retrieved_entry.data {
+            if let LogEntryData::BlockEntry(ref expected_block) = log_entry_data {
+                assert_eq!(block.hash, expected_block.hash);
+                assert_eq!(block.number, expected_block.number);
+                assert_eq!(block.parent_hash, expected_block.parent_hash);
+                assert_eq!(block.uncle_hash, expected_block.uncle_hash);
+                assert_eq!(block.transactions_root, expected_block.transactions_root);
+                assert_eq!(block.state_root, expected_block.state_root);
+                assert_eq!(block.receipts_root, expected_block.receipts_root);
+                assert_eq!(block.miner, expected_block.miner);
+                assert_eq!(block.extra_data, expected_block.extra_data);
+                assert_eq!(block.size, expected_block.size);
+                assert_eq!(block.gas_limit, expected_block.gas_limit);
+                assert_eq!(block.gas_used, expected_block.gas_used);
+                assert_eq!(block.timestamp, expected_block.timestamp);
+                assert_eq!(block.bloom, expected_block.bloom);
+                assert_eq!(block.author, expected_block.author);
+                assert_eq!(block.transaction_hashes, expected_block.transaction_hashes);
+            } else {
+                panic!("Expected BlockEntry");
+            }
+        } else {
+            panic!("Expected BlockEntry");
+        }
+    }
+
+    #[test]
+    fn test_save_log_entry_with_conflict() {
+        let storage = setup_storage();
+        let index = 1;
+        let term = 1;
+        let conflicting_term = 2;
+        let log_entry_data = create_mock_log_entry_data_block();
+
+        // Save initial log entry
+        storage.save_log_entry(index, term, log_entry_data.clone(), "block").unwrap();
+
+        // Save conflicting log entry at the same index but with a different term
+        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block").unwrap();
+
+        // Assert no entries exist after the conflicting entry's index, confirming that the conflicting entry and all that follow it were deleted
+        assert!(storage.get_entry(index + 1).unwrap().is_none());
+
+        // Retrieve the entry at the index and assert it matches the conflicting term entry
+        let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
+        assert_eq!(retrieved_entry.index, index);
+        assert_eq!(retrieved_entry.term, conflicting_term);
+
+        if let LogEntryData::BlockEntry(ref block) = retrieved_entry.data {
+            if let LogEntryData::BlockEntry(ref expected_block) = log_entry_data {
+                assert_eq!(block.hash, expected_block.hash);
+                assert_eq!(block.number, expected_block.number);
+                assert_eq!(block.parent_hash, expected_block.parent_hash);
+                assert_eq!(block.uncle_hash, expected_block.uncle_hash);
+                assert_eq!(block.transactions_root, expected_block.transactions_root);
+                assert_eq!(block.state_root, expected_block.state_root);
+                assert_eq!(block.receipts_root, expected_block.receipts_root);
+                assert_eq!(block.miner, expected_block.miner);
+                assert_eq!(block.extra_data, expected_block.extra_data);
+                assert_eq!(block.size, expected_block.size);
+                assert_eq!(block.gas_limit, expected_block.gas_limit);
+                assert_eq!(block.gas_used, expected_block.gas_used);
+                assert_eq!(block.timestamp, expected_block.timestamp);
+                assert_eq!(block.bloom, expected_block.bloom);
+                assert_eq!(block.author, expected_block.author);
+                assert_eq!(block.transaction_hashes, expected_block.transaction_hashes);
+            } else {
+                panic!("Expected BlockEntry");
+            }
+        } else {
+            panic!("Expected BlockEntry");
         }
     }
 }
