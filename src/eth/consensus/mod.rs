@@ -196,7 +196,6 @@ impl Consensus {
         rx_blocks: broadcast::Receiver<Block>,
     ) -> Arc<Self> {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
-        let last_arrived_block_number = AtomicU64::new(0); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
@@ -209,7 +208,7 @@ impl Consensus {
             direct_peers,
             current_term: AtomicU64::new(0),
             voted_for: Mutex::new(None),
-            prev_log_index,
+            prev_log_index: AtomicU64::new(0),
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
             role: AtomicU8::new(Role::Follower as u8),
