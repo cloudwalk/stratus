@@ -8,7 +8,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
-use oneshot;
 use revm::primitives::bitvec::vec;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
