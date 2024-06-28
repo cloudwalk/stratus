@@ -49,7 +49,7 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
     }
 
     // try http headers
-    for header in ["x-app", "x-client"] {
+    for header in ["x-app", "x-stratus-app", "x-client", "x-stratus-client"] {
         if let Some(client_app) = headers.get(header) {
             let Ok(client_app) = client_app.to_str() else {
                 tracing::warn!(%header, value = ?client_app, "failed to parse http header as ascii string");
@@ -57,7 +57,7 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
             };
             let client_app = normalize(client_app);
             if not(client_app.is_empty()) {
-                return RpcClientApp::Identified(client_app.to_owned());
+                return RpcClientApp::parse(&client_app);
             }
         }
     }
@@ -77,7 +77,7 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
         if let Some(client_app) = query_params.get(param) {
             let client_app = normalize(client_app);
             if not(client_app.is_empty()) {
-                return RpcClientApp::Identified(client_app.to_owned());
+                return RpcClientApp::parse(&client_app);
             }
         }
     }
