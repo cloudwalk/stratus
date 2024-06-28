@@ -542,7 +542,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
-            Ok(hex_num(result.gas))
+            Ok(hex_num(result.gas.as_u64() + (result.gas.as_u64() / 10 + 1)))
         }
 
         // result is failure
