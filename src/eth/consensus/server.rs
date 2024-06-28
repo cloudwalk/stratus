@@ -451,8 +451,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_append_transaction_executions_not_leader_term_mismatch() {
-        // Create follower with term 2
+    async fn test_append_transaction_executions_term_mismatch_on_follower() {
+        // This test verifies that if a follower receives a request with a term
+        // lower than its current term, it will return a TermMismatch error.
         let consensus = create_follower_consensus_with_leader(Some(2)).await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
@@ -476,8 +477,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_append_block_commit_not_leader_term_mismatch() {
-        // Create follower with term 2
+    async fn test_append_block_commit_term_mismatch_on_follower() {
+        // This test verifies that if a follower receives a block commit request with a term
+        // lower than its current term, it will return a TermMismatch error.
         let consensus = create_follower_consensus_with_leader(Some(2)).await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
@@ -501,5 +503,138 @@ mod tests {
         let status = response.unwrap_err();
         assert_eq!(status.code(), tonic::Code::NotFound);
         assert_eq!(status.message(), "Request term 1 is less than current term 2");
+    }
+
+    #[tokio::test]
+    async fn test_append_transaction_executions_log_mismatch_on_follower() {
+        // This test verifies that if a follower receives a transaction execution request
+        // with a prev_log_index that does not exist in its log entries, it will return a LogMismatch error.
+        let consensus = create_follower_consensus_with_leader(Some(1)).await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(Arc::clone(&consensus)),
+        };
+
+        let executions = vec![create_mock_transaction_execution_entry()];
+
+        let request = Request::new(AppendTransactionExecutionsRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 1,
+            prev_log_term: 1,
+            executions: executions.clone(),
+        });
+
+        let response = service.append_transaction_executions(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::DeadlineExceeded);
+        assert_eq!(status.message(), "No log entry found at index 1");
+    }
+
+    #[tokio::test]
+    async fn test_append_block_commit_log_mismatch_on_follower() {
+        // This test verifies that if a follower receives a block commit request
+        // with a prev_log_index that does not exist in its log entries, it will return a LogMismatch error.
+        let consensus = create_follower_consensus_with_leader(Some(1)).await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(Arc::clone(&consensus)),
+        };
+
+        let block_entry = BlockEntry {
+            number: 1,
+            ..Default::default()
+        };
+
+        let request = Request::new(AppendBlockCommitRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 1,
+            prev_log_term: 1,
+            block_entry: Some(block_entry.clone()),
+        });
+
+        let response = service.append_block_commit(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::DeadlineExceeded);
+        assert_eq!(status.message(), "No log entry found at index 1");
+    }
+
+    #[tokio::test]
+    async fn test_append_transaction_executions_log_term_mismatch_on_follower() {
+        // This test verifies that if a follower receives a transaction execution request
+        // with a prev_log_term that does not match the term of the existing log entry at prev_log_index,
+        // it will return a TermMismatch error.
+        let consensus = create_follower_consensus_with_leader(Some(1)).await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(Arc::clone(&consensus)),
+        };
+
+        // Insert a log entry with a term that does not match the request term
+        let mismatched_log_entry = LogEntryData::TransactionExecutionEntries(vec![]);
+        consensus
+            .log_entries_storage
+            .save_log_entry(1, 2, mismatched_log_entry.clone(), "transaction")
+            .unwrap();
+
+        let executions = vec![create_mock_transaction_execution_entry()];
+
+        let request = Request::new(AppendTransactionExecutionsRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 1,
+            prev_log_term: 1,
+            executions: executions.clone(),
+        });
+
+        let response = service.append_transaction_executions(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::NotFound);
+        assert_eq!(status.message(), "Log entry term 2 does not match request term 1 at index 1");
+    }
+
+    #[tokio::test]
+    async fn test_append_block_commit_log_term_mismatch_on_follower() {
+        // This test verifies that if a follower receives a block commit request
+        // with a prev_log_term that does not match the term of the existing log entry at prev_log_index,
+        // it will return a TermMismatch error.
+        let consensus = create_follower_consensus_with_leader(Some(1)).await;
+        let service = AppendEntryServiceImpl {
+            consensus: Mutex::new(Arc::clone(&consensus)),
+        };
+
+        // Insert a log entry with a term that does not match the request term
+        let mismatched_log_entry = LogEntryData::BlockEntry(BlockEntry {
+            number: 1,
+            ..Default::default()
+        });
+        consensus
+            .log_entries_storage
+            .save_log_entry(1, 2, mismatched_log_entry.clone(), "block")
+            .unwrap();
+
+        let block_entry = BlockEntry {
+            number: 1,
+            ..Default::default()
+        };
+
+        let request = Request::new(AppendBlockCommitRequest {
+            term: 1,
+            leader_id: "leader_id".to_string(),
+            prev_log_index: 1,
+            prev_log_term: 1,
+            block_entry: Some(block_entry.clone()),
+        });
+
+        let response = service.append_block_commit(request).await;
+        assert!(response.is_err());
+
+        let status = response.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::NotFound);
+        assert_eq!(status.message(), "Log entry term 2 does not match request term 1 at index 1");
     }
 }
