@@ -23,7 +23,7 @@ use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
 #[serde_as]
-#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
     pub from_block: Option<BlockFilter>,
@@ -81,7 +81,7 @@ impl LogFilterInput {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
 // This nested type is necessary to fine-tune how we want serde to deserialize the topics field
 pub struct LogFilterInputTopic(#[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")] pub Vec<Option<LogTopic>>);
 

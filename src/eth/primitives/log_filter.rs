@@ -6,7 +6,7 @@ use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
 use crate::ext::not;
 
-#[derive(DebugAsJson, serde::Serialize)]
+#[derive(Clone, DebugAsJson, serde::Serialize, Eq, Hash, PartialEq)]
 #[cfg_attr(test, derive(Default))]
 pub struct LogFilter {
     pub from_block: BlockNumber,
