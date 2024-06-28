@@ -101,7 +101,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.reset_heartbeat_signal.notify_waiters();
-        //TODO change cached index from consensus after the storage is implemented
+        consensus.log_index.store(index, Ordering::SeqCst);
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
@@ -175,8 +175,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::internal("Failed to save log entry"));
         }
 
-        let prev_log_index = consensus.last_arrived_block_number.load(Ordering::SeqCst);
-
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
         //TODO FIXME move this code back when we have propagation:      tracing::error!(
         //TODO FIXME move this code back when we have propagation:          "leader is behind follower: arrived_block: {}, block_entry: {}",
@@ -195,13 +193,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.reset_heartbeat_signal.notify_waiters();
-        consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
-
-        tracing::info!(
-            prev_log_index = prev_log_index,
-            new_prev_log_index = consensus.last_arrived_block_number.load(Ordering::SeqCst),
-            "last arrived block number set",
-        );
+        consensus.log_index.store(index, Ordering::SeqCst);
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
@@ -209,7 +201,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
             message: "Block Commit appended successfully".into(),
-            last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
+            last_committed_block_number: consensus.log_index.load(Ordering::SeqCst),
         }))
     }
 

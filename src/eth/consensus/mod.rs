@@ -173,7 +173,7 @@ pub struct Consensus {
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
-    last_arrived_block_number: AtomicU64, //FIXME this should be replaced by the index on our appendEntry log
+    prev_log_index: AtomicU64,
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
     role: AtomicU8,
     heartbeat_timeout: Duration,
@@ -209,7 +209,7 @@ impl Consensus {
             direct_peers,
             current_term: AtomicU64::new(0),
             voted_for: Mutex::new(None),
-            last_arrived_block_number,
+            prev_log_index,
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
             role: AtomicU8::new(Role::Follower as u8),
@@ -315,7 +315,7 @@ impl Consensus {
             let request = Request::new(RequestVoteRequest {
                 term,
                 candidate_id: consensus.my_address.to_string(),
-                last_log_index: consensus.last_arrived_block_number.load(Ordering::SeqCst),
+                last_log_index: consensus.prev_log_index.load(Ordering::SeqCst),
                 last_log_term: term,
             });
 
@@ -597,7 +597,6 @@ impl Consensus {
         Ok((result.tx_hash, target_url)) //XXX HEX
     }
 
-    //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
         if self.is_leader() {
             return true;
@@ -609,26 +608,26 @@ impl Consensus {
             return false;
         }
 
-        let last_arrived_block_number = self.last_arrived_block_number.load(Ordering::SeqCst);
+        let prev_log_index = self.prev_log_index.load(Ordering::SeqCst);
 
-        if last_arrived_block_number == 0 {
+        if prev_log_index == 0 {
             tracing::warn!("no appendEntry has been received yet");
             return false;
         }
 
-        let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or(BlockNumber::from(0)).into();
+        let log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
 
         tracing::info!(
-            "last arrived block number: {}, storage block number: {}",
-            last_arrived_block_number,
-            storage_block_number
+            "last arrived log index: {}, current log index: {}",
+            prev_log_index,
+            log_index
         );
 
-        if (last_arrived_block_number - 3) <= storage_block_number {
+        if (prev_log_index - 3) <= log_index { // TODO Should adjust hardcoded value?
             tracing::info!("should serve request");
             true
         } else {
-            let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
+            let diff = (prev_log_index as i128) - (log_index as i128);
             tracing::warn!(diff = diff, "should not serve request");
             false
         }
@@ -741,7 +740,7 @@ impl Consensus {
             let current_term = self.current_term.load(Ordering::SeqCst);
             let request = Request::new(AppendTransactionExecutionsRequest {
                 term: current_term,
-                prev_log_index: self.last_arrived_block_number.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
+                prev_log_index: self.log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
                 prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
                 executions,
                 leader_id: self.my_address.to_string(),
@@ -774,7 +773,7 @@ impl Consensus {
             let current_term = self.current_term.load(Ordering::SeqCst);
             let request = Request::new(AppendBlockCommitRequest {
                 term: current_term,
-                prev_log_index: self.last_arrived_block_number.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
+                prev_log_index: self.prev_log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
                 prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
                 block_entry: Some(block_entry.clone()),
                 leader_id: self.my_address.to_string(),
