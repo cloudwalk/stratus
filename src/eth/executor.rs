@@ -255,7 +255,7 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Executes a transaction persisting state changes.
-    #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to))]
+    #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
@@ -264,6 +264,7 @@ impl Executor {
             s.rec_str("tx_hash", &tx_input.hash);
             s.rec_str("tx_from", &tx_input.signer);
             s.rec_opt("tx_to", &tx_input.to);
+            s.rec_str("tx_nonce", &tx_input.nonce);
         });
         tracing::info!(
             tx_hash = %tx_input.hash,
@@ -306,9 +307,10 @@ impl Executor {
         };
 
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_transact(start.elapsed(), true, function.clone());
-        #[cfg(feature = "metrics")]
-        metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
+        {
+            metrics::inc_executor_transact(start.elapsed(), true, function.clone());
+            metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
+        }
 
         Ok(tx_execution)
     }

@@ -6,8 +6,8 @@ use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -83,7 +83,7 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(self.state.read_slot(address, index, point_in_time))
     }
 
-    fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
         Ok(self.state.read_block(selection))
     }
 

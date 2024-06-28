@@ -1,8 +1,8 @@
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -32,7 +32,7 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn save_block(&self, block: Block) -> anyhow::Result<()>;
 
     /// Retrieves a block from the storage.
-    fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
+    fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>>;
 
     /// Retrieves a transaction from the storage.
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;

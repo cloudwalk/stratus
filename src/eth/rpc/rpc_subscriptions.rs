@@ -249,7 +249,7 @@ pub struct RpcSubscriptionsConnected {
 impl RpcSubscriptionsConnected {
     /// Adds a new subscriber to `newPendingTransactions` event.
     pub async fn add_new_pending_txs(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
-        tracing::debug!(
+        tracing::info!(
             id = sink.subscription_id().to_string_ext(),
             %rpc_client,
             "subscribing to newPendingTransactions event"
@@ -263,7 +263,7 @@ impl RpcSubscriptionsConnected {
 
     /// Adds a new subscriber to `newHeads` event.
     pub async fn add_new_heads(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
-        tracing::debug!(
+        tracing::info!(
             id = sink.subscription_id().to_string_ext(),
             %rpc_client,
             "subscribing to newHeads event"
@@ -277,7 +277,7 @@ impl RpcSubscriptionsConnected {
 
     /// Adds a new subscriber to `logs` event.
     pub async fn add_logs(&self, rpc_client: RpcClientApp, filter: LogFilter, sink: SubscriptionSink) {
-        tracing::debug!(
+        tracing::info!(
             id = sink.subscription_id().to_string_ext(), ?filter,
             %rpc_client,
             "subscribing to logs event"

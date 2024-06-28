@@ -24,8 +24,8 @@ use super::rocks_db::create_or_open_db;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -379,14 +379,14 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_block(&self, selection: &BlockSelection) -> Option<Block> {
+    pub fn read_block(&self, selection: &BlockFilter) -> Option<Block> {
         tracing::debug!(?selection, "reading block");
 
         let block = match selection {
-            BlockSelection::Latest => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
-            BlockSelection::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
-            BlockSelection::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
-            BlockSelection::Hash(block_hash) =>
+            BlockFilter::Latest => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
+            BlockFilter::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
+            BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
+            BlockFilter::Hash(block_hash) =>
                 if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into()) {
                     self.blocks_by_number.get(&block_number)
                 } else {

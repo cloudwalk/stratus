@@ -34,6 +34,7 @@ use crate::log_and_err;
 #[derive(Debug)]
 pub struct BlockchainClient {
     http: HttpClient,
+    pub http_url: String,
     ws: Option<RwLock<WsClient>>,
     ws_url: Option<String>,
     timeout: Duration,
@@ -61,6 +62,7 @@ impl BlockchainClient {
 
         let client = Self {
             http,
+            http_url: http_url.to_owned(),
             ws,
             ws_url: ws_url.map(|x| x.to_owned()),
             timeout,

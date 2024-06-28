@@ -13,14 +13,13 @@ use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
 use tracing::field;
 use tracing::info_span;
-use tracing::instrument::Instrumented;
-use tracing::Instrument;
 use tracing::Span;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
@@ -100,9 +99,9 @@ pub struct RpcMiddleware {
 }
 
 impl<'a> RpcServiceT<'a> for RpcMiddleware {
-    type Future = Instrumented<RpcResponse<'a>>;
+    type Future = RpcResponse<'a>;
 
-    fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
+    fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // track request
         let span = info_span!(
             "rpc::request",
@@ -113,14 +112,15 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             rpc_tx_hash = field::Empty,
             rpc_tx_from = field::Empty,
             rpc_tx_to = field::Empty,
+            rpc_tx_nonce = field::Empty,
             rpc_tx_function = field::Empty
         );
         let enter = span.enter();
 
         // extract request data
         let client = request.extensions.rpc_client();
-        let method = request.method_name();
-        let tx = match method {
+        let method = request.method_name().to_owned();
+        let tx = match method.as_str() {
             "eth_call" | "eth_estimateGas" => TxTracingIdentifiers::from_call(request.params()).ok(),
             "eth_sendRawTransaction" => TxTracingIdentifiers::from_transaction(request.params()).ok(),
             "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TxTracingIdentifiers::from_transaction_query(request.params()).ok(),
@@ -151,11 +151,14 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         // metrify request
         #[cfg(feature = "metrics")]
         {
-            active_requests::COUNTERS.inc(&client, method);
-            metrics::inc_rpc_requests_started(&client, method, tx.as_ref().and_then(|tx| tx.function.clone()));
+            active_requests::COUNTERS.inc(&client, &method);
+            metrics::inc_rpc_requests_started(&client, &method, tx.as_ref().and_then(|tx| tx.function.clone()));
         }
-
         drop(enter);
+
+        // make span available to rpc-server
+        request.extensions_mut().insert(span);
+
         RpcResponse {
             identifiers: RpcResponseIdentifiers {
                 client,
@@ -166,7 +169,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             start: Instant::now(),
             future_response: self.service.call(request),
         }
-        .instrument(span)
     }
 }
 
@@ -260,6 +262,7 @@ struct TxTracingIdentifiers {
     pub function: Option<SoliditySignature>,
     pub from: Option<Address>,
     pub to: Option<Address>,
+    pub nonce: Option<Nonce>,
 }
 
 impl TxTracingIdentifiers {
@@ -271,6 +274,7 @@ impl TxTracingIdentifiers {
             function: tx.extract_function(),
             from: Some(tx.signer),
             to: tx.to,
+            nonce: Some(tx.nonce),
         })
     }
 
@@ -281,6 +285,7 @@ impl TxTracingIdentifiers {
             function: call.extract_function(),
             from: call.from,
             to: call.to,
+            nonce: None,
         })
     }
 
@@ -291,6 +296,7 @@ impl TxTracingIdentifiers {
             function: None,
             from: None,
             to: None,
+            nonce: None,
         })
     }
 
@@ -306,6 +312,9 @@ impl TxTracingIdentifiers {
         }
         if let Some(tx_to) = self.to {
             span.rec_str("rpc_tx_to", &tx_to);
+        }
+        if let Some(tx_nonce) = self.nonce {
+            span.rec_str("rpc_tx_nonce", &tx_nonce);
         }
     }
 }
