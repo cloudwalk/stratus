@@ -127,7 +127,7 @@ impl PermanentStorage for RocksPermanentStorage {
         todo!()
     }
 
-    fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        self.state.read_all_slots(address)
+    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+        self.state.read_all_slots(address, point_in_time)
     }
 }

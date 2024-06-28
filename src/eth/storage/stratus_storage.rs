@@ -289,9 +289,9 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_all_slots", skip_all)]
-    pub fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        tracing::info!(storage = %label::PERM, %address, "reading all slots");
-        self.perm.read_all_slots(address)
+    pub fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+        tracing::info!(storage = %label::PERM, %address, ?point_in_time, "reading all slots");
+        self.perm.read_all_slots(address, point_in_time)
     }
 
     // -------------------------------------------------------------------------

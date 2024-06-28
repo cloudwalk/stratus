@@ -316,17 +316,32 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
-        let address: AddressRocksdb = (*address).into();
-        Ok(self
+    pub fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+        let rocks_address: AddressRocksdb = (*address).into();
+
+        let present_slots = self
             .account_slots
-            .iter_from((address, SlotIndexRocksdb::from(0)), rocksdb::Direction::Forward)
-            .take_while(|((addr, _), _)| &address == addr)
+            .iter_from((rocks_address, SlotIndexRocksdb::from(0)), rocksdb::Direction::Forward)
+            .take_while(|((addr, _), _)| &rocks_address == addr)
             .map(|((_, idx), value)| Slot {
                 index: idx.into(),
                 value: value.into(),
             })
-            .collect())
+            .collect();
+
+        match point_in_time {
+            StoragePointInTime::Present => Ok(present_slots),
+            StoragePointInTime::Past(_) => {
+                let mut past_slots = Vec::with_capacity(present_slots.len());
+                for index in present_slots.iter().map(|s| s.index) {
+                    let past_slot = self.read_slot(address, &index, point_in_time);
+                    if let Some(past_slot) = past_slot {
+                        past_slots.push(past_slot);
+                    }
+                }
+                Ok(past_slots)
+            }
+        }
     }
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {

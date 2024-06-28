@@ -31,6 +31,7 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilterInput;
+use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
@@ -149,16 +150,17 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("debug_setHead", debug_set_head)?;
-        module.register_blocking_method("debug_readAllSlotsFromAccount", debug_read_all_slots)?;
     }
-    module.register_async_method("debug_readSubscriptions", debug_read_subscriptions)?;
 
-    // stratus health check
+    // stratus status
     module.register_method("stratus_startup", stratus_startup)?;
     module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_method("stratus_liveness", stratus_liveness)?;
     module.register_method("stratus_version", stratus_version)?;
+
+    // stratus state
     module.register_blocking_method("stratus_getSlots", stratus_get_slots)?;
+    module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
 
     // blockchain
     module.register_method("net_version", net_version)?;
@@ -231,14 +233,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
     Ok(to_json_value(timestamp))
 }
 
-#[cfg(feature = "dev")]
-fn debug_read_all_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let (_, address) = next_rpc_param::<Address>(params.sequence())?;
-    let slots = ctx.storage.read_all_slots(&address)?;
-    Ok(to_json_value(slots))
-}
-
-async fn debug_read_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> JsonValue {
+async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> JsonValue {
     let (pending_txs, new_heads, logs) = join!(ctx.subs.pending_txs.read(), ctx.subs.new_heads.read(), ctx.subs.logs.read());
     json!({
         "newPendingTransactions":
@@ -313,9 +308,9 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
 }
 
 #[tracing::instrument(name = "rpc::stratus_getSlots", skip_all, fields(address, indexes))]
-fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<Vec<Slot>, RpcError> {
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let (params, indexes) = next_rpc_param::<Vec<SlotIndex>>(params)?;
+    let (params, indexes) = next_rpc_param_or_default::<Vec<SlotIndex>>(params)?;
     let (_, block_selection) = next_rpc_param_or_default::<BlockSelection>(params)?;
 
     Span::with(|s| {
@@ -323,13 +318,20 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) ->
         s.rec_str("index", &format!("{:?}", indexes));
     });
 
+    // no indexes specified, read all slots
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_selection)?;
-    let slots = indexes
-        .into_iter()
-        .map(|index| ctx.storage.read_slot(&address, &index, &point_in_time))
-        .collect::<Result<Vec<_>, _>>()?;
+    if indexes.is_empty() {
+        let all_slots = ctx.storage.read_all_slots(&address, &point_in_time)?;
+        return Ok(all_slots);
+    }
 
-    Ok(to_json_value(slots))
+    // indexes specified, read only the selected ones
+    let mut selected_slots = Vec::with_capacity(indexes.len());
+    for index in indexes {
+        let slot = ctx.storage.read_slot(&address, &index, &point_in_time)?;
+        selected_slots.push(slot);
+    }
+    Ok(selected_slots)
 }
 
 // -----------------------------------------------------------------------------

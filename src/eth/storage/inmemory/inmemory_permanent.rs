@@ -175,14 +175,19 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>> {
+    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
         let state = self.lock_read();
 
         let Some(account) = state.accounts.get(address) else {
             return Ok(Default::default());
         };
 
-        Ok(account.slots.clone().into_values().map(|slot| slot.get_current()).collect())
+        Ok(account
+            .slots
+            .clone()
+            .into_values()
+            .map(|slot| slot.get_at_point(point_in_time).unwrap_or_default())
+            .collect())
     }
 
     fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
