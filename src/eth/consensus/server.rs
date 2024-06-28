@@ -88,7 +88,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
                 }
             }
-    
+
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
@@ -169,7 +169,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 }
             }
             tracing::info!(number = block_entry.number, "appending new block");
-    
+
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
@@ -267,10 +267,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         Ok(Response::new(RequestVoteResponse {
             term: request.term,
             vote_granted: false,
-            message: format!(
-                "index is bellow expectation: last_log_index {}",
-                request.last_log_index
-            ),
+            message: format!("index is bellow expectation: last_log_index {}", request.last_log_index),
         }))
     }
 }

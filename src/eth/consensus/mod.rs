@@ -613,7 +613,7 @@ impl Consensus {
             let log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
 
             tracing::info!("last arrived log index: {}, current log index: {}", prev_log_index, log_index);
-    
+
             if (prev_log_index - 3) <= log_index {
                 // TODO Should adjust hardcoded value?
                 tracing::info!("should serve request");
