@@ -624,7 +624,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     // forward transaction to the leader
     if ctx.consensus.should_forward() {
         tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
-        return match Handle::current().block_on(ctx.consensus.forward(tx)) {
+        return match Handle::current().block_on(ctx.consensus.forward(data)) {
             Ok((hash, url)) => {
                 tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
                 Ok(hex_data(hash))
