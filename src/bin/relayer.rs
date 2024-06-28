@@ -23,7 +23,7 @@ async fn run(config: ExternalRelayerConfig) -> anyhow::Result<()> {
 
     // init services
     let backoff = config.relayer.backoff;
-    let relayer = config.relayer.init().await?;
+    let mut relayer = config.relayer.init().await?;
 
     loop {
         if GlobalState::warn_if_shutdown(TASK_NAME) {

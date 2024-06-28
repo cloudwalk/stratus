@@ -21,6 +21,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
@@ -242,13 +243,29 @@ impl BlockchainClient {
         }
     }
 
+    /// Fetches the current transaction count (nonce) for an account.
+    pub async fn fetch_transaction_count(&self, address: &Address) -> anyhow::Result<Nonce> {
+        tracing::debug!("fetching block number");
+        let address = to_json_value(address);
+
+        let result = self
+            .http
+            .request::<Nonce, Vec<JsonValue>>("eth_getTransactionCount", vec![address, to_json_value("latest")])
+            .await;
+
+        match result {
+            Ok(number) => Ok(number),
+            Err(e) => log_and_err!(reason = e, "failed to fetch transaction count"),
+        }
+    }
+
     // -------------------------------------------------------------------------
     // RPC mutations
     // -------------------------------------------------------------------------
 
     /// Sends a signed transaction.
-    pub async fn send_raw_transaction(&self, hash: Hash, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
-        tracing::debug!(%hash, "sending raw transaction");
+    pub async fn send_raw_transaction(&self, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
+        tracing::debug!("sending raw transaction");
 
         let tx = to_json_value(tx);
         let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await;

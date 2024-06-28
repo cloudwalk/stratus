@@ -6,6 +6,8 @@
 //! offers functionalities to create, manage, and convert nonces, maintaining
 //! the integrity and uniqueness of transactions in the network.
 
+use std::str::FromStr;
+
 use anyhow::anyhow;
 use ethereum_types::U256;
 use ethereum_types::U64;
@@ -49,6 +51,21 @@ impl TryFrom<U256> for Nonce {
 
     fn try_from(value: U256) -> Result<Self, Self::Error> {
         Ok(Nonce(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
+    }
+}
+
+impl FromStr for Nonce {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        // This parses a hexadecimal string
+        match U64::from_str(s) {
+            Ok(parsed) => Ok(Self(parsed)),
+            Err(e) => {
+                tracing::warn!(reason = ?e, value = %s, "failed to parse nonce");
+                Err(anyhow!("Failed to parse field '{}' with value '{}'", "nonce", s))
+            }
+        }
     }
 }
 

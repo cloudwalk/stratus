@@ -109,6 +109,7 @@ fake = { version = "=2.9.2", features = ["derive"] }
 
 # relayer
 petgraph = "=0.6.5"
+ethers-signers = "2.0.14"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
