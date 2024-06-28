@@ -160,27 +160,27 @@ impl ExternalRelayer {
 
         let point_in_time = StoragePointInTime::Past(block_number);
         let mut futures = vec![];
-        for (addr, index) in changed_slots {
+        for (address, index) in changed_slots {
             futures.push(async move {
             let stratus_slot_value = loop {
-                match self.stratus_chain.fetch_storage_at(&addr, &index, point_in_time).await {
+                match self.stratus_chain.fetch_storage_at(&address, &index, point_in_time).await {
                     Ok(value) => break value,
-                    Err(err) => tracing::warn!(?addr, ?index, ?err, "failed to fetch slot value from stratus, retrying..."),
+                    Err(e) => tracing::warn!(reason = ?e, %address, %index, "failed to fetch slot value from stratus, retrying..."),
                 }
             };
 
             let substrate_slot_value = loop {
-                match self.substrate_chain.fetch_storage_at(&addr, &index, StoragePointInTime::Present).await {
+                match self.substrate_chain.fetch_storage_at(&address, &index, StoragePointInTime::Present).await {
                     Ok(value) => break value,
-                    Err(err) => tracing::warn!(?addr, ?index, ?err, "failed to fetch slot value from substrate, retrying..."),
+                    Err(e) => tracing::warn!(reason = ?e, %address, %index, "failed to fetch slot value from substrate, retrying..."),
                 }
             };
 
             if stratus_slot_value != substrate_slot_value {
-                tracing::error!(?addr, ?index, ?point_in_time, "evm state mismatch between stratus and substrate");
+                tracing::error!(%address, %index, %point_in_time, "evm state mismatch between stratus and substrate");
                 while let Err(e) = sqlx::query!(
                     "INSERT INTO slot_mismatches (address, index, block_number, stratus_value, substrate_value) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
-                    addr as _,
+                    address as _,
                     index as _,
                     block_number as _,
                     stratus_slot_value as _,
@@ -315,7 +315,7 @@ impl ExternalRelayer {
 
     /// Compares the given receipt to the receipt returned by the pending transaction, retries until a receipt is returned
     /// to ensure the nonce was incremented. In case of a mismatch it returns an error describing what mismatched.
-    #[tracing::instrument(name = "external_relayer::compare_receipt", skip_all, fields(hash))]
+    #[tracing::instrument(name = "external_relayer::compare_receipt", skip_all, fields(tx_hash))]
     async fn compare_receipt(&self, mut stratus_tx: TransactionMined, substrate_pending_transaction: PendingTransaction<'_>) -> anyhow::Result<(), RelayError> {
         #[cfg(feature = "metrics")]
         let start_metric = metrics::now();
@@ -323,19 +323,19 @@ impl ExternalRelayer {
         let tx_hash: Hash = stratus_tx.input.hash;
         let block_number: BlockNumber = stratus_tx.block_number;
 
-        tracing::info!(?block_number, ?tx_hash, ?substrate_pending_transaction.tx_hash, "comparing receipts");
+        tracing::info!(%block_number, %tx_hash, ?substrate_pending_transaction.tx_hash, "comparing receipts");
 
         // fill span
-        Span::with(|s| s.rec_str("hash", &tx_hash));
+        Span::with(|s| s.rec_str("tx_hash", &tx_hash));
 
         let mut substrate_receipt = substrate_pending_transaction;
         let _res = {
             let receipt = loop {
                 match substrate_receipt.await {
                     Ok(r) => break r,
-                    Err(err) => {
+                    Err(e) => {
                         substrate_receipt = PendingTransaction::new(tx_hash, &self.substrate_chain);
-                        tracing::warn!(?err);
+                        tracing::warn!(reason = ?e);
                         continue;
                     }
                 }
@@ -367,17 +367,17 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let hash = stratus_receipt.input.hash;
+        let tx_hash = stratus_receipt.input.hash;
         let block_number = stratus_receipt.block_number;
 
-        tracing::info!(?block_number, ?hash, "saving transaction mismatch");
+        tracing::info!(%block_number, %tx_hash, "saving transaction mismatch");
 
         let stratus_json = to_json_value(stratus_receipt);
         let substrate_json = to_json_value(substrate_receipt);
         let res = loop {
             match sqlx::query!(
                 "INSERT INTO mismatches (hash, block_number, stratus_receipt, substrate_receipt, error) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
-                &hash as _,
+                &tx_hash as _,
                 block_number as _,
                 &stratus_json,
                 &substrate_json,
@@ -387,14 +387,14 @@ impl ExternalRelayer {
             .await
             {
                 Ok(res) => break res,
-                Err(err) => tracing::error!(?block_number, ?hash, ?err, "failed to insert row in pgsql, retrying"),
+                Err(e) => tracing::error!(reason = ?e, %block_number, %tx_hash, "failed to insert row in pgsql, retrying"),
             }
         };
 
         if res.rows_affected() == 0 {
             tracing::info!(
-                ?block_number,
-                ?hash,
+                %block_number,
+                %tx_hash,
                 "transaction mismatch already in database (this should only happen if this block is being retried)."
             );
         };
@@ -408,19 +408,19 @@ impl ExternalRelayer {
         loop {
             match self.substrate_chain.send_raw_transaction(rlp.clone()).await {
                 Ok(tx) => break tx,
-                Err(err) => {
+                Err(e) => {
                     tracing::warn!(
-                        ?tx_mined.input.nonce,
-                        ?tx_hash,
+                        tx_nonnce = %tx_mined.input.nonce,
+                        %tx_hash,
                         "substrate_chain.send_raw_transaction returned an error, checking if transaction was sent anyway"
                     );
 
                     if self.substrate_chain.fetch_transaction(tx_hash).await.unwrap_or(None).is_some() {
-                        tracing::info!(?tx_hash, "transaction found on substrate");
+                        tracing::info!(%tx_hash, "transaction found on substrate");
                         return PendingTransaction::new(tx_hash, &self.substrate_chain);
                     }
 
-                    tracing::warn!(?tx_hash, ?err, "failed to send raw transaction, retrying...");
+                    tracing::warn!(reason = ?e, %tx_hash, "failed to send raw transaction, retrying...");
                     continue;
                 }
             }
@@ -429,17 +429,17 @@ impl ExternalRelayer {
 
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
     /// calling eth_getTransactionByHash. (infallible)
-    #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(hash))]
+    #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(tx_hash))]
     pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(), RelayError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
         let tx_hash = tx_mined.input.hash;
 
-        tracing::info!(?tx_mined.input.nonce, ?tx_hash, "relaying transaction");
+        tracing::info!(?tx_mined.input.nonce, %tx_hash, "relaying transaction");
 
         // fill span
-        Span::with(|s| s.rec_str("hash", &tx_hash));
+        Span::with(|s| s.rec_str("tx_hash", &tx_hash));
 
         let rlp = Transaction::from(tx_mined.input.clone()).rlp();
         let mut tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
@@ -449,7 +449,7 @@ impl ExternalRelayer {
         loop {
             if let Err(error) = self.compare_receipt(tx_mined.clone(), tx).await {
                 match error {
-                    RelayError::TransactionNotFound => tracing::warn!(?tx_hash, "transaction not found in substrate, trying to resend"),
+                    RelayError::TransactionNotFound => tracing::warn!(%tx_hash, "transaction not found in substrate, trying to resend"),
                     err => break Err(err),
                 }
                 tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
@@ -520,7 +520,7 @@ impl ExternalRelayerClient {
         let start = metrics::now();
 
         let block_number = block.header.number;
-        tracing::info!(?block_number, "sending block to relayer");
+        tracing::info!(%block_number, "sending block to relayer");
 
         // strip bytecode
         for tx in block.transactions.iter_mut() {
@@ -535,7 +535,7 @@ impl ExternalRelayerClient {
         let mut remaining_tries = 5;
 
         while remaining_tries > 0 {
-            if let Err(err) = sqlx::query!(
+            if let Err(e) = sqlx::query!(
                 r#"
                     INSERT INTO relayer_blocks
                     (number, payload)
@@ -549,7 +549,7 @@ impl ExternalRelayerClient {
             .await
             {
                 remaining_tries -= 1;
-                tracing::warn!(?err, ?remaining_tries, "failed to insert into relayer_blocks");
+                tracing::warn!(reason = ?e, ?remaining_tries, "failed to insert into relayer_blocks");
             } else {
                 break;
             }

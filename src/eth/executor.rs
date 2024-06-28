@@ -140,15 +140,15 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Reexecutes an external block locally and imports it to the temporary storage.
-    #[tracing::instrument(name = "executor::external_block", skip_all, fields(number))]
+    #[tracing::instrument(name = "executor::external_block", skip_all, fields(block_number))]
     pub fn execute_external_block(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), ExecutionMetrics::default());
 
         Span::with(|s| {
-            s.rec_str("number", &block.number());
+            s.rec_str("block_number", &block.number());
         });
-        tracing::info!(number = %block.number(), "reexecuting external block");
+        tracing::info!(block_number = %block.number(), "reexecuting external block");
 
         // track active block number
         let storage = &self.storage;
@@ -184,7 +184,7 @@ impl Executor {
     ///
     /// This function wraps `reexecute_external_tx_inner` and returns back the payload
     /// to facilitate re-execution of parallel transactions that failed
-    #[tracing::instrument(name = "executor::external_transaction", skip_all, fields(hash))]
+    #[tracing::instrument(name = "executor::external_transaction", skip_all, fields(tx_hash))]
     fn execute_external_transaction<'a, 'b>(
         &'a self,
         tx: &'b ExternalTransaction,
@@ -192,10 +192,10 @@ impl Executor {
         block: &ExternalBlock,
     ) -> anyhow::Result<ExternalTransactionExecution> {
         Span::with(|s| {
-            s.rec_str("hash", &tx.hash);
+            s.rec_str("tx_hash", &tx.hash);
         });
 
-        tracing::info!(number = %block.number(), hash = %tx.hash(), "reexecuting external transaction");
+        tracing::info!(block_number = %block.number(), tx_hash = %tx.hash(), "reexecuting external transaction");
 
         #[cfg(feature = "metrics")]
         let start = metrics::now();
@@ -223,7 +223,7 @@ impl Executor {
             Err(e) => {
                 let json_tx = to_json_string(&tx);
                 let json_receipt = to_json_string(&receipt);
-                tracing::error!(reason = ?e, number = %block.number(), hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
+                tracing::error!(reason = ?e, block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
                 return Err(e);
             }
         };
@@ -243,7 +243,7 @@ impl Executor {
             let json_tx = to_json_string(&tx);
             let json_receipt = to_json_string(&receipt);
             let json_execution_logs = to_json_string(&evm_result.execution.logs);
-            tracing::error!(reason = %"mismatch reexecuting transaction", number = %block.number(), hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
+            tracing::error!(reason = %"mismatch reexecuting transaction", block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
             return Err(e);
         };
 
@@ -255,24 +255,24 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Executes a transaction persisting state changes.
-    #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(hash, from, to))]
+    #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to))]
     pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
         #[cfg(feature = "metrics")]
         let (start, function) = (metrics::now(), tx_input.extract_function());
 
         Span::with(|s| {
-            s.rec_str("hash", &tx_input.hash);
-            s.rec_str("from", &tx_input.signer);
-            s.rec_opt("to", &tx_input.to);
+            s.rec_str("tx_hash", &tx_input.hash);
+            s.rec_str("tx_from", &tx_input.signer);
+            s.rec_opt("tx_to", &tx_input.to);
         });
         tracing::info!(
-            hash = %tx_input.hash,
-            nonce = %tx_input.nonce,
-            from = ?tx_input.from,
-            signer = %tx_input.signer,
-            to = ?tx_input.to,
-            data_len = %tx_input.input.len(),
-            data = %tx_input.input,
+            tx_hash = %tx_input.hash,
+            tx_nonce = %tx_input.nonce,
+            tx_from = ?tx_input.from,
+            tx_signer = %tx_input.signer,
+            tx_to = ?tx_input.to,
+            tx_data_len = %tx_input.input.len(),
+            tx_data = %tx_input.input,
             "executing local transaction"
         );
 
@@ -328,7 +328,7 @@ impl Executor {
             to = ?input.to,
             data_len = input.data.len(),
             data = %input.data,
-            ?point_in_time,
+            %point_in_time,
             "executing read-only local transaction"
         );
 

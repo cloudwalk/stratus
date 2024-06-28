@@ -195,8 +195,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         let block = match selection {
             BlockSelection::Latest => state_lock.blocks_by_number.values().last().cloned(),
             BlockSelection::Earliest => state_lock.blocks_by_number.values().next().cloned(),
-            BlockSelection::Number(number) => state_lock.blocks_by_number.get(number).cloned(),
-            BlockSelection::Hash(hash) => state_lock.blocks_by_hash.get(hash).cloned(),
+            BlockSelection::Number(block_number) => state_lock.blocks_by_number.get(block_number).cloned(),
+            BlockSelection::Hash(block_hash) => state_lock.blocks_by_hash.get(block_hash).cloned(),
         };
         match block {
             Some(block) => Ok(Some((*block).clone())),

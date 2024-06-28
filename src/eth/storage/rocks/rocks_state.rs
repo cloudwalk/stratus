@@ -128,7 +128,7 @@ impl RocksStorageState {
 
     pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
         let block_number = self.blocks_by_number.last_key().unwrap_or_default();
-        tracing::info!(number = %block_number, "preloaded block_number");
+        tracing::info!(%block_number, "preloaded block_number");
         Ok((u64::from(block_number)).into())
     }
 
@@ -385,9 +385,9 @@ impl RocksStorageState {
         let block = match selection {
             BlockSelection::Latest => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
             BlockSelection::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
-            BlockSelection::Number(number) => self.blocks_by_number.get(&(*number).into()),
-            BlockSelection::Hash(hash) =>
-                if let Some(block_number) = self.blocks_by_hash.get(&(*hash).into()) {
+            BlockSelection::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
+            BlockSelection::Hash(block_hash) =>
+                if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into()) {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     None
@@ -480,8 +480,8 @@ impl RocksStorageState {
         let batch_len = batch.len();
         let result = self.db.write(batch);
 
-        if let Err(err) = &result {
-            tracing::error!(?err, batch_len, "failed to write batch to DB");
+        if let Err(e) = &result {
+            tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");
         }
         result.map_err(Into::into)
     }

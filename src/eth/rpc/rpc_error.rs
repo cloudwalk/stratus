@@ -29,7 +29,7 @@ impl From<anyhow::Error> for RpcError {
 
 impl From<ErrorObjectOwned> for RpcError {
     fn from(value: ErrorObjectOwned) -> Self {
-        tracing::warn!(?value);
+        tracing::warn!(reason = ?value, "rpc warning response");
         RpcError::Response(value)
     }
 }

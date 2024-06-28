@@ -28,6 +28,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
+use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
 
 #[derive(Debug)]
@@ -144,10 +145,10 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number.
-    pub async fn fetch_block(&self, number: BlockNumber) -> anyhow::Result<JsonValue> {
-        tracing::debug!(%number, "fetching block");
+    pub async fn fetch_block(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
+        tracing::debug!(%block_number, "fetching block");
 
-        let number = to_json_value(number);
+        let number = to_json_value(block_number);
         let result = self
             .http
             .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number, JsonValue::Bool(true)])
@@ -160,10 +161,10 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by hash.
-    pub async fn fetch_block_by_hash(&self, hash: Hash, tx_detail: bool) -> anyhow::Result<JsonValue> {
-        tracing::debug!(%hash, "fetching block");
+    pub async fn fetch_block_by_hash(&self, tx_hash: Hash, tx_detail: bool) -> anyhow::Result<JsonValue> {
+        tracing::debug!(%tx_hash, "fetching block");
 
-        let hash = to_json_value(hash);
+        let hash = to_json_value(tx_hash);
         let result = self
             .http
             .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByHash", vec![hash, JsonValue::Bool(tx_detail)])
@@ -176,10 +177,10 @@ impl BlockchainClient {
     }
 
     /// Fetches a transaction by hash.
-    pub async fn fetch_transaction(&self, hash: Hash) -> anyhow::Result<Option<Transaction>> {
-        tracing::debug!(%hash, "fetching transaction");
+    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<Transaction>> {
+        tracing::debug!(%tx_hash, "fetching transaction");
 
-        let hash = to_json_value(hash);
+        let hash = to_json_value(tx_hash);
 
         let result = self
             .http
@@ -193,10 +194,10 @@ impl BlockchainClient {
     }
 
     /// Fetches a receipt by hash.
-    pub async fn fetch_receipt(&self, hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
-        tracing::debug!(%hash, "fetching transaction receipt");
+    pub async fn fetch_receipt(&self, tx_hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
+        tracing::debug!(%tx_hash, "fetching transaction receipt");
 
-        let hash = to_json_value(hash);
+        let hash = to_json_value(tx_hash);
         let result = self
             .http
             .request::<Option<ExternalReceipt>, Vec<JsonValue>>("eth_getTransactionReceipt", vec![hash])
@@ -209,11 +210,11 @@ impl BlockchainClient {
     }
 
     /// Fetches account balance by address and block number.
-    pub async fn fetch_balance(&self, address: &Address, number: Option<BlockNumber>) -> anyhow::Result<Wei> {
-        tracing::debug!(%address, ?number, "fetching account balance");
+    pub async fn fetch_balance(&self, address: &Address, block_number: Option<BlockNumber>) -> anyhow::Result<Wei> {
+        tracing::debug!(%address, block_number = %block_number.or_empty(), "fetching account balance");
 
         let address = to_json_value(address);
-        let number = to_json_value(number);
+        let number = to_json_value(block_number);
         let result = self.http.request::<Wei, Vec<JsonValue>>("eth_getBalance", vec![address, number]).await;
 
         match result {
@@ -224,7 +225,7 @@ impl BlockchainClient {
 
     /// Fetches a slot by a slot at some block.
     pub async fn fetch_storage_at(&self, address: &Address, index: &SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<SlotValue> {
-        tracing::debug!(%address, ?point_in_time, "fetching account balance");
+        tracing::debug!(%address, %point_in_time, "fetching account balance");
 
         let address = to_json_value(address);
         let index = to_json_value(index);
@@ -298,9 +299,9 @@ impl BlockchainClient {
                 e @ Err(ClientError::RestartNeeded(_)) => {
                     // will try to reconnect websocket client only in first attempt
                     if first_attempt {
-                        tracing::error!(%first_attempt, reason = ?e, "failed to subscribe to newHeads event. trying to reconnect websocket client now.");
+                        tracing::error!(reason = ?e, %first_attempt, "failed to subscribe to newHeads event. trying to reconnect websocket client now.");
                     } else {
-                        tracing::error!(%first_attempt, reason = ?e, "failed to subscribe to newHeads event. will not try to reconnect websocket client.");
+                        tracing::error!(reason = ?e, %first_attempt, "failed to subscribe to newHeads event. will not try to reconnect websocket client.");
                         return e.context("failed to subscribe to newHeads event");
                     }
                     first_attempt = false;
