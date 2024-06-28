@@ -664,25 +664,35 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
 
     // enter span
     let _middleware_enter = enter_middleware_span(&ext);
-    let _method_enter = info_span!("rpc::eth_getLogs", log_filter = field::Empty).entered();
+    let _method_enter = info_span!(
+        "rpc::eth_getLogs",
+        filter = field::Empty,
+        filter_from = field::Empty,
+        filter_to = field::Empty,
+        filter_range = field::Empty
+    )
+    .entered();
 
     // parse params
     let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params.sequence())?;
-    let mut log_filter = filter_input.parse(&ctx.storage)?;
+    let mut filter = filter_input.parse(&ctx.storage)?;
 
     // for this operation, the filter always need the end block specified to calculate the difference
-    if log_filter.to_block.is_none() {
-        log_filter.to_block = Some(ctx.storage.read_mined_block_number()?);
+    if filter.to_block.is_none() {
+        filter.to_block = Some(ctx.storage.read_mined_block_number()?);
     }
+    let blocks_in_range = filter.from_block.count_to(&filter.to_block.unwrap());
 
     // track
     Span::with(|s| {
-        s.rec_str("log_filter", &to_json_string(&log_filter));
+        s.rec_str("filter", &to_json_string(&filter));
+        s.rec_str("filter_from", &filter.from_block);
+        s.rec_str("filter_to", &filter.to_block.unwrap());
+        s.rec_str("filter_range", &blocks_in_range);
     });
-    tracing::info!(?log_filter, "reading logs");
+    tracing::info!(?filter, "reading logs");
 
     // check range
-    let blocks_in_range = log_filter.from_block.count_to(&log_filter.to_block.unwrap());
     if blocks_in_range > MAX_BLOCK_RANGE {
         return Err(rpc_invalid_params_error(format!(
             "filter range will fetch logs from {} blocks, but the max allowed is {}",
@@ -692,7 +702,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
     }
 
     // execute
-    let logs = ctx.storage.read_logs(&log_filter)?;
+    let logs = ctx.storage.read_logs(&filter)?;
     Ok(JsonValue::Array(logs.into_iter().map(|x| x.to_json_rpc_log()).collect()))
 }
 
