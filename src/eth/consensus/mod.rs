@@ -40,7 +40,6 @@ use tokio::time::sleep;
 use tonic::transport::Server;
 use tonic::Request;
 
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
