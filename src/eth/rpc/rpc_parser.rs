@@ -9,6 +9,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
 use jsonrpsee::Extensions;
 use rlp::Decodable;
+use tracing::Span;
 
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
 
@@ -16,11 +17,18 @@ use crate::eth::rpc::rpc_client_app::RpcClientApp;
 pub trait RpcExtensionsExt {
     /// Returns the client performing the JSON-RPC request.
     fn rpc_client(&self) -> RpcClientApp;
+
+    /// Enters RpcMiddleware request span if present.
+    fn enter_middleware_span(&self) -> Option<tracing::span::Entered<'_>>;
 }
 
 impl RpcExtensionsExt for Extensions {
     fn rpc_client(&self) -> RpcClientApp {
         self.get::<RpcClientApp>().cloned().unwrap_or_default()
+    }
+
+    fn enter_middleware_span(&self) -> Option<tracing::span::Entered<'_>> {
+        self.get::<Span>().map(|s| s.enter())
     }
 }
 

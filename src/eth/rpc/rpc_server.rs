@@ -271,7 +271,7 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
 
 fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<Vec<Slot>, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::stratus_getSlots", address = field::Empty, indexes = field::Empty).entered();
 
     // parse params
@@ -381,7 +381,7 @@ fn eth_gas_price(_: Params<'_>, _: &RpcContext, _: &Extensions) -> String {
 
 fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
 
     // execute
@@ -402,7 +402,7 @@ fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
 #[inline(always)]
 fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = if KIND == 'h' {
         info_span!(
             "rpc::eth_getBlockByHash",
@@ -463,7 +463,7 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 
 fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionByHash", tx_hash = field::Empty, found = field::Empty).entered();
 
     // parse params
@@ -493,7 +493,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
 
 fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
 
     // parse params
@@ -523,7 +523,7 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
 
 fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_estimateGas", tx_from = field::Empty, tx_to = field::Empty).entered();
 
     // parse params
@@ -560,7 +560,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
 
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, field = field::Empty).entered();
 
     // parse params
@@ -598,7 +598,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow
 
 fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
         "rpc::eth_sendRawTransaction",
         tx_hash = field::Empty,
@@ -662,7 +662,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
     const MAX_BLOCK_RANGE: u64 = 5_000;
 
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
         "rpc::eth_getLogs",
         filter = field::Empty,
@@ -715,7 +715,7 @@ fn eth_accounts(_: Params<'_>, _ctx: &RpcContext, _: &Extensions) -> anyhow::Res
 
 fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionCount", address = field::Empty, filter = field::Empty).entered();
 
     // pare params
@@ -736,7 +736,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
 fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getBalance", address = field::Empty, filter = field::Empty).entered();
 
     // parse params
@@ -758,7 +758,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
 
 fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getCode", address = field::Empty, filter = field::Empty).entered();
 
     // parse params
@@ -784,7 +784,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
 
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
     // enter span
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
     let _method_enter = method_span.enter();
 
@@ -833,7 +833,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 // -----------------------------------------------------------------------------
 
 fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
-    let _middleware_enter = enter_middleware_span(&ext);
+    let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getStorageAt", address = field::Empty, index = field::Empty).entered();
 
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
@@ -855,9 +855,6 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-fn enter_middleware_span(ext: &Extensions) -> Option<tracing::span::Entered<'_>> {
-    ext.get::<Span>().map(|s| s.enter())
-}
 
 #[inline(always)]
 fn hex_data<T: AsRef<[u8]>>(value: T) -> String {
