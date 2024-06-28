@@ -83,7 +83,7 @@ impl RpcSubscriptions {
                 subs.new_heads.write().await.retain(|_, s| not(s.sink.is_closed()));
                 subs.logs.write().await.retain(|_, inner_map| {
                     inner_map.retain(|_, s| not(s.sink.is_closed()));
-                    inner_map.is_empty()
+                    not(inner_map.is_empty())
                 });
 
                 // update metrics
