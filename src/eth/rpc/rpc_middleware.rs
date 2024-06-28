@@ -11,6 +11,7 @@ use jsonrpsee::server::middleware::rpc::RpcServiceT;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
+use pin_project::pinned_drop;
 use tracing::field;
 use tracing::info_span;
 use tracing::Span;
@@ -66,7 +67,14 @@ mod active_requests {
         }
 
         pub fn dec(&self, client: &RpcClientApp, method: &str) {
-            let active = self.counter_for(client, method).fetch_sub(1, Ordering::Relaxed) - 1;
+            let active = self
+                .counter_for(client, method)
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                    let new = current.saturating_sub(1);
+                    Some(new)
+                })
+                .unwrap();
+            let active = active.saturating_sub(1);
             metrics::set_rpc_requests_active(active, client, method);
         }
 
@@ -160,12 +168,10 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         request.extensions_mut().insert(span);
 
         RpcResponse {
-            identifiers: RpcResponseIdentifiers {
-                client,
-                id: request.id.to_string(),
-                method: method.to_string(),
-                tx,
-            },
+            client,
+            id: request.id.to_string(),
+            method: method.to_string(),
+            tx,
             start: Instant::now(),
             future_response: self.service.call(request),
         }
@@ -177,9 +183,15 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 // -----------------------------------------------------------------------------
 
 /// https://blog.adamchalmers.com/pin-unpin/
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct RpcResponse<'a> {
-    identifiers: RpcResponseIdentifiers,
+    // identifiers
+    client: RpcClientApp,
+    id: String,
+    method: String,
+    tx: Option<TxTracingIdentifiers>,
+
+    // data
     start: Instant,
     #[pin]
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
@@ -202,13 +214,13 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result = response.as_result();
             tracing::info!(
-                rpc_client = %resp.identifiers.client,
-                rpc_id = %resp.identifiers.id,
-                rpc_method = %resp.identifiers.method,
-                rpc_tx_hash = %resp.identifiers.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-                rpc_tx_function = %resp.identifiers.tx.as_ref().and_then(|tx|tx.function.clone()).or_empty(),
-                rpc_tx_from = %resp.identifiers.tx.as_ref().and_then(|tx|tx.from).or_empty(),
-                rpc_tx_to = %resp.identifiers.tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                rpc_client = %resp.client,
+                rpc_id = %resp.id,
+                rpc_method = %resp.method,
+                rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
+                rpc_tx_function = %resp.tx.as_ref().and_then(|tx|tx.function.clone()).or_empty(),
+                rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
+                rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
                 rpc_result = %response_result,
                 rpc_success = %response_success,
                 rpc_duration_us = %elapsed.as_micros(),
@@ -225,9 +237,9 @@ impl<'a> Future for RpcResponse<'a> {
 
                 metrics::inc_rpc_requests_finished(
                     elapsed,
-                    &resp.identifiers.client,
-                    resp.identifiers.method.clone(),
-                    resp.identifiers.tx.as_ref().and_then(|tx| tx.function.clone()),
+                    &*resp.client,
+                    resp.method.clone(),
+                    resp.tx.as_ref().and_then(|tx| tx.function.clone()),
                     rpc_result,
                     response.is_success(),
                 );
@@ -238,15 +250,9 @@ impl<'a> Future for RpcResponse<'a> {
     }
 }
 
-struct RpcResponseIdentifiers {
-    client: RpcClientApp,
-    id: String,
-    method: String,
-    tx: Option<TxTracingIdentifiers>,
-}
-
-impl Drop for RpcResponseIdentifiers {
-    fn drop(&mut self) {
+#[pinned_drop]
+impl PinnedDrop for RpcResponse<'_> {
+    fn drop(self: std::pin::Pin<&mut Self>) {
         #[cfg(feature = "metrics")]
         {
             active_requests::COUNTERS.dec(&self.client, &self.method);
