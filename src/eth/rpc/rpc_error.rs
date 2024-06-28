@@ -19,7 +19,7 @@ pub enum RpcError {
 // -----------------------------------------------------------------------------
 impl From<anyhow::Error> for RpcError {
     fn from(value: anyhow::Error) -> Self {
-        tracing::error!(reason = ?value, "rpc error response");
+        tracing::warn!(reason = ?value, "rpc error response");
         match value.downcast::<ErrorObject>() {
             Ok(err) => RpcError::Response(err),
             Err(err) => RpcError::Generic(err),
@@ -29,7 +29,7 @@ impl From<anyhow::Error> for RpcError {
 
 impl From<ErrorObjectOwned> for RpcError {
     fn from(value: ErrorObjectOwned) -> Self {
-        tracing::warn!(reason = ?value, "rpc warning response");
+        tracing::warn!(reason = ?value, "rpc error response");
         RpcError::Response(value)
     }
 }
