@@ -57,7 +57,7 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
 
     /// Retrieves all current slots associated to an address.
-    fn read_all_slots(&self, address: &Address) -> anyhow::Result<Vec<Slot>>;
+    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>>;
 
     // -------------------------------------------------------------------------
     // Global state
