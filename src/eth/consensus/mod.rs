@@ -512,7 +512,7 @@ impl Consensus {
         true
     }
 
-    pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<Hash> {
+    pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<(Hash, String)> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -523,12 +523,12 @@ impl Consensus {
         };
 
         let forward_to = forward_to::TransactionRelayer::new(Arc::clone(blockchain_client));
-        let result = forward_to.forward(transaction).await?;
+        let (result, target_url) = forward_to.forward(transaction).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok(result.tx_hash) //XXX HEX
+        Ok((result.tx_hash, target_url)) //XXX HEX
     }
 
     //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block

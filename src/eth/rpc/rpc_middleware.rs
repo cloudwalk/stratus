@@ -19,6 +19,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
@@ -111,6 +112,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             rpc_tx_hash = field::Empty,
             rpc_tx_from = field::Empty,
             rpc_tx_to = field::Empty,
+            rpc_tx_nonce = field::Empty,
             rpc_tx_function = field::Empty
         );
         let enter = span.enter();
@@ -260,6 +262,7 @@ struct TxTracingIdentifiers {
     pub function: Option<SoliditySignature>,
     pub from: Option<Address>,
     pub to: Option<Address>,
+    pub nonce: Option<Nonce>,
 }
 
 impl TxTracingIdentifiers {
@@ -271,6 +274,7 @@ impl TxTracingIdentifiers {
             function: tx.extract_function(),
             from: Some(tx.signer),
             to: tx.to,
+            nonce: Some(tx.nonce),
         })
     }
 
@@ -281,6 +285,7 @@ impl TxTracingIdentifiers {
             function: call.extract_function(),
             from: call.from,
             to: call.to,
+            nonce: None,
         })
     }
 
@@ -291,6 +296,7 @@ impl TxTracingIdentifiers {
             function: None,
             from: None,
             to: None,
+            nonce: None,
         })
     }
 
@@ -306,6 +312,9 @@ impl TxTracingIdentifiers {
         }
         if let Some(tx_to) = self.to {
             span.rec_str("rpc_tx_to", &tx_to);
+        }
+        if let Some(tx_nonce) = self.nonce {
+            span.rec_str("rpc_tx_nonce", &tx_nonce);
         }
     }
 }

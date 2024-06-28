@@ -20,8 +20,8 @@ use crate::eth::evm::EvmConfig;
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::relayer::ExternalRelayer;
 use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::ExternalRpcStorage;
@@ -281,7 +281,7 @@ impl MinerConfig {
 
         // enable genesis block
         if self.enable_genesis {
-            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
+            let genesis = storage.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 tracing::info!("enabling genesis block");
                 miner.commit(Block::genesis())?;

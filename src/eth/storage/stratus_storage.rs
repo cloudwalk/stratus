@@ -4,8 +4,8 @@ use tracing::Span;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
@@ -89,7 +89,7 @@ impl StratusStorage {
     #[tracing::instrument(name = "storage::read_block_number_to_resume_import", skip_all)]
     pub fn read_block_number_to_resume_import(&self) -> anyhow::Result<BlockNumber> {
         // if does not have the zero block present, should resume from zero
-        let zero = self.read_block(&BlockSelection::Number(BlockNumber::ZERO))?;
+        let zero = self.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
         if zero.is_none() {
             tracing::info!(block_number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
             return Ok(BlockNumber::ZERO);
@@ -104,7 +104,7 @@ impl StratusStorage {
 
         // fallback to last mined block number
         let mined_number = self.read_mined_block_number()?;
-        let mined_block = self.read_block(&BlockSelection::Number(mined_number))?;
+        let mined_block = self.read_block(&BlockFilter::Number(mined_number))?;
         match mined_block {
             Some(_) => {
                 tracing::info!(block_number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
@@ -337,7 +337,7 @@ impl StratusStorage {
     }
 
     #[tracing::instrument(name = "storage::read_block", skip_all)]
-    pub fn read_block(&self, selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
+    pub fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
         tracing::debug!(storage = %label::PERM, ?selection, "reading block");
 
         timed(|| self.perm.read_block(selection)).with(|m| {
@@ -406,11 +406,11 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block selection to a specific storage point-in-time indicator.
-    pub fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
-        match block_selection {
-            BlockSelection::Latest => Ok(StoragePointInTime::Present),
-            BlockSelection::Number(number) => Ok(StoragePointInTime::Past(*number)),
-            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection)? {
+    pub fn translate_to_point_in_time(&self, block_filter: &BlockFilter) -> anyhow::Result<StoragePointInTime> {
+        match block_filter {
+            BlockFilter::Latest => Ok(StoragePointInTime::Present),
+            BlockFilter::Number(number) => Ok(StoragePointInTime::Past(*number)),
+            BlockFilter::Earliest | BlockFilter::Hash(_) => match self.read_block(block_filter)? {
                 Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
                 None => Err(anyhow!(
                     "failed to select block because it is greater than current block number or block hash is invalid"
