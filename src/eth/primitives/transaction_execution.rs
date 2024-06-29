@@ -68,47 +68,37 @@ impl TransactionExecution {
     /// TODO: use From or TryFrom trait instead of this function
     pub fn to_append_entry_transaction(&self) -> append_entry::TransactionExecutionEntry {
         match self {
-            Self::External(ExternalTransactionExecution { tx, receipt, result }) => append_entry::TransactionExecutionEntry {
-                hash: tx.hash.to_fixed_bytes().to_vec(),
-                nonce: tx.nonce.as_u64(),
-                value: u256_to_bytes(tx.value),
-                gas_price: tx.gas_price.map_or(vec![], u256_to_bytes),
-                input: tx.input.to_vec(),
-                v: tx.v.as_u64(),
-                r: u256_to_bytes(tx.r),
-                s: u256_to_bytes(tx.s),
-                chain_id: Some(tx.chain_id.unwrap_or_default().as_u64()),
+            Self::External(_) => panic!("Only LocalTransactionExecution is supported"),
+            Self::Local(LocalTransactionExecution { input, result }) => append_entry::TransactionExecutionEntry {
+                hash: input.hash.as_fixed_bytes().to_vec(),
+                nonce: input.nonce.as_u64(),
+                value: u256_to_bytes(*input.value.inner()),
+                gas_price: u256_to_bytes(*input.gas_price.inner()),
+                input: input.input.to_vec(),
+                v: input.v.as_u64(),
+                r: u256_to_bytes(input.r),
+                s: u256_to_bytes(input.s),
+                chain_id: Some(input.chain_id.unwrap_or_default().into()),
                 result: result.execution.result.to_string(),
                 output: result.execution.output.to_vec(),
-                from: tx.from.as_bytes().to_vec(),
-                to: tx.to.map(|to| to.as_bytes().to_vec()),
-                block_number: receipt.block_number().as_u64(),
-                transaction_index: receipt.transaction_index.as_u64(),
-                logs: receipt
-                    .logs
-                    .iter()
-                    .map(|log| append_entry::Log {
-                        address: log.address.as_bytes().to_vec(),
-                        topics: log.topics.iter().map(|topic| topic.as_bytes().to_vec()).collect(),
-                        data: log.data.to_vec(),
-                        log_index: log.log_index.unwrap_or_default().as_u64(),
-                    })
-                    .collect(),
-                gas: u256_to_bytes(tx.gas),
-                receipt_cumulative_gas_used: u256_to_bytes(receipt.cumulative_gas_used),
-                receipt_gas_used: receipt.gas_used.map_or(vec![], u256_to_bytes),
-                receipt_contract_address: receipt.contract_address.map_or(vec![], |addr| addr.as_bytes().to_vec()),
-                receipt_status: receipt.status.unwrap_or_default().as_u32(),
-                receipt_logs_bloom: receipt.logs_bloom.as_bytes().to_vec(),
-                receipt_effective_gas_price: receipt.effective_gas_price.map_or(vec![], u256_to_bytes),
-                deployed_contract_address: None,
-                gas_limit: u256_to_bytes(tx.gas),
-                signer: vec![],
-                receipt_applied: true,
-                tx_type: None,
+                from: input.from.as_bytes().to_vec(),
+                to: input.to.map(|to| to.as_bytes().to_vec()),
+                logs: result.execution.logs.iter().map(|log| append_entry::Log {
+                    address: log.address.as_bytes().to_vec(),
+                    topics: vec![
+                        log.topic0.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
+                        log.topic1.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
+                        log.topic2.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
+                        log.topic3.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
+                    ],
+                    data: log.data.to_vec(),
+                }).collect(),
+                gas: u256_to_bytes(result.execution.gas.into()),
+                deployed_contract_address: result.execution.deployed_contract_address.map(|addr| addr.as_bytes().to_vec()),
+                gas_limit: u256_to_bytes(input.gas_limit.into()),
+                signer: vec![], //XXX check this field
+                tx_type: None, //XXX check this field
             },
-            // TODO: no need to panic here, this could be implemented
-            _ => panic!("Only ExternalTransactionExecution is supported"),
         }
     }
 }
