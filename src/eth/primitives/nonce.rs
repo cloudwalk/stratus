@@ -32,6 +32,10 @@ impl Nonce {
     pub fn next(&self) -> Self {
         Self(self.0 + 1)
     }
+
+    pub fn as_u64(&self) -> u64 {
+        self.0.as_u64()
+    }
 }
 
 impl Dummy<Faker> for Nonce {

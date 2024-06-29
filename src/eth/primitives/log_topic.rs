@@ -15,6 +15,10 @@ impl LogTopic {
     pub fn new(inner: H256) -> Self {
         Self(inner)
     }
+
+    pub fn inner(&self) -> H256 {
+        self.0
+    }
 }
 
 impl Display for LogTopic {
