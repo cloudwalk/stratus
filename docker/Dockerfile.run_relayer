@@ -1,5 +1,5 @@
 # Build
-FROM rust:1.75 as builder
+FROM rust:1.79 as builder
 
 WORKDIR /app
 COPY .git /app/.git
@@ -22,7 +22,7 @@ ENV NO_COLOR=1
 RUN cargo build --release --bin relayer --no-default-features --features metrics
 
 # Runtime
-FROM rust:1.75 as runtime
+FROM rust:1.79 as runtime
 WORKDIR /app
 COPY --from=builder /app/target/release/relayer /app/relayer
 COPY --from=builder /app/config/* /app/config/

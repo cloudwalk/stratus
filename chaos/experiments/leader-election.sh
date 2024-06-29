@@ -61,7 +61,7 @@ start_instance() {
     local tokio_console_address=$6
     local metrics_exporter_address=$7
 
-    RUST_LOG=info cargo run --release --bin $binary --features dev -- \
+    RUST_LOG=info RUST_BACKTRACE=1 cargo run --release --bin $binary --features dev -- \
         --block-mode=1s \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
@@ -85,8 +85,58 @@ check_liveness() {
 check_leader() {
     local grpc_address=$1
 
+    # Base64 encoded placeholder values to ensure they match the expected length
+    local hash="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    local gas="AAAAAAAAAAE="
+    local bloom="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    local data="AAAAAAAAAAE="
+
     # Send the gRPC request using grpcurl and capture both stdout and stderr
-    response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{"term": 999999999, "prevLogIndex": 0, "prevLogTerm": 0, "leader_id": "leader_id_value", "block_entry": {"number": 1, "hash": "ZXh0cmFfZGF0YV92YWx1ZQ==", "transactions_root": "ZXh0cmFfZGF0YV92YWx1ZQ==", "gas_used": 999, "gas_limit": 999, "bloom": "ZXh0cmFfZGF0YV92YWx1ZQ==", "timestamp": 123456789, "parent_hash": "ZXh0cmFfZGF0YV92YWx1ZQ==", "author": "ZXh0cmFfZGF0YV92YWx1ZQ==", "extra_data": "ZXh0cmFfZGF0YV92YWx1ZQ==", "miner": "ZXh0cmFfZGF0YV92YWx1ZQ==", "receipts_root": "ZXh0cmFfZGF0YV92YWx1ZQ==", "uncle_hash": "ZXh0cmFfZGF0YV92YWx1ZQ==", "size": 12345, "state_root": "ZXh0cmFfZGF0YV92YWx1ZQ==", "transaction_hashes": []}}' "$grpc_address" append_entry.AppendEntryService/AppendBlockCommit 2>&1)
+    response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{
+        "leader_id": "leader_id_value",
+        "term": 999999999,
+        "prevLogIndex": 0,
+        "prevLogTerm": 0,
+        "executions": [
+            {
+                "hash": "'"$hash"'",
+                "nonce": 1,
+                "value": "'"$gas"'",
+                "gas_price": "'"$gas"'",
+                "input": "'"$data"'",
+                "v": 27,
+                "r": "'"$hash"'",
+                "s": "'"$hash"'",
+                "chain_id": 1,
+                "result": "Success",
+                "output": "'"$data"'",
+                "from": "'"$hash"'",
+                "to": "'"$hash"'",
+                "transaction_index": 1,
+                "logs": [
+                    {
+                        "address": "'"$hash"'",
+                        "topics": ["'"$hash"'"],
+                        "data": "'"$data"'",
+                        "log_index": 0
+                    }
+                ],
+                "gas": "'"$gas"'",
+                "receipt_cumulative_gas_used": "'"$gas"'",
+                "receipt_gas_used": "'"$gas"'",
+                "receipt_contract_address": "'"$hash"'",
+                "receipt_status": 1,
+                "receipt_logs_bloom": "'"$bloom"'",
+                "receipt_effective_gas_price": "'"$gas"'",
+                "block_number": 1,
+                "tx_type": 1,
+                "signer": "'"$hash"'",
+                "gas_limit": "'"$gas"'",
+                "receipt_applied": true,
+                "deployed_contract_address": "'"$hash"'"
+            }
+        ]
+    }' "$grpc_address" append_entry.AppendEntryService/AppendTransactionExecutions 2>&1)
 
     # Check the response for specific strings to determine the node status
     if [[ "$response" == *"append_transaction_executions called on leader node"* ]]; then

@@ -2,7 +2,7 @@
 # syntax=docker/dockerfile:1.2
 
 # Build stage
-FROM rust:1.75 as builder
+FROM rust:1.79 as builder
 
 WORKDIR /app
 
@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --bin run-with-importer --features dev
 
 # Runtime
-FROM rust:1.75 as runtime
+FROM rust:1.79 as runtime
 WORKDIR /app
 COPY --from=builder /app/target/release/run-with-importer /app/run-with-importer
 COPY --from=builder /app/config/* /app/config/
