@@ -1,4 +1,4 @@
-use core::sync::atomic::Ordering;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;

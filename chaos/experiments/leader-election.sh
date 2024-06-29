@@ -61,7 +61,7 @@ start_instance() {
     local tokio_console_address=$6
     local metrics_exporter_address=$7
 
-    RUST_LOG=info cargo run --release --bin $binary --features dev -- \
+    RUST_LOG=info RUST_BACKTRACE=1 cargo run --release --bin $binary --features dev -- \
         --block-mode=1s \
         --enable-test-accounts \
         --candidate-peers="$candidate_peers" \

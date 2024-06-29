@@ -1,6 +1,6 @@
-use core::sync::atomic::Ordering;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use ethereum_types::H160;
