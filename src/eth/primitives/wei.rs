@@ -30,6 +30,10 @@ impl Wei {
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
     }
+
+    pub fn inner(&self) -> &U256 {
+        &self.0
+    }
 }
 
 impl Dummy<Faker> for Wei {
