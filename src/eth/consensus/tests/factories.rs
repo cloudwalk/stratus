@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use ethereum_types::Bloom;
 use ethereum_types::H160;
 use ethereum_types::H256;
 use rand::Rng;
@@ -39,7 +40,7 @@ pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>) -> BlockEntry {
         gas_limit: rand::thread_rng().gen(),
         gas_used: rand::thread_rng().gen(),
         timestamp: rand::thread_rng().gen(),
-        bloom: H256::random().as_bytes().to_vec(),
+        bloom: Bloom::random().as_bytes().to_vec(),
         transaction_hashes,
     }
 }

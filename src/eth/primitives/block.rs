@@ -9,6 +9,7 @@ use serde_json::Value as JsonValue;
 
 use super::LogMined;
 use super::TransactionInput;
+use crate::eth::consensus::append_entry;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
@@ -155,6 +156,12 @@ impl Block {
         }
 
         block_compacted_changes.into_values().collect_vec()
+    }
+
+    pub fn from_append_entry_block(block_entry: append_entry::BlockEntry) -> anyhow::Result<Self> {
+        let header = BlockHeader::from_append_entry_block(block_entry.clone())?;
+        let transactions = vec![]; //XXX block_entry.transactions.into_iter().map(TransactionMined::from_append_entry_transaction).collect();
+        Ok(Self { header, transactions })
     }
 }
 
