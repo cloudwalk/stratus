@@ -112,27 +112,17 @@ check_leader() {
                 "output": "'"$data"'",
                 "from": "'"$hash"'",
                 "to": "'"$hash"'",
-                "transaction_index": 1,
                 "logs": [
                     {
                         "address": "'"$hash"'",
                         "topics": ["'"$hash"'"],
-                        "data": "'"$data"'",
-                        "log_index": 0
+                        "data": "'"$data"'"
                     }
                 ],
                 "gas": "'"$gas"'",
-                "receipt_cumulative_gas_used": "'"$gas"'",
-                "receipt_gas_used": "'"$gas"'",
-                "receipt_contract_address": "'"$hash"'",
-                "receipt_status": 1,
-                "receipt_logs_bloom": "'"$bloom"'",
-                "receipt_effective_gas_price": "'"$gas"'",
-                "block_number": 1,
                 "tx_type": 1,
                 "signer": "'"$hash"'",
                 "gas_limit": "'"$gas"'",
-                "receipt_applied": true,
                 "deployed_contract_address": "'"$hash"'"
             }
         ]
