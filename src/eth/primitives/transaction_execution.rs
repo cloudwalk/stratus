@@ -83,21 +83,26 @@ impl TransactionExecution {
                 output: result.execution.output.to_vec(),
                 from: input.from.as_bytes().to_vec(),
                 to: input.to.map(|to| to.as_bytes().to_vec()),
-                logs: result.execution.logs.iter().map(|log| append_entry::Log {
-                    address: log.address.as_bytes().to_vec(),
-                    topics: vec![
-                        log.topic0.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
-                        log.topic1.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
-                        log.topic2.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
-                        log.topic3.map_or_else(|| vec![], |t| t.inner().as_bytes().to_vec()),
-                    ],
-                    data: log.data.to_vec(),
-                }).collect(),
+                logs: result
+                    .execution
+                    .logs
+                    .iter()
+                    .map(|log| append_entry::Log {
+                        address: log.address.as_bytes().to_vec(),
+                        topics: vec![
+                            log.topic0.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
+                            log.topic1.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
+                            log.topic2.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
+                            log.topic3.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
+                        ],
+                        data: log.data.to_vec(),
+                    })
+                    .collect(),
                 gas: u256_to_bytes(result.execution.gas.into()),
                 deployed_contract_address: result.execution.deployed_contract_address.map(|addr| addr.as_bytes().to_vec()),
                 gas_limit: u256_to_bytes(input.gas_limit.into()),
                 signer: vec![], //XXX check this field
-                tx_type: None, //XXX check this field
+                tx_type: None,  //XXX check this field
             },
         }
     }
