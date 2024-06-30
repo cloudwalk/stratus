@@ -77,7 +77,7 @@ impl InMemoryTemporaryStorageState {
     fn require_active_block(&mut self) -> anyhow::Result<&PendingBlock> {
         match &self.block {
             Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"),
+            None => log_and_err!("no pending block being mined"), // try calling set_active_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
 
@@ -85,7 +85,7 @@ impl InMemoryTemporaryStorageState {
     fn require_active_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
         match &mut self.block {
             Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"),
+            None => log_and_err!("no pending block being mined"), // try calling set_active_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
 }
