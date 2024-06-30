@@ -88,6 +88,7 @@ pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEn
 
 pub async fn create_mock_consensus() -> Arc<Consensus> {
     let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
+    storage.set_active_block_number_as_next_if_not_set().unwrap();
     let (_log_entries_storage, tmpdir_log_entries) = StratusStorage::mock_new_rocksdb();
     let direct_peers = Vec::new();
     let importer_config = None;
