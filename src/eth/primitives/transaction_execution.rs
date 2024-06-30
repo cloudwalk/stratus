@@ -1,34 +1,30 @@
 use std::collections::HashMap;
-
 use std::str::FromStr;
 
 use display_json::DebugAsJson;
 use ethereum_types::H160;
 use ethereum_types::H256;
-use ethereum_types::U256;
 use ethereum_types::U64;
 
+use super::Gas;
 use crate::eth::consensus::append_entry;
 use crate::eth::consensus::utils::*;
 use crate::eth::evm::EvmExecutionResult;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionMetrics;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::ChainId;
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Address;
-
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionMetrics;
-use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogTopic;
+use crate::eth::primitives::Nonce;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
-
-use super::Gas;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(DebugAsJson, Clone, strum::EnumIs, serde::Serialize)]
@@ -130,8 +126,7 @@ impl TransactionExecution {
     }
 
     pub fn from_append_entry_transaction(entry: append_entry::TransactionExecutionEntry) -> anyhow::Result<Self> {
-        let execution_result = ExecutionResult::from_str(&entry.result)
-            .map_err(|_| anyhow::anyhow!("Invalid execution result: {}", entry.result))?;
+        let execution_result = ExecutionResult::from_str(&entry.result).map_err(|_| anyhow::anyhow!("Invalid execution result: {}", entry.result))?;
 
         let input = TransactionInput {
             tx_type: entry.tx_type.map(U64::from),
@@ -156,14 +151,30 @@ impl TransactionExecution {
                 receipt_applied: false,
                 result: execution_result,
                 output: Bytes(entry.output),
-                logs: entry.logs.iter().map(|log| Log {
-                    address: Address::new_from_h160(H160::from_slice(&log.address)),
-                    topic0: log.topics.get(0).and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
-                    topic1: log.topics.get(1).and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
-                    topic2: log.topics.get(2).and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
-                    topic3: log.topics.get(3).and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
-                    data: Bytes(log.data.clone()),
-                }).collect(),
+                logs: entry
+                    .logs
+                    .iter()
+                    .map(|log| Log {
+                        address: Address::new_from_h160(H160::from_slice(&log.address)),
+                        topic0: log
+                            .topics
+                            .first()
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        topic1: log
+                            .topics
+                            .get(1)
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        topic2: log
+                            .topics
+                            .get(2)
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        topic3: log
+                            .topics
+                            .get(3)
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        data: Bytes(log.data.clone()),
+                    })
+                    .collect(),
                 gas: Gas::try_from(bytes_to_u256(&entry.gas)?)?,
                 changes: HashMap::new(), // assuming empty for now
                 deployed_contract_address: entry.deployed_contract_address.map(|addr| Address::new_from_h160(H160::from_slice(&addr))),

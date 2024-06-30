@@ -1,4 +1,5 @@
-use anyhow::{Result, anyhow};
+use anyhow::anyhow;
+use anyhow::Result;
 use ethereum_types::U256;
 
 pub fn u256_to_bytes(u: U256) -> Vec<u8> {
