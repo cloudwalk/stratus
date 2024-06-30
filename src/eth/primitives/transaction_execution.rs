@@ -103,6 +103,7 @@ impl TransactionExecution {
                 gas_limit: u256_to_bytes(input.gas_limit.into()),
                 signer: vec![], //XXX check this field
                 tx_type: None,  //XXX check this field
+                block_timestamp: result.execution.block_timestamp.as_u64(),
             },
         }
     }
