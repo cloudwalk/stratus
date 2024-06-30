@@ -190,6 +190,14 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
+    // appends transactions to the pending block
+    // also make them available as a cache for queries
+    fn append_transaction(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        let mut states = self.lock_write();
+        states.head.require_active_block_mut()?.push_transaction(tx);
+        Ok(())
+    }
+
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
