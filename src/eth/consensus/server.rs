@@ -84,7 +84,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 Ok(transaction_execution) => {
                     tracing::info!(hash = %transaction_execution.hash(), "appending execution");
                     match consensus.storage.append_transaction(transaction_execution) {
-                        Ok(_) => { tracing::info!("transaction execution commited into memory successfully"); }
+                        Ok(_) => {
+                            tracing::info!("transaction execution commited into memory successfully");
+                        }
                         Err(err) => {
                             tracing::error!("Failed to commit transaction execution: {:?}", err);
                             return Err(Status::internal("Failed to commit transaction execution"));
