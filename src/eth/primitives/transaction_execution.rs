@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
+use std::str::FromStr;
+
 use display_json::DebugAsJson;
 use ethereum_types::H160;
 use ethereum_types::H256;
+use ethereum_types::U256;
 use ethereum_types::U64;
 
 use crate::eth::consensus::append_entry;
@@ -24,6 +27,8 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
+
+use super::Gas;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(DebugAsJson, Clone, strum::EnumIs, serde::Serialize)]
@@ -138,16 +143,16 @@ impl TransactionExecution {
             to: entry.to.map(|to| Address::new_from_h160(H160::from_slice(&to))),
             value: Wei::new(bytes_to_u256(&entry.value)?),
             input: Bytes(entry.input),
-            gas_limit: (bytes_to_u256(&entry.gas_limit)?).into(),
+            gas_limit: Gas::try_from(bytes_to_u256(&entry.gas_limit)?)?,
             gas_price: Wei::new(bytes_to_u256(&entry.gas_price)?),
             v: U64::from(entry.v),
-            r: bytes_to_u256(&entry.r),
-            s: bytes_to_u256(&entry.s),
+            r: bytes_to_u256(&entry.r)?,
+            s: bytes_to_u256(&entry.s)?,
         };
 
         let result = EvmExecutionResult {
             execution: EvmExecution {
-                block_timestamp: UnixTime::from(entry.timestamp),
+                block_timestamp: UnixTime::from(entry.block_timestamp),
                 receipt_applied: false,
                 result: execution_result,
                 output: Bytes(entry.output),
@@ -159,7 +164,7 @@ impl TransactionExecution {
                     topic3: log.topics.get(3).and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
                     data: Bytes(log.data.clone()),
                 }).collect(),
-                gas: (bytes_to_u256(&entry.gas)?).into(),
+                gas: Gas::try_from(bytes_to_u256(&entry.gas)?)?,
                 changes: HashMap::new(), // assuming empty for now
                 deployed_contract_address: entry.deployed_contract_address.map(|addr| Address::new_from_h160(H160::from_slice(&addr))),
             },

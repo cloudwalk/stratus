@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use crate::eth::primitives::U256;
+use ethereum_types::U256;
 
 pub fn u256_to_bytes(u: U256) -> Vec<u8> {
     let mut bytes = [0u8; 32];
