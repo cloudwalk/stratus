@@ -117,8 +117,9 @@ impl TransactionExecution {
                 gas: u256_to_bytes(result.execution.gas.into()),
                 deployed_contract_address: result.execution.deployed_contract_address.map(|addr| addr.as_bytes().to_vec()),
                 gas_limit: u256_to_bytes(input.gas_limit.into()),
-                signer: vec![], //XXX check this field
-                tx_type: None,  //XXX check this field
+                signer: input.signer.as_bytes().to_vec(),
+                tx_type: input.tx_type.map(|t| t.as_u64()),
+                block_timestamp: result.execution.block_timestamp.as_u64(),
             },
         }
     }
