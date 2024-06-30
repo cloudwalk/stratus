@@ -1,13 +1,30 @@
-use display_json::DebugAsJson;
+use std::collections::HashMap;
+use std::str::FromStr;
 
+use display_json::DebugAsJson;
+use ethereum_types::H160;
+use ethereum_types::H256;
+use ethereum_types::U64;
+
+use super::Gas;
 use crate::eth::consensus::append_entry;
 use crate::eth::consensus::utils::*;
 use crate::eth::evm::EvmExecutionResult;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionMetrics;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::Log;
+use crate::eth::primitives::LogTopic;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::Wei;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(DebugAsJson, Clone, strum::EnumIs, serde::Serialize)]
@@ -106,6 +123,66 @@ impl TransactionExecution {
                 block_timestamp: result.execution.block_timestamp.as_u64(),
             },
         }
+    }
+
+    pub fn from_append_entry_transaction(entry: append_entry::TransactionExecutionEntry) -> anyhow::Result<Self> {
+        let execution_result = ExecutionResult::from_str(&entry.result).map_err(|_| anyhow::anyhow!("Invalid execution result: {}", entry.result))?;
+
+        let input = TransactionInput {
+            tx_type: entry.tx_type.map(U64::from),
+            chain_id: entry.chain_id.map(ChainId::from),
+            hash: Hash::new_from_h256(H256::from_slice(&entry.hash)),
+            nonce: Nonce::from(entry.nonce),
+            signer: Address::new_from_h160(H160::from_slice(&entry.signer)),
+            from: Address::new_from_h160(H160::from_slice(&entry.from)),
+            to: entry.to.map(|to| Address::new_from_h160(H160::from_slice(&to))),
+            value: Wei::new(bytes_to_u256(&entry.value)?),
+            input: Bytes(entry.input),
+            gas_limit: Gas::try_from(bytes_to_u256(&entry.gas_limit)?)?,
+            gas_price: Wei::new(bytes_to_u256(&entry.gas_price)?),
+            v: U64::from(entry.v),
+            r: bytes_to_u256(&entry.r)?,
+            s: bytes_to_u256(&entry.s)?,
+        };
+
+        let result = EvmExecutionResult {
+            execution: EvmExecution {
+                block_timestamp: UnixTime::from(entry.block_timestamp),
+                receipt_applied: false,
+                result: execution_result,
+                output: Bytes(entry.output),
+                logs: entry
+                    .logs
+                    .iter()
+                    .map(|log| Log {
+                        address: Address::new_from_h160(H160::from_slice(&log.address)),
+                        topic0: log
+                            .topics
+                            .first()
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        topic1: log
+                            .topics
+                            .get(1)
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        topic2: log
+                            .topics
+                            .get(2)
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        topic3: log
+                            .topics
+                            .get(3)
+                            .and_then(|t| if t.is_empty() { None } else { Some(LogTopic::new(H256::from_slice(t))) }),
+                        data: Bytes(log.data.clone()),
+                    })
+                    .collect(),
+                gas: Gas::try_from(bytes_to_u256(&entry.gas)?)?,
+                changes: HashMap::new(), // assuming empty for now
+                deployed_contract_address: entry.deployed_contract_address.map(|addr| Address::new_from_h160(H160::from_slice(&addr))),
+            },
+            metrics: ExecutionMetrics::default(), // assuming default metrics for now
+        };
+
+        Ok(Self::Local(LocalTransactionExecution { input, result }))
     }
 }
 
