@@ -103,6 +103,7 @@ impl TransactionExecution {
                 gas_limit: u256_to_bytes(input.gas_limit.into()),
                 signer: input.signer.as_bytes().to_vec(),
                 tx_type: input.tx_type.map(|t| t.as_u64()),
+                block_timestamp: result.execution.block_timestamp.as_u64(),
             },
         }
     }

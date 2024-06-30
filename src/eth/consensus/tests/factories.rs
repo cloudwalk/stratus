@@ -70,6 +70,7 @@ pub fn create_mock_transaction_execution_entry() -> TransactionExecutionEntry {
         signer: vec![rand::thread_rng().gen()],
         gas_limit: vec![rand::thread_rng().gen()],
         deployed_contract_address: Some(vec![rand::thread_rng().gen()]),
+        block_timestamp: rand::thread_rng().gen(),
     }
 }
 

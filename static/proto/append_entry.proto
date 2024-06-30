@@ -48,6 +48,7 @@ message TransactionExecutionEntry {
     bytes signer = 27;
     bytes gas_limit = 28;
     optional bytes deployed_contract_address = 30;
+    uint64 block_timestamp = 31;
 }
 
 message AppendTransactionExecutionsRequest {
