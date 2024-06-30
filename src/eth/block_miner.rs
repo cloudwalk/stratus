@@ -205,6 +205,7 @@ impl BlockMiner {
     }
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
+    /// mainly used when is_automine is enabled.
     pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
         let block = self.mine_local()?;
         self.commit(block)
