@@ -79,10 +79,23 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         tracing::info!(executions = executions.len(), "appending executions");
         // TODO commit can be run on a background
-        for execution in &executions {
-            let transaction_execution = TransactionExecution::from_append_entry_transaction(execution);
-            tracing::info!(hash = transaction_execution.hash, "appending execution");
-            consensus.storage.append_transaction(transaction_execution);
+        for execution in executions {
+            match TransactionExecution::from_append_entry_transaction(execution) {
+                Ok(transaction_execution) => {
+                    tracing::info!(hash = %transaction_execution.hash(), "appending execution");
+                    match consensus.storage.append_transaction(transaction_execution) {
+                        Ok(_) => { tracing::info!("transaction execution commited into memory successfully"); }
+                        Err(err) => {
+                            tracing::error!("Failed to commit transaction execution: {:?}", err);
+                            return Err(Status::internal("Failed to commit transaction execution"));
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::error!("Failed to append transaction execution: {:?}", err);
+                    return Err(Status::internal("Failed to parse transaction execution for commit"));
+                }
+            }
         }
 
         #[cfg(feature = "metrics")]
@@ -269,7 +282,7 @@ mod tests {
         });
 
         let response = service.append_transaction_executions(request).await;
-        assert!(response.is_ok());
+        assert!(response.is_ok(), "{}", format!("{:?}", response));
 
         // Check if the log entry was inserted correctly
         let log_entries_storage = &consensus.log_entries_storage;
