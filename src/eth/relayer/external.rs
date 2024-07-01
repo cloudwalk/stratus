@@ -12,6 +12,7 @@ use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::Span;
@@ -40,6 +41,26 @@ use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
 type MismatchedBlocks = HashSet<BlockNumber>;
+
+lazy_static! {
+    static ref SIGNATURES: HashSet<&'static str> = [
+        "PixCashier",
+        "PixCashierv3",
+        "CardPaymentProcessor",
+        "CardPaymentProcessorv2",
+        "CompoundAgent",
+        "BRLCToken::freeze",
+        "BRLCToken::transferFrozen",
+        "BRLCToken::restrictionIncrease",
+        "BRLCToken::restrictionDecrease",
+        "BRLCToken::blocklist",
+        "BRLCToken::unBlocklist",
+        "BRLCToken::blacklist",
+        "BRLCToken::unBlacklist",
+    ]
+    .into_iter()
+    .collect();
+}
 
 #[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum RelayError {
@@ -133,7 +154,11 @@ impl ExternalRelayer {
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
         let mut combined_transactions = vec![];
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
-            if tx.input.extract_function().is_some_and(|sig| sig.contains("PixCashier")) {
+            if tx
+                .input
+                .extract_function()
+                .is_some_and(|sig| SIGNATURES.contains(&sig.as_ref()) || sig.split("::").next().is_some_and(|scope| SIGNATURES.contains(&scope)))
+            {
                 let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
                 if let Some(transaction) = transaction_signed {
                     tx.input = transaction;
