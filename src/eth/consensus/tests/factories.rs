@@ -24,13 +24,18 @@ use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::storage::StratusStorage;
 
-pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>) -> BlockEntry {
+pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>, deterministic_transaction_root: Option<Hash>) -> BlockEntry {
+    let transactions_root = match deterministic_transaction_root {
+        Some(hash) => hash.as_fixed_bytes().to_vec(),
+        None => H256::random().as_bytes().to_vec(),
+    };
+
     BlockEntry {
         number: rand::thread_rng().gen(),
         hash: H256::random().as_bytes().to_vec(),
         parent_hash: H256::random().as_bytes().to_vec(),
         uncle_hash: H256::random().as_bytes().to_vec(),
-        transactions_root: H256::random().as_bytes().to_vec(),
+        transactions_root,
         state_root: H256::random().as_bytes().to_vec(),
         receipts_root: H256::random().as_bytes().to_vec(),
         miner: H160::random().as_bytes().to_vec(),
@@ -45,9 +50,14 @@ pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>) -> BlockEntry {
     }
 }
 
-pub fn create_mock_transaction_execution_entry() -> TransactionExecutionEntry {
+pub fn create_mock_transaction_execution_entry(deterministic_hash: Option<Hash>) -> TransactionExecutionEntry {
+    let hash = match deterministic_hash {
+        Some(hash) => hash.as_fixed_bytes().to_vec(),
+        None => H256::random().as_bytes().to_vec(),
+    };
+
     TransactionExecutionEntry {
-        hash: H256::random().as_bytes().to_vec(),
+        hash,
         nonce: rand::thread_rng().gen(),
         value: vec![rand::thread_rng().gen()],
         gas_price: vec![rand::thread_rng().gen()],
@@ -75,11 +85,11 @@ pub fn create_mock_transaction_execution_entry() -> TransactionExecutionEntry {
 }
 
 pub fn create_mock_log_entry_data_block() -> LogEntryData {
-    LogEntryData::BlockEntry(create_mock_block_entry(vec![]))
+    LogEntryData::BlockEntry(create_mock_block_entry(vec![], None))
 }
 
 pub fn create_mock_log_entry_data_transactions() -> LogEntryData {
-    LogEntryData::TransactionExecutionEntries(vec![create_mock_transaction_execution_entry(), create_mock_transaction_execution_entry()])
+    LogEntryData::TransactionExecutionEntries(vec![create_mock_transaction_execution_entry(None), create_mock_transaction_execution_entry(None)])
 }
 
 pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEntry {
@@ -113,6 +123,8 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
 }
 
 use tonic::service::Interceptor;
+
+use super::Hash;
 
 // Define a simple interceptor that does nothing
 struct MockInterceptor;

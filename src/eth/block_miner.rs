@@ -31,6 +31,8 @@ use crate::ext::DisplayExt;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 
+use super::consensus::append_entry;
+
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 
@@ -332,6 +334,94 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
     }
 
     // TODO: calculate size, state_root, receipts_root, parent_hash
+    Ok(block)
+
+}
+/// Mines transactions and logs, assigning necessary properties like block hash and log index.
+/// This function is used to process transactions both in local block creation and block propagation.
+pub fn assemble_transactions_mined(
+    block: &mut Block,
+    txs: NonEmpty<LocalTransactionExecution>,
+    log_index: &mut Index,
+) {
+    for (tx_idx, tx) in txs.into_iter().enumerate() {
+        let transaction_index = Index::new(tx_idx as u64);
+        let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());
+
+        for mined_log in tx.result.execution.logs.clone() {
+            // Accrue bloom filters for both address and topics to optimize log searching later.
+            block.header.bloom.accrue(BloomInput::Raw(mined_log.address.as_ref()));
+            for topic in mined_log.topics().into_iter() {
+                block.header.bloom.accrue(BloomInput::Raw(topic.as_ref()));
+            }
+
+            // Set block-specific properties for each mined log.
+            let mined_log = LogMined {
+                log: mined_log,
+                transaction_hash: tx.input.hash,
+                transaction_index,
+                log_index: *log_index,
+                block_number: block.header.number,
+                block_hash: block.header.hash,
+            };
+            mined_logs.push(mined_log);
+            *log_index = *log_index + Index::ONE;
+        }
+
+        // Create a mined transaction with all required properties set, including logs.
+        let mined_transaction = TransactionMined {
+            input: tx.input,
+            execution: tx.result.execution,
+            transaction_index,
+            block_number: block.header.number,
+            block_hash: block.header.hash,
+            logs: mined_logs,
+        };
+
+        // Add the mined transaction to the block's list of transactions.
+        block.transactions.push(mined_transaction);
+    }
+}
+
+
+/// Creates a block from propagated transactions. This is used during block synchronization across nodes.
+pub fn block_from_propagation(
+    block_entry: append_entry::BlockEntry,
+    temporary_transactions: Vec<LocalTransactionExecution>,
+) -> anyhow::Result<Block> {
+    // Construct the block header from the propagated block entry.
+    let header = BlockHeader::from_append_entry_block(block_entry.clone())?;
+
+    // Initialize a new block with the provided header.
+    let mut block = Block {
+        header,
+        transactions: Vec::new(),
+    };
+
+    // Mine transactions and logs, setting up all necessary properties.
+    let mut log_index = Index::ZERO;
+
+    if !temporary_transactions.is_empty() {
+        assemble_transactions_mined(&mut block, NonEmpty::from_vec(temporary_transactions).unwrap(), &mut log_index);
+    }
+
+    // Calculate the transactions root and compare it with the one in the block header to ensure integrity.
+    if !block.transactions.is_empty() {
+        let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
+        dbg!(&transactions_hashes);
+        let calculated_transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
+
+        if block.header.transactions_root != calculated_transactions_root {
+            return Err(anyhow::anyhow!(
+                "transactions root mismatch: expected {:?}, calculated {:?}",
+                block.header.transactions_root,
+                calculated_transactions_root
+            ));
+        }
+    }
+
+    // TODO: calculate size, state_root, receipts_root, parent_hash
+
     Ok(block)
 }
 

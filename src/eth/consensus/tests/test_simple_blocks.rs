@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ethereum_types::H256;
+use hex_literal::hex;
 use tokio::sync::Mutex;
 use tonic::Request;
 
@@ -29,14 +30,34 @@ async fn test_append_entries_transaction_executions_and_block() {
         let (leader_address, _) = peers.iter().find(|&(_, (peer, _))| peer.role == Role::Leader).expect("Leader peer not found");
         leader_address.to_string()
     };
-    // Create 3 requests with 3 transactions each, totaling 9 transactions
+
     let total_requests = 3;
     let transactions_per_request = 3;
     let mut all_executions = Vec::new();
     let mut prev_log_index = 0;
 
+    // Provided deterministic hashes
+    let provided_hashes = vec![
+        Hash::new(hex!("60581af145126156b499ac08b42a37a46d9f3b5684a723152d415c2cb9e797f9")),
+        Hash::new(hex!("bceda89e22137dbc65b22313987e2879183a572eb62f4dd63bcacd334d78fa17")),
+        Hash::new(hex!("4c5a9cd79146318ddf66a3eaa3bb01b036616ab745e97f46bd9965e39f8ffaf1")),
+        Hash::new(hex!("69f1e3f3074d3d9711edbf5aea3ea3f4b955a8115a8c46695087f2f2b2c6f343")),
+        Hash::new(hex!("0fbb7855bd2c7add38d3bf2e0e64e000e553c066ef984d0a93c35b4871607d6d")),
+        Hash::new(hex!("cec569fe883d36a17addacfc5c5b21fdccad38a7eec862cbe02d40e20cb602eb")),
+        Hash::new(hex!("66f7f14c633fe76d08d690d25b9fda8094b64a9e5c6b0dba3a410eb5181ccb62")),
+        Hash::new(hex!("6e8fed1ab67fa3955c1c32e8ab568d1ce6e282ccea06844029b954d2586cb979")),
+        Hash::new(hex!("9c4babff06b9ea539e4221102069e6fa3775877fa8fc6316e5df6bfe909d56e2")),
+    ];
+
+    let mut hash_index = 0;
     for _ in 0..total_requests {
-        let executions: Vec<TransactionExecutionEntry> = (0..transactions_per_request).map(|_| create_mock_transaction_execution_entry()).collect();
+        let executions: Vec<TransactionExecutionEntry> = (0..transactions_per_request)
+            .map(|_| {
+                let entry = create_mock_transaction_execution_entry(Some(provided_hashes[hash_index]));
+                hash_index += 1;
+                entry
+            })
+            .collect();
 
         // Store all executions for later verification
         all_executions.extend(executions.clone());
@@ -63,7 +84,7 @@ async fn test_append_entries_transaction_executions_and_block() {
     // Create and append block with transaction hashes
     let transaction_hashes: Vec<Vec<u8>> = all_executions.iter().map(|e| e.hash.clone()).collect();
 
-    let block_entry = create_mock_block_entry(transaction_hashes.clone());
+    let block_entry = create_mock_block_entry(transaction_hashes.clone(), Some(Hash::new(hex!("f07543db1bff9fa1a639578e2d90949a56822c108c63ca1b2f2a55deb2d562fc"))));
 
     let block_request = Request::new(AppendBlockCommitRequest {
         term: 1,
@@ -74,7 +95,7 @@ async fn test_append_entries_transaction_executions_and_block() {
     });
 
     let block_response = service.append_block_commit(block_request).await;
-    assert!(block_response.is_ok());
+    assert!(block_response.is_ok(), "{}", format!("{:?}", block_response));
     let response_inner = block_response.unwrap().into_inner();
     assert_eq!(response_inner.status, StatusCode::AppendSuccess as i32);
 
