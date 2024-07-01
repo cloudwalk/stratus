@@ -184,6 +184,13 @@ impl TransactionExecution {
 
         Ok(Self::Local(LocalTransactionExecution { input, result }))
     }
+
+    pub fn inner_local(&self) -> Option<LocalTransactionExecution> {
+        match self {
+            Self::Local(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize)]
