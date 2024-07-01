@@ -13,11 +13,12 @@ use super::append_entry::AppendTransactionExecutionsResponse;
 use super::append_entry::RequestVoteRequest;
 use super::append_entry::RequestVoteResponse;
 use super::append_entry::StatusCode;
+use crate::eth::block_miner::block_from_propagation;
 use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
-use crate::eth::primitives::Block;
+use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::Consensus;
 #[cfg(feature = "metrics")]
@@ -164,11 +165,19 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
-        let block_result = Block::from_append_entry_block(block_entry.clone());
+        //TODO FIXME XXX there are a lot of operations that we must do at the temp storage and maybe some at the perm storage, such as clearing the transactions and starting a new current block
+        let pending_transactions = consensus.storage.pending_transactions().map_err(|e| {
+            tracing::error!("Failed to get pending transactions: {:?}", e);
+            Status::internal("Failed to get pending transactions")
+        })?;
+
+        let transaction_executions: Vec<LocalTransactionExecution> = pending_transactions.iter().filter_map(|tx| tx.inner_local()).collect();
+
+        let block_result = block_from_propagation(block_entry.clone(), transaction_executions);
         match block_result {
-            Ok(block) => match consensus.storage.save_block(block) {
+            Ok(block) => match consensus.storage.save_block(block.clone()) {
                 Ok(_) => {
-                    tracing::info!(block_number = block_entry.number, "block saved successfully");
+                    tracing::info!(block_number = %block.header.number, "block saved successfully");
                 }
                 Err(err) => {
                     tracing::error!("failed to save block: {:?}", err);
@@ -177,7 +186,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             },
             Err(err) => {
                 tracing::error!("failed to parse block: {:?}", err);
-                return Err(Status::internal("failed to save block"));
+                return Err(Status::internal("failed to parse block"));
             }
         }
 
@@ -273,7 +282,7 @@ mod tests {
 
         consensus.set_role(Role::Follower);
 
-        let executions = vec![create_mock_transaction_execution_entry()];
+        let executions = vec![create_mock_transaction_execution_entry(None)];
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
@@ -369,7 +378,7 @@ mod tests {
             leader_id,
             prev_log_index: 0,
             prev_log_term: 0,
-            block_entry: Some(create_mock_block_entry(vec![])),
+            block_entry: Some(create_mock_block_entry(vec![], None)),
         });
 
         let response = service.append_block_commit(request).await;
