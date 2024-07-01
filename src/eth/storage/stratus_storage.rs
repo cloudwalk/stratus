@@ -310,8 +310,14 @@ impl StratusStorage {
         })
     }
 
+    /// append a transaction to the current block during propagation (consensus)
     pub fn append_transaction(&self, tx: TransactionExecution) -> anyhow::Result<()> {
         self.temp.append_transaction(tx)
+    }
+
+    /// gives the list of pending transactions on current block
+    pub fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
+        self.temp.pending_transactions()
     }
 
     #[tracing::instrument(name = "storage::finish_block", skip_all, fields(block_number))]
