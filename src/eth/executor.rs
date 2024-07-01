@@ -369,11 +369,14 @@ impl Executor {
         }
 
         // executes transaction until no more conflicts
-        let mut tx_attempt = 0;
+        let mut attempt = 0;
         loop {
+            attempt += 1;
+
             // track
             let _span = info_span!(
                 "executor::local_transaction_attempt",
+                attempt = field::Empty,
                 tx_hash = field::Empty,
                 tx_from = field::Empty,
                 tx_to = field::Empty,
@@ -381,14 +384,14 @@ impl Executor {
             )
             .entered();
             Span::with(|s| {
-                s.rec_str("tx_attempt", &tx_attempt);
+                s.rec_str("attempt", &attempt);
                 s.rec_str("tx_hash", &tx_input.hash);
                 s.rec_str("tx_from", &tx_input.signer);
                 s.rec_opt("tx_to", &tx_input.to);
                 s.rec_str("tx_nonce", &tx_input.nonce);
             });
             tracing::info!(
-                %tx_attempt,
+                %attempt,
                 tx_hash = %tx_input.hash,
                 tx_nonce = %tx_input.nonce,
                 tx_from = ?tx_input.from,
@@ -416,9 +419,8 @@ impl Executor {
                 }
                 Err(e) =>
                     if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
-                        tracing::warn!(%tx_attempt, ?conflicts, "temporary storage conflict detected when saving execution");
-                        tx_attempt += 1;
-                        if tx_attempt > max_attempts {
+                        tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
+                        if attempt >= max_attempts {
                             return Err(e);
                         }
                         continue;
