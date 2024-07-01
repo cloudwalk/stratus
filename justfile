@@ -530,7 +530,7 @@ hive-build-client:
     docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .
 
 # Run Hive test
-hive:
+hive: _check-if-go-is-installed
     if ! docker images | grep -q stratus_base; then \
         echo "Building Docker image..."; \
         docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .; \
@@ -542,6 +542,14 @@ hive:
 #    cd hive && sudo ./hive --client stratus --sim stratus/rpc --sim.parallelism 10 --loglevel 5 --docker.output
 
 # Run Hiveview
-hiveview:
+hiveview: _check-if-go-is-installed
     cd hive && go build ./cmd/hiveview
     ./hive/hiveview --serve --addr 0.0.0.0:8080 --logdir ./hive/workspace/logs/
+
+# Check if `go` is installed
+_check-if-go-is-installed:
+    @if ! which go &> /dev/null; then \
+        echo "Go isn't installed but it is required, exiting."; \
+        echo 'In MacOS, install it with `brew install go`.'; \
+        exit 1; \
+    fi
