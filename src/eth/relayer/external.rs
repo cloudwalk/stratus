@@ -71,17 +71,17 @@ impl TxSigner {
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
         tracing::info!(?tx_input.hash, "signing transaction");
-
+        let gas_limit = tx_input.gas_limit.as_u64() * 10;
         let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
             .nonce(self.nonce)
-            .gas(tx_input.gas_limit.as_u64() * 10);
+            .gas(gas_limit);
 
         let req = TypedTransaction::Legacy(tx);
         let signature = self.wallet.sign_transaction_sync(&req).unwrap();
         let new_hash = req.hash(&signature);
 
         tx_input.signer = self.wallet.address().into();
-        tx_input.gas_limit = (tx_input.gas_limit.as_u64() * 10).into();
+        tx_input.gas_limit = gas_limit.into();
         // None is Legacy
         tx_input.tx_type = None;
         tx_input.hash = new_hash.into();
@@ -238,7 +238,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 5
+                LIMIT 3
             )
             UPDATE relayer_blocks r
                 SET started = true
@@ -342,6 +342,7 @@ impl ExternalRelayer {
             };
             if let Some(substrate_receipt) = receipt {
                 let _ = stratus_tx.execution.apply_receipt(&substrate_receipt);
+                stratus_tx.execution.fix_logs_relayer_signer(&substrate_receipt);
                 if let Err(compare_error) = stratus_tx.execution.compare_with_receipt(&substrate_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
