@@ -567,7 +567,7 @@ mod tests {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
-        let executions = vec![create_mock_transaction_execution_entry()];
+        let executions = vec![create_mock_transaction_execution_entry(None)];
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
@@ -632,7 +632,7 @@ mod tests {
             .save_log_entry(1, 2, mismatched_log_entry.clone(), "transaction")
             .unwrap();
 
-        let executions = vec![create_mock_transaction_execution_entry()];
+        let executions = vec![create_mock_transaction_execution_entry(None)];
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
