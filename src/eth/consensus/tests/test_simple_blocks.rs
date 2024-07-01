@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use ethereum_types::H160;
 use ethereum_types::H256;
 use hex_literal::hex;
 use tokio::sync::Mutex;
@@ -15,8 +16,13 @@ use crate::eth::consensus::AppendEntryServiceImpl;
 use crate::eth::consensus::Role;
 use crate::eth::consensus::StatusCode;
 use crate::eth::consensus::TransactionExecutionEntry;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StoragePointInTime;
 
 #[tokio::test]
 async fn test_append_entries_transaction_executions_and_block() {
@@ -105,36 +111,53 @@ async fn test_append_entries_transaction_executions_and_block() {
     let storage = &consensus.storage;
 
     // Verify the block was saved with the correct transaction hashes
-    let _saved_block = storage.read_block(&BlockFilter::Latest).unwrap().unwrap();
-    //XXX assert_eq!(saved_block.transactions.len(), all_executions.len());
+    let saved_block = storage.read_block(&BlockFilter::Latest).unwrap().unwrap();
+    assert_eq!(saved_block.transactions.len(), all_executions.len());
 
-    //XXX let saved_transaction_hashes: Vec<String> = saved_block.transactions.iter().map(|tx| tx.input.hash.clone()).collect();
-    //XXX assert_eq!(saved_transaction_hashes, transaction_hashes);
+    let saved_transaction_hashes: Vec<Hash> = saved_block.transactions.iter().map(|tx| tx.input.hash.clone()).collect();
+    let expected_transaction_hashes: Vec<Hash> = transaction_hashes.iter().map(|hash| Hash::new_from_h256(H256::from_slice(hash))).collect();
 
-    //XXX // Test reading accounts
-    //XXX let account_address = Address::from(H256::random());
-    //XXX let account = storage.read_account(&account_address, &StoragePointInTime::Present).unwrap();
-    //XXX assert_eq!(account.address, account_address);
+    assert_eq!(saved_transaction_hashes, expected_transaction_hashes);
 
-    //XXX // Test reading slots
-    //XXX let slot_index = SlotIndex::new(0);
-    //XXX let slot = storage.read_slot(&account.address, &slot_index, &StoragePointInTime::Present).unwrap();
-    //XXX assert_eq!(slot.index, slot_index);
-
-    //XXX // Test reading execution
+    // Test reading transaction execution
     let tx_hash = all_executions[0].hash.clone();
     let saved_tx = storage.read_transaction(&Hash::new_from_h256(H256::from_slice(&tx_hash))).unwrap();
     assert!(saved_tx.is_some());
 
-    //XXX // Test reading logs
-    //XXX let log_filter = LogFilter::default();
-    //XXX let logs = storage.read_logs(&log_filter).unwrap();
-    //XXX assert!(logs.is_empty());
+    // Test reading logs
+    let log_filter = LogFilter::default();
+    let logs = storage.read_logs(&log_filter).unwrap();
+    assert!(logs.is_empty());
 
-    //XXX // Test reading block numbers
-    //XXX let active_block_number = storage.read_active_block_number().unwrap().unwrap();
-    //XXX assert!(active_block_number > BlockNumber::ZERO);
+    // Test reading execution
+    let tx_hash = all_executions[0].hash.clone();
+    let saved_tx = storage.read_transaction(&Hash::new_from_h256(H256::from_slice(&tx_hash))).unwrap();
+    assert!(saved_tx.is_some());
 
-    //XXX let mined_block_number = storage.read_mined_block_number().unwrap();
-    //XXX assert!(mined_block_number >= BlockNumber::ZERO);
+    // Test reading logs
+    let log_filter = LogFilter::default();
+    let logs = storage.read_logs(&log_filter).unwrap();
+    assert!(logs.is_empty());
+
+    // Test reading block numbers
+    let active_block_number = storage.read_active_block_number().unwrap().unwrap();
+    assert!(active_block_number > BlockNumber::ZERO);
+
+    let mined_block_number = storage.read_mined_block_number().unwrap();
+    assert!(mined_block_number >= BlockNumber::ZERO);
+
+    for execution in all_executions.iter() {
+        let account = storage.read_account(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present).unwrap();
+        //TODO test account details
+    }
+
+    for execution in all_executions.iter() {
+        let slot = storage.read_slot(&Address::new_from_h160(H160::from_slice(&execution.from)), &SlotIndex::ZERO, &StoragePointInTime::Present).unwrap();
+        //TODO test slot details
+    }
+
+    for execution in all_executions.iter() {
+        let slots = storage.read_all_slots(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present).unwrap();
+        //TODO test slots details
+    }
 }
