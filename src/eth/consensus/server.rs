@@ -104,6 +104,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             }
         }
 
+        consensus.prev_log_index.store(index, Ordering::SeqCst);
         consensus.reset_heartbeat_signal.notify_waiters();
 
         tracing::info!(executions = executions.len(), "appending executions");
@@ -128,7 +129,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 }
             }
         }
-        consensus.prev_log_index.store(index, Ordering::SeqCst);
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
@@ -240,8 +240,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
             }
         }
 
-        consensus.reset_heartbeat_signal.notify_waiters();
         consensus.prev_log_index.store(index, Ordering::SeqCst);
+        consensus.reset_heartbeat_signal.notify_waiters();
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
