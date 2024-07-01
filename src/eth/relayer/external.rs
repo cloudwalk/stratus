@@ -49,14 +49,14 @@ lazy_static! {
         "CardPaymentProcessor",
         "CardPaymentProcessorv2",
         "CompoundAgent",
-        "BRLCToken::freeze",
-        "BRLCToken::transferFrozen",
-        "BRLCToken::restrictionIncrease",
-        "BRLCToken::restrictionDecrease",
-        "BRLCToken::blocklist",
-        "BRLCToken::unBlocklist",
-        "BRLCToken::blacklist",
-        "BRLCToken::unBlacklist",
+        "BRLCToken::freeze(address,uint256)",
+        "BRLCToken::transferFrozen(address,address,uint256)",
+        "BRLCToken::restrictionIncrease(address,bytes32,uint256)",
+        "BRLCToken::restrictionDecrease(address,bytes32,uint256)",
+        "BRLCToken::blocklist(address)",
+        "BRLCToken::unBlocklist(address)",
+        "BRLCToken::blacklist(address)",
+        "BRLCToken::unBlacklist(address)",
     ]
     .into_iter()
     .collect();
