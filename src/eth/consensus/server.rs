@@ -59,6 +59,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
         }
 
+        if request_inner.term > current_term {
+            consensus.current_term.store(request_inner.term, Ordering::SeqCst);
+            if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+                consensus.update_leader(leader_peer_address).await;
+            }
+        }
+
         let executions = request_inner.executions;
         let index = request_inner.prev_log_index + 1;
         let term = request_inner.prev_log_term;
@@ -93,18 +100,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
             }
-
-            if request_inner.term > current_term {
-                consensus.current_term.store(request_inner.term, Ordering::SeqCst);
-            }
         }
 
         //TODO send the executions to the Storage
         tracing::info!(executions = executions.len(), "appending executions");
 
-        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
-            consensus.update_leader(leader_peer_address).await;
-        }
         consensus.reset_heartbeat_signal.notify_waiters();
         consensus.prev_log_index.store(index, Ordering::SeqCst);
 
@@ -138,6 +138,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
             let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
             tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
             return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+        }
+        
+        if request_inner.term > current_term {
+            consensus.current_term.store(request_inner.term, Ordering::SeqCst);
+            if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+                consensus.update_leader(leader_peer_address).await;
+            }
         }
 
         let Some(block_entry) = request_inner.block_entry else {
@@ -178,10 +185,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
             }
-
-            if request_inner.term > current_term {
-                consensus.current_term.store(request_inner.term, Ordering::SeqCst);
-            }
         }
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
@@ -198,9 +201,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
-        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
-            consensus.update_leader(leader_peer_address).await;
-        }
         consensus.reset_heartbeat_signal.notify_waiters();
         consensus.prev_log_index.store(index, Ordering::SeqCst);
 
