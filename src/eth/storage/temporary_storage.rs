@@ -35,11 +35,11 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     /// Appends a transaction to the active block.
     fn append_transaction(&self, tx: TransactionExecution) -> anyhow::Result<()>;
 
-    /// Retrieves the pending transactions of the active block.
-    fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
-
     /// Finishes the mining of the active block and starts a new block.
     fn finish_block(&self) -> anyhow::Result<PendingBlock>;
+
+    /// Retrieves the pending transactions of the active block.
+    fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
 
     /// Retrieves a transaction from the storage.
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>>;
