@@ -41,10 +41,9 @@ use tonic::transport::Server;
 use tonic::Request;
 
 use crate::eth::primitives::Hash;
+use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
-use crate::eth::storage::StratusStorage;
-
 use crate::ext::SleepReason;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;

@@ -161,7 +161,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
             return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
         }
-        
+
         if request_inner.term > current_term {
             consensus.current_term.store(request_inner.term, Ordering::SeqCst);
             if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
