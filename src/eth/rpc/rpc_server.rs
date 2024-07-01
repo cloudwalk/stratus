@@ -1,5 +1,6 @@
 //! RPC server for HTTP and WS.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -332,7 +333,7 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Exten
             ).collect_vec()
         ,
         "logs":
-            logs.iter().map(|s|
+            logs.values().flat_map(HashMap::values).map(|s|
                 json!({
                     "created_at": s.created_at,
                     "client": s.client,
@@ -541,7 +542,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
-            Ok(hex_num(result.gas))
+            Ok(hex_num(result.gas.as_u64() + (result.gas.as_u64() / 10 + 1)))
         }
 
         // result is failure

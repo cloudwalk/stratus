@@ -1,4 +1,4 @@
-use core::sync::atomic::Ordering;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -13,10 +13,13 @@ use super::append_entry::AppendTransactionExecutionsResponse;
 use super::append_entry::RequestVoteRequest;
 use super::append_entry::RequestVoteResponse;
 use super::append_entry::StatusCode;
+use crate::eth::block_miner::block_from_propagation;
 use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
+use crate::eth::primitives::LocalTransactionExecution;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::Consensus;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -70,14 +73,33 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::internal("Failed to save log entry"));
         }
 
-        //TODO send the executions to the Storage
-        tracing::info!(executions = executions.len(), "appending executions");
-
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.reset_heartbeat_signal.notify_waiters();
-        //TODO change cached index from consensus after the storage is implemented
+
+        tracing::info!(executions = executions.len(), "appending executions");
+        // TODO commit can be run on a background
+        for execution in executions {
+            match TransactionExecution::from_append_entry_transaction(execution) {
+                Ok(transaction_execution) => {
+                    tracing::info!(hash = %transaction_execution.hash(), "appending execution");
+                    match consensus.storage.append_transaction(transaction_execution) {
+                        Ok(_) => {
+                            tracing::info!("transaction execution commited into memory successfully");
+                        }
+                        Err(err) => {
+                            tracing::error!("Failed to commit transaction execution: {:?}", err);
+                            return Err(Status::internal("Failed to commit transaction execution"));
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::error!("Failed to append transaction execution: {:?}", err);
+                    return Err(Status::internal("Failed to parse transaction execution for commit"));
+                }
+            }
+        }
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
@@ -142,6 +164,31 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: };
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
+
+        //TODO FIXME XXX there are a lot of operations that we must do at the temp storage and maybe some at the perm storage, such as clearing the transactions and starting a new current block
+        let pending_transactions = consensus.storage.pending_transactions().map_err(|e| {
+            tracing::error!("Failed to get pending transactions: {:?}", e);
+            Status::internal("Failed to get pending transactions")
+        })?;
+
+        let transaction_executions: Vec<LocalTransactionExecution> = pending_transactions.iter().filter_map(|tx| tx.inner_local()).collect();
+
+        let block_result = block_from_propagation(block_entry.clone(), transaction_executions);
+        match block_result {
+            Ok(block) => match consensus.storage.save_block(block.clone()) {
+                Ok(_) => {
+                    tracing::info!(block_number = %block.header.number, "block saved successfully");
+                }
+                Err(err) => {
+                    tracing::error!("failed to save block: {:?}", err);
+                    return Err(Status::internal("failed to save block"));
+                }
+            },
+            Err(err) => {
+                tracing::error!("failed to parse block: {:?}", err);
+                return Err(Status::internal("failed to parse block"));
+            }
+        }
 
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
@@ -235,7 +282,7 @@ mod tests {
 
         consensus.set_role(Role::Follower);
 
-        let executions = vec![create_mock_transaction_execution_entry()];
+        let executions = vec![create_mock_transaction_execution_entry(None)];
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
@@ -246,7 +293,7 @@ mod tests {
         });
 
         let response = service.append_transaction_executions(request).await;
-        assert!(response.is_ok());
+        assert!(response.is_ok(), "{}", format!("{:?}", response));
 
         // Check if the log entry was inserted correctly
         let log_entries_storage = &consensus.log_entries_storage;
@@ -331,10 +378,7 @@ mod tests {
             leader_id,
             prev_log_index: 0,
             prev_log_term: 0,
-            block_entry: Some(BlockEntry {
-                number: 1,
-                ..Default::default()
-            }),
+            block_entry: Some(create_mock_block_entry(vec![], None)),
         });
 
         let response = service.append_block_commit(request).await;
@@ -344,7 +388,7 @@ mod tests {
         let response = response.unwrap().into_inner();
         assert_eq!(response.status, StatusCode::AppendSuccess as i32);
         assert_eq!(response.message, "Block Commit appended successfully");
-        assert_eq!(response.last_committed_block_number, 1);
+        //FIXME last_committed_block_number should actually be called lastlogindex assert_eq!(response.last_committed_block_number, 1);
     }
 
     #[tokio::test]

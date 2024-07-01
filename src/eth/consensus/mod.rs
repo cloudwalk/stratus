@@ -483,7 +483,7 @@ impl Consensus {
                                 let current_term = consensus.current_term.load(Ordering::SeqCst);
                                 tracing::debug!(current_term, "Current term loaded");
 
-                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.to_string().into_bytes()).collect();
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
 
                                 match consensus.log_entries_storage.save_log_entry(
                                     last_index + 1,
@@ -505,7 +505,7 @@ impl Consensus {
                             }
                             #[cfg(not(feature = "rocks"))]
                             {
-                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.to_string().into_bytes()).collect();
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
                                 let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
                                 if consensus.broadcast_sender.send(block_entry).is_err() {
                                     tracing::error!("Failed to broadcast block");

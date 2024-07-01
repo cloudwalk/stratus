@@ -26,7 +26,6 @@ message Log {
     bytes address = 1;
     repeated bytes topics = 2;
     bytes data = 3;
-    uint64 log_index = 4;
 }
 
 message TransactionExecutionEntry {
@@ -43,21 +42,13 @@ message TransactionExecutionEntry {
     bytes output = 11;
     bytes from = 12;
     optional bytes to = 13;
-    uint64 transaction_index = 16;
     repeated Log logs = 17;
     bytes gas = 18;
-    bytes receipt_cumulative_gas_used = 19;
-    bytes receipt_gas_used = 20;
-    bytes receipt_contract_address = 21;
-    uint32 receipt_status = 22;
-    bytes receipt_logs_bloom = 23;
-    bytes receipt_effective_gas_price = 24;
-    uint64 block_number = 25;
     optional uint64 tx_type = 26;
     bytes signer = 27;
     bytes gas_limit = 28;
-    bool receipt_applied = 29;
     optional bytes deployed_contract_address = 30;
+    uint64 block_timestamp = 31;
 }
 
 message AppendTransactionExecutionsRequest {
