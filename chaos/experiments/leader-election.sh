@@ -132,7 +132,7 @@ check_leader() {
     # Check the response for specific strings to determine the node status
     if [[ "$response" == *"append_transaction_executions called on leader node"* ]]; then
         return 0 # Success exit code for leader
-    elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
+    else
         return 1 # Failure exit code for non-leader
     fi
 }
