@@ -217,6 +217,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_account", skip_all, fields(address, point_in_time))]
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+        #[cfg(feature = "expensive-spans")]
         Span::with(|s| {
             s.rec_str("address", address);
             s.rec_str("point_in_time", point_in_time);
@@ -253,6 +254,7 @@ impl StratusStorage {
 
     #[tracing::instrument(name = "storage::read_slot", skip_all, fields(address, index, point_in_time))]
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+        #[cfg(feature = "expensive-spans")]
         Span::with(|s| {
             s.rec_str("address", address);
             s.rec_str("index", index);
