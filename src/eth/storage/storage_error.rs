@@ -1,6 +1,6 @@
 use crate::eth::primitives::ExecutionConflicts;
 
-#[derive(Debug, thiserror::Error, derive_new::new)]
+#[derive(Debug, thiserror::Error, strum::EnumIs, derive_new::new)]
 pub enum StorageError {
     /// Generic error interacting with the storage.
     #[error("Storage error: {0}")]
