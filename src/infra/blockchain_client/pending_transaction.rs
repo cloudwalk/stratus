@@ -72,12 +72,12 @@ pub struct PendingTransaction<'a> {
 
 impl<'a> PendingTransaction<'a> {
     pub fn new(tx_hash: Hash, provider: &'a BlockchainClient) -> Self {
-        let delay = Box::pin(Delay::new(Duration::from_millis(5)));
+        let delay = Box::pin(Delay::new(Duration::from_millis(100)));
         PendingTransaction {
             state: PendingTxState::InitialDelay(delay),
             provider,
             tx_hash,
-            interval: Box::new(interval(Duration::from_millis(10))),
+            interval: Box::new(interval(Duration::from_millis(20))),
             retries_remaining: 200,
         }
     }
@@ -133,7 +133,6 @@ impl<'a> Future for PendingTransaction<'a> {
                 // If it hasn't confirmed yet, poll again later
                 let tx = tx_opt.unwrap();
                 if tx.block_number.is_none() {
-                    tracing::info!(?tx, "BLOCK NOT MINED");
                     *this.state = PendingTxState::PausedGettingTx;
                     ctx.waker().wake_by_ref();
                     return Poll::Pending;
