@@ -77,7 +77,7 @@ impl InMemoryTemporaryStorageState {
     fn require_active_block(&mut self) -> anyhow::Result<&PendingBlock> {
         match &self.block {
             Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"),
+            None => log_and_err!("no pending block being mined"), // try calling set_active_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
 
@@ -85,7 +85,7 @@ impl InMemoryTemporaryStorageState {
     fn require_active_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
         match &mut self.block {
             Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"),
+            None => log_and_err!("no pending block being mined"), // try calling set_active_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
 }
@@ -188,6 +188,20 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         states.head.require_active_block_mut()?.push_transaction(tx);
 
         Ok(())
+    }
+
+    // appends transactions to the pending block
+    // also make them available as a cache for queries
+    fn append_transaction(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        let mut states = self.lock_write();
+        states.head.require_active_block_mut()?.push_transaction(tx);
+        Ok(())
+    }
+
+    fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
+        let states = self.lock_read();
+        let Some(ref pending_block) = states.head.block else { return Ok(vec![]) };
+        Ok(pending_block.tx_executions.clone().into_iter().map(|(_, tx)| tx.clone()).collect())
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
