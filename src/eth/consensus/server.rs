@@ -65,6 +65,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         if request_inner.term > current_term {
             consensus.current_term.store(request_inner.term, Ordering::SeqCst);
             if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+                tracing::info!(leader_address = %leader_peer_address, "updating leader due to received term {} greater than current term {}", request_inner.term, current_term);
                 consensus.update_leader(leader_peer_address).await;
             }
         }
@@ -166,6 +167,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         if request_inner.term > current_term {
             consensus.current_term.store(request_inner.term, Ordering::SeqCst);
             if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+                tracing::info!(leader_address = %leader_peer_address, "updating leader due to received term {} greater than current term {}", request_inner.term, current_term);
                 consensus.update_leader(leader_peer_address).await;
             }
         }
@@ -204,7 +206,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             }
             tracing::info!(number = block_entry.number, "appending new block");
 
-            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
+            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
             }
