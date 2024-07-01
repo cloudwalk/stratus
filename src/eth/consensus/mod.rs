@@ -211,7 +211,6 @@ impl Consensus {
 
         #[cfg(not(feature = "rocks"))]
         {
-            log_entries_storage = None;
             current_term = 0;
             prev_log_index = 0;
         }
