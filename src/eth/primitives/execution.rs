@@ -184,7 +184,7 @@ impl EvmExecution {
             let (Some(_), Some(source)) = (execution_log.topic3, receipt_log.topics.get(3)) else {
                 continue;
             };
-            execution_log.topic3 = Some(source.clone().into());
+            execution_log.topic3 = Some((*source).into());
         }
     }
 
