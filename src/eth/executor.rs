@@ -31,7 +31,6 @@ use crate::ext::to_json_string;
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
-use crate::log_and_err;
 use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
@@ -59,71 +58,21 @@ impl EvmTask {
 // Evm communication channels
 // -----------------------------------------------------------------------------
 
-struct EvmTx {
+/// Manages EVM pool and communication channels.
+struct Evms {
     /// Shared-pool of EVMs used for parallel execution of transactions. Usually contains multiple EVMs.
-    pub shared: crossbeam_channel::Sender<EvmTask>,
+    pub tx_parallel: crossbeam_channel::Sender<EvmTask>,
 
     /// Serial-pool of EVMs used for serial execution of transactions. Usually contains a single EVM.
-    pub serial: crossbeam_channel::Sender<EvmTask>,
+    pub tx_serial: crossbeam_channel::Sender<EvmTask>,
+
+    /// Shared-pool of EVMs used for parallel execution of calls (eth_call and eth_estimateGas). Usually contains multiple EVMs.
+    pub call: crossbeam_channel::Sender<EvmTask>,
 }
 
-impl EvmTx {
-    /// Executes a transaction in the shared pool of EVMs.
-    fn execute_in_shared(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
-        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
-        let task = EvmTask::new(evm_input, execution_tx);
-        let _ = self.shared.send(task);
-        execution_rx.recv()?
-    }
-
-    /// Executes a transaction in the serial pool of EVMs.
-    fn execute_in_serial(&self, evm_input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
-        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
-        let task = EvmTask::new(evm_input, execution_tx);
-        let _ = self.serial.send(task);
-        execution_rx.recv()?
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Executor
-// -----------------------------------------------------------------------------
-
-pub struct Executor {
-    /// Channels to send transactions to background EVMs.
-    evms: EvmTx,
-
-    // Number of running EVMs.
-    #[allow(unused)]
-    config: EvmConfig,
-
-    /// Mutex-wrapped miner for creating new blockchain blocks.
-    miner: Arc<BlockMiner>,
-
-    /// Shared storage backend for persisting blockchain state.
-    storage: Arc<StratusStorage>,
-}
-
-impl Executor {
-    /// Creates a new [`Executor`].
-    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, config: EvmConfig) -> Self {
-        tracing::info!(?config, "creating executor");
-
-        let evm_tx = Self::spawn_evms(Arc::clone(&storage), &config);
-        Self {
-            evms: evm_tx,
-            config,
-            miner,
-            storage,
-        }
-    }
-
+impl Evms {
     /// Spawns EVM tasks in background.
-    fn spawn_evms(storage: Arc<StratusStorage>, config: &EvmConfig) -> EvmTx {
-        let (evm_shared_tx, evm_shared_rx) = crossbeam_channel::unbounded::<EvmTask>();
-        let (evm_serial_tx, evm_serial_rx) = crossbeam_channel::unbounded::<EvmTask>(); // TODO: maybe crossbeam is not the best to be used here, but it's fine for now
-        let chain_id = config.chain_id;
-
+    fn spawn(storage: Arc<StratusStorage>, config: &EvmConfig) -> Self {
         fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, chain_id: ChainId, task_rx: crossbeam_channel::Receiver<EvmTask>) {
             let mut evm = Revm::new(storage, chain_id);
 
@@ -144,21 +93,90 @@ impl Executor {
             warn_task_tx_closed(task_name);
         }
 
-        // spawn shared evms
+        let chain_id = config.chain_id;
+
+        // spawn parallel transactions evms
+        let (evm_parallel_tx, evm_parallel_rx) = crossbeam_channel::unbounded::<EvmTask>();
         for evm_index in 1..=config.num_evms {
             let evm_storage = Arc::clone(&storage);
-            let evm_rx = evm_shared_rx.clone();
-            let task_name = format!("evm-shared-{}", evm_index);
-            spawn_blocking_named_or_thread(&format!("executor::{}", task_name), move || evm_loop(&task_name, evm_storage, chain_id, evm_rx));
+            let evm_parallel_rx = evm_parallel_rx.clone();
+            let task_name = format!("evm-tx-parallel-{}", evm_index);
+            spawn_blocking_named_or_thread(&format!("executor::{}", task_name), move || {
+                evm_loop(&task_name, evm_storage, chain_id, evm_parallel_rx);
+            });
         }
 
-        // spawn serial execution evm
-        spawn_blocking_named_or_thread("executor::evm-serial", move || evm_loop("evm-serial", storage, chain_id, evm_serial_rx));
+        // spawn serial transaction execution evm
+        let (evm_serial_tx, evm_serial_rx) = crossbeam_channel::unbounded::<EvmTask>(); // TODO: maybe crossbeam is not the best to be used here, but it's fine for now
+        let evm_storage = Arc::clone(&storage);
+        spawn_blocking_named_or_thread("executor::evm-tx-serial", move || evm_loop("evm-serial", evm_storage, chain_id, evm_serial_rx));
 
-        EvmTx {
-            shared: evm_shared_tx,
-            serial: evm_serial_tx,
+        // spawn paralell call evms
+        let (evm_call_tx, evm_call_rx) = crossbeam_channel::unbounded::<EvmTask>();
+        for evm_index in 1..=config.num_evms {
+            let evm_storage = Arc::clone(&storage);
+            let evm_call_rx = evm_call_rx.clone();
+            let task_name = format!("evm-call-{}", evm_index);
+            spawn_blocking_named_or_thread(&format!("executor::{}", task_name), move || {
+                evm_loop(&task_name, evm_storage, chain_id, evm_call_rx);
+            });
         }
+
+        Evms {
+            tx_parallel: evm_parallel_tx,
+            tx_serial: evm_serial_tx,
+            call: evm_call_tx,
+        }
+    }
+
+    /// Executes a transaction in the specified route.
+    fn execute(&self, evm_input: EvmInput, route: EvmRoute) -> anyhow::Result<EvmExecutionResult> {
+        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
+
+        let task = EvmTask::new(evm_input, execution_tx);
+        let _ = match route {
+            EvmRoute::Parallel => self.tx_parallel.send(task),
+            EvmRoute::Serial => self.tx_serial.send(task),
+            EvmRoute::Call => self.call.send(task),
+        };
+
+        execution_rx.recv()?
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum EvmRoute {
+    Parallel,
+    Serial,
+    Call,
+}
+
+// -----------------------------------------------------------------------------
+// Executor
+// -----------------------------------------------------------------------------
+
+pub struct Executor {
+    /// Channels to send transactions to background EVMs.
+    evms: Evms,
+
+    // Number of running EVMs.
+    #[allow(unused)]
+    config: EvmConfig,
+
+    /// Mutex-wrapped miner for creating new blockchain blocks.
+    miner: Arc<BlockMiner>,
+
+    /// Shared storage backend for persisting blockchain state.
+    storage: Arc<StratusStorage>,
+}
+
+impl Executor {
+    /// Creates a new [`Executor`].
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, config: EvmConfig) -> Self {
+        tracing::info!(?config, "creating executor");
+
+        let evms = Evms::spawn(Arc::clone(&storage), &config);
+        Self { evms, config, miner, storage }
     }
 
     // -------------------------------------------------------------------------
@@ -241,7 +259,7 @@ impl Executor {
         let evm_input = EvmInput::from_external(tx, receipt, block)?;
         #[cfg(feature = "metrics")]
         let function = evm_input.extract_function();
-        let evm_result = self.evms.execute_in_serial(evm_input);
+        let evm_result = self.evms.execute(evm_input, EvmRoute::Serial);
 
         // handle re-execution result
         let mut evm_result = match evm_result {
@@ -283,6 +301,9 @@ impl Executor {
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
+        #[cfg(feature = "metrics")]
+        let (start, function) = (metrics::now(), tx_input.extract_function());
+
         // track
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_input.hash);
@@ -301,15 +322,46 @@ impl Executor {
             "executing local transaction"
         );
 
-        // execute
-        self.execute_local_transaction_with_retries(tx_input, usize::MAX)
+        // execute in parallel first
+        // fallback to serial in case of conflict
+        let parallel_result = self.execute_local_transaction_with_retries(tx_input.clone(), EvmRoute::Parallel, 1);
+        let tx_execution = match parallel_result {
+            Ok(tx_execution) => Ok(tx_execution),
+            Err(e) =>
+                if let Some(StorageError::Conflict(_)) = e.downcast_ref::<StorageError>() {
+                    self.execute_local_transaction_with_retries(tx_input, EvmRoute::Serial, usize::MAX)
+                } else {
+                    Err(e)
+                },
+        };
+
+        // track metrics
+        match tx_execution {
+            Ok(tx_execution) => {
+                #[cfg(feature = "metrics")]
+                {
+                    metrics::inc_executor_transact(start.elapsed(), true, function.clone());
+                    metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
+                }
+                Ok(tx_execution)
+            }
+            Err(e) => {
+                #[cfg(feature = "metrics")]
+                {
+                    metrics::inc_executor_transact(start.elapsed(), false, function.clone());
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Executes a transaction until it reaches the max number of attempts.
-    pub fn execute_local_transaction_with_retries(&self, tx_input: TransactionInput, max_attempts: usize) -> anyhow::Result<TransactionExecution> {
-        #[cfg(feature = "metrics")]
-        let (start, function) = (metrics::now(), tx_input.extract_function());
-
+    fn execute_local_transaction_with_retries(
+        &self,
+        tx_input: TransactionInput,
+        evm_route: EvmRoute,
+        max_attempts: usize,
+    ) -> anyhow::Result<TransactionExecution> {
         // validate
         if tx_input.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
@@ -347,35 +399,30 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            // check attempts
-            tx_attempt += 1;
-            if tx_attempt > max_attempts {
-                return log_and_err!("aborting local transaction execution because reached max number of attempts");
-            }
-
             // execute transaction in evm
+            // in case of failure, do not retry
             let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
-            let evm_result = self.evms.execute_in_shared(evm_input)?;
+            let evm_result = match self.evms.execute(evm_input, evm_route) {
+                Ok(evm_result) => evm_result,
+                Err(e) => return Err(e),
+            };
 
             // save execution to temporary storage
+            // in case of failure, retry if conflict or abandon if unexpected error
             let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
             match self.miner.save_execution(tx_execution.clone()) {
                 Ok(_) => {
-                    #[cfg(feature = "metrics")]
-                    {
-                        metrics::inc_executor_transact(start.elapsed(), true, function.clone());
-                        metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
-                    }
                     return Ok(tx_execution);
                 }
                 Err(e) =>
                     if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
                         tracing::warn!(%tx_attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         tx_attempt += 1;
+                        if tx_attempt > max_attempts {
+                            return Err(e);
+                        }
                         continue;
                     } else {
-                        #[cfg(feature = "metrics")]
-                        metrics::inc_executor_transact(start.elapsed(), false, function);
                         return Err(e);
                     },
             }
@@ -402,7 +449,7 @@ impl Executor {
         );
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
-        let evm_result = self.evms.execute_in_shared(evm_input);
+        let evm_result = self.evms.execute(evm_input, EvmRoute::Call);
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_call(start.elapsed(), evm_result.is_ok(), function.clone());
