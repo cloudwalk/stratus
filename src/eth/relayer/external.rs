@@ -157,7 +157,7 @@ impl ExternalRelayer {
             if tx
                 .input
                 .extract_function()
-                .is_some_and(|sig| SIGNATURES.contains(&sig.as_ref()) || sig.split("::").next().is_some_and(|scope| SIGNATURES.contains(&scope)))
+                .is_some_and(|sig| SIGNATURES.contains(sig.as_ref()) || sig.split("::").next().is_some_and(|scope| SIGNATURES.contains(scope)))
             {
                 let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
                 if let Some(transaction) = transaction_signed {
