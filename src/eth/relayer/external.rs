@@ -456,7 +456,7 @@ impl ExternalRelayer {
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
     /// calling eth_getTransactionByHash. (infallible)
     #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(tx_hash))]
-    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(), RelayError> {
+    async fn relay_transaction(&self, tx_mined: TransactionMined) -> anyhow::Result<(), RelayError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -471,7 +471,7 @@ impl ExternalRelayer {
         let mut tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_relay_and_check_mempool(start.elapsed());
+        metrics::inc_relay_transaction(start.elapsed());
         loop {
             if let Err(error) = self.compare_receipt(tx_mined.clone(), tx).await {
                 match error {
@@ -497,7 +497,7 @@ impl ExternalRelayer {
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
             tracing::info!(elapsed=?start.elapsed().as_secs(), transaction_num=roots.len(), remaining=dag.txs_remaining(),"forwarding");
-            let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
+            let futures = roots.into_iter().map(|root_tx| self.relay_transaction(root_tx));
             results.extend(join_all(futures).await);
         }
 
