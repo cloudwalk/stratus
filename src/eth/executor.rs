@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use tracing::field;
+use tracing::info_span;
 use tracing::Span;
 
 use crate::eth::evm::revm::Revm;
@@ -28,6 +30,7 @@ use crate::ext::to_json_string;
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
+use crate::log_and_err;
 use crate::GlobalState;
 
 #[derive(Debug)]
@@ -233,9 +236,7 @@ impl Executor {
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
-        #[cfg(feature = "metrics")]
-        let (start, function) = (metrics::now(), tx_input.extract_function());
-
+        // track
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_input.hash);
             s.rec_str("tx_from", &tx_input.signer);
@@ -253,42 +254,84 @@ impl Executor {
             "executing local transaction"
         );
 
+        // execute
+        self.execute_local_transaction_until(tx_input, usize::MAX)
+    }
+
+    /// Tries to execute a transaction until it reaches the max number of attempts.
+    pub fn execute_local_transaction_until(&self, tx_input: TransactionInput, max_attempts: usize) -> anyhow::Result<TransactionExecution> {
+        #[cfg(feature = "metrics")]
+        let (start, function) = (metrics::now(), tx_input.extract_function());
+
         // validate
         if tx_input.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
-            return Err(anyhow!("transaction sent from zero address is not allowed."));
+            return Err(anyhow!("transaction sent from zero address is not allowed"));
         }
 
         // executes transaction until no more conflicts
-        // TODO: must have a stop condition like timeout or max number of retries
-        let tx_execution = loop {
+        let mut tx_attempt = 0;
+        loop {
+            let _span = info_span!(
+                "executor::local_transaction_attempt",
+                tx_hash = field::Empty,
+                tx_from = field::Empty,
+                tx_to = field::Empty,
+                tx_nonce = field::Empty
+            )
+            .entered();
+            Span::with(|s| {
+                s.rec_str("tx_attempt", &tx_attempt);
+                s.rec_str("tx_hash", &tx_input.hash);
+                s.rec_str("tx_from", &tx_input.signer);
+                s.rec_opt("tx_to", &tx_input.to);
+                s.rec_str("tx_nonce", &tx_input.nonce);
+            });
+            tracing::info!(
+                %tx_attempt,
+                tx_hash = %tx_input.hash,
+                tx_nonce = %tx_input.nonce,
+                tx_from = ?tx_input.from,
+                tx_signer = %tx_input.signer,
+                tx_to = ?tx_input.to,
+                tx_data_len = %tx_input.input.len(),
+                tx_data = %tx_input.input,
+                "executing local transaction attempt"
+            );
+
+            // check attempts
+            tx_attempt += 1;
+            if tx_attempt > max_attempts {
+                return log_and_err!("aborting local transaction execution because reached max number of attempts");
+            }
+
             // execute transaction
             let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
             let evm_result = self.execute_in_evm(evm_input)?;
 
-            // save execution to temporary storage (not working yet)
+            // save execution to temporary storage
             let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-            if let Err(e) = self.miner.save_execution(tx_execution.clone()) {
-                if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
-                    tracing::warn!(?conflicts, "temporary storage conflict detected when saving execution");
-                    continue;
-                } else {
+            match self.miner.save_execution(tx_execution.clone()) {
+                Ok(_) => {
                     #[cfg(feature = "metrics")]
-                    metrics::inc_executor_transact(start.elapsed(), false, function);
-                    return Err(e);
+                    {
+                        metrics::inc_executor_transact(start.elapsed(), true, function.clone());
+                        metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
+                    }
+                    return Ok(tx_execution);
                 }
+                Err(e) =>
+                    if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                        tracing::warn!(%tx_attempt, ?conflicts, "temporary storage conflict detected when saving execution");
+                        tx_attempt += 1;
+                        continue;
+                    } else {
+                        #[cfg(feature = "metrics")]
+                        metrics::inc_executor_transact(start.elapsed(), false, function);
+                        return Err(e);
+                    },
             }
-
-            break tx_execution;
-        };
-
-        #[cfg(feature = "metrics")]
-        {
-            metrics::inc_executor_transact(start.elapsed(), true, function.clone());
-            metrics::inc_executor_transact_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
         }
-
-        Ok(tx_execution)
     }
 
     /// Executes a transaction without persisting state changes.
