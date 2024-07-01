@@ -202,8 +202,8 @@ metrics! {
     "Time to run ExternalRelayer::compute_tx_dag."
     histogram_duration compute_tx_dag{},
 
-    "Time to run ExternalRelayer::relay_and_check_mempool."
-    histogram_duration relay_and_check_mempool{},
+    "Time to run ExternalRelayer::relay_transaction."
+    histogram_duration relay_transaction{},
 
     "Time to run ExternalRelayer::take_roots."
     histogram_duration take_roots{},
