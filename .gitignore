@@ -4,11 +4,7 @@
 .idea
 
 # Data
-data/**/*.csv
-data/**/*.db
-data/**/*.json
-data/**/*.txt
-data/**/*.rocksdb
+data/log-entries-rocksdb/
 data/rocksdb/
 
 # E2E (Stratus)

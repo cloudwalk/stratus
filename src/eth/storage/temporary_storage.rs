@@ -32,6 +32,12 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     /// Saves an re-executed transaction to the active mined block.
     fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
 
+    /// Appends a transaction to the active block.
+    fn append_transaction(&self, tx: TransactionExecution) -> anyhow::Result<()>;
+
+    /// Retrieves the pending transactions of the active block.
+    fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
+
     /// Finishes the mining of the active block and starts a new block.
     fn finish_block(&self) -> anyhow::Result<PendingBlock>;
 

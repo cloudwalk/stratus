@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Test modules compilation can be pretty weird, leave this here
 
 use std::fs;
 use std::sync::Arc;
@@ -22,69 +22,69 @@ use stratus::ext::traced_sleep;
 use stratus::ext::SleepReason;
 use stratus::infra::docker::Docker;
 use stratus::GlobalServices;
-#[cfg(feature = "metrics")]
-mod m {
-    pub use const_format::formatcp;
-    pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
-    pub use stratus::infra::metrics::METRIC_EXECUTOR_EXTERNAL_BLOCK;
-    pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
-    pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
-    pub use stratus::infra::metrics::METRIC_STORAGE_SAVE_BLOCK;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "metrics")] {
+        pub use const_format::formatcp;
+        pub use stratus::infra::metrics::METRIC_EVM_EXECUTION;
+        pub use stratus::infra::metrics::METRIC_EXECUTOR_EXTERNAL_BLOCK;
+        pub use stratus::infra::metrics::METRIC_STORAGE_READ_ACCOUNT;
+        pub use stratus::infra::metrics::METRIC_STORAGE_READ_SLOT;
+        pub use stratus::infra::metrics::METRIC_STORAGE_SAVE_BLOCK;
+
+        const METRIC_QUERIES: [&str; 45] = [
+            // Executor
+            "* Executor",
+            formatcp!("{}_sum", METRIC_EXECUTOR_EXTERNAL_BLOCK),
+            // EVM
+            "* EVM",
+            formatcp!("{}_count", METRIC_EVM_EXECUTION),
+            formatcp!("{}_sum", METRIC_EVM_EXECUTION),
+            formatcp!("{}{{quantile='1'}}", METRIC_EVM_EXECUTION),
+            formatcp!("{}{{quantile='0.95'}}", METRIC_EVM_EXECUTION),
+            "* ACCOUNTS (count)",
+            formatcp!("sum({}_count)", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}_count{{found_at='temporary'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}_count{{found_at='permanent'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}_count{{found_at='default'}}", METRIC_STORAGE_READ_ACCOUNT),
+            "* ACCOUNTS (cumulative)",
+            formatcp!("sum({}_sum)", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}_sum{{found_at='temporary'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}_sum{{found_at='permanent'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}_sum{{found_at='default'}}", METRIC_STORAGE_READ_ACCOUNT),
+            "* ACCOUNTS (P100)",
+            formatcp!("{}{{found_at='temporary', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}{{found_at='permanent', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}{{found_at='default', quantile='1'}}", METRIC_STORAGE_READ_ACCOUNT),
+            "* ACCOUNTS (P95)",
+            formatcp!("{}{{found_at='temporary', quantile='0.95'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}{{found_at='permanent', quantile='0.95'}}", METRIC_STORAGE_READ_ACCOUNT),
+            formatcp!("{}{{found_at='default', quantile='0.95'}}", METRIC_STORAGE_READ_ACCOUNT),
+            "* SLOTS (count)",
+            formatcp!("sum({}_count)", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}_count{{found_at='temporary'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}_count{{found_at='permanent'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}_count{{found_at='default'}}", METRIC_STORAGE_READ_SLOT),
+            "* SLOTS (cumulative)",
+            formatcp!("sum({}_sum)", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}_sum{{found_at='temporary'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}_sum{{found_at='permanent'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}_sum{{found_at='default'}}", METRIC_STORAGE_READ_SLOT),
+            "* SLOTS (P100)",
+            formatcp!("{}{{found_at='temporary', quantile='1'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}{{found_at='permanent', quantile='1'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}{{found_at='default', quantile='1'}}", METRIC_STORAGE_READ_SLOT),
+            "* SLOTS (P95)",
+            formatcp!("{}{{found_at='temporary', quantile='0.95'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}{{found_at='permanent', quantile='0.95'}}", METRIC_STORAGE_READ_SLOT),
+            formatcp!("{}{{found_at='default', quantile='0.95'}}", METRIC_STORAGE_READ_SLOT),
+            "* COMMIT",
+            formatcp!("{}{{quantile='1'}}", METRIC_STORAGE_SAVE_BLOCK),
+        ];
+    } else {
+        const METRIC_QUERIES: [&str; 0] = [];
+    }
 }
-
-#[cfg(feature = "metrics")]
-const METRIC_QUERIES: [&str; 45] = [
-    // Executor
-    "* Executor",
-    m::formatcp!("{}_sum", m::METRIC_EXECUTOR_EXTERNAL_BLOCK),
-    // EVM
-    "* EVM",
-    m::formatcp!("{}_count", m::METRIC_EVM_EXECUTION),
-    m::formatcp!("{}_sum", m::METRIC_EVM_EXECUTION),
-    m::formatcp!("{}{{quantile='1'}}", m::METRIC_EVM_EXECUTION),
-    m::formatcp!("{}{{quantile='0.95'}}", m::METRIC_EVM_EXECUTION),
-    "* ACCOUNTS (count)",
-    m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    "* ACCOUNTS (cumulative)",
-    m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    "* ACCOUNTS (P100)",
-    m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    "* ACCOUNTS (P95)",
-    m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_ACCOUNT),
-    "* SLOTS (count)",
-    m::formatcp!("sum({}_count)", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}_count{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}_count{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}_count{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
-    "* SLOTS (cumulative)",
-    m::formatcp!("sum({}_sum)", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}_sum{{found_at='temporary'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}_sum{{found_at='permanent'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}_sum{{found_at='default'}}", m::METRIC_STORAGE_READ_SLOT),
-    "* SLOTS (P100)",
-    m::formatcp!("{}{{found_at='temporary', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}{{found_at='permanent', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}{{found_at='default', quantile='1'}}", m::METRIC_STORAGE_READ_SLOT),
-    "* SLOTS (P95)",
-    m::formatcp!("{}{{found_at='temporary', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}{{found_at='permanent', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
-    m::formatcp!("{}{{found_at='default', quantile='0.95'}}", m::METRIC_STORAGE_READ_SLOT),
-    "* COMMIT",
-    m::formatcp!("{}{{quantile='1'}}", m::METRIC_STORAGE_SAVE_BLOCK),
-];
-
-#[cfg(not(feature = "metrics"))]
-const METRIC_QUERIES: [&str; 0] = [];
 
 // -----------------------------------------------------------------------------
 // Data initialization

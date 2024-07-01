@@ -26,9 +26,17 @@ impl Wei {
     pub const ONE: Wei = Wei(U256::one());
     pub const TEST_BALANCE: Wei = Wei(U256([u64::MAX, 0, 0, 0]));
 
+    pub fn new(value: U256) -> Self {
+        Self(value)
+    }
+
     /// Checks if current value is zero.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
+    }
+
+    pub fn inner(&self) -> &U256 {
+        &self.0
     }
 }
 

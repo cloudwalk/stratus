@@ -66,8 +66,8 @@ use append_entry::TransactionExecutionEntry;
 #[cfg(feature = "rocks")]
 use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
+use super::primitives::Bytes;
 use super::primitives::TransactionExecution;
-use super::primitives::TransactionInput;
 use crate::config::RunWithImporterConfig;
 use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
@@ -485,7 +485,7 @@ impl Consensus {
                                 let current_term = consensus.current_term.load(Ordering::SeqCst);
                                 tracing::debug!(current_term, "Current term loaded");
 
-                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.to_string().into_bytes()).collect();
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
 
                                 match consensus.log_entries_storage.save_log_entry(
                                     last_index + 1,
@@ -507,7 +507,7 @@ impl Consensus {
                             }
                             #[cfg(not(feature = "rocks"))]
                             {
-                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.to_string().into_bytes()).collect();
+                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
                                 let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
                                 if consensus.broadcast_sender.send(block_entry).is_err() {
                                     tracing::error!("Failed to broadcast block");
@@ -580,7 +580,7 @@ impl Consensus {
         true
     }
 
-    pub async fn forward(&self, transaction: TransactionInput) -> anyhow::Result<(Hash, String)> {
+    pub async fn forward(&self, transaction: Bytes) -> anyhow::Result<(Hash, String)> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -590,13 +590,12 @@ impl Consensus {
             return Err(anyhow::anyhow!("blockchain client is not set, cannot forward transaction"));
         };
 
-        let forward_to = forward_to::TransactionRelayer::new(Arc::clone(blockchain_client));
-        let (result, target_url) = forward_to.forward(transaction).await?;
+        let result = blockchain_client.send_raw_transaction(transaction.into()).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok((result.tx_hash, target_url)) //XXX HEX
+        Ok((result.tx_hash, blockchain_client.http_url.clone())) //XXX HEX
     }
 
     pub async fn should_serve(&self) -> bool {

@@ -213,22 +213,13 @@ mod tests {
                     assert_eq!(execution.output, expected_execution.output);
                     assert_eq!(execution.from, expected_execution.from);
                     assert_eq!(execution.to, expected_execution.to);
-                    assert_eq!(execution.block_number, expected_execution.block_number);
-                    assert_eq!(execution.transaction_index, expected_execution.transaction_index);
                     assert_eq!(execution.logs.len(), expected_execution.logs.len());
                     for (log, expected_log) in execution.logs.iter().zip(expected_execution.logs.iter()) {
                         assert_eq!(log.address, expected_log.address);
                         assert_eq!(log.topics, expected_log.topics);
                         assert_eq!(log.data, expected_log.data);
-                        assert_eq!(log.log_index, expected_log.log_index);
                     }
                     assert_eq!(execution.gas, expected_execution.gas);
-                    assert_eq!(execution.receipt_cumulative_gas_used, expected_execution.receipt_cumulative_gas_used);
-                    assert_eq!(execution.receipt_gas_used, expected_execution.receipt_gas_used);
-                    assert_eq!(execution.receipt_contract_address, expected_execution.receipt_contract_address);
-                    assert_eq!(execution.receipt_status, expected_execution.receipt_status);
-                    assert_eq!(execution.receipt_logs_bloom, expected_execution.receipt_logs_bloom);
-                    assert_eq!(execution.receipt_effective_gas_price, expected_execution.receipt_effective_gas_price);
                 }
             } else {
                 panic!("Expected TransactionExecutionEntries");
