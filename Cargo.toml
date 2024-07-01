@@ -185,13 +185,16 @@ path = "src/bin/relayer.rs"
 default = ["bg-threads", "metrics", "tracing", "rocks"]
 
 # Application is running in develoment mode.
-dev  = []
+dev = []
 
 # Enable runtime metrics collection.
 metrics = ["dep:metrics-exporter-prometheus"]
 
 # Enable runtime tracing/spans collection.
 tracing = []
+
+# Enable expensive tracing spans for debugging purposes.
+expensive-spans = []
 
 # Background tasks are spawned using threads instead of Tokio blocking tasks.
 bg-threads = []
