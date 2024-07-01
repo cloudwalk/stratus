@@ -12,7 +12,7 @@ pub struct CallInput {
     #[serde(default)]
     pub value: Wei,
 
-    #[serde(default)]
+    #[serde(alias = "input", default)]
     pub data: Bytes,
 }
 
