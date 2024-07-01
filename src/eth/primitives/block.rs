@@ -9,7 +9,6 @@ use serde_json::Value as JsonValue;
 
 use super::LogMined;
 use super::TransactionInput;
-use crate::eth::consensus::append_entry;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;

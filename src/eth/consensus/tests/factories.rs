@@ -89,7 +89,10 @@ pub fn create_mock_log_entry_data_block() -> LogEntryData {
 }
 
 pub fn create_mock_log_entry_data_transactions() -> LogEntryData {
-    LogEntryData::TransactionExecutionEntries(vec![create_mock_transaction_execution_entry(None), create_mock_transaction_execution_entry(None)])
+    LogEntryData::TransactionExecutionEntries(vec![
+        create_mock_transaction_execution_entry(None),
+        create_mock_transaction_execution_entry(None),
+    ])
 }
 
 pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEntry {

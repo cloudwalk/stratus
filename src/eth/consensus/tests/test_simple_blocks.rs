@@ -84,7 +84,10 @@ async fn test_append_entries_transaction_executions_and_block() {
     // Create and append block with transaction hashes
     let transaction_hashes: Vec<Vec<u8>> = all_executions.iter().map(|e| e.hash.clone()).collect();
 
-    let block_entry = create_mock_block_entry(transaction_hashes.clone(), Some(Hash::new(hex!("f07543db1bff9fa1a639578e2d90949a56822c108c63ca1b2f2a55deb2d562fc"))));
+    let block_entry = create_mock_block_entry(
+        transaction_hashes.clone(),
+        Some(Hash::new(hex!("f07543db1bff9fa1a639578e2d90949a56822c108c63ca1b2f2a55deb2d562fc"))),
+    );
 
     let block_request = Request::new(AppendBlockCommitRequest {
         term: 1,

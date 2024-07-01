@@ -10,6 +10,7 @@ use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tracing::Span;
 
+use super::consensus::append_entry;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -30,8 +31,6 @@ use crate::ext::spawn_named;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
-
-use super::consensus::append_entry;
 
 pub struct BlockMiner {
     storage: Arc<StratusStorage>,
@@ -335,15 +334,10 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 
     // TODO: calculate size, state_root, receipts_root, parent_hash
     Ok(block)
-
 }
 /// Mines transactions and logs, assigning necessary properties like block hash and log index.
 /// This function is used to process transactions both in local block creation and block propagation.
-pub fn assemble_transactions_mined(
-    block: &mut Block,
-    txs: NonEmpty<LocalTransactionExecution>,
-    log_index: &mut Index,
-) {
+pub fn assemble_transactions_mined(block: &mut Block, txs: NonEmpty<LocalTransactionExecution>, log_index: &mut Index) {
     for (tx_idx, tx) in txs.into_iter().enumerate() {
         let transaction_index = Index::new(tx_idx as u64);
         let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());
@@ -383,12 +377,8 @@ pub fn assemble_transactions_mined(
     }
 }
 
-
 /// Creates a block from propagated transactions. This is used during block synchronization across nodes.
-pub fn block_from_propagation(
-    block_entry: append_entry::BlockEntry,
-    temporary_transactions: Vec<LocalTransactionExecution>,
-) -> anyhow::Result<Block> {
+pub fn block_from_propagation(block_entry: append_entry::BlockEntry, temporary_transactions: Vec<LocalTransactionExecution>) -> anyhow::Result<Block> {
     // Construct the block header from the propagated block entry.
     let header = BlockHeader::from_append_entry_block(block_entry.clone())?;
 

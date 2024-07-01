@@ -18,7 +18,6 @@ use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::Consensus;
@@ -172,11 +171,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             Status::internal("Failed to get pending transactions")
         })?;
 
-        let transaction_executions: Vec<LocalTransactionExecution> = pending_transactions
-            .iter()
-            .filter_map(|tx| tx.inner_local())
-            .collect();
-
+        let transaction_executions: Vec<LocalTransactionExecution> = pending_transactions.iter().filter_map(|tx| tx.inner_local()).collect();
 
         let block_result = block_from_propagation(block_entry.clone(), transaction_executions);
         match block_result {
