@@ -747,11 +747,12 @@ impl Consensus {
                 executions,
                 leader_id: self.my_address.to_string(),
             });
-            tracing::debug!("append_transaction_execution request sent. term: {}, prev_log_index: {}, prev_log_term: {}",
-            request.get_ref().term,
-            request.get_ref().prev_log_index,
-            request.get_ref().prev_log_term,
-        );
+            tracing::debug!(
+                "append_transaction_execution request sent. term: {}, prev_log_index: {}, prev_log_term: {}",
+                request.get_ref().term,
+                request.get_ref().prev_log_index,
+                request.get_ref().prev_log_term,
+            );
 
             match peer.client.append_transaction_executions(request).await {
                 Ok(response) =>
@@ -786,7 +787,8 @@ impl Consensus {
                 leader_id: self.my_address.to_string(),
             });
 
-            tracing::debug!("append_block_commit request sent. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
+            tracing::debug!(
+                "append_block_commit request sent. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
                 request.get_ref().block_entry.as_ref().map(|b| b.number).unwrap_or(0),
                 request.get_ref().term,
                 request.get_ref().prev_log_index,
