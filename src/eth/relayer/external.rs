@@ -12,6 +12,7 @@ use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::Span;
@@ -40,6 +41,26 @@ use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
 type MismatchedBlocks = HashSet<BlockNumber>;
+
+lazy_static! {
+    static ref SIGNATURES: HashSet<&'static str> = [
+        "PixCashier",
+        "PixCashierv3",
+        "CardPaymentProcessor",
+        "CardPaymentProcessorv2",
+        "CompoundAgent",
+        "BRLCToken::freeze(address,uint256)",
+        "BRLCToken::transferFrozen(address,address,uint256)",
+        "BRLCToken::restrictionIncrease(address,bytes32,uint256)",
+        "BRLCToken::restrictionDecrease(address,bytes32,uint256)",
+        "BRLCToken::blocklist(address)",
+        "BRLCToken::unBlocklist(address)",
+        "BRLCToken::blacklist(address)",
+        "BRLCToken::unBlacklist(address)",
+    ]
+    .into_iter()
+    .collect();
+}
 
 #[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum RelayError {
@@ -71,17 +92,17 @@ impl TxSigner {
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
         tracing::info!(?tx_input.hash, "signing transaction");
-
+        let gas_limit = tx_input.gas_limit.as_u64() * 10;
         let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
             .nonce(self.nonce)
-            .gas(tx_input.gas_limit.as_u64() * 10);
+            .gas(gas_limit);
 
         let req = TypedTransaction::Legacy(tx);
         let signature = self.wallet.sign_transaction_sync(&req).unwrap();
         let new_hash = req.hash(&signature);
 
         tx_input.signer = self.wallet.address().into();
-        tx_input.gas_limit = (tx_input.gas_limit.as_u64() * 10).into();
+        tx_input.gas_limit = gas_limit.into();
         // None is Legacy
         tx_input.tx_type = None;
         tx_input.hash = new_hash.into();
@@ -133,7 +154,11 @@ impl ExternalRelayer {
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
         let mut combined_transactions = vec![];
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
-            if tx.input.extract_function().is_some_and(|sig| sig.contains("PixCashier")) {
+            if tx
+                .input
+                .extract_function()
+                .is_some_and(|sig| SIGNATURES.contains(sig.as_ref()) || sig.split("::").next().is_some_and(|scope| SIGNATURES.contains(scope)))
+            {
                 let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
                 if let Some(transaction) = transaction_signed {
                     tx.input = transaction;
@@ -238,7 +263,7 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 5
+                LIMIT 3
             )
             UPDATE relayer_blocks r
                 SET started = true
@@ -342,6 +367,7 @@ impl ExternalRelayer {
             };
             if let Some(substrate_receipt) = receipt {
                 let _ = stratus_tx.execution.apply_receipt(&substrate_receipt);
+                stratus_tx.execution.fix_logs_relayer_signer(&substrate_receipt);
                 if let Err(compare_error) = stratus_tx.execution.compare_with_receipt(&substrate_receipt) {
                     let err_string = compare_error.to_string();
                     let error = log_and_err!("transaction mismatch!").context(err_string.clone());
@@ -430,7 +456,7 @@ impl ExternalRelayer {
     /// Relays a transaction to Substrate and waits until the transaction is in the mempool by
     /// calling eth_getTransactionByHash. (infallible)
     #[tracing::instrument(name = "external_relayer::relay_and_check_mempool", skip_all, fields(tx_hash))]
-    pub async fn relay_and_check_mempool(&self, tx_mined: TransactionMined) -> anyhow::Result<(), RelayError> {
+    async fn relay_transaction(&self, tx_mined: TransactionMined) -> anyhow::Result<(), RelayError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -445,7 +471,7 @@ impl ExternalRelayer {
         let mut tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
 
         #[cfg(feature = "metrics")]
-        metrics::inc_relay_and_check_mempool(start.elapsed());
+        metrics::inc_relay_transaction(start.elapsed());
         loop {
             if let Err(error) = self.compare_receipt(tx_mined.clone(), tx).await {
                 match error {
@@ -471,7 +497,7 @@ impl ExternalRelayer {
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
             tracing::info!(elapsed=?start.elapsed().as_secs(), transaction_num=roots.len(), remaining=dag.txs_remaining(),"forwarding");
-            let futures = roots.into_iter().map(|root_tx| self.relay_and_check_mempool(root_tx));
+            let futures = roots.into_iter().map(|root_tx| self.relay_transaction(root_tx));
             results.extend(join_all(futures).await);
         }
 
