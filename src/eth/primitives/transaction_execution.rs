@@ -98,8 +98,8 @@ impl TransactionExecution {
                 chain_id: Some(input.chain_id.unwrap_or_default().into()),
                 result: result.execution.result.to_string(),
                 output: result.execution.output.to_vec(),
-                from: input.from.as_bytes().to_vec(),
-                to: input.to.map(|to| to.as_bytes().to_vec()),
+                from: input.from.to_fixed_bytes().to_vec(),
+                to: input.to.map(|to| to.to_fixed_bytes().to_vec()),
                 logs: result
                     .execution
                     .logs
@@ -118,7 +118,7 @@ impl TransactionExecution {
                 gas: u256_to_bytes(result.execution.gas.into()),
                 deployed_contract_address: result.execution.deployed_contract_address.map(|addr| addr.as_bytes().to_vec()),
                 gas_limit: u256_to_bytes(input.gas_limit.into()),
-                signer: input.signer.as_bytes().to_vec(),
+                signer: input.signer.to_fixed_bytes().to_vec(),
                 tx_type: input.tx_type.map(|t| t.as_u64()),
                 block_timestamp: result.execution.block_timestamp.as_u64(),
             },

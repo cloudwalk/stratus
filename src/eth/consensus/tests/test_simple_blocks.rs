@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use ethereum_types::H256;
 use tokio::sync::Mutex;
 use tonic::Request;
 
@@ -14,6 +15,7 @@ use crate::eth::consensus::Role;
 use crate::eth::consensus::StatusCode;
 use crate::eth::consensus::TransactionExecutionEntry;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::Hash;
 
 #[tokio::test]
 async fn test_append_entries_transaction_executions_and_block() {
@@ -96,9 +98,9 @@ async fn test_append_entries_transaction_executions_and_block() {
     //XXX assert_eq!(slot.index, slot_index);
 
     //XXX // Test reading execution
-    //XXX let tx_hash = all_executions[0].hash.clone();
-    //XXX let saved_tx = storage.read_transaction(&H256::from_slice(&hex::decode(&tx_hash).unwrap())).unwrap();
-    //XXX assert!(saved_tx.is_some());
+    let tx_hash = all_executions[0].hash.clone();
+    let saved_tx = storage.read_transaction(&Hash::new_from_h256(H256::from_slice(&tx_hash))).unwrap();
+    assert!(saved_tx.is_some());
 
     //XXX // Test reading logs
     //XXX let log_filter = LogFilter::default();

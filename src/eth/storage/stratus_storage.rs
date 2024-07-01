@@ -310,6 +310,10 @@ impl StratusStorage {
         })
     }
 
+    pub fn append_transaction(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        self.temp.append_transaction(tx)
+    }
+
     #[tracing::instrument(name = "storage::finish_block", skip_all, fields(block_number))]
     pub fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         tracing::debug!(storage = %label::TEMP, "finishing active block");

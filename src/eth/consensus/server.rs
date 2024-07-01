@@ -18,6 +18,7 @@ use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::Consensus;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -71,14 +72,33 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::internal("Failed to save log entry"));
         }
 
-        //TODO send the executions to the Storage
-        tracing::info!(executions = executions.len(), "appending executions");
-
         if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
             consensus.update_leader(leader_peer_address).await;
         }
         consensus.reset_heartbeat_signal.notify_waiters();
-        //TODO change cached index from consensus after the storage is implemented
+
+        tracing::info!(executions = executions.len(), "appending executions");
+        // TODO commit can be run on a background
+        for execution in executions {
+            match TransactionExecution::from_append_entry_transaction(execution) {
+                Ok(transaction_execution) => {
+                    tracing::info!(hash = %transaction_execution.hash(), "appending execution");
+                    match consensus.storage.append_transaction(transaction_execution) {
+                        Ok(_) => {
+                            tracing::info!("transaction execution commited into memory successfully");
+                        }
+                        Err(err) => {
+                            tracing::error!("Failed to commit transaction execution: {:?}", err);
+                            return Err(Status::internal("Failed to commit transaction execution"));
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::error!("Failed to append transaction execution: {:?}", err);
+                    return Err(Status::internal("Failed to parse transaction execution for commit"));
+                }
+            }
+        }
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
@@ -144,7 +164,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         //TODO FIXME move this code back when we have propagation: #[cfg(feature = "metrics")]
         //TODO FIXME move this code back when we have propagation: metrics::set_append_entries_block_number_diff(diff);
 
-        //TODO send the executions to the Storage
         let block_result = Block::from_append_entry_block(block_entry.clone());
         match block_result {
             Ok(block) => match consensus.storage.save_block(block) {
@@ -265,7 +284,7 @@ mod tests {
         });
 
         let response = service.append_transaction_executions(request).await;
-        assert!(response.is_ok());
+        assert!(response.is_ok(), "{}", format!("{:?}", response));
 
         // Check if the log entry was inserted correctly
         let log_entries_storage = &consensus.log_entries_storage;

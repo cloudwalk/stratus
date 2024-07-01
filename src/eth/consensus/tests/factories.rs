@@ -56,10 +56,10 @@ pub fn create_mock_transaction_execution_entry() -> TransactionExecutionEntry {
         r: vec![rand::thread_rng().gen()],
         s: vec![rand::thread_rng().gen()],
         chain_id: Some(rand::thread_rng().gen()),
-        result: "Success".to_string(),
+        result: "success".to_string(),
         output: vec![rand::thread_rng().gen()],
-        from: H160::random().as_bytes().to_vec(),
-        to: Some(H160::random().as_bytes().to_vec()),
+        from: H160::random().to_fixed_bytes().to_vec(),
+        to: Some(H160::random().to_fixed_bytes().to_vec()),
         logs: vec![Log {
             address: H160::random().as_bytes().to_vec(),
             topics: vec![H256::random().as_bytes().to_vec()],
@@ -67,9 +67,9 @@ pub fn create_mock_transaction_execution_entry() -> TransactionExecutionEntry {
         }],
         gas: vec![rand::thread_rng().gen()],
         tx_type: Some(rand::thread_rng().gen()),
-        signer: vec![rand::thread_rng().gen()],
+        signer: H160::random().to_fixed_bytes().to_vec(),
         gas_limit: vec![rand::thread_rng().gen()],
-        deployed_contract_address: Some(vec![rand::thread_rng().gen()]),
+        deployed_contract_address: Some(H160::random().to_fixed_bytes().to_vec()),
         block_timestamp: rand::thread_rng().gen(),
     }
 }
@@ -88,6 +88,7 @@ pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEn
 
 pub async fn create_mock_consensus() -> Arc<Consensus> {
     let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
+    storage.set_active_block_number_as_next_if_not_set().unwrap();
     let (_log_entries_storage, tmpdir_log_entries) = StratusStorage::mock_new_rocksdb();
     let direct_peers = Vec::new();
     let importer_config = None;

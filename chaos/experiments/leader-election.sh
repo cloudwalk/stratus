@@ -90,6 +90,7 @@ check_leader() {
     local gas="AAAAAAAAAAE="
     local bloom="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     local data="AAAAAAAAAAE="
+    local twentybytes="QUFBQUFBQUFBQUFBQUFBQUFBQUA="
 
     # Send the gRPC request using grpcurl and capture both stdout and stderr
     response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{
@@ -108,22 +109,22 @@ check_leader() {
                 "r": "'"$hash"'",
                 "s": "'"$hash"'",
                 "chain_id": 1,
-                "result": "Success",
+                "result": "success",
                 "output": "'"$data"'",
-                "from": "'"$hash"'",
-                "to": "'"$hash"'",
+                "from": "'"$twentybytes"'",
+                "to": "'"$twentybytes"'",
                 "logs": [
                     {
-                        "address": "'"$hash"'",
+                        "address": "'"$twentybytes"'",
                         "topics": ["'"$hash"'"],
                         "data": "'"$data"'"
                     }
                 ],
                 "gas": "'"$gas"'",
                 "tx_type": 1,
-                "signer": "'"$hash"'",
+                "signer": "'"$twentybytes"'",
                 "gas_limit": "'"$gas"'",
-                "deployed_contract_address": "'"$hash"'"
+                "deployed_contract_address": "'"$twentybytes"'"
             }
         ]
     }' "$grpc_address" append_entry.AppendEntryService/AppendTransactionExecutions 2>&1)
