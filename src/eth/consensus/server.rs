@@ -44,6 +44,12 @@ impl AppendEntryService for AppendEntryServiceImpl {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
 
+        tracing::debug!("append_transaction_execution request received. term: {}, prev_log_index: {}, prev_log_term: {}",
+            request.get_ref().term,
+            request.get_ref().prev_log_index,
+            request.get_ref().prev_log_term,
+        );
+
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
@@ -145,6 +151,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
     async fn append_block_commit(&self, request: Request<AppendBlockCommitRequest>) -> Result<Response<AppendBlockCommitResponse>, Status> {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
+
+        tracing::debug!("append_block_commit request received. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
+            request.get_ref().block_entry.as_ref().map(|b| b.number).unwrap_or(0),
+            request.get_ref().term,
+            request.get_ref().prev_log_index,
+            request.get_ref().prev_log_term,
+        );
 
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);

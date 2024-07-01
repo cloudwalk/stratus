@@ -742,11 +742,16 @@ impl Consensus {
             let current_term = self.current_term.load(Ordering::SeqCst);
             let request = Request::new(AppendTransactionExecutionsRequest {
                 term: current_term,
-                prev_log_index: self.prev_log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
-                prev_log_term: current_term,                                //FIXME we should gather it from the log entries
+                prev_log_index: self.log_entries_storage.get_last_index().unwrap_or(0),
+                prev_log_term: self.log_entries_storage.get_last_term().unwrap_or(0),
                 executions,
                 leader_id: self.my_address.to_string(),
             });
+            tracing::debug!("append_transaction_execution request sent. term: {}, prev_log_index: {}, prev_log_term: {}",
+            request.get_ref().term,
+            request.get_ref().prev_log_index,
+            request.get_ref().prev_log_term,
+        );
 
             match peer.client.append_transaction_executions(request).await {
                 Ok(response) =>
@@ -775,11 +780,18 @@ impl Consensus {
             let current_term = self.current_term.load(Ordering::SeqCst);
             let request = Request::new(AppendBlockCommitRequest {
                 term: current_term,
-                prev_log_index: self.prev_log_index.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
-                prev_log_term: current_term,                                //FIXME we should gather it from the log entries
+                prev_log_index: self.log_entries_storage.get_last_index().unwrap_or(0),
+                prev_log_term: self.log_entries_storage.get_last_term().unwrap_or(0),
                 block_entry: Some(block_entry.clone()),
                 leader_id: self.my_address.to_string(),
             });
+
+            tracing::debug!("append_block_commit request sent. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
+                request.get_ref().block_entry.as_ref().map(|b| b.number).unwrap_or(0),
+                request.get_ref().term,
+                request.get_ref().prev_log_index,
+                request.get_ref().prev_log_term,
+            );
 
             let response = peer.client.append_block_commit(request).await?;
             let response = response.into_inner();
