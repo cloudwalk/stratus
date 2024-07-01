@@ -197,9 +197,24 @@ impl Consensus {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
-        let log_entries_storage = Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap());
-        let current_term = log_entries_storage.get_last_term().unwrap_or(0);
-        let prev_log_index = log_entries_storage.get_last_index().unwrap_or(0);
+
+        #[cfg(feature = "rocks")]
+        let log_entries_storage: Arc<AppendLogEntriesStorage>;
+        let current_term: u64;
+        let prev_log_index: u64;
+        #[cfg(feature = "rocks")]
+        {
+            log_entries_storage = Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap());
+            current_term = log_entries_storage.get_last_term().unwrap_or(0);
+            prev_log_index = log_entries_storage.get_last_index().unwrap_or(0);
+        }
+
+        #[cfg(not(feature = "rocks"))]
+        {
+            log_entries_storage = None;
+            current_term = 0;
+            prev_log_index = 0;
+        }
 
         let consensus = Self {
             broadcast_sender,
@@ -740,10 +755,25 @@ impl Consensus {
     async fn append_transaction_executions_to_peer(&self, peer: &mut Peer, executions: Vec<TransactionExecutionEntry>) {
         if self.is_leader() {
             let current_term = self.current_term.load(Ordering::SeqCst);
+            let prev_log_index: u64;
+            let prev_log_term: u64;
+
+            #[cfg(feature = "rocks")]
+            {
+                prev_log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+                prev_log_term = self.log_entries_storage.get_last_term().unwrap_or(0);
+            }
+
+            #[cfg(not(feature = "rocks"))]
+            {
+                prev_log_index = 0;
+                prev_log_term = 0;
+            }
+
             let request = Request::new(AppendTransactionExecutionsRequest {
                 term: current_term,
-                prev_log_index: self.log_entries_storage.get_last_index().unwrap_or(0),
-                prev_log_term: self.log_entries_storage.get_last_term().unwrap_or(0),
+                prev_log_index,
+                prev_log_term,
                 executions,
                 leader_id: self.my_address.to_string(),
             });
@@ -779,10 +809,26 @@ impl Consensus {
             let start = metrics::now();
 
             let current_term = self.current_term.load(Ordering::SeqCst);
+
+            let prev_log_index: u64;
+            let prev_log_term: u64;
+
+            #[cfg(feature = "rocks")]
+            {
+                prev_log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+                prev_log_term = self.log_entries_storage.get_last_term().unwrap_or(0);
+            }
+
+            #[cfg(not(feature = "rocks"))]
+            {
+                prev_log_index = 0;
+                prev_log_term = 0;
+            }
+
             let request = Request::new(AppendBlockCommitRequest {
                 term: current_term,
-                prev_log_index: self.log_entries_storage.get_last_index().unwrap_or(0),
-                prev_log_term: self.log_entries_storage.get_last_term().unwrap_or(0),
+                prev_log_index,
+                prev_log_term,
                 block_entry: Some(block_entry.clone()),
                 leader_id: self.my_address.to_string(),
             });
