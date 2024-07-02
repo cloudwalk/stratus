@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use tracing::field;
 use tracing::info_span;
 use tracing::Span;
 
@@ -144,10 +143,15 @@ impl Evms {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, strum::Display)]
 pub enum EvmRoute {
+    #[strum(to_string = "parallel")]
     Parallel,
+
+    #[strum(to_string = "serial")]
     Serial,
+
+    #[strum(to_string = "call")]
     Call,
 }
 
@@ -376,19 +380,15 @@ impl Executor {
             // track
             let _span = info_span!(
                 "executor::local_transaction_attempt",
-                attempt = field::Empty,
-                tx_hash = field::Empty,
-                tx_from = field::Empty,
-                tx_to = field::Empty,
-                tx_nonce = field::Empty
+                %attempt,
+                tx_hash = %tx_input.hash,
+                tx_from = %tx_input.signer,
+                tx_to = tracing::field::Empty,
+                tx_nonce = %tx_input.nonce
             )
             .entered();
             Span::with(|s| {
-                s.rec_str("attempt", &attempt);
-                s.rec_str("tx_hash", &tx_input.hash);
-                s.rec_str("tx_from", &tx_input.signer);
                 s.rec_opt("tx_to", &tx_input.to);
-                s.rec_str("tx_nonce", &tx_input.nonce);
             });
             tracing::info!(
                 %attempt,
