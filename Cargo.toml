@@ -193,9 +193,6 @@ metrics = ["dep:metrics-exporter-prometheus"]
 # Enable runtime tracing/spans collection.
 tracing = []
 
-# Enable runtime additional tracing spans for debugging purposes.
-tracing-debug = []
-
 # Background tasks are spawned using threads instead of Tokio blocking tasks.
 bg-threads = []
 
