@@ -126,6 +126,8 @@ pub struct ExternalRelayer {
     stratus_chain: BlockchainClient,
 
     signer: TxSigner,
+
+    blocks_to_fetch: u64,
 }
 
 impl ExternalRelayer {
@@ -148,6 +150,7 @@ impl ExternalRelayer {
             stratus_chain: BlockchainClient::new_http(&config.stratus_rpc, config.rpc_timeout).await?,
             pool,
             signer,
+            blocks_to_fetch: config.blocks_to_fetch,
         })
     }
 
@@ -265,13 +268,14 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 3
+                LIMIT $1
             )
             UPDATE relayer_blocks r
                 SET started = true
                 FROM cte
                 WHERE r.number = cte.number
-                RETURNING r.number, r.payload"#
+                RETURNING r.number, r.payload"#,
+            self.blocks_to_fetch as i64
         )
         .fetch_all(&self.pool)
         .await?;
