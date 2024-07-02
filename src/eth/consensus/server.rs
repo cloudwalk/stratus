@@ -422,7 +422,7 @@ mod tests {
         let response = response.unwrap().into_inner();
         assert_eq!(response.status, StatusCode::AppendSuccess as i32);
         assert_eq!(response.message, "transaction Executions appended successfully");
-        assert_eq!(response.last_log_index, 0);
+        assert_eq!(response.last_log_index, 1);
     }
 
     #[tokio::test]
