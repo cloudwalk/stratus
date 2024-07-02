@@ -114,7 +114,7 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
     let miner = BlockMiner::new(
         storage.clone(),
         crate::eth::BlockMinerMode::External, //XXX this should be passed as an argument, leaders start with interval, followers with the soon to be implemented follower mode
-        None
+        None,
     );
 
     Consensus::new(
