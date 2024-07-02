@@ -294,10 +294,11 @@ impl RocksStorageState {
         }
 
         match point_in_time {
-            StoragePointInTime::Present => self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
-                index: *index,
-                value: account_slot_value.clone().into(),
-            }),
+            StoragePointInTime::Present | StoragePointInTime::Pending =>
+                self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
+                    index: *index,
+                    value: account_slot_value.clone().into(),
+                }),
             StoragePointInTime::Past(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
@@ -330,7 +331,7 @@ impl RocksStorageState {
             .collect();
 
         match point_in_time {
-            StoragePointInTime::Present => Ok(present_slots),
+            StoragePointInTime::Present | StoragePointInTime::Pending => Ok(present_slots),
             StoragePointInTime::Past(_) => {
                 let mut past_slots = Vec::with_capacity(present_slots.len());
                 for index in present_slots.iter().map(|s| s.index) {
@@ -351,7 +352,7 @@ impl RocksStorageState {
         }
 
         match point_in_time {
-            StoragePointInTime::Present => match self.accounts.get(&((*address).into())) {
+            StoragePointInTime::Present | StoragePointInTime::Pending => match self.accounts.get(&((*address).into())) {
                 Some(inner_account) => {
                     let account = inner_account.to_account(address);
                     tracing::trace!(%address, ?account, "account found");
@@ -383,7 +384,7 @@ impl RocksStorageState {
         tracing::debug!(?selection, "reading block");
 
         let block = match selection {
-            BlockFilter::Latest => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
+            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
             BlockFilter::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
             BlockFilter::Hash(block_hash) =>
