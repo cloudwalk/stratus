@@ -11,7 +11,7 @@ describe("Transaction: parallel transfer", () => {
     });
     it("Sends parallel requests", async () => {
         const counterParty = randomAccounts(1)[0];
-        expect(await sendGetBalance(counterParty.address)).eq(0);
+        expect(await sendGetBalance(counterParty.address)).eq(0, "counterParty initial balance mismatch");
 
         // sign transactions from accounts that have balance
         let expectedCounterPartyBalance = 0;
@@ -32,6 +32,9 @@ describe("Transaction: parallel transfer", () => {
         await sendRawTransactions(signedTxs);
 
         // verify
-        expect(await sendGetBalance(counterParty.address)).eq(expectedCounterPartyBalance);
+        expect(await sendGetBalance(counterParty.address)).eq(
+            expectedCounterPartyBalance,
+            "counterParty final balance mismatch",
+        );
     });
 });
