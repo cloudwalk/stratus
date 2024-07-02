@@ -65,7 +65,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
         await sendRawTransactions(signedTxs);
 
         // verify
-        expect(await _contract.get(ALICE.address)).eq(expectedBalances[BOB.address], "Alice final balance mismatch");
+        expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address], "Alice final balance mismatch");
         expect(await _contract.get(BOB.address)).eq(expectedBalances[BOB.address], "Bob final balance mismatch");
         expect(await _contract.get(CHARLIE.address)).eq(
             expectedBalances[CHARLIE.address],
