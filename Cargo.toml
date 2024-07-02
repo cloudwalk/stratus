@@ -182,7 +182,7 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["bg-threads", "metrics", "tracing", "tracing-debug", "rocks"]
+default = ["bg-threads", "metrics", "tracing", "rocks"]
 
 # Application is running in develoment mode.
 dev = []
