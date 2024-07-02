@@ -173,9 +173,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let transaction_executions: Vec<LocalTransactionExecution> = pending_transactions.iter().filter_map(|tx| tx.inner_local()).collect();
 
+        //TODO move this logic into BlockMiner and add safety checks as consensus is or isnt on follower mode there
         let block_result = block_from_propagation(block_entry.clone(), transaction_executions);
+        consensus.storage.finish_block().unwrap();
         match block_result {
-            Ok(block) => match consensus.storage.save_block(block.clone()) {
+            Ok(block) => match consensus.miner.commit(block.clone()) {
                 Ok(_) => {
                     tracing::info!(block_number = %block.header.number, "block saved successfully");
                 }
@@ -186,6 +188,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             },
             Err(err) => {
                 tracing::error!("failed to parse block: {:?}", err);
+                dbg!(err, pending_transactions.len());
                 return Err(Status::internal("failed to parse block"));
             }
         }

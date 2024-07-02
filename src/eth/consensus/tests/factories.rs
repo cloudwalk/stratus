@@ -107,26 +107,31 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
     let importer_config = None;
     let jsonrpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
     let grpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
-    let (tx_pending_txs, _) = broadcast::channel(10);
-    let (tx_blocks, _) = broadcast::channel(10);
 
     let tmpdir_log_entries_path = tmpdir_log_entries.path().to_str().map(|s| s.to_owned());
+    let storage = Arc::new(storage);
+
+    let miner = BlockMiner::new(
+        storage.clone(),
+        crate::eth::BlockMinerMode::External, //XXX this should be passed as an argument, leaders start with interval, followers with the soon to be implemented follower mode
+        None
+    );
 
     Consensus::new(
-        storage.into(),
+        storage.clone(),
+        miner.into(),
         tmpdir_log_entries_path,
         direct_peers,
         importer_config,
         jsonrpc_address,
         grpc_address,
-        tx_pending_txs.subscribe(),
-        tx_blocks.subscribe(),
     )
     .await
 }
 
 use tonic::service::Interceptor;
 
+use super::BlockMiner;
 use super::Hash;
 
 // Define a simple interceptor that does nothing

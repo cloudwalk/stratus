@@ -170,4 +170,22 @@ async fn test_append_entries_transaction_executions_and_block() {
             .unwrap();
         //TODO test slots details
     }
+
+    let block_entry = create_mock_block_entry(vec![], None);
+
+    let block_request = Request::new(AppendBlockCommitRequest {
+        term: 1,
+        leader_id: leader_id.clone(),
+        prev_log_index,
+        prev_log_term: 1,
+        block_entry: Some(block_entry.clone()),
+    });
+
+    let block_response = service.append_block_commit(block_request).await;
+    assert!(block_response.is_ok(), "{}", format!("{:?}", block_response));
+    let response_inner = block_response.unwrap().into_inner();
+    assert_eq!(response_inner.status, StatusCode::AppendSuccess as i32);
+
+    let saved_block = storage.read_block(&BlockFilter::Latest).unwrap().unwrap();
+    assert_eq!(saved_block.transactions.len(), 0);
 }
