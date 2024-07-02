@@ -68,6 +68,7 @@ use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
 use super::primitives::Bytes;
 use super::primitives::TransactionExecution;
+use super::BlockMiner;
 use crate::config::RunWithImporterConfig;
 use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
@@ -166,6 +167,7 @@ pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
+    miner: Arc<BlockMiner>,
     #[cfg(feature = "rocks")]
     log_entries_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
@@ -188,13 +190,12 @@ impl Consensus {
     #[allow(clippy::too_many_arguments)] //TODO: refactor into consensus config
     pub async fn new(
         storage: Arc<StratusStorage>,
+        miner: Arc<BlockMiner>,
         log_storage_path: Option<String>,
         direct_peers: Vec<String>,
         importer_config: Option<RunWithImporterConfig>,
         jsonrpc_address: SocketAddr,
         grpc_address: SocketAddr,
-        rx_pending_txs: broadcast::Receiver<TransactionExecution>,
-        rx_blocks: broadcast::Receiver<Block>,
     ) -> Arc<Self> {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
         let last_arrived_block_number = AtomicU64::new(0);
@@ -220,6 +221,7 @@ impl Consensus {
 
         let consensus = Self {
             broadcast_sender,
+            miner: Arc::clone(&miner),
             storage,
             #[cfg(feature = "rocks")]
             log_entries_storage,
@@ -239,6 +241,10 @@ impl Consensus {
             blockchain_client: Mutex::new(None),
         };
         let consensus = Arc::new(consensus);
+
+        //TODO replace this for a synchronous call
+        let rx_pending_txs: broadcast::Receiver<TransactionExecution> = miner.notifier_pending_txs.subscribe();
+        let rx_blocks: broadcast::Receiver<Block> = miner.notifier_blocks.subscribe();
 
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         Self::initialize_transaction_execution_queue(Arc::clone(&consensus));

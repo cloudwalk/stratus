@@ -228,7 +228,6 @@ impl BlockMiner {
             Handle::current().block_on(relayer.send_to_relayer(block.clone()))?;
         }
 
-        // persist block
         self.storage.save_block(block.clone())?;
         self.storage.set_mined_block_number(block_number)?;
 
