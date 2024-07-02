@@ -3,6 +3,7 @@ use ethereum_types::H256;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
+use ethers_core::types::OtherFields;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
@@ -157,6 +158,7 @@ where
             // block: identifiers
             hash: Some(header.hash.into()),
             number: Some(header.number.into()),
+            mix_hash: Some(Default::default()),
 
             // block: relation with other blocks
             uncles_hash: HASH_EMPTY_UNCLES.into(),
@@ -181,22 +183,19 @@ where
             excess_blob_gas: None,
 
             // transactions
+            transactions: vec![], // can't fill transactions from header, must be modified afterward
             transactions_root: header.transactions_root.into(),
             receipts_root: HASH_EMPTY_TRIE.into(),
+            withdrawals_root: None,
+            withdrawals: None,
 
             // data
+            size: Some(u64::from(header.size).into()),
             logs_bloom: Some(*header.bloom),
             extra_data: Default::default(),
-
-            // TODO
-            ..Default::default() // state_root: todo!(),
-                                 // seal_fields: todo!(),
-                                 // transactions: todo!(),
-                                 // size: todo!(),
-                                 // mix_hash: todo!(),
-                                 // withdrawals_root: todo!(),
-                                 // withdrawals: todo!(),
-                                 // other: todo!(),
+            state_root: header.state_root.into(),
+            seal_fields: Default::default(),
+            other: OtherFields::default(),
         }
     }
 }

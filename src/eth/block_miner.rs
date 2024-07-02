@@ -20,6 +20,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::Size;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::relayer::ExternalRelayerClient;
@@ -273,6 +274,7 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 
     let mut block = Block::new(number, block_timestamp);
     block.transactions.reserve(txs.len());
+    block.header.size = Size::from(txs.len() as u64);
 
     // mine transactions and logs
     let mut log_index = Index::ZERO;
@@ -332,7 +334,7 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
         }
     }
 
-    // TODO: calculate size, state_root, receipts_root, parent_hash
+    // TODO: calculate state_root, receipts_root and parent_hash
     Ok(block)
 }
 /// Mines transactions and logs, assigning necessary properties like block hash and log index.
