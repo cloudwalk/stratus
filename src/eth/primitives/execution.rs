@@ -168,6 +168,26 @@ impl EvmExecution {
         Ok(())
     }
 
+    pub fn fix_logs_relayer_signer(&mut self, receipt: &ExternalReceipt) {
+        const REQUEST_CASHOUT_EVENT_HASH: [u8; 32] = hex!("20b676b4cd29836c09ac8cdd7874e46af9018a34a1085e1945f7bfa506af3cbd");
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| REQUEST_CASHOUT_EVENT_HASH == topic.as_ref());
+            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| REQUEST_CASHOUT_EVENT_HASH == topic.as_ref());
+
+            // only try overwriting if both logs refer to the target event
+            let should_overwrite = execution_log_matches() && receipt_log_matches();
+            if !should_overwrite {
+                continue;
+            }
+
+            let (Some(_), Some(source)) = (execution_log.topic3, receipt_log.topics.get(3)) else {
+                continue;
+            };
+            execution_log.topic3 = Some((*source).into());
+        }
+    }
+
     /// External transactions are re-executed locally with max gas and zero gas price.
     ///
     /// This causes some attributes to be different from the original execution.
