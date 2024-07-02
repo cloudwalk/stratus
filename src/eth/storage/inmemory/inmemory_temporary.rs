@@ -26,7 +26,7 @@ use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
-const MAX_BLOCKS: usize = 64;
+pub const MAX_BLOCKS: usize = 64;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
@@ -74,7 +74,7 @@ pub struct InMemoryTemporaryStorageState {
 
 impl InMemoryTemporaryStorageState {
     /// Validates there is an active pending block being mined and returns a reference to it.
-    fn require_active_block(&mut self) -> anyhow::Result<&PendingBlock> {
+    fn require_active_block(&self) -> anyhow::Result<&PendingBlock> {
         match &self.block {
             Some(block) => Ok(block),
             None => log_and_err!("no pending block being mined"), // try calling set_active_block_number_as_next_if_not_set or any other method to create a new block on temp storage

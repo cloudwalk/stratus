@@ -15,6 +15,7 @@ pub use external_rpc_storage::ExternalRpcStorage;
 pub use inmemory::InMemoryPermanentStorage;
 pub use inmemory::InMemoryPermanentStorageState;
 pub use inmemory::InMemoryTemporaryStorage;
+pub use inmemory::INMEMORY_TEMPORARY_STORAGE_MAX_BLOCKS;
 pub use permanent_storage::PermanentStorage;
 pub use postgres_external_rpc::PostgresExternalRpcStorage;
 pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;

@@ -161,7 +161,7 @@ macro_rules! channel_read {
         $crate::channel_read_impl!($rx, timeout_ms: 2000)
     };
     ($rx: ident, $timeout_ms:expr) => {
-        $crate::channel_read_impl!($rx, timeout_ms: $timeout_ms),
+        $crate::channel_read_impl!($rx, timeout_ms: $timeout_ms)
     };
 }
 
