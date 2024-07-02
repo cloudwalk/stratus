@@ -269,6 +269,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         consensus.prev_log_index.store(index, Ordering::SeqCst);
+        consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
         consensus.reset_heartbeat_signal.notify_waiters();
 
         #[cfg(feature = "metrics")]
