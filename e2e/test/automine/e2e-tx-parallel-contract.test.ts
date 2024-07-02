@@ -6,7 +6,7 @@ import {
     TX_PARAMS,
     deployTestContractBalances,
     deployTestContractCounter,
-    pollForTransactions,
+    pollReceipts,
     send,
     sendGetNonce,
     sendRawTransactions,
@@ -62,9 +62,13 @@ describe("Transaction: parallel TestContractBalances", async () => {
         }
 
         // send transactions in parallel
-        await sendRawTransactions(signedTxs);
+        const hashes = await sendRawTransactions(signedTxs);
+        const receipts = await pollReceipts(hashes);
 
         // verify
+        expect(receipts.successCount).eq(signedTxs.length, "Success transaction count mismatch");
+        expect(receipts.failedCount).eq(0, "Failed transaction count mismatch");
+
         expect(await _contract.get(ALICE.address)).eq(expectedBalances[ALICE.address], "Alice final balance mismatch");
         expect(await _contract.get(BOB.address)).eq(expectedBalances[BOB.address], "Bob final balance mismatch");
         expect(await _contract.get(CHARLIE.address)).eq(
@@ -92,12 +96,12 @@ describe("Transaction: parallel TestContractBalances", async () => {
 
         // send transactions in parallel
         const hashes = await sendRawTransactions(signedTxs);
-        const receipts = await pollForTransactions(hashes);
-        let failed = receipts.filter((r) => r.status == 0).length;
+        const receipts = await pollReceipts(hashes);
 
         // check remaining balance
+        expect(receipts.successCount).eq(15, "Success transaction count mismatch");
+        expect(receipts.failedCount).eq(5, "Failed transaction count mismatch");
         expect(await _contract.get(ALICE.address)).eq(15, "Alice final balance mismatch");
-        expect(failed).eq(5, "Failed transactions count mismatch");
     });
 });
 
@@ -144,9 +148,13 @@ describe("Transaction: parallel TestContractCounter", async () => {
             const doubleSignedTx = await doubleSender.signer().signTransaction(doubleTx);
 
             // send transactions in parallel
-            await sendRawTransactions([incSignedTx, doubleSignedTx]);
+            const hashes = await sendRawTransactions([incSignedTx, doubleSignedTx]);
+            const receipts = await pollReceipts(hashes);
 
             // verify
+            expect(receipts.successCount).eq(2, "Success transaction count mismatch");
+            expect(receipts.failedCount).eq(0, "Failed transaction count mismatch");
+
             expect(await _contract.getCounter()).eq(i + 1, "Counter final value mismatch");
             expect(await _contract.getDoubleCounter()).oneOf(
                 expectedDoubleCounter,
