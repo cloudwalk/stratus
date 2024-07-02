@@ -306,23 +306,6 @@ where
         .expect("spawning background thread should not fail")
 }
 
-/// Spawns a blocking Tokio task or a thread according to the compilation feature-flag.
-#[track_caller]
-pub fn spawn_blocking_named_or_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static)
-where
-    T: Send + 'static,
-{
-    #[cfg(feature = "bg-threads")]
-    {
-        spawn_thread(name, task);
-    }
-
-    #[cfg(not(feature = "bg-threads"))]
-    {
-        spawn_blocking_named(name, task);
-    }
-}
-
 /// Spawns a handler that listens to system signals.
 pub async fn spawn_signal_handler() -> anyhow::Result<()> {
     const TASK_NAME: &str = "signal-handler";
