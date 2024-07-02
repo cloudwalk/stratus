@@ -18,9 +18,9 @@ use crate::eth::consensus::StatusCode;
 use crate::eth::consensus::TransactionExecutionEntry;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StoragePointInTime;
 
@@ -114,7 +114,7 @@ async fn test_append_entries_transaction_executions_and_block() {
     let saved_block = storage.read_block(&BlockFilter::Latest).unwrap().unwrap();
     assert_eq!(saved_block.transactions.len(), all_executions.len());
 
-    let saved_transaction_hashes: Vec<Hash> = saved_block.transactions.iter().map(|tx| tx.input.hash.clone()).collect();
+    let saved_transaction_hashes: Vec<Hash> = saved_block.transactions.iter().map(|tx| tx.input.hash).collect();
     let expected_transaction_hashes: Vec<Hash> = transaction_hashes.iter().map(|hash| Hash::new_from_h256(H256::from_slice(hash))).collect();
 
     assert_eq!(saved_transaction_hashes, expected_transaction_hashes);
@@ -147,17 +147,27 @@ async fn test_append_entries_transaction_executions_and_block() {
     assert!(mined_block_number >= BlockNumber::ZERO);
 
     for execution in all_executions.iter() {
-        let account = storage.read_account(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present).unwrap();
+        let _account = storage
+            .read_account(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present)
+            .unwrap();
         //TODO test account details
     }
 
     for execution in all_executions.iter() {
-        let slot = storage.read_slot(&Address::new_from_h160(H160::from_slice(&execution.from)), &SlotIndex::ZERO, &StoragePointInTime::Present).unwrap();
+        let _slot = storage
+            .read_slot(
+                &Address::new_from_h160(H160::from_slice(&execution.from)),
+                &SlotIndex::ZERO,
+                &StoragePointInTime::Present,
+            )
+            .unwrap();
         //TODO test slot details
     }
 
     for execution in all_executions.iter() {
-        let slots = storage.read_all_slots(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present).unwrap();
+        let _slots = storage
+            .read_all_slots(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present)
+            .unwrap();
         //TODO test slots details
     }
 }
