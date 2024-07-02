@@ -193,7 +193,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
         let state_lock = self.lock_read();
         let block = match selection {
-            BlockFilter::Latest => state_lock.blocks_by_number.values().last().cloned(),
+            BlockFilter::Latest | BlockFilter::Pending => state_lock.blocks_by_number.values().last().cloned(),
             BlockFilter::Earliest => state_lock.blocks_by_number.values().next().cloned(),
             BlockFilter::Number(block_number) => state_lock.blocks_by_number.get(block_number).cloned(),
             BlockFilter::Hash(block_hash) => state_lock.blocks_by_hash.get(block_hash).cloned(),

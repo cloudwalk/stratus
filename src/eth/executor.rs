@@ -465,7 +465,7 @@ impl Executor {
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
         let evm_route = match point_in_time {
-            StoragePointInTime::Present => EvmRoute::CallPresent,
+            StoragePointInTime::Present | StoragePointInTime::Pending => EvmRoute::CallPresent,
             StoragePointInTime::Past(_) => EvmRoute::CallPast,
         };
         let evm_result = self.evms.execute(evm_input, evm_route);
