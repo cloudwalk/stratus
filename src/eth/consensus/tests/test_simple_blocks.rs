@@ -112,7 +112,7 @@ async fn test_append_entries_transaction_executions_and_block() {
 
     // Verify the block was saved with the correct transaction hashes
     let saved_block = storage.read_block(&BlockFilter::Latest).unwrap().unwrap();
-    assert_eq!(saved_block.transactions.len(), all_executions.len());
+    assert_eq!(saved_block.transactions.len(), 9);
 
     let saved_transaction_hashes: Vec<Hash> = saved_block.transactions.iter().map(|tx| tx.input.hash).collect();
     let expected_transaction_hashes: Vec<Hash> = transaction_hashes.iter().map(|hash| Hash::new_from_h256(H256::from_slice(hash))).collect();
@@ -171,6 +171,7 @@ async fn test_append_entries_transaction_executions_and_block() {
         //TODO test slots details
     }
 
+    // generates a second block
     let block_entry = create_mock_block_entry(vec![], None);
 
     let block_request = Request::new(AppendBlockCommitRequest {
@@ -188,4 +189,56 @@ async fn test_append_entries_transaction_executions_and_block() {
 
     let saved_block = storage.read_block(&BlockFilter::Latest).unwrap().unwrap();
     assert_eq!(saved_block.transactions.len(), 0);
+
+    // generates a third block
+    let provided_hashes = vec![
+        Hash::new(hex!("056bd43a37cafa7321985c7b4c5f228db2f2f9e4e20307b88e4427a7ee8d273c")),
+        Hash::new(hex!("0891f0534d157cbf567a6b5e4d3894d169af57f529ed31448045dd1314fe0bb1")),
+        Hash::new(hex!("22caaef98424a1a1f95d3604ecd35d99c8f82014b69be201e0d31fd44a512b24")),
+    ];
+
+    let mut hash_index = 0;
+    let executions: Vec<TransactionExecutionEntry> = (0..transactions_per_request)
+        .map(|_| {
+            let entry = create_mock_transaction_execution_entry(Some(provided_hashes[hash_index]));
+            hash_index += 1;
+            entry
+        })
+        .collect();
+
+    let request = Request::new(AppendTransactionExecutionsRequest {
+        term: 1,
+        leader_id: leader_id.clone(),
+        prev_log_index,
+        prev_log_term: 1, // assuming same term for simplicity
+        executions: executions.clone(),
+    });
+
+    let response = service.append_transaction_executions(request).await;
+    assert!(response.is_ok());
+    let response_inner = response.unwrap().into_inner();
+    assert_eq!(response_inner.status, StatusCode::AppendSuccess as i32);
+
+    let transaction_hashes: Vec<Vec<u8>> = executions.iter().map(|e| e.hash.clone()).collect();
+
+    let block_entry = create_mock_block_entry(
+        transaction_hashes,
+        Some(Hash::new(hex!("1ba6cc210ec982f09290338c2bd8b501bf2ca40ff153c11dd1b10a57128b5b64"))),
+    );
+
+    let block_request = Request::new(AppendBlockCommitRequest {
+        term: 1,
+        leader_id: leader_id.clone(),
+        prev_log_index,
+        prev_log_term: 1,
+        block_entry: Some(block_entry.clone()),
+    });
+
+    let block_response = service.append_block_commit(block_request).await;
+    assert!(block_response.is_ok(), "{}", format!("{:?}", block_response));
+    let response_inner = block_response.unwrap().into_inner();
+    assert_eq!(response_inner.status, StatusCode::AppendSuccess as i32);
+
+    let saved_block = storage.read_block(&BlockFilter::Latest).unwrap().unwrap();
+    assert_eq!(saved_block.transactions.len(), 3);
 }
