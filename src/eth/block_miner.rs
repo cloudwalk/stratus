@@ -398,7 +398,6 @@ pub fn block_from_propagation(block_entry: append_entry::BlockEntry, temporary_t
     // Calculate the transactions root and compare it with the one in the block header to ensure integrity.
     if !block.transactions.is_empty() {
         let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
-        dbg!(&transactions_hashes);
         let calculated_transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
 
         if block.header.transactions_root != calculated_transactions_root {
