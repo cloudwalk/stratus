@@ -294,7 +294,7 @@ impl RocksStorageState {
         }
 
         match point_in_time {
-            StoragePointInTime::Present | StoragePointInTime::Pending =>
+            StoragePointInTime::Mined | StoragePointInTime::Temp =>
                 self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
                     index: *index,
                     value: account_slot_value.clone().into(),
@@ -331,7 +331,7 @@ impl RocksStorageState {
             .collect();
 
         match point_in_time {
-            StoragePointInTime::Present | StoragePointInTime::Pending => Ok(present_slots),
+            StoragePointInTime::Mined | StoragePointInTime::Temp => Ok(present_slots),
             StoragePointInTime::Past(_) => {
                 let mut past_slots = Vec::with_capacity(present_slots.len());
                 for index in present_slots.iter().map(|s| s.index) {
@@ -352,7 +352,7 @@ impl RocksStorageState {
         }
 
         match point_in_time {
-            StoragePointInTime::Present | StoragePointInTime::Pending => match self.accounts.get(&((*address).into())) {
+            StoragePointInTime::Mined | StoragePointInTime::Temp => match self.accounts.get(&((*address).into())) {
                 Some(inner_account) => {
                     let account = inner_account.to_account(address);
                     tracing::trace!(%address, ?account, "account found");

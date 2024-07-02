@@ -538,7 +538,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     tracing::info!("executing eth_estimateGas");
 
     // execute
-    match ctx.executor.execute_local_call(call, StoragePointInTime::Present) {
+    match ctx.executor.execute_local_call(call, StoragePointInTime::Mined) {
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");

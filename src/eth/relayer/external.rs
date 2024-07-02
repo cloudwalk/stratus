@@ -200,7 +200,7 @@ impl ExternalRelayer {
             };
 
             let substrate_slot_value = loop {
-                match self.substrate_chain.fetch_storage_at(&address, &index, StoragePointInTime::Present).await {
+                match self.substrate_chain.fetch_storage_at(&address, &index, StoragePointInTime::Mined).await {
                     Ok(value) => break value,
                     Err(e) => tracing::warn!(reason = ?e, %address, %index, "failed to fetch slot value from substrate, retrying..."),
                 }

@@ -51,7 +51,7 @@ where
     /// Returns the value at the given point in time.
     pub fn get_at_point(&self, point_in_time: &StoragePointInTime) -> Option<T> {
         match point_in_time {
-            StoragePointInTime::Present | StoragePointInTime::Pending => Some(self.get_current()),
+            StoragePointInTime::Mined | StoragePointInTime::Temp => Some(self.get_current()),
             StoragePointInTime::Past(block_number) => self.get_at_block(block_number),
         }
     }

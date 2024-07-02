@@ -64,13 +64,13 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Pending => storage.read_active_block_number()?.unwrap_or(BlockNumber::ZERO),
-            StoragePointInTime::Present => storage.read_mined_block_number()?,
+            StoragePointInTime::Temp => storage.read_active_block_number()?.unwrap_or(BlockNumber::ZERO),
+            StoragePointInTime::Mined => storage.read_mined_block_number()?,
             StoragePointInTime::Past(number) => number,
         };
         let to = match to {
-            StoragePointInTime::Pending => storage.read_active_block_number()?,
-            StoragePointInTime::Present => None,
+            StoragePointInTime::Temp => storage.read_active_block_number()?,
+            StoragePointInTime::Mined => None,
             StoragePointInTime::Past(number) => Some(number),
         };
 
