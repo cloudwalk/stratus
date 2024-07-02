@@ -189,7 +189,9 @@ impl MockAppendEntryServiceClient {
         Ok(tonic::Response::new(AppendTransactionExecutionsResponse {
             status: super::StatusCode::AppendSuccess as i32,
             message: "Mock response".to_string(),
-            last_committed_block_number: 0,
+            match_log_index: 0,
+            last_log_index: 0,
+            last_log_term: 0,
         }))
     }
 
@@ -200,7 +202,9 @@ impl MockAppendEntryServiceClient {
         Ok(tonic::Response::new(AppendBlockCommitResponse {
             status: super::StatusCode::AppendSuccess as i32,
             message: "Mock response".to_string(),
-            last_committed_block_number: 0,
+            match_log_index: 0,
+            last_log_index: 0,
+            last_log_term: 0,
         }))
     }
 

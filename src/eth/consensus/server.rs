@@ -143,10 +143,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_TRANSACTION_EXECUTIONS);
 
+        let last_log_index = consensus.prev_log_index.load(Ordering::SeqCst);
+        let last_log_term = consensus.current_term.load(Ordering::SeqCst);
+
         Ok(Response::new(AppendTransactionExecutionsResponse {
             status: StatusCode::AppendSuccess as i32,
             message: "transaction Executions appended successfully".into(),
-            last_committed_block_number: 0,
+            match_log_index: index,
+            last_log_index: last_log_index,
+            last_log_term: last_log_term,
         }))
     }
 
@@ -275,10 +280,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
 
+        let last_log_index = consensus.prev_log_index.load(Ordering::SeqCst);
+        let last_log_term = consensus.current_term.load(Ordering::SeqCst);
+
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
             message: "Block Commit appended successfully".into(),
-            last_committed_block_number: consensus.prev_log_index.load(Ordering::SeqCst),
+            match_log_index: index,
+            last_log_index: last_log_index,
+            last_log_term: last_log_term,
         }))
     }
 
@@ -412,7 +422,7 @@ mod tests {
         let response = response.unwrap().into_inner();
         assert_eq!(response.status, StatusCode::AppendSuccess as i32);
         assert_eq!(response.message, "transaction Executions appended successfully");
-        assert_eq!(response.last_committed_block_number, 0);
+        assert_eq!(response.last_log_index, 0);
     }
 
     #[tokio::test]
