@@ -8,7 +8,6 @@ use ethereum_types::Bloom;
 use ethereum_types::H160;
 use ethereum_types::H256;
 use rand::Rng;
-use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 
 use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
@@ -117,13 +116,13 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
     let storage = Arc::new(storage);
 
     let miner = BlockMiner::new(
-        storage.clone(),
+        Arc::clone(&storage),
         crate::eth::BlockMinerMode::External, //XXX this should be passed as an argument, leaders start with interval, followers with the soon to be implemented follower mode
         None,
     );
 
     Consensus::new(
-        storage.clone(),
+        Arc::clone(&storage),
         miner.into(),
         tmpdir_log_entries_path,
         direct_peers,

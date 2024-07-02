@@ -191,11 +191,9 @@ async fn test_append_entries_transaction_executions_and_block() {
     assert_eq!(saved_block.transactions.len(), 0);
 
     // generates a third block
-    let provided_hashes = vec![
-        Hash::new(hex!("056bd43a37cafa7321985c7b4c5f228db2f2f9e4e20307b88e4427a7ee8d273c")),
+    let provided_hashes = [Hash::new(hex!("056bd43a37cafa7321985c7b4c5f228db2f2f9e4e20307b88e4427a7ee8d273c")),
         Hash::new(hex!("0891f0534d157cbf567a6b5e4d3894d169af57f529ed31448045dd1314fe0bb1")),
-        Hash::new(hex!("22caaef98424a1a1f95d3604ecd35d99c8f82014b69be201e0d31fd44a512b24")),
-    ];
+        Hash::new(hex!("22caaef98424a1a1f95d3604ecd35d99c8f82014b69be201e0d31fd44a512b24"))];
 
     let mut hash_index = 0;
     let executions: Vec<TransactionExecutionEntry> = (0..transactions_per_request)
