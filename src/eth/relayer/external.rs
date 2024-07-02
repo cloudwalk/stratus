@@ -162,10 +162,12 @@ impl ExternalRelayer {
                 let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
                 if let Some(transaction) = transaction_signed {
                     tx.input = transaction;
-                } else {
+                } else if tx.is_success() {
                     let prev_hash = tx.input.hash;
                     tx.input = self.signer.sign_transaction_input(tx.input);
                     self.insert_transaction_mapping(prev_hash, &tx.input).await;
+                } else {
+                    continue;
                 }
             }
             combined_transactions.push(tx);
