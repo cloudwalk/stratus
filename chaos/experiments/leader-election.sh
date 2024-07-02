@@ -95,7 +95,7 @@ check_leader() {
     # Send the gRPC request using grpcurl and capture both stdout and stderr
     response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{
         "leader_id": "leader_id_value",
-        "term": 999999999,
+        "term": 0,
         "prevLogIndex": 0,
         "prevLogTerm": 0,
         "executions": [
@@ -132,7 +132,7 @@ check_leader() {
     # Check the response for specific strings to determine the node status
     if [[ "$response" == *"append_transaction_executions called on leader node"* ]]; then
         return 0 # Success exit code for leader
-    else
+    elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
         return 1 # Failure exit code for non-leader
     fi
 }
