@@ -158,7 +158,7 @@ where
             // block: identifiers
             hash: Some(header.hash.into()),
             number: Some(header.number.into()),
-            mix_hash: Default::default(),
+            mix_hash: Some(Default::default()),
 
             // block: relation with other blocks
             uncles_hash: HASH_EMPTY_UNCLES.into(),
