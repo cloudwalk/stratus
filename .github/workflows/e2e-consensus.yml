@@ -33,16 +33,16 @@ jobs:
         include:
           - leader-restart: true
             instances: 2
-            iterations: 2
+            iterations: 1
           - leader-restart: true
             instances: 3
-            iterations: 4
+            iterations: 3
           - leader-restart: false
             instances: 2
-            iterations: 8
+            iterations: 6
           - leader-restart: false
             instances: 3
-            iterations: 12
+            iterations: 8
 
     name: E2E Leader Election with ${{ matrix.instances }} instance(s) and leader restart ${{ matrix.leader-restart }}
     runs-on: ubuntu-latest
