@@ -150,8 +150,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
             status: StatusCode::AppendSuccess as i32,
             message: "transaction Executions appended successfully".into(),
             match_log_index: index,
-            last_log_index: last_log_index,
-            last_log_term: last_log_term,
+            last_log_index,
+            last_log_term,
         }))
     }
 
@@ -287,8 +287,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
             status: StatusCode::AppendSuccess as i32,
             message: "Block Commit appended successfully".into(),
             match_log_index: index,
-            last_log_index: last_log_index,
-            last_log_term: last_log_term,
+            last_log_index,
+            last_log_term,
         }))
     }
 
