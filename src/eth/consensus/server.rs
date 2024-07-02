@@ -271,7 +271,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             },
             Err(err) => {
                 tracing::error!("failed to parse block: {:?}", err);
-                dbg!(err, pending_transactions.len());
                 return Err(Status::internal("failed to parse block"));
             }
         }
