@@ -15,7 +15,6 @@ use serde_with::OneOrMany;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogTopic;
@@ -64,12 +63,10 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Pending => storage.read_active_block_number()?.unwrap_or(BlockNumber::ZERO),
             StoragePointInTime::Present => storage.read_mined_block_number()?,
             StoragePointInTime::Past(number) => number,
         };
         let to = match to {
-            StoragePointInTime::Pending => storage.read_active_block_number()?,
             StoragePointInTime::Present => None,
             StoragePointInTime::Past(number) => Some(number),
         };

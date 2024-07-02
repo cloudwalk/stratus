@@ -226,8 +226,8 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
-        // read from temp only if pending
-        if point_in_time.is_pending() {
+        // read from temp only if present
+        if point_in_time.is_present() {
             tracing::debug!(storage = %label::TEMP, %address, "reading account");
             let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
                 metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
@@ -259,8 +259,8 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
-        // read from temp only if pending
-        if point_in_time.is_pending() {
+        // read from temp only if present
+        if point_in_time.is_present() {
             tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
             let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
                 metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
@@ -424,7 +424,6 @@ impl StratusStorage {
     /// Translates a block selection to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: &BlockFilter) -> anyhow::Result<StoragePointInTime> {
         match block_filter {
-            BlockFilter::Pending => Ok(StoragePointInTime::Present),
             BlockFilter::Latest => Ok(StoragePointInTime::Present),
             BlockFilter::Number(number) => Ok(StoragePointInTime::Past(*number)),
             BlockFilter::Earliest | BlockFilter::Hash(_) => match self.read_block(block_filter)? {
