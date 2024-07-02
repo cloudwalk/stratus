@@ -173,7 +173,8 @@ pub struct Consensus {
     direct_peers: Vec<String>,
     voted_for: Mutex<Option<PeerAddress>>, //essential to ensure that a server only votes once per term
     current_term: AtomicU64,
-    last_arrived_block_number: AtomicU64, //FIXME this should be replaced by the index on our appendEntry log
+    last_arrived_block_number: AtomicU64, // kept for should_serve method check
+    prev_log_index: AtomicU64,
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
     role: AtomicU8,
     heartbeat_timeout: Duration,
@@ -196,19 +197,37 @@ impl Consensus {
         rx_blocks: broadcast::Receiver<Block>,
     ) -> Arc<Self> {
         let (broadcast_sender, _) = broadcast::channel(32); //TODO rename to internal_peer_broadcast_sender
-        let last_arrived_block_number = AtomicU64::new(0); //we use the max value to ensure that only after receiving the first appendEntry we can start the consensus
+        let last_arrived_block_number = AtomicU64::new(0);
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
+
+        #[cfg(feature = "rocks")]
+        let log_entries_storage: Arc<AppendLogEntriesStorage>;
+        let current_term: u64;
+        let prev_log_index: u64;
+        #[cfg(feature = "rocks")]
+        {
+            log_entries_storage = Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap());
+            current_term = log_entries_storage.get_last_term().unwrap_or(0);
+            prev_log_index = log_entries_storage.get_last_index().unwrap_or(0);
+        }
+
+        #[cfg(not(feature = "rocks"))]
+        {
+            current_term = 0;
+            prev_log_index = 0;
+        }
 
         let consensus = Self {
             broadcast_sender,
             storage,
             #[cfg(feature = "rocks")]
-            log_entries_storage: Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap()),
+            log_entries_storage,
             peers,
             direct_peers,
-            current_term: AtomicU64::new(0),
+            current_term: AtomicU64::new(current_term),
             voted_for: Mutex::new(None),
+            prev_log_index: AtomicU64::new(prev_log_index),
             last_arrived_block_number,
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
@@ -315,7 +334,7 @@ impl Consensus {
             let request = Request::new(RequestVoteRequest {
                 term,
                 candidate_id: consensus.my_address.to_string(),
-                last_log_index: consensus.last_arrived_block_number.load(Ordering::SeqCst),
+                last_log_index: consensus.prev_log_index.load(Ordering::SeqCst),
                 last_log_term: term,
             });
 
@@ -596,7 +615,6 @@ impl Consensus {
         Ok((result.tx_hash, blockchain_client.http_url.clone())) //XXX HEX
     }
 
-    //TODO for now the block number is the index, but it should be a separate index wiht the execution AND the block
     pub async fn should_serve(&self) -> bool {
         if self.is_leader() {
             return true;
@@ -612,24 +630,29 @@ impl Consensus {
 
         if last_arrived_block_number == 0 {
             tracing::warn!("no appendEntry has been received yet");
-            return false;
-        }
-
-        let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or(BlockNumber::from(0)).into();
-
-        tracing::info!(
-            "last arrived block number: {}, storage block number: {}",
-            last_arrived_block_number,
-            storage_block_number
-        );
-
-        if (last_arrived_block_number - 3) <= storage_block_number {
-            tracing::info!("should serve request");
-            true
-        } else {
-            let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
-            tracing::warn!(diff = diff, "should not serve request");
             false
+        } else {
+            #[cfg(feature = "rocks")]
+            {
+                let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or(BlockNumber::from(0)).into();
+
+                tracing::info!(
+                    "last arrived block number: {}, storage block number: {}",
+                    last_arrived_block_number,
+                    storage_block_number
+                );
+
+                if (last_arrived_block_number - 3) <= storage_block_number {
+                    tracing::info!("should serve request");
+                    true
+                } else {
+                    let diff = (last_arrived_block_number as i128) - (storage_block_number as i128);
+                    tracing::warn!(diff = diff, "should not serve request");
+                    false
+                }
+            }
+            #[cfg(not(feature = "rocks"))] // TODO remove this branch when rocksdb is not optional in consensus
+            true
         }
     }
 
@@ -738,13 +761,34 @@ impl Consensus {
     async fn append_transaction_executions_to_peer(&self, peer: &mut Peer, executions: Vec<TransactionExecutionEntry>) {
         if self.is_leader() {
             let current_term = self.current_term.load(Ordering::SeqCst);
+            let prev_log_index: u64;
+            let prev_log_term: u64;
+
+            #[cfg(feature = "rocks")]
+            {
+                prev_log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+                prev_log_term = self.log_entries_storage.get_last_term().unwrap_or(0);
+            }
+
+            #[cfg(not(feature = "rocks"))]
+            {
+                prev_log_index = 0;
+                prev_log_term = 0;
+            }
+
             let request = Request::new(AppendTransactionExecutionsRequest {
                 term: current_term,
-                prev_log_index: self.last_arrived_block_number.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
-                prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
+                prev_log_index,
+                prev_log_term,
                 executions,
                 leader_id: self.my_address.to_string(),
             });
+            tracing::debug!(
+                "append_transaction_execution request sent. term: {}, prev_log_index: {}, prev_log_term: {}",
+                request.get_ref().term,
+                request.get_ref().prev_log_index,
+                request.get_ref().prev_log_term,
+            );
 
             match peer.client.append_transaction_executions(request).await {
                 Ok(response) =>
@@ -771,13 +815,37 @@ impl Consensus {
             let start = metrics::now();
 
             let current_term = self.current_term.load(Ordering::SeqCst);
+
+            let prev_log_index: u64;
+            let prev_log_term: u64;
+
+            #[cfg(feature = "rocks")]
+            {
+                prev_log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+                prev_log_term = self.log_entries_storage.get_last_term().unwrap_or(0);
+            }
+
+            #[cfg(not(feature = "rocks"))]
+            {
+                prev_log_index = 0;
+                prev_log_term = 0;
+            }
+
             let request = Request::new(AppendBlockCommitRequest {
                 term: current_term,
-                prev_log_index: self.last_arrived_block_number.load(Ordering::SeqCst), //FIXME we should gather it from the log entries
-                prev_log_term: current_term,                                           //FIXME we should gather it from the log entries
+                prev_log_index,
+                prev_log_term,
                 block_entry: Some(block_entry.clone()),
                 leader_id: self.my_address.to_string(),
             });
+
+            tracing::debug!(
+                "append_block_commit request sent. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
+                request.get_ref().block_entry.as_ref().map(|b| b.number).unwrap_or(0),
+                request.get_ref().term,
+                request.get_ref().prev_log_index,
+                request.get_ref().prev_log_term,
+            );
 
             let response = peer.client.append_block_commit(request).await?;
             let response = response.into_inner();

@@ -44,6 +44,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
 
+        tracing::debug!(
+            "append_transaction_execution request received. term: {}, prev_log_index: {}, prev_log_term: {}",
+            request.get_ref().term,
+            request.get_ref().prev_log_index,
+            request.get_ref().prev_log_term,
+        );
+
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
@@ -62,20 +69,52 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
         }
 
+        if request_inner.term > current_term {
+            consensus.current_term.store(request_inner.term, Ordering::SeqCst);
+            if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+                tracing::info!(leader_address = %leader_peer_address, "updating leader due to received term {} greater than current term {}", request_inner.term, current_term);
+                consensus.update_leader(leader_peer_address).await;
+            }
+        }
+
         let executions = request_inner.executions;
         let index = request_inner.prev_log_index + 1;
         let term = request_inner.prev_log_term;
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
 
         #[cfg(feature = "rocks")]
-        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
-            tracing::error!("Failed to save log entry: {:?}", e);
-            return Err(Status::internal("Failed to save log entry"));
+        {
+            // TODO Uncomment when snapshot is implemented
+            //if request_inner.prev_log_index != 0 {
+            //    if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+            //        if log_entry.term != request_inner.prev_log_term {
+            //            let error_message = format!(
+            //                "Log entry term {} does not match request term {} at index {}",
+            //                log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+            //            );
+            //            tracing::error!(
+            //                log_entry_term = log_entry.term,
+            //                request_term = request_inner.prev_log_term,
+            //                index = request_inner.prev_log_index,
+            //                "{}",
+            //                &error_message
+            //            );
+            //            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+            //        }
+            //    } else {
+            //        let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
+            //        tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+            //        return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+            //    }
+            //}
+
+            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
+                tracing::error!("Failed to save log entry: {:?}", e);
+                return Err(Status::internal("Failed to save log entry"));
+            }
         }
 
-        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
-            consensus.update_leader(leader_peer_address).await;
-        }
+        consensus.prev_log_index.store(index, Ordering::SeqCst);
         consensus.reset_heartbeat_signal.notify_waiters();
 
         tracing::info!(executions = executions.len(), "appending executions");
@@ -115,6 +154,14 @@ impl AppendEntryService for AppendEntryServiceImpl {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
 
+        tracing::debug!(
+            "append_block_commit request received. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
+            request.get_ref().block_entry.as_ref().map(|b| b.number).unwrap_or(0),
+            request.get_ref().term,
+            request.get_ref().prev_log_index,
+            request.get_ref().prev_log_term,
+        );
+
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
@@ -133,23 +180,54 @@ impl AppendEntryService for AppendEntryServiceImpl {
             return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
         }
 
+        if request_inner.term > current_term {
+            consensus.current_term.store(request_inner.term, Ordering::SeqCst);
+            if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
+                tracing::info!(leader_address = %leader_peer_address, "updating leader due to received term {} greater than current term {}", request_inner.term, current_term);
+                consensus.update_leader(leader_peer_address).await;
+            }
+        }
+
         let Some(block_entry) = request_inner.block_entry else {
             return Err(Status::invalid_argument("empty block entry"));
         };
-
-        tracing::info!(number = block_entry.number, "appending new block");
 
         let index = request_inner.prev_log_index + 1;
         let term = request_inner.prev_log_term;
         let data = LogEntryData::BlockEntry(block_entry.clone());
 
         #[cfg(feature = "rocks")]
-        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
-            tracing::error!("Failed to save log entry: {:?}", e);
-            return Err(Status::internal("Failed to save log entry"));
-        }
+        {
+            // TODO Uncomment when snapshot is implemented
+            //if request_inner.prev_log_index != 0 {
+            //    if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+            //        if log_entry.term != request_inner.prev_log_term {
+            //            let error_message = format!(
+            //                "Log entry term {} does not match request term {} at index {}",
+            //                log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+            //            );
+            //            tracing::error!(
+            //                log_entry_term = log_entry.term,
+            //                request_term = request_inner.prev_log_term,
+            //                index = request_inner.prev_log_index,
+            //                "{}",
+            //                &error_message
+            //            );
+            //            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+            //        }
+            //    } else {
+            //        let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
+            //        tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+            //        return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+            //    }
+            //}
+            tracing::info!(number = block_entry.number, "appending new block");
 
-        let last_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst);
+            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
+                tracing::error!("Failed to save log entry: {:?}", e);
+                return Err(Status::internal("Failed to save log entry"));
+            }
+        }
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
         //TODO FIXME move this code back when we have propagation:      tracing::error!(
@@ -190,17 +268,9 @@ impl AppendEntryService for AppendEntryServiceImpl {
             }
         }
 
-        if let Ok(leader_peer_address) = PeerAddress::from_string(request_inner.leader_id) {
-            consensus.update_leader(leader_peer_address).await;
-        }
-        consensus.reset_heartbeat_signal.notify_waiters();
+        consensus.prev_log_index.store(index, Ordering::SeqCst);
         consensus.last_arrived_block_number.store(block_entry.number, Ordering::SeqCst);
-
-        tracing::info!(
-            last_last_arrived_block_number = last_last_arrived_block_number,
-            new_last_arrived_block_number = consensus.last_arrived_block_number.load(Ordering::SeqCst),
-            "last arrived block number set",
-        );
+        consensus.reset_heartbeat_signal.notify_waiters();
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::APPEND_BLOCK_COMMIT);
@@ -208,7 +278,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         Ok(Response::new(AppendBlockCommitResponse {
             status: StatusCode::AppendSuccess as i32,
             message: "Block Commit appended successfully".into(),
-            last_committed_block_number: consensus.last_arrived_block_number.load(Ordering::SeqCst),
+            last_committed_block_number: consensus.prev_log_index.load(Ordering::SeqCst),
         }))
     }
 
@@ -236,33 +306,44 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
 
-        if request.last_log_index >= consensus.last_arrived_block_number.load(Ordering::SeqCst) {
-            consensus.current_term.store(request.term, Ordering::SeqCst);
-            consensus.set_role(Role::Follower);
-            consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
+        #[cfg(feature = "rocks")]
+        {
+            let candidate_last_log_index = consensus.log_entries_storage.get_last_index().unwrap();
 
-            let mut voted_for = consensus.voted_for.lock().await;
-            *voted_for = Some(candidate_address.clone());
+            if request.last_log_index >= candidate_last_log_index {
+                consensus.current_term.store(request.term, Ordering::SeqCst);
+                consensus.set_role(Role::Follower);
+                consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
 
-            tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
-            return Ok(Response::new(RequestVoteResponse {
+                let mut voted_for = consensus.voted_for.lock().await;
+                *voted_for = Some(candidate_address.clone());
+
+                tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
+                return Ok(Response::new(RequestVoteResponse {
+                    term: request.term,
+                    vote_granted: true,
+                    message: "success".to_string(),
+                }));
+            }
+
+            #[cfg(feature = "metrics")]
+            metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::REQUEST_VOTE);
+
+            Ok(Response::new(RequestVoteResponse {
                 term: request.term,
-                vote_granted: true,
-                message: "success".to_string(),
-            }));
+                vote_granted: false,
+                message: format!(
+                    "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
+                    request.last_log_index, candidate_last_log_index
+                ),
+            }))
         }
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::REQUEST_VOTE);
-
+        // TODO remove when rocksdb is not feature flag in consensus
+        #[cfg(not(feature = "rocks"))]
         Ok(Response::new(RequestVoteResponse {
             term: request.term,
             vote_granted: false,
-            message: format!(
-                "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
-                request.last_log_index,
-                consensus.last_arrived_block_number.load(Ordering::SeqCst)
-            ),
+            message: format!("index is bellow expectation: last_log_index {}", request.last_log_index),
         }))
     }
 }
@@ -443,8 +524,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_append_transaction_executions_not_leader_term_mismatch() {
-        // Create follower with term 2
+    async fn test_append_transaction_executions_term_mismatch_on_follower() {
+        // This test verifies that if a follower receives a request with a term
+        // lower than its current term, it will return a TermMismatch error.
         let consensus = create_follower_consensus_with_leader(Some(2)).await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
@@ -468,8 +550,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_append_block_commit_not_leader_term_mismatch() {
-        // Create follower with term 2
+    async fn test_append_block_commit_term_mismatch_on_follower() {
+        // This test verifies that if a follower receives a block commit request with a term
+        // lower than its current term, it will return a TermMismatch error.
         let consensus = create_follower_consensus_with_leader(Some(2)).await;
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
