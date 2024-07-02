@@ -1,5 +1,6 @@
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -24,14 +25,18 @@ use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::storage::StratusStorage;
 
+static GLOBAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>, deterministic_transaction_root: Option<Hash>) -> BlockEntry {
     let transactions_root = match deterministic_transaction_root {
         Some(hash) => hash.as_fixed_bytes().to_vec(),
         None => H256::random().as_bytes().to_vec(),
     };
 
+    let number = GLOBAL_COUNTER.fetch_add(1, Ordering::SeqCst);
+
     BlockEntry {
-        number: rand::thread_rng().gen(),
+        number: number as u64,
         hash: H256::random().as_bytes().to_vec(),
         parent_hash: H256::random().as_bytes().to_vec(),
         uncle_hash: H256::random().as_bytes().to_vec(),
