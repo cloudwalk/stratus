@@ -200,6 +200,7 @@ run_test() {
         grpc_addresses+=("${params[1]}")
         rocks_paths+=("${params[2]}")
         liveness+=(false)
+        sleep 5
     done
 
     all_ready=false
@@ -267,6 +268,10 @@ run_test() {
                 break
             fi
         done
+
+        if [ $num_instances -eq 2 ]; then
+            sleep 40 # wait for leader election before raising the other instance to avoid split vote
+        fi
 
         # Restart the killed instance
         echo "Restarting the killed instance..."
