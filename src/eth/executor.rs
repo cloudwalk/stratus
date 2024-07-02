@@ -1,7 +1,7 @@
+use std::cmp::max;
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use tracing::field;
 use tracing::info_span;
 use tracing::Span;
 
@@ -25,7 +25,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
-use crate::ext::spawn_blocking_named_or_thread;
+use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -60,19 +60,28 @@ impl EvmTask {
 
 /// Manages EVM pool and communication channels.
 struct Evms {
-    /// Shared-pool of EVMs used for parallel execution of transactions. Usually contains multiple EVMs.
+    /// Pool for parallel execution of transactions received via `eth_sendRawTransaction`. Usually contains multiple EVMs.
     pub tx_parallel: crossbeam_channel::Sender<EvmTask>,
 
-    /// Serial-pool of EVMs used for serial execution of transactions. Usually contains a single EVM.
+    /// Pool for serial execution of transactions received via `eth_sendRawTransaction`. Usually contains a single EVM.
     pub tx_serial: crossbeam_channel::Sender<EvmTask>,
 
-    /// Shared-pool of EVMs used for parallel execution of calls (eth_call and eth_estimateGas). Usually contains multiple EVMs.
-    pub call: crossbeam_channel::Sender<EvmTask>,
+    /// Pool for serial execution of external transactions received via `importer-online` or `importer-offline`. Usually contains a single EVM.
+    pub tx_external: crossbeam_channel::Sender<EvmTask>,
+
+    /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from current state. Usually contains multiple EVMs.
+    pub call_present: crossbeam_channel::Sender<EvmTask>,
+
+    /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from past state. Usually contains multiple EVMs.
+    pub call_past: crossbeam_channel::Sender<EvmTask>,
 }
 
 impl Evms {
     /// Spawns EVM tasks in background.
     fn spawn(storage: Arc<StratusStorage>, config: &EvmConfig) -> Self {
+        let chain_id = config.chain_id;
+
+        // function executed by evm threads
         fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, chain_id: ChainId, task_rx: crossbeam_channel::Receiver<EvmTask>) {
             let mut evm = Revm::new(storage, chain_id);
 
@@ -93,39 +102,34 @@ impl Evms {
             warn_task_tx_closed(task_name);
         }
 
-        let chain_id = config.chain_id;
+        // function that spawn evm threads
+        let spawn_evms = |task_name: &str, num_evms: usize| {
+            let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
 
-        // spawn parallel transactions evms
-        let (evm_parallel_tx, evm_parallel_rx) = crossbeam_channel::unbounded::<EvmTask>();
-        for evm_index in 1..=config.num_evms {
-            let evm_storage = Arc::clone(&storage);
-            let evm_parallel_rx = evm_parallel_rx.clone();
-            let task_name = format!("evm-tx-parallel-{}", evm_index);
-            spawn_blocking_named_or_thread(&format!("executor::{}", task_name), move || {
-                evm_loop(&task_name, evm_storage, chain_id, evm_parallel_rx);
-            });
-        }
+            for evm_index in 1..=num_evms {
+                let evm_storage = Arc::clone(&storage);
+                let evm_rx = evm_rx.clone();
+                let task_name = format!("{}-{}", task_name, evm_index);
+                let thread_name = task_name.clone();
+                spawn_thread(&thread_name, move || {
+                    evm_loop(&task_name, evm_storage, chain_id, evm_rx);
+                });
+            }
+            evm_tx
+        };
 
-        // spawn serial transaction execution evm
-        let (evm_serial_tx, evm_serial_rx) = crossbeam_channel::unbounded::<EvmTask>(); // TODO: maybe crossbeam is not the best to be used here, but it's fine for now
-        let evm_storage = Arc::clone(&storage);
-        spawn_blocking_named_or_thread("executor::evm-tx-serial", move || evm_loop("evm-serial", evm_storage, chain_id, evm_serial_rx));
-
-        // spawn paralell call evms
-        let (evm_call_tx, evm_call_rx) = crossbeam_channel::unbounded::<EvmTask>();
-        for evm_index in 1..=config.num_evms {
-            let evm_storage = Arc::clone(&storage);
-            let evm_call_rx = evm_call_rx.clone();
-            let task_name = format!("evm-call-{}", evm_index);
-            spawn_blocking_named_or_thread(&format!("executor::{}", task_name), move || {
-                evm_loop(&task_name, evm_storage, chain_id, evm_call_rx);
-            });
-        }
+        let tx_parallel = spawn_evms("evm-tx-parallel", config.num_evms);
+        let tx_serial = spawn_evms("evm-tx-serial", 1);
+        let tx_external = spawn_evms("evm-tx-external", 1);
+        let call_present = spawn_evms("evm-call-present", max(config.num_evms / 2, 1));
+        let call_past = spawn_evms("evm-call-past", max(config.num_evms / 4, 1));
 
         Evms {
-            tx_parallel: evm_parallel_tx,
-            tx_serial: evm_serial_tx,
-            call: evm_call_tx,
+            tx_parallel,
+            tx_serial,
+            tx_external,
+            call_present,
+            call_past,
         }
     }
 
@@ -137,18 +141,31 @@ impl Evms {
         let _ = match route {
             EvmRoute::Parallel => self.tx_parallel.send(task),
             EvmRoute::Serial => self.tx_serial.send(task),
-            EvmRoute::Call => self.call.send(task),
+            EvmRoute::External => self.tx_external.send(task),
+            EvmRoute::CallPresent => self.call_present.send(task),
+            EvmRoute::CallPast => self.call_past.send(task),
         };
 
         execution_rx.recv()?
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, strum::Display)]
 pub enum EvmRoute {
+    #[strum(to_string = "parallel")]
     Parallel,
+
+    #[strum(to_string = "serial")]
     Serial,
-    Call,
+
+    #[strum(to_string = "external")]
+    External,
+
+    #[strum(to_string = "call_present")]
+    CallPresent,
+
+    #[strum(to_string = "call_past")]
+    CallPast,
 }
 
 // -----------------------------------------------------------------------------
@@ -259,7 +276,7 @@ impl Executor {
         let evm_input = EvmInput::from_external(tx, receipt, block)?;
         #[cfg(feature = "metrics")]
         let function = evm_input.extract_function();
-        let evm_result = self.evms.execute(evm_input, EvmRoute::Serial);
+        let evm_result = self.evms.execute(evm_input, EvmRoute::External);
 
         // handle re-execution result
         let mut evm_result = match evm_result {
@@ -376,19 +393,15 @@ impl Executor {
             // track
             let _span = info_span!(
                 "executor::local_transaction_attempt",
-                attempt = field::Empty,
-                tx_hash = field::Empty,
-                tx_from = field::Empty,
-                tx_to = field::Empty,
-                tx_nonce = field::Empty
+                %attempt,
+                tx_hash = %tx_input.hash,
+                tx_from = %tx_input.signer,
+                tx_to = tracing::field::Empty,
+                tx_nonce = %tx_input.nonce
             )
             .entered();
             Span::with(|s| {
-                s.rec_str("attempt", &attempt);
-                s.rec_str("tx_hash", &tx_input.hash);
-                s.rec_str("tx_from", &tx_input.signer);
                 s.rec_opt("tx_to", &tx_input.to);
-                s.rec_str("tx_nonce", &tx_input.nonce);
             });
             tracing::info!(
                 %attempt,
@@ -451,7 +464,11 @@ impl Executor {
         );
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
-        let evm_result = self.evms.execute(evm_input, EvmRoute::Call);
+        let evm_route = match point_in_time {
+            StoragePointInTime::Present => EvmRoute::CallPresent,
+            StoragePointInTime::Past(_) => EvmRoute::CallPast,
+        };
+        let evm_result = self.evms.execute(evm_input, evm_route);
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_call(start.elapsed(), evm_result.is_ok(), function.clone());
@@ -463,8 +480,4 @@ impl Executor {
 
         Ok(execution)
     }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 }

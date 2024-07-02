@@ -126,6 +126,8 @@ pub struct ExternalRelayer {
     stratus_chain: BlockchainClient,
 
     signer: TxSigner,
+
+    blocks_to_fetch: u64,
 }
 
 impl ExternalRelayer {
@@ -148,6 +150,7 @@ impl ExternalRelayer {
             stratus_chain: BlockchainClient::new_http(&config.stratus_rpc, config.rpc_timeout).await?,
             pool,
             signer,
+            blocks_to_fetch: config.blocks_to_fetch,
         })
     }
 
@@ -162,10 +165,12 @@ impl ExternalRelayer {
                 let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
                 if let Some(transaction) = transaction_signed {
                     tx.input = transaction;
-                } else {
+                } else if tx.is_success() {
                     let prev_hash = tx.input.hash;
                     tx.input = self.signer.sign_transaction_input(tx.input);
                     self.insert_transaction_mapping(prev_hash, &tx.input).await;
+                } else {
+                    continue;
                 }
             }
             combined_transactions.push(tx);
@@ -263,13 +268,14 @@ impl ExternalRelayer {
                 FROM relayer_blocks
                 WHERE finished = false
                 ORDER BY number ASC
-                LIMIT 3
+                LIMIT $1
             )
             UPDATE relayer_blocks r
                 SET started = true
                 FROM cte
                 WHERE r.number = cte.number
-                RETURNING r.number, r.payload"#
+                RETURNING r.number, r.payload"#,
+            self.blocks_to_fetch as i64
         )
         .fetch_all(&self.pool)
         .await?;
