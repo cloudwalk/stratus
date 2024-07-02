@@ -396,7 +396,6 @@ impl StratusStorage {
     // General state
     // -------------------------------------------------------------------------
 
-    #[tracing::instrument(name = "storage::reset", skip_all)]
     pub fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::reset").entered();
