@@ -123,7 +123,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             match TransactionExecution::from_append_entry_transaction(execution) {
                 Ok(transaction_execution) => {
                     tracing::info!(hash = %transaction_execution.hash(), "appending execution");
-                    match consensus.storage.append_transaction(transaction_execution) {
+                    match consensus.storage.save_execution(transaction_execution) {
                         Ok(_) => {
                             tracing::info!("transaction execution commited into memory successfully");
                         }
