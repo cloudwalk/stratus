@@ -134,6 +134,8 @@ check_leader() {
         return 0 # Success exit code for leader
     elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
         return 1 # Failure exit code for non-leader
+    elif [[ "$response" == *"is less than current term"* ]]; then
+        return 1 # Failure exit code for non-leader
     fi
 }
 
