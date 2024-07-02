@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { TEST_ACCOUNTS, randomAccounts } from "../helpers/account";
-import { send, sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
+import { pollReceipts, send, sendGetBalance, sendRawTransactions, sendReset } from "../helpers/rpc";
 
 describe("Transaction: parallel transfer", () => {
     it("Resets blockchain", async () => {
@@ -11,7 +11,7 @@ describe("Transaction: parallel transfer", () => {
     });
     it("Sends parallel requests", async () => {
         const counterParty = randomAccounts(1)[0];
-        expect(await sendGetBalance(counterParty.address)).eq(0);
+        expect(await sendGetBalance(counterParty.address)).eq(0, "counterParty initial balance mismatch");
 
         // sign transactions from accounts that have balance
         let expectedCounterPartyBalance = 0;
@@ -29,9 +29,16 @@ describe("Transaction: parallel transfer", () => {
         }
 
         // send transactions in parallel
-        await sendRawTransactions(signedTxs);
+        const hashes = await sendRawTransactions(signedTxs);
+        const receipts = await pollReceipts(hashes);
 
         // verify
-        expect(await sendGetBalance(counterParty.address)).eq(expectedCounterPartyBalance);
+        expect(receipts.successCount).eq(signedTxs.length, "Success transaction count mismatch");
+        expect(receipts.failedCount).eq(0, "Failed transaction count mismatch");
+
+        expect(await sendGetBalance(counterParty.address)).eq(
+            expectedCounterPartyBalance,
+            "counterParty final balance mismatch",
+        );
     });
 });
