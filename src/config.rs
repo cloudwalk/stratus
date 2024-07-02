@@ -386,6 +386,9 @@ pub struct ExternalRelayerServerConfig {
 
     #[arg(long = "signer", env = "SIGNER")]
     pub signer: String,
+
+    #[arg(long = "blocks-to-fetch", env = "BLOCKS_TO_FETCH", default_value = "3")]
+    pub blocks_to_fetch: u64,
 }
 
 impl ExternalRelayerServerConfig {
