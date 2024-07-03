@@ -813,10 +813,10 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            tracing::info!("Successfully appended block to peer: {:?}", peer.client);
+                            tracing::info!("successfully appended block to peer: {:?}", peer.client);
                             Ok(())
                         }
-                        _ => Err(anyhow!("Unexpected status code: {:?}", response.status)),
+                        _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
                     }
                 }
                 LogEntryData::TransactionExecutionEntries(executions) => {
@@ -840,10 +840,10 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            tracing::info!("Successfully appended transaction executions to peer: {:?}", peer.client);
+                            tracing::info!("successfully appended transaction executions to peer: {:?}", peer.client);
                             Ok(())
                         }
-                        _ => Err(anyhow!("Unexpected status code: {:?}", response.status)),
+                        _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
                     }
                 }
                 LogEntryData::EmptyData => Ok(()),
