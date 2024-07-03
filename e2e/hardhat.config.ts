@@ -17,6 +17,8 @@ export function defineBlockMiningIntervalInMs(blockMintingModeTitle?: string): n
     return undefined;
 }
 
+const STRATUS_PORT = process.env.STRATUS_PORT || 3000; // Default to 3000 if not set
+
 const config: HardhatUserConfig = {
     solidity: {
         compilers: [
@@ -55,7 +57,7 @@ const config: HardhatUserConfig = {
             },
         },
         stratus: {
-            url: "http://localhost:3000?app=e2e",
+            url: `http://localhost:${STRATUS_PORT}?app=e2e`,
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,
             },
