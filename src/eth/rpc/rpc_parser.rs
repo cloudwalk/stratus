@@ -5,6 +5,8 @@ use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 use jsonrpsee::types::error::INVALID_PARAMS_MSG;
+use jsonrpsee::types::error::INVALID_REQUEST_CODE;
+use jsonrpsee::types::error::INVALID_REQUEST_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
 use jsonrpsee::Extensions;
@@ -67,8 +69,13 @@ pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> anyhow::Result<T> {
 }
 
 /// Creates an RPC parsing error response.
-pub fn rpc_invalid_params_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
+pub fn rpc_params_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
     ErrorObjectOwned::owned(INVALID_PARAMS_CODE, INVALID_PARAMS_MSG, Some(message))
+}
+
+/// Creates an RPC internal error response.
+pub fn rpc_client_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
+    ErrorObjectOwned::owned(INVALID_REQUEST_CODE, INVALID_REQUEST_MSG, Some(message))
 }
 
 /// Creates an RPC internal error response.
