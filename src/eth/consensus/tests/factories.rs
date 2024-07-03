@@ -12,11 +12,11 @@ use tokio::sync::Mutex;
 
 use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
 use crate::eth::consensus::append_entry::AppendTransactionExecutionsResponse;
+use crate::eth::consensus::append_entry::BlockEntry;
 use crate::eth::consensus::append_entry::Log;
 use crate::eth::consensus::append_entry::RequestVoteResponse;
 use crate::eth::consensus::append_entry::TransactionExecutionEntry;
 use crate::eth::consensus::log_entry::LogEntry;
-use crate::eth::consensus::BlockEntry;
 use crate::eth::consensus::Consensus;
 use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::Peer;

@@ -58,7 +58,6 @@ use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
 use append_entry::AppendBlockCommitRequest;
 use append_entry::AppendTransactionExecutionsRequest;
-use append_entry::BlockEntry;
 use append_entry::RequestVoteRequest;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
@@ -461,7 +460,9 @@ impl Consensus {
                     let peers = consensus.peers.read().await;
                     for (_, (peer, _)) in peers.iter() {
                         let mut peer_clone = peer.clone();
-                        consensus.append_transaction_executions_to_peer(&mut peer_clone, executions.clone()).await;
+                        let _ = consensus
+                            .append_entry_to_peer(&mut peer_clone, &LogEntryData::TransactionExecutionEntries(executions.clone()))
+                            .await;
                     }
                 }
             }
@@ -736,9 +737,9 @@ impl Consensus {
 
             while let Some(log_entry) = log_entry_queue.first() {
                 match log_entry {
-                    LogEntryData::BlockEntry(block) => {
+                    LogEntryData::BlockEntry(_block) => {
                         tracing::info!("sending block to peer: {:?}", peer.client);
-                        match consensus.append_block_to_peer(&mut peer, block).await {
+                        match consensus.append_entry_to_peer(&mut peer, log_entry).await {
                             Ok(_) => {
                                 log_entry_queue.remove(0);
                                 tracing::info!("successfully appended block to peer: {:?}", peer.client);
@@ -764,58 +765,7 @@ impl Consensus {
         }
     }
 
-    async fn append_transaction_executions_to_peer(&self, peer: &mut Peer, executions: Vec<TransactionExecutionEntry>) {
-        if self.is_leader() {
-            let current_term = self.current_term.load(Ordering::SeqCst);
-            let prev_log_index: u64;
-            let prev_log_term: u64;
-
-            #[cfg(feature = "rocks")]
-            {
-                prev_log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
-                prev_log_term = self.log_entries_storage.get_last_term().unwrap_or(0);
-            }
-
-            #[cfg(not(feature = "rocks"))]
-            {
-                prev_log_index = 0;
-                prev_log_term = 0;
-            }
-
-            let request = Request::new(AppendTransactionExecutionsRequest {
-                term: current_term,
-                prev_log_index,
-                prev_log_term,
-                executions,
-                leader_id: self.my_address.to_string(),
-            });
-            tracing::debug!(
-                "append_transaction_execution request sent. term: {}, prev_log_index: {}, prev_log_term: {}",
-                request.get_ref().term,
-                request.get_ref().prev_log_index,
-                request.get_ref().prev_log_term,
-            );
-
-            match peer.client.append_transaction_executions(request).await {
-                Ok(response) =>
-                    if response.into_inner().status == StatusCode::AppendSuccess as i32 {
-                        tracing::info!("Successfully appended transaction executions to peer: {:?}", peer.client);
-                    } else {
-                        tracing::warn!("Failed to append transaction executions to peer: {:?}", peer.client);
-                    },
-                Err(e) => {
-                    tracing::warn!("Error appending transaction executions to peer {:?}: {:?}", peer.client, e);
-                }
-            }
-        } else {
-            tracing::error!(
-                transactions = executions.len(),
-                "append_transaction_executions_to_peer called on non-leader node"
-            );
-        }
-    }
-
-    async fn append_block_to_peer(&self, peer: &mut Peer, block_entry: &BlockEntry) -> Result<(), anyhow::Error> {
+    async fn append_entry_to_peer(&self, peer: &mut Peer, entry_data: &LogEntryData) -> Result<(), anyhow::Error> {
         if self.is_leader() {
             #[cfg(feature = "metrics")]
             let start = metrics::now();
@@ -837,37 +787,70 @@ impl Consensus {
                 prev_log_term = 0;
             }
 
-            let request = Request::new(AppendBlockCommitRequest {
-                term: current_term,
-                prev_log_index,
-                prev_log_term,
-                block_entry: Some(block_entry.clone()),
-                leader_id: self.my_address.to_string(),
-            });
+            match &entry_data {
+                LogEntryData::BlockEntry(block_entry) => {
+                    let request = Request::new(AppendBlockCommitRequest {
+                        term: current_term,
+                        prev_log_index,
+                        prev_log_term,
+                        block_entry: Some(block_entry.clone()),
+                        leader_id: self.my_address.to_string(),
+                    });
 
-            tracing::debug!(
-                "append_block_commit request sent. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
-                request.get_ref().block_entry.as_ref().map(|b| b.number).unwrap_or(0),
-                request.get_ref().term,
-                request.get_ref().prev_log_index,
-                request.get_ref().prev_log_term,
-            );
+                    tracing::debug!(
+                        "append_block_commit request sent. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
+                        block_entry.number,
+                        current_term,
+                        prev_log_index,
+                        prev_log_term,
+                    );
 
-            let response = peer.client.append_block_commit(request).await?;
-            let response = response.into_inner();
+                    let response = peer.client.append_block_commit(request).await?;
+                    let response = response.into_inner();
 
-            tracing::info!(match_index = peer.match_index, next_index = peer.next_index, role = ?peer.role,  "current follower state on election"); //TODO also move this to metrics
+                    #[cfg(feature = "metrics")]
+                    metrics::inc_consensus_append_block_to_peer(start.elapsed());
 
-            #[cfg(feature = "metrics")]
-            metrics::inc_consensus_append_block_to_peer(start.elapsed());
+                    match StatusCode::try_from(response.status) {
+                        Ok(StatusCode::AppendSuccess) => {
+                            tracing::info!("Successfully appended block to peer: {:?}", peer.client);
+                            Ok(())
+                        }
+                        _ => Err(anyhow!("Unexpected status code: {:?}", response.status)),
+                    }
+                }
+                LogEntryData::TransactionExecutionEntries(executions) => {
+                    let request = Request::new(AppendTransactionExecutionsRequest {
+                        term: current_term,
+                        prev_log_index,
+                        prev_log_term,
+                        executions: executions.clone(),
+                        leader_id: self.my_address.to_string(),
+                    });
 
-            match StatusCode::try_from(response.status) {
-                Ok(StatusCode::AppendSuccess) => Ok(()),
-                _ => Err(anyhow!("Unexpected status code: {:?}", response.status)),
+                    tracing::debug!(
+                        "append_transaction_execution request sent. term: {}, prev_log_index: {}, prev_log_term: {}",
+                        current_term,
+                        prev_log_index,
+                        prev_log_term,
+                    );
+
+                    let response = peer.client.append_transaction_executions(request).await?;
+                    let response = response.into_inner();
+
+                    match StatusCode::try_from(response.status) {
+                        Ok(StatusCode::AppendSuccess) => {
+                            tracing::info!("Successfully appended transaction executions to peer: {:?}", peer.client);
+                            Ok(())
+                        }
+                        _ => Err(anyhow!("Unexpected status code: {:?}", response.status)),
+                    }
+                }
+                LogEntryData::EmptyData => Ok(()),
             }
         } else {
-            tracing::error!("append_block_to_peer called on non-leader node");
-            Err(anyhow!("append_block_to_peer called on non-leader node"))
+            tracing::error!("append_entry_to_peer called on non-leader node");
+            Err(anyhow!("append_entry_to_peer called on non-leader node"))
         }
     }
 }
