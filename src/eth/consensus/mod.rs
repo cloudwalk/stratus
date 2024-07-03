@@ -154,7 +154,6 @@ type ClientType = MockAppendEntryServiceClient;
 #[derive(Clone)]
 struct Peer {
     client: ClientType,
-    #[allow(dead_code)]
     match_index: u64,
     #[allow(dead_code)]
     next_index: u64,
@@ -391,6 +390,12 @@ impl Consensus {
         } else {
             let mut blockchain_client_lock = self.blockchain_client.lock().await;
             *blockchain_client_lock = None; // clear the blockchain client for safety reasons when not running on importer-online mode
+        }
+
+        // When a node becomes a leader, it should reset the match_index for all peers
+        let mut peers = self.peers.write().await;
+        for (_, (peer, _)) in peers.iter_mut() {
+            peer.match_index = 0;
         }
 
         self.set_role(Role::Leader);
@@ -817,8 +822,8 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            tracing::info!("successfully appended block to peer: {:?}", peer.client);
-                            Ok(())
+                            peer.match_index = prev_log_index + 1;
+                            tracing::info!("successfully appended block to peer: {:?}, match_index: {}", peer.client, peer.match_index);                            Ok(())
                         }
                         _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
                     }
@@ -844,8 +849,8 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            tracing::info!("successfully appended transaction executions to peer: {:?}", peer.client);
-                            Ok(())
+                            peer.match_index = prev_log_index + 1;
+                            tracing::info!("successfully appended transaction executions to peer: {:?}, match_index: {}", peer.client, peer.match_index);                            Ok(())
                         }
                         _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
                     }
