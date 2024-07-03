@@ -153,7 +153,7 @@ impl EvmInput {
             nonce: Some(input.nonce),
             block_number: BlockNumber::ZERO, // TODO: use number of block being mined
             block_timestamp: UnixTime::now(),
-            point_in_time: StoragePointInTime::Temporary,
+            point_in_time: StoragePointInTime::Pending,
             chain_id: input.chain_id,
         }
     }
@@ -169,11 +169,11 @@ impl EvmInput {
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: None,
             block_number: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Temporary => BlockNumber::ZERO, // TODO: use number of block being mined
+                StoragePointInTime::Mined | StoragePointInTime::Pending => BlockNumber::ZERO, // TODO: use number of block being mined
                 StoragePointInTime::MinedPast(number) => number,
             },
             block_timestamp: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Temporary => UnixTime::now(),
+                StoragePointInTime::Mined | StoragePointInTime::Pending => UnixTime::now(),
                 StoragePointInTime::MinedPast(_) => UnixTime::now(), // TODO: use timestamp of the specified block
             },
             point_in_time,
@@ -193,7 +193,7 @@ impl EvmInput {
             nonce: Some(tx.0.nonce.try_into()?),
             gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.try_into()?),
             gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.0.gas_price.map_into().unwrap_or(Wei::ZERO)),
-            point_in_time: StoragePointInTime::Temporary,
+            point_in_time: StoragePointInTime::Pending,
             block_number: block.number(),
             block_timestamp: block.timestamp(),
             chain_id: match tx.0.chain_id {

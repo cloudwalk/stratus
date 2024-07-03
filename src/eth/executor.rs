@@ -211,10 +211,10 @@ impl Executor {
         });
         tracing::info!(block_number = %block.number(), "reexecuting external block");
 
-        // track active block number
+        // track pending block number
         let storage = &self.storage;
-        storage.set_active_external_block(block.clone())?;
-        storage.set_active_block_number(block.number())?;
+        storage.set_pending_external_block(block.clone())?;
+        storage.set_pending_block_number(block.number())?;
 
         // determine how to execute each transaction
         for tx in &block.transactions {
@@ -465,7 +465,7 @@ impl Executor {
 
         let evm_input = EvmInput::from_eth_call(input, point_in_time);
         let evm_route = match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Temporary => EvmRoute::CallPresent,
+            StoragePointInTime::Mined | StoragePointInTime::Pending => EvmRoute::CallPresent,
             StoragePointInTime::MinedPast(_) => EvmRoute::CallPast,
         };
         let evm_result = self.evms.execute(evm_input, evm_route);

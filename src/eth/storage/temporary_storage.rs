@@ -16,27 +16,27 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     // Block number
     // -------------------------------------------------------------------------
 
-    /// Sets the block number activelly being mined.
-    fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+    /// Sets the block number being mined.
+    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
-    // Reads the block number activelly being mined.
-    fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
+    // Retrieves the block number being mined.
+    fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
 
     // -------------------------------------------------------------------------
     // Block and executions
     // -------------------------------------------------------------------------
 
-    /// Sets the external block being re-executed.
-    fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
+    /// Sets the pending external block being re-executed.
+    fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
 
-    /// Saves an re-executed transaction to the active mined block.
+    /// Saves a re-executed transaction to the pending mined block.
     fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
 
-    /// Retrieves the pending transactions of the active block.
+    /// Retrieves the pending transactions of the pending block.
     fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
 
-    /// Finishes the mining of the active block and starts a new block.
-    fn finish_block(&self) -> anyhow::Result<PendingBlock>;
+    /// Finishes the mining of the pending block and starts a new block.
+    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock>;
 
     /// Retrieves a transaction from the storage.
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>>;

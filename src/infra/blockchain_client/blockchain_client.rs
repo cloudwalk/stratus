@@ -232,7 +232,7 @@ impl BlockchainClient {
         let address = to_json_value(address);
         let index = to_json_value(index);
         let number = match point_in_time {
-            StoragePointInTime::Temporary => to_json_value("pending"),
+            StoragePointInTime::Pending => to_json_value("pending"),
             StoragePointInTime::Mined => to_json_value("latest"),
             StoragePointInTime::MinedPast(number) => to_json_value(number),
         };

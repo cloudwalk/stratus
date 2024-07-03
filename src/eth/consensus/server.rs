@@ -258,7 +258,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         //TODO move this logic into BlockMiner and add safety checks as consensus is or isnt on follower mode there
         let block_result = block_from_propagation(block_entry.clone(), transaction_executions);
-        consensus.storage.finish_block().unwrap();
+        consensus.storage.finish_pending_block().unwrap();
         match block_result {
             Ok(block) => match consensus.miner.commit(block.clone()) {
                 Ok(_) => {

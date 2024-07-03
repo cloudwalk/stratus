@@ -297,7 +297,7 @@ impl MinerConfig {
         }
 
         // set block number
-        storage.set_active_block_number_as_next_if_not_set()?;
+        storage.set_pending_block_number_as_next_if_not_set()?;
 
         // enable interval miner
         if miner.mode().is_interval() {
