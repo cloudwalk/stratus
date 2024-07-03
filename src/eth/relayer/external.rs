@@ -13,6 +13,7 @@ use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::Span;
@@ -32,6 +33,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::to_json_value;
+use crate::ext::ResultExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -144,14 +146,18 @@ impl ExternalRelayer {
 
         let substrate_chain = BlockchainClient::new_http(&config.forward_to, config.rpc_timeout).await?;
         let signer = TxSigner::new(config.signer, &substrate_chain).await?;
-
-        Ok(Self {
+        let relayer = Self {
             substrate_chain,
             stratus_chain: BlockchainClient::new_http(&config.stratus_rpc, config.rpc_timeout).await?,
             pool,
             signer,
             blocks_to_fetch: config.blocks_to_fetch,
-        })
+        };
+
+        if config.cleanup {
+            relayer.cleanup_database().await;
+        }
+        Ok(relayer)
     }
 
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
@@ -178,9 +184,42 @@ impl ExternalRelayer {
         Ok(combined_transactions)
     }
 
-    async fn blocks_have_been_mined(&self, blocks: Vec<Hash>) -> bool {
-        let futures = blocks.into_iter().map(|hash| self.stratus_chain.fetch_block_by_hash(hash, false));
-        !join_all(futures).await.into_iter().any(|result| result.is_err() || result.unwrap().is_null())
+    /// Cleanups the database in case of rollbacks by deleting blocks in the relayer_blocks table that have not been mined in stratus
+    async fn cleanup_database(&self) {
+        tracing::info!("starting db cleanup");
+        loop {
+            let Ok(blocks) = self.fetch_blocks(200).await else { continue };
+            let Ok(missing) = self.missing_blocks(blocks.into_iter().map(|block| block.hash()).collect()).await else {
+                continue;
+            };
+            if missing.is_empty() {
+                break;
+            }
+            tracing::info!(?missing, "found missing blocks, cleaning up");
+            let missing_json = missing.into_iter().map(|hash| serde_json::to_value(hash).expect_infallible()).collect_vec();
+            while sqlx::query!(
+                "DELETE FROM relayer_blocks WHERE payload->'header'->'hash' IN (SELECT * FROM UNNEST($1::JSONB[]))",
+                missing_json as _
+            )
+            .execute(&self.pool)
+            .await
+            .is_err()
+            {}
+        }
+        tracing::info!("finished db cleanup");
+    }
+
+    async fn missing_blocks(&self, blocks: Vec<Hash>) -> anyhow::Result<Vec<Hash>> {
+        let futures = blocks.iter().map(|hash| self.stratus_chain.fetch_block_by_hash(*hash, false));
+        Ok(join_all(futures)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<Value>, _>>()?
+            .into_iter()
+            .map(|inner| inner.is_null())
+            .zip(blocks)
+            .filter_map(|(is_missing, block)| if is_missing { Some(block) } else { None })
+            .collect())
     }
 
     #[tracing::instrument(name = "external_relayer::relay_next_block", skip_all)]
@@ -260,7 +299,7 @@ impl ExternalRelayer {
         .transpose()
     }
 
-    pub async fn fetch_blocks(&self) -> anyhow::Result<Vec<Block>> {
+    pub async fn fetch_blocks(&self, blocks_to_fetch: u64) -> anyhow::Result<Vec<Block>> {
         let block_rows = sqlx::query!(
             r#"
             WITH cte AS (
@@ -275,7 +314,7 @@ impl ExternalRelayer {
                 FROM cte
                 WHERE r.number = cte.number
                 RETURNING r.number, r.payload"#,
-            self.blocks_to_fetch as i64
+            blocks_to_fetch as i64
         )
         .fetch_all(&self.pool)
         .await?;
@@ -290,7 +329,7 @@ impl ExternalRelayer {
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(name = "external_relayer::relay_blocks", skip_all, fields(block_number))]
     pub async fn relay_blocks(&mut self) -> anyhow::Result<Vec<BlockNumber>> {
-        let blocks = self.fetch_blocks().await?;
+        let blocks = self.fetch_blocks(self.blocks_to_fetch).await?;
 
         if blocks.is_empty() {
             tracing::info!("no blocks to relay");
@@ -303,7 +342,9 @@ impl ExternalRelayer {
         // fill span
         Span::with(|s| s.rec_str("block_number", &max_number));
 
-        if !self.blocks_have_been_mined(blocks.iter().map(|block| block.hash()).collect()).await {
+        let missing_blocks = self.missing_blocks(blocks.iter().map(|block| block.hash()).collect()).await?;
+        if !missing_blocks.is_empty() {
+            tracing::error!(?missing_blocks, "some blocks in this batch have not been mined in stratus");
             return Err(anyhow!("some blocks in this batch have not been mined in stratus"));
         }
 
