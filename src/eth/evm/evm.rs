@@ -142,7 +142,7 @@ impl EvmInput {
     }
 
     /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
-    pub fn from_eth_transaction(input: TransactionInput) -> Self {
+    pub fn from_eth_transaction(input: TransactionInput, pending_block_number: BlockNumber) -> Self {
         Self {
             from: input.signer,
             to: input.to,
@@ -151,7 +151,7 @@ impl EvmInput {
             gas_limit: Gas::MAX,
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: Some(input.nonce),
-            block_number: BlockNumber::ZERO, // TODO: use number of block being mined
+            block_number: pending_block_number,
             block_timestamp: UnixTime::now(),
             point_in_time: StoragePointInTime::Pending,
             chain_id: input.chain_id,
@@ -159,7 +159,7 @@ impl EvmInput {
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas`.
-    pub fn from_eth_call(input: CallInput, point_in_time: StoragePointInTime) -> Self {
+    pub fn from_eth_call(input: CallInput, point_in_time: StoragePointInTime, pending_block_number: BlockNumber) -> Self {
         Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
@@ -169,7 +169,7 @@ impl EvmInput {
             gas_price: Wei::ZERO, // XXX: use value from input?
             nonce: None,
             block_number: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Pending => BlockNumber::ZERO, // TODO: use number of block being mined
+                StoragePointInTime::Mined | StoragePointInTime::Pending => pending_block_number,
                 StoragePointInTime::MinedPast(number) => number,
             },
             block_timestamp: match point_in_time {
