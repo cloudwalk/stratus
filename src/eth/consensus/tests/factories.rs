@@ -139,6 +139,7 @@ use super::BlockMiner;
 use super::Hash;
 
 // Define a simple interceptor that does nothing
+#[allow(dead_code)] // HACK to avoid unused code warning
 struct MockInterceptor;
 impl Interceptor for MockInterceptor {
     fn call(&mut self, req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
