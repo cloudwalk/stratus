@@ -64,14 +64,14 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Temp => storage.read_active_block_number()?.unwrap_or(BlockNumber::ZERO),
+            StoragePointInTime::Temporary => storage.read_active_block_number()?.unwrap_or(BlockNumber::ZERO),
             StoragePointInTime::Mined => storage.read_mined_block_number()?,
-            StoragePointInTime::Past(number) => number,
+            StoragePointInTime::MinedPast(number) => number,
         };
         let to = match to {
-            StoragePointInTime::Temp => storage.read_active_block_number()?,
+            StoragePointInTime::Temporary => storage.read_active_block_number()?,
             StoragePointInTime::Mined => None,
-            StoragePointInTime::Past(number) => Some(number),
+            StoragePointInTime::MinedPast(number) => Some(number),
         };
 
         Ok(LogFilter {

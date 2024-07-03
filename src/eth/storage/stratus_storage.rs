@@ -227,7 +227,7 @@ impl StratusStorage {
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
         // read from temp only if requested
-        if point_in_time.is_temp() {
+        if point_in_time.is_temporary() {
             tracing::debug!(storage = %label::TEMP, %address, "reading account");
             let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
                 metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
@@ -260,7 +260,7 @@ impl StratusStorage {
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
         // read from temp only if requested
-        if point_in_time.is_temp() {
+        if point_in_time.is_temporary() {
             tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
             let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
                 metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
@@ -416,14 +416,14 @@ impl StratusStorage {
     // Utils
     // -------------------------------------------------------------------------
 
-    /// Translates a block selection to a specific storage point-in-time indicator.
+    /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: &BlockFilter) -> anyhow::Result<StoragePointInTime> {
         match block_filter {
-            BlockFilter::Pending => Ok(StoragePointInTime::Mined),
+            BlockFilter::Pending => Ok(StoragePointInTime::Temporary),
             BlockFilter::Latest => Ok(StoragePointInTime::Mined),
-            BlockFilter::Number(number) => Ok(StoragePointInTime::Past(*number)),
+            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(*number)),
             BlockFilter::Earliest | BlockFilter::Hash(_) => match self.read_block(block_filter)? {
-                Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
+                Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
                 None => Err(anyhow!(
                     "failed to select block because it is greater than current block number or block hash is invalid"
                 )),
