@@ -108,7 +108,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             //    }
             //}
 
-            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction") {
+            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction", false) {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
             }
@@ -228,7 +228,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             //}
             tracing::info!(number = block_entry.number, "appending new block");
 
-            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block") {
+            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block", false) {
                 tracing::error!("Failed to save log entry: {:?}", e);
                 return Err(Status::internal("Failed to save log entry"));
             }

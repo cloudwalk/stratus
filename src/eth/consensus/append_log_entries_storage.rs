@@ -99,33 +99,40 @@ impl AppendLogEntriesStorage {
         }
     }
 
-    pub fn save_log_entry(&self, index: u64, term: u64, data: LogEntryData, entry_type: &str) -> Result<()> {
+    pub fn save_log_entry(&self, index: u64, term: u64, data: LogEntryData, entry_type: &str, append_only: bool) -> Result<()> {
         tracing::debug!(index, term, "Creating {} log entry", entry_type);
         let log_entry = LogEntry { term, index, data };
         tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
 
-        tracing::debug!("Checking for existing {} entry at new index", entry_type);
         match self.get_entry(log_entry.index) {
-            Ok(Some(existing_entry)) =>
-                if existing_entry.term != log_entry.term {
+            Ok(Some(existing_entry)) => {
+                if existing_entry.term == log_entry.term {
+                    Ok(())
+                } else if append_only {
+                    // Append-only if called by Leader
+                    tracing::warn!(
+                        index = log_entry.index,
+                        existing_term = existing_entry.term,
+                        new_term = log_entry.term,
+                        "Conflicting entry found in append-only mode. Not overwriting."
+                    );
+                    Ok(())
+                } else {
+                    // Overwrite conflicting entries if called by follower
                     tracing::warn!(
                         index = log_entry.index,
                         "Conflicting entry found, deleting existing entry and all that follow it"
                     );
                     self.delete_entries_from(log_entry.index)?;
-                },
-            Ok(None) => {
-                // No existing entry at this index, proceed to save the new entry
+                    self.save_entry(&log_entry)
+                }
             }
+            Ok(None) => self.save_entry(&log_entry),
             Err(e) => {
                 tracing::error!(index = log_entry.index, "Error retrieving entry: {}", e);
-                return Err(anyhow::anyhow!("Error retrieving entry: {}", e));
+                Err(anyhow::anyhow!("Error retrieving entry: {}", e))
             }
         }
-
-        tracing::debug!("Appending new {} log entry", entry_type);
-        self.save_entry(&log_entry)
-            .map_err(|e| anyhow::anyhow!("Failed to append {} log entry: {}", entry_type, e))
     }
 }
 
@@ -236,7 +243,7 @@ mod tests {
         let term = 1;
         let log_entry_data = create_mock_log_entry_data_block();
 
-        storage.save_log_entry(index, term, log_entry_data.clone(), "block").unwrap();
+        storage.save_log_entry(index, term, log_entry_data.clone(), "block", false).unwrap();
         let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
 
         assert_eq!(retrieved_entry.index, index);
@@ -269,18 +276,18 @@ mod tests {
     }
 
     #[test]
-    fn test_save_log_entry_with_conflict() {
+    fn test_save_log_entry_follower_overwrite_with_conflict() {
         let storage = setup_storage();
         let index = 1;
         let term = 1;
         let conflicting_term = 2;
         let log_entry_data = create_mock_log_entry_data_block();
 
-        // Save initial log entry
-        storage.save_log_entry(index, term, log_entry_data.clone(), "block").unwrap();
+        // Save initial log entry as follower (append_only = false)
+        storage.save_log_entry(index, term, log_entry_data.clone(), "block", false).unwrap();
 
         // Save conflicting log entry at the same index but with a different term
-        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block").unwrap();
+        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block", false).unwrap();
 
         // Assert no entries exist after the conflicting entry's index, confirming that the conflicting entry and all that follow it were deleted
         assert!(storage.get_entry(index + 1).unwrap().is_none());
@@ -289,6 +296,54 @@ mod tests {
         let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
         assert_eq!(retrieved_entry.index, index);
         assert_eq!(retrieved_entry.term, conflicting_term);
+
+        if let LogEntryData::BlockEntry(ref block) = retrieved_entry.data {
+            if let LogEntryData::BlockEntry(ref expected_block) = log_entry_data {
+                assert_eq!(block.hash, expected_block.hash);
+                assert_eq!(block.number, expected_block.number);
+                assert_eq!(block.parent_hash, expected_block.parent_hash);
+                assert_eq!(block.uncle_hash, expected_block.uncle_hash);
+                assert_eq!(block.transactions_root, expected_block.transactions_root);
+                assert_eq!(block.state_root, expected_block.state_root);
+                assert_eq!(block.receipts_root, expected_block.receipts_root);
+                assert_eq!(block.miner, expected_block.miner);
+                assert_eq!(block.extra_data, expected_block.extra_data);
+                assert_eq!(block.size, expected_block.size);
+                assert_eq!(block.gas_limit, expected_block.gas_limit);
+                assert_eq!(block.gas_used, expected_block.gas_used);
+                assert_eq!(block.timestamp, expected_block.timestamp);
+                assert_eq!(block.bloom, expected_block.bloom);
+                assert_eq!(block.author, expected_block.author);
+                assert_eq!(block.transaction_hashes, expected_block.transaction_hashes);
+            } else {
+                panic!("Expected BlockEntry");
+            }
+        } else {
+            panic!("Expected BlockEntry");
+        }
+    }
+
+    #[test]
+    fn test_save_log_entry_leader_append_only_with_conflict() {
+        let storage = setup_storage();
+        let index = 1;
+        let term = 1;
+        let conflicting_term = 2;
+        let log_entry_data = create_mock_log_entry_data_block();
+
+        // Save initial log entry as leader (append_only = true)
+        storage.save_log_entry(index, term, log_entry_data.clone(), "block", true).unwrap();
+
+        // Attempt to save another entry at the same index with a different term
+        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block", true).unwrap();
+
+        // Retrieve the entry and assert it still matches the original entry
+        let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
+        assert_eq!(retrieved_entry.index, index);
+        assert_eq!(retrieved_entry.term, term); // Should match the original term
+
+        // Verify that no new entry was added because it was append-only
+        assert!(storage.get_entry(index + 1).unwrap().is_none());
 
         if let LogEntryData::BlockEntry(ref block) = retrieved_entry.data {
             if let LogEntryData::BlockEntry(ref expected_block) = log_entry_data {
