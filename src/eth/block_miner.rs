@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use ethereum_types::BloomInput;
@@ -39,6 +40,9 @@ pub struct BlockMiner {
     /// Mode the block miner is running.
     mode: BlockMinerMode,
 
+    /// Exclusivity lock for automine operations.
+    automine_lock: Mutex<()>,
+
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<TransactionExecution>,
 
@@ -59,6 +63,7 @@ impl BlockMiner {
         Self {
             storage,
             mode,
+            automine_lock: Mutex::new(()),
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
@@ -93,6 +98,14 @@ impl BlockMiner {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_execution.hash());
         });
+
+        // when executing in automine mode, only one transaction can be persisted at time,
+        // otherwise parallel blocks can be generated at the same time and cause bugs.
+        let _automine_lock = if self.mode.is_automine() {
+            Some(self.automine_lock.lock().unwrap())
+        } else {
+            None
+        };
 
         // save execution to temporary storage
         self.storage.save_execution(tx_execution.clone())?;
