@@ -154,7 +154,9 @@ type ClientType = MockAppendEntryServiceClient;
 #[derive(Clone)]
 struct Peer {
     client: ClientType,
+    #[allow(dead_code)]
     match_index: u64,
+    #[allow(dead_code)]
     next_index: u64,
     role: Role,
     receiver: Arc<Mutex<broadcast::Receiver<LogEntryData>>>,
