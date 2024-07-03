@@ -10,6 +10,7 @@ use crate::eth::evm::Evm;
 use crate::eth::evm::EvmConfig;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
@@ -385,8 +386,6 @@ impl Executor {
             return Err(anyhow!("transaction sent from zero address is not allowed"));
         }
 
-        let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or(1.into());
-
         // executes transaction until no more conflicts
         let mut attempt = 0;
         loop {
@@ -417,9 +416,10 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            // execute transaction in evm
-            // in case of failure, do not retry
+            // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
+            let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or_default();
             let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_block_number);
+
             let evm_result = match self.evms.execute(evm_input, evm_route) {
                 Ok(evm_result) => evm_result,
                 Err(e) => return Err(e),
@@ -465,9 +465,15 @@ impl Executor {
             "executing read-only local transaction"
         );
 
-        let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or(1.into());
+        // retrieve block info
+        let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or_default();
+        let mined_block = match point_in_time {
+            StoragePointInTime::MinedPast(number) => self.storage.read_block(&BlockFilter::Number(number))?,
+            _ => None,
+        };
 
-        let evm_input = EvmInput::from_eth_call(input, point_in_time, pending_block_number);
+        // execute
+        let evm_input = EvmInput::from_eth_call(input, point_in_time, pending_block_number, mined_block)?;
         let evm_route = match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => EvmRoute::CallPresent,
             StoragePointInTime::MinedPast(_) => EvmRoute::CallPast,
