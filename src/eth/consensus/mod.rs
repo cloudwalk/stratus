@@ -449,6 +449,7 @@ impl Consensus {
                             current_term,
                             LogEntryData::TransactionExecutionEntries(executions.clone()),
                             "transaction",
+                            true,
                         ) {
                             Ok(_) => {
                                 tracing::debug!("Transaction execution entry saved successfully");
@@ -518,6 +519,7 @@ impl Consensus {
                                     current_term,
                                     LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes.clone())),
                                     "block",
+                                    true
                                 ) {
                                     Ok(_) => {
                                         tracing::debug!("Block entry saved successfully");
