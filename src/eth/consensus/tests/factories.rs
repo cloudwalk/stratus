@@ -1,5 +1,6 @@
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -7,7 +8,6 @@ use ethereum_types::Bloom;
 use ethereum_types::H160;
 use ethereum_types::H256;
 use rand::Rng;
-use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 
 use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
@@ -24,14 +24,18 @@ use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
 use crate::eth::storage::StratusStorage;
 
+static GLOBAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>, deterministic_transaction_root: Option<Hash>) -> BlockEntry {
     let transactions_root = match deterministic_transaction_root {
         Some(hash) => hash.as_fixed_bytes().to_vec(),
         None => H256::random().as_bytes().to_vec(),
     };
 
+    let number = GLOBAL_COUNTER.fetch_add(1, Ordering::SeqCst);
+
     BlockEntry {
-        number: rand::thread_rng().gen(),
+        number: number as u64,
         hash: H256::random().as_bytes().to_vec(),
         parent_hash: H256::random().as_bytes().to_vec(),
         uncle_hash: H256::random().as_bytes().to_vec(),
@@ -101,32 +105,37 @@ pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEn
 
 pub async fn create_mock_consensus() -> Arc<Consensus> {
     let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
-    storage.set_active_block_number_as_next_if_not_set().unwrap();
+    storage.set_pending_block_number_as_next_if_not_set().unwrap();
     let (_log_entries_storage, tmpdir_log_entries) = StratusStorage::mock_new_rocksdb();
     let direct_peers = Vec::new();
     let importer_config = None;
     let jsonrpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
     let grpc_address = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
-    let (tx_pending_txs, _) = broadcast::channel(10);
-    let (tx_blocks, _) = broadcast::channel(10);
 
     let tmpdir_log_entries_path = tmpdir_log_entries.path().to_str().map(|s| s.to_owned());
+    let storage = Arc::new(storage);
+
+    let miner = BlockMiner::new(
+        Arc::clone(&storage),
+        crate::eth::BlockMinerMode::External, //XXX this should be passed as an argument, leaders start with interval, followers with the soon to be implemented follower mode
+        None,
+    );
 
     Consensus::new(
-        storage.into(),
+        Arc::clone(&storage),
+        miner.into(),
         tmpdir_log_entries_path,
         direct_peers,
         importer_config,
         jsonrpc_address,
         grpc_address,
-        tx_pending_txs.subscribe(),
-        tx_blocks.subscribe(),
     )
     .await
 }
 
 use tonic::service::Interceptor;
 
+use super::BlockMiner;
 use super::Hash;
 
 // Define a simple interceptor that does nothing
@@ -189,7 +198,9 @@ impl MockAppendEntryServiceClient {
         Ok(tonic::Response::new(AppendTransactionExecutionsResponse {
             status: super::StatusCode::AppendSuccess as i32,
             message: "Mock response".to_string(),
-            last_committed_block_number: 0,
+            match_log_index: 0,
+            last_log_index: 0,
+            last_log_term: 0,
         }))
     }
 
@@ -200,7 +211,9 @@ impl MockAppendEntryServiceClient {
         Ok(tonic::Response::new(AppendBlockCommitResponse {
             status: super::StatusCode::AppendSuccess as i32,
             message: "Mock response".to_string(),
-            last_committed_block_number: 0,
+            match_log_index: 0,
+            last_log_index: 0,
+            last_log_term: 0,
         }))
     }
 

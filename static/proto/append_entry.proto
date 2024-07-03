@@ -54,15 +54,17 @@ message TransactionExecutionEntry {
 message AppendTransactionExecutionsRequest {
     string leader_id = 1;
     uint64 term = 2;
-    uint64 prevLogIndex = 3;
-    uint64 prevLogTerm = 4;
+    uint64 prev_log_index = 3;
+    uint64 prev_log_term = 4;
     repeated TransactionExecutionEntry executions = 5;
 }
 
 message AppendTransactionExecutionsResponse {
     StatusCode status = 1;
     string message = 2;
-    uint64 last_committed_block_number = 3;
+    uint64 match_log_index = 3;
+    uint64 last_log_index = 4;
+    uint64 last_log_term = 5;
 }
 
 message BlockEntry {
@@ -87,15 +89,17 @@ message BlockEntry {
 message AppendBlockCommitRequest {
     string leader_id = 1;
     uint64 term = 2;
-    uint64 prevLogIndex = 3;
-    uint64 prevLogTerm = 4;
+    uint64 prev_log_index = 3;
+    uint64 prev_log_term = 4;
     BlockEntry block_entry = 5;
 }
 
 message AppendBlockCommitResponse {
     StatusCode status = 1;
     string message = 2;
-    uint64 last_committed_block_number = 3;
+    uint64 match_log_index = 3;
+    uint64 last_log_index = 4;
+    uint64 last_log_term = 5;
 }
 
 message RequestVoteRequest {

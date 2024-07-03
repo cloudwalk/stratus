@@ -24,13 +24,12 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let miner = config.miner.init_external_mode(Arc::clone(&storage), None)?;
     let consensus = Consensus::new(
         Arc::clone(&storage),
+        Arc::clone(&miner),
         config.storage.perm_storage.rocks_path_prefix.clone(),
         config.clone().candidate_peers.clone(),
         Some(config.clone()),
         config.address,
         config.grpc_server_address,
-        miner.notifier_pending_txs.subscribe(),
-        miner.notifier_blocks.subscribe(),
     )
     .await; // in development, with no leader configured, the current node ends up being the leader
     let (http_url, ws_url) = consensus.get_chain_url().await.expect("chain url not found");

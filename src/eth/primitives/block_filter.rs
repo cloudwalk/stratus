@@ -5,11 +5,14 @@ use crate::eth::primitives::Hash;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
 pub enum BlockFilter {
-    /// Retrieve the most recent block.
+    /// Information from the last mined block.
     #[default]
     Latest,
 
-    /// Retrieve the most early block.
+    /// Information from the block being mined.
+    Pending,
+
+    /// Information from the first block.
     Earliest,
 
     /// Retrieve a block by its hash.
@@ -23,6 +26,7 @@ impl Display for BlockFilter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BlockFilter::Latest => write!(f, "latest"),
+            BlockFilter::Pending => write!(f, "pending"),
             BlockFilter::Earliest => write!(f, "earliest"),
             BlockFilter::Hash(block_hash) => write!(f, "{}", block_hash),
             BlockFilter::Number(block_number) => write!(f, "{}", block_number),
@@ -43,7 +47,7 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
         match value.as_str() {
             // parse special keywords
             "latest" => Ok(Self::Latest),
-            "pending" => Ok(Self::Latest), // map to latest because we do not have the concept of pending blocks internally
+            "pending" => Ok(Self::Pending),
             "earliest" => Ok(Self::Earliest),
 
             // parse hash (64: H256 without 0x prefix; 66: H256 with 0x prefix)

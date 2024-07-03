@@ -297,7 +297,7 @@ impl MinerConfig {
         }
 
         // set block number
-        storage.set_active_block_number_as_next_if_not_set()?;
+        storage.set_pending_block_number_as_next_if_not_set()?;
 
         // enable interval miner
         if miner.mode().is_interval() {
@@ -386,6 +386,9 @@ pub struct ExternalRelayerServerConfig {
 
     #[arg(long = "signer", env = "SIGNER")]
     pub signer: String,
+
+    #[arg(long = "blocks-to-fetch", env = "BLOCKS_TO_FETCH", default_value = "3")]
+    pub blocks_to_fetch: u64,
 }
 
 impl ExternalRelayerServerConfig {

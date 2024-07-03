@@ -240,25 +240,24 @@ pub enum SleepReason {
 }
 
 /// Sleeps the current task and tracks why it is sleeping.
+#[cfg(feature = "tracing")]
 #[inline(always)]
 pub async fn traced_sleep(duration: Duration, reason: SleepReason) {
-    cfg_if::cfg_if! {
-        if #[cfg(all(feature = "tracing", feature = "expensive-spans"))] {
-            use tracing::info_span;
-            use tracing::Instrument;
+    use tracing::Instrument;
 
-            let span = info_span!("tokio::sleep", duration_ms = %duration.as_millis(), %reason);
-            async {
-                tracing::debug!(duration_ms = %duration.as_millis(), %reason, "sleeping");
-                tokio::time::sleep(duration).await;
-            }
-            .instrument(span)
-            .await;
-        } else {
-            let _ = reason; // remove warning
-            tokio::time::sleep(duration).await;
-        }
+    let span = tracing::debug_span!("tokio::sleep", duration_ms = %duration.as_millis(), %reason);
+    async {
+        tracing::debug!(duration_ms = %duration.as_millis(), %reason, "sleeping");
+        tokio::time::sleep(duration).await;
     }
+    .instrument(span)
+    .await;
+}
+
+#[cfg(not(feature = "tracing"))]
+#[inline(always)]
+pub async fn traced_sleep(duration: Duration, _: SleepReason) {
+    tokio::time::sleep(duration).await;
 }
 
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.

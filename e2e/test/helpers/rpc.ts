@@ -350,14 +350,20 @@ export async function prepareSignedTx(props: {
     return await account.signer().signTransaction(tx);
 }
 
+interface Receipts {
+    receipts: TransactionReceipt[];
+    successCount: number;
+    failedCount: number;
+}
+
 // Polls for receipts of multiple transaction without checking the transaction status
-export async function pollForTransactions(
+export async function pollReceipts(
     txHashes: string[],
     options: {
         timeoutInMs?: number;
         pollingIntervalInMs?: number;
     } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 },
-): Promise<TransactionReceipt[]> {
+): Promise<Receipts> {
     const { timeoutInMs, pollingIntervalInMs } = normalizePollingOptions(options);
     const startTimestamp = Date.now();
     const transactionReceipts: TransactionReceipt[] = [];
@@ -399,11 +405,15 @@ export async function pollForTransactions(
             orderedTransactionReceipts.push(targetReceipt);
         }
     });
-    return orderedTransactionReceipts;
+    return {
+        receipts: orderedTransactionReceipts,
+        successCount: orderedTransactionReceipts.filter((r) => r.status == 1).length,
+        failedCount: orderedTransactionReceipts.filter((r) => r.status == 0).length,
+    };
 }
 
 // Polls for the receipt of a single transaction without checking the transaction status
-export async function pollForTransaction(
+export async function pollReceipt(
     tx: TransactionResponse | string | Promise<TransactionResponse> | Promise<string> | null | undefined,
     options: {
         timeoutInMs?: number;
@@ -415,12 +425,12 @@ export async function pollForTransaction(
     }
     tx = await tx;
     const txHash = typeof tx === "string" ? tx : tx.hash;
-    const [txReceipt] = await pollForTransactions([txHash], options);
+    const [txReceipt] = await pollReceipts([txHash], options);
     return txReceipt;
 }
 
 // Polls for the block with a given number is minted
-export async function pollForBlock(
+export async function pollBlock(
     blockNumber: number,
     options: {
         timeoutInMs?: number;
@@ -446,14 +456,14 @@ export async function pollForBlock(
 }
 
 // Polls for the next block is minted
-export async function pollForNextBlock(
+export async function pollNextBlock(
     options: {
         timeoutInMs?: number;
         pollingIntervalInMs?: number;
     } = { timeoutInMs: DEFAULT_TX_TIMEOUT_IN_MS, pollingIntervalInMs: DEFAULT_TX_TIMEOUT_IN_MS / 100 },
 ): Promise<Block> {
     const latestBlockNumber = await sendGetBlockNumber();
-    return pollForBlock(latestBlockNumber + 1, options);
+    return pollBlock(latestBlockNumber + 1, options);
 }
 
 // Normalizes the options for poll functions

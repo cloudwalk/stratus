@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use ethereum_types::BloomInput;
@@ -20,6 +21,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::Size;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::relayer::ExternalRelayerClient;
@@ -37,6 +39,9 @@ pub struct BlockMiner {
 
     /// Mode the block miner is running.
     mode: BlockMinerMode,
+
+    /// Exclusivity lock for automine operations.
+    automine_lock: Mutex<()>,
 
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<TransactionExecution>,
@@ -58,6 +63,7 @@ impl BlockMiner {
         Self {
             storage,
             mode,
+            automine_lock: Mutex::new(()),
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
@@ -93,6 +99,14 @@ impl BlockMiner {
             s.rec_str("tx_hash", &tx_execution.hash());
         });
 
+        // when executing in automine mode, only one transaction can be persisted at time,
+        // otherwise parallel blocks can be generated at the same time and cause bugs.
+        let _automine_lock = if self.mode.is_automine() {
+            Some(self.automine_lock.lock().unwrap())
+        } else {
+            None
+        };
+
         // save execution to temporary storage
         self.storage.save_execution(tx_execution.clone())?;
 
@@ -113,7 +127,7 @@ impl BlockMiner {
     pub fn mine_external(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external block");
 
-        let block = self.storage.finish_block()?;
+        let block = self.storage.finish_pending_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -147,7 +161,7 @@ impl BlockMiner {
     pub fn mine_external_mixed(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external mixed block");
 
-        let block = self.storage.finish_block()?;
+        let block = self.storage.finish_pending_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -185,7 +199,7 @@ impl BlockMiner {
     pub fn mine_local(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining local block");
 
-        let block = self.storage.finish_block()?;
+        let block = self.storage.finish_pending_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -227,7 +241,6 @@ impl BlockMiner {
             Handle::current().block_on(relayer.send_to_relayer(block.clone()))?;
         }
 
-        // persist block
         self.storage.save_block(block.clone())?;
         self.storage.set_mined_block_number(block_number)?;
 
@@ -273,6 +286,7 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
 
     let mut block = Block::new(number, block_timestamp);
     block.transactions.reserve(txs.len());
+    block.header.size = Size::from(txs.len() as u64);
 
     // mine transactions and logs
     let mut log_index = Index::ZERO;
@@ -332,7 +346,7 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
         }
     }
 
-    // TODO: calculate size, state_root, receipts_root, parent_hash
+    // TODO: calculate state_root, receipts_root and parent_hash
     Ok(block)
 }
 /// Mines transactions and logs, assigning necessary properties like block hash and log index.
@@ -398,7 +412,6 @@ pub fn block_from_propagation(block_entry: append_entry::BlockEntry, temporary_t
     // Calculate the transactions root and compare it with the one in the block header to ensure integrity.
     if !block.transactions.is_empty() {
         let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
-        dbg!(&transactions_hashes);
         let calculated_transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
 
         if block.header.transactions_root != calculated_transactions_root {
