@@ -148,7 +148,7 @@ async fn test_append_entries_transaction_executions_and_block() {
 
     for execution in all_executions.iter() {
         let _account = storage
-            .read_account(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present)
+            .read_account(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Mined)
             .unwrap();
         //TODO test account details
     }
@@ -158,7 +158,7 @@ async fn test_append_entries_transaction_executions_and_block() {
             .read_slot(
                 &Address::new_from_h160(H160::from_slice(&execution.from)),
                 &SlotIndex::ZERO,
-                &StoragePointInTime::Present,
+                &StoragePointInTime::Mined,
             )
             .unwrap();
         //TODO test slot details
@@ -166,7 +166,7 @@ async fn test_append_entries_transaction_executions_and_block() {
 
     for execution in all_executions.iter() {
         let _slots = storage
-            .read_all_slots(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Present)
+            .read_all_slots(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Mined)
             .unwrap();
         //TODO test slots details
     }

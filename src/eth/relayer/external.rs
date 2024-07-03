@@ -188,7 +188,7 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let point_in_time = StoragePointInTime::Past(block_number);
+        let point_in_time = StoragePointInTime::MinedPast(block_number);
         let mut futures = vec![];
         for (address, index) in changed_slots {
             futures.push(async move {
@@ -200,7 +200,7 @@ impl ExternalRelayer {
             };
 
             let substrate_slot_value = loop {
-                match self.substrate_chain.fetch_storage_at(&address, &index, StoragePointInTime::Present).await {
+                match self.substrate_chain.fetch_storage_at(&address, &index, StoragePointInTime::Mined).await {
                     Ok(value) => break value,
                     Err(e) => tracing::warn!(reason = ?e, %address, %index, "failed to fetch slot value from substrate, retrying..."),
                 }

@@ -119,7 +119,7 @@ pub fn init_config_and_data(
 
 pub fn filter_accounts_and_slots(snapshot: InMemoryPermanentStorageState) -> (Vec<Account>, Vec<(Address, Slot)>) {
     // filter and convert accounts
-    let accounts = snapshot.accounts.values().map(|a| a.to_account(&StoragePointInTime::Present)).collect_vec();
+    let accounts = snapshot.accounts.values().map(|a| a.to_account(&StoragePointInTime::Mined)).collect_vec();
 
     // filter and convert slots
     let mut slots = Vec::new();
