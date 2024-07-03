@@ -190,14 +190,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    // appends transactions to the pending block
-    // also make them available as a cache for queries
-    fn append_transaction(&self, tx: TransactionExecution) -> anyhow::Result<()> {
-        let mut states = self.lock_write();
-        states.head.require_active_block_mut()?.push_transaction(tx);
-        Ok(())
-    }
-
     fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
         let states = self.lock_read();
         let Some(ref pending_block) = states.head.block else { return Ok(vec![]) };
