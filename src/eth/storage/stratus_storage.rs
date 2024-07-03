@@ -98,10 +98,10 @@ impl StratusStorage {
         }
 
         // try to resume from pending block number
-        let pending_number = self.read_pending_block_number()?;
-        if let Some(pending_number) = pending_number {
-            tracing::info!(block_number = %pending_number, reason = %"set in storage", "resume from PENDING");
-            return Ok(pending_number);
+        let pending_block_number = self.read_pending_block_number()?;
+        if let Some(number) = pending_block_number {
+            tracing::info!(block_number = %number, reason = %"set in storage", "resume from PENDING");
+            return Ok(number);
         }
 
         // fallback to last mined block number

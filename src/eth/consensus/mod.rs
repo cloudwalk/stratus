@@ -40,7 +40,6 @@ use tokio::time::sleep;
 use tonic::transport::Server;
 use tonic::Request;
 
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
@@ -645,7 +644,7 @@ impl Consensus {
         } else {
             #[cfg(feature = "rocks")]
             {
-                let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or(BlockNumber::from(0)).into();
+                let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or_default().into();
 
                 tracing::info!(
                     "last arrived block number: {}, storage block number: {}",
