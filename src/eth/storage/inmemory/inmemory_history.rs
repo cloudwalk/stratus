@@ -52,7 +52,7 @@ where
     pub fn get_at_point(&self, point_in_time: &StoragePointInTime) -> Option<T> {
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => Some(self.get_current()),
-            StoragePointInTime::MinedAtPast(block_number) => self.get_at_block(block_number),
+            StoragePointInTime::MinedPast(block_number) => self.get_at_block(block_number),
         }
     }
 

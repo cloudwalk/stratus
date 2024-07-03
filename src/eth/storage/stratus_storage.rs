@@ -421,9 +421,9 @@ impl StratusStorage {
         match block_filter {
             BlockFilter::Pending => Ok(StoragePointInTime::Pending),
             BlockFilter::Latest => Ok(StoragePointInTime::Mined),
-            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedAtPast(*number)),
+            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(*number)),
             BlockFilter::Earliest | BlockFilter::Hash(_) => match self.read_block(block_filter)? {
-                Some(block) => Ok(StoragePointInTime::MinedAtPast(block.header.number)),
+                Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
                 None => Err(anyhow!(
                     "failed to select block because it is greater than current block number or block hash is invalid"
                 )),

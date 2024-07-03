@@ -170,11 +170,11 @@ impl EvmInput {
             nonce: None,
             block_number: match point_in_time {
                 StoragePointInTime::Mined | StoragePointInTime::Pending => BlockNumber::ZERO, // TODO: use number of block being mined
-                StoragePointInTime::MinedAtPast(number) => number,
+                StoragePointInTime::MinedPast(number) => number,
             },
             block_timestamp: match point_in_time {
                 StoragePointInTime::Mined | StoragePointInTime::Pending => UnixTime::now(),
-                StoragePointInTime::MinedAtPast(_) => UnixTime::now(), // TODO: use timestamp of the specified block
+                StoragePointInTime::MinedPast(_) => UnixTime::now(), // TODO: use timestamp of the specified block
             },
             point_in_time,
             chain_id: None,

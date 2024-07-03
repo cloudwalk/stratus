@@ -66,12 +66,12 @@ impl LogFilterInput {
         let from = match from {
             StoragePointInTime::Pending => storage.read_pending_block_number()?.unwrap_or(BlockNumber::ZERO),
             StoragePointInTime::Mined => storage.read_mined_block_number()?,
-            StoragePointInTime::MinedAtPast(number) => number,
+            StoragePointInTime::MinedPast(number) => number,
         };
         let to = match to {
             StoragePointInTime::Pending => storage.read_pending_block_number()?,
             StoragePointInTime::Mined => None,
-            StoragePointInTime::MinedAtPast(number) => Some(number),
+            StoragePointInTime::MinedPast(number) => Some(number),
         };
 
         Ok(LogFilter {

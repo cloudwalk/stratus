@@ -17,7 +17,7 @@ pub enum StoragePointInTime {
 
     /// State of [`Account`] or [`Slot`] at some specific mined block in the past.
     #[strum(to_string = "mined-past")]
-    MinedAtPast(BlockNumber),
+    MinedPast(BlockNumber),
 }
 
 // -----------------------------------------------------------------------------

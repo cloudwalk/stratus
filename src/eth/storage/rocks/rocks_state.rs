@@ -299,7 +299,7 @@ impl RocksStorageState {
                     index: *index,
                     value: account_slot_value.clone().into(),
                 }),
-            StoragePointInTime::MinedAtPast(number) => {
+            StoragePointInTime::MinedPast(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
                     .iter_from((*address, *index, *number), rocksdb::Direction::Reverse)
@@ -332,7 +332,7 @@ impl RocksStorageState {
 
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => Ok(present_slots),
-            StoragePointInTime::MinedAtPast(_) => {
+            StoragePointInTime::MinedPast(_) => {
                 let mut past_slots = Vec::with_capacity(present_slots.len());
                 for index in present_slots.iter().map(|s| s.index) {
                     let past_slot = self.read_slot(address, &index, point_in_time);
@@ -364,7 +364,7 @@ impl RocksStorageState {
                     None
                 }
             },
-            StoragePointInTime::MinedAtPast(block_number) => {
+            StoragePointInTime::MinedPast(block_number) => {
                 let rocks_address: AddressRocksdb = (*address).into();
                 if let Some(((addr, _), account_info)) = self
                     .accounts_history
