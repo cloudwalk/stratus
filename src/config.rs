@@ -391,7 +391,7 @@ pub struct ExternalRelayerServerConfig {
     pub blocks_to_fetch: u64,
 
     /// Clanup db on startup (delete blocks that don't exist in stratus currently)
-    #[arg(long = "cleanup-db", env = "CLEANUP-DB", default_value = "false")]
+    #[arg(long = "cleanup-db", env = "CLEANUP_DB", default_value = "false")]
     pub cleanup: bool,
 }
 
