@@ -74,7 +74,7 @@ pub struct InMemoryTemporaryStorageState {
 
 impl InMemoryTemporaryStorageState {
     /// Validates there is a pending block being mined and returns a reference to it.
-    fn require_pending_block(&mut self) -> anyhow::Result<&PendingBlock> {
+    fn require_pending_block(&self) -> anyhow::Result<&PendingBlock> {
         match &self.block {
             Some(block) => Ok(block),
             None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
