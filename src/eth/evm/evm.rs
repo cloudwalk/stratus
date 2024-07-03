@@ -11,6 +11,7 @@ use std::borrow::Cow;
 use display_json::DebugAsJson;
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -31,6 +32,7 @@ use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::if_else;
+use crate::log_and_err;
 
 /// Evm execution result.
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -159,8 +161,13 @@ impl EvmInput {
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas`.
-    pub fn from_eth_call(input: CallInput, point_in_time: StoragePointInTime, pending_block_number: BlockNumber) -> Self {
-        Self {
+    pub fn from_eth_call(
+        input: CallInput,
+        point_in_time: StoragePointInTime,
+        pending_block_number: BlockNumber,
+        mined_block: Option<Block>,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
             value: input.value,
@@ -174,11 +181,14 @@ impl EvmInput {
             },
             block_timestamp: match point_in_time {
                 StoragePointInTime::Mined | StoragePointInTime::Pending => UnixTime::now(),
-                StoragePointInTime::MinedPast(_) => UnixTime::now(), // TODO: use timestamp of the specified block
+                StoragePointInTime::MinedPast(_) => match mined_block {
+                    Some(block) => block.header.timestamp,
+                    None => return log_and_err!("failed to create EvmInput because cannot determine mined block timestamp"),
+                },
             },
             point_in_time,
             chain_id: None,
-        }
+        })
     }
 
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
