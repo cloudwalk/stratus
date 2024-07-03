@@ -77,7 +77,7 @@ impl InMemoryTemporaryStorageState {
     fn require_active_block(&mut self) -> anyhow::Result<&PendingBlock> {
         match &self.block {
             Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"), // try calling set_active_block_number_as_next_if_not_set or any other method to create a new block on temp storage
+            None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
 
@@ -85,7 +85,7 @@ impl InMemoryTemporaryStorageState {
     fn require_active_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
         match &mut self.block {
             Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"), // try calling set_active_block_number_as_next_if_not_set or any other method to create a new block on temp storage
+            None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
 }
@@ -118,7 +118,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let mut states = self.lock_write();
         match states.head.block.as_mut() {
             Some(block) => block.number = number,
@@ -129,7 +129,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+    fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         let states = self.lock_read();
         match &states.head.block {
             Some(block) => Ok(Some(block.number)),
@@ -141,7 +141,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    fn set_active_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+    fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
         let mut states = self.lock_write();
         states.head.require_active_block_mut()?.external_block = Some(block);
         Ok(())

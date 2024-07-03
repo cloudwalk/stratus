@@ -83,7 +83,7 @@ async fn validate_state_rpc(
             .fetch_storage_at(
                 &sampled_slot.address,
                 &sampled_slot.index,
-                stratus::eth::primitives::StoragePointInTime::MinedPast(sampled_slot.block_number),
+                stratus::eth::primitives::StoragePointInTime::MinedAtPast(sampled_slot.block_number),
             )
             .await?;
 

@@ -140,7 +140,7 @@ async fn test_append_entries_transaction_executions_and_block() {
     assert!(logs.is_empty());
 
     // Test reading block numbers
-    let active_block_number = storage.read_active_block_number().unwrap().unwrap();
+    let active_block_number = storage.read_pending_block_number().unwrap().unwrap();
     assert!(active_block_number > BlockNumber::ZERO);
 
     let mined_block_number = storage.read_mined_block_number().unwrap();

@@ -18,7 +18,7 @@ pub trait PermanentStorage: Send + Sync + 'static {
     // Block number
     // -------------------------------------------------------------------------
 
-    /// Sets the last mined block number to a specific value.
+    /// Sets the last mined block number.
     fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
     // Retrieves the last mined block number.

@@ -24,8 +24,8 @@ metrics! {
     "Time to execute storage check_conflicts operation."
     histogram_duration storage_check_conflicts{storage, success, conflicted},
 
-    "Time to execute storage read_active_block_number operation."
-    histogram_duration storage_read_active_block_number{storage, success},
+    "Time to execute storage read_pending_block_number operation."
+    histogram_duration storage_read_pending_block_number{storage, success},
 
     "Time to execute storage read_mined_block_number operation."
     histogram_duration storage_read_mined_block_number{storage, success},
@@ -50,8 +50,8 @@ metrics! {
 metrics! {
     group: storage_write,
 
-    "Time to execute storage set_active_block_number operation."
-    histogram_duration storage_set_active_block_number{storage, success},
+    "Time to execute storage set_pending_block_number operation."
+    histogram_duration storage_set_pending_block_number{storage, success},
 
     "Time to execute storage set_mined_block_number operation."
     histogram_duration storage_set_mined_block_number{storage, success},
@@ -62,8 +62,8 @@ metrics! {
     "Time to execute storage save_account_changes operation."
     histogram_duration storage_save_execution{storage, success},
 
-    "Time to execute storage set_active_external_block operation."
-    histogram_duration storage_set_active_external_block{storage, success},
+    "Time to execute storage set_pending_external_block operation."
+    histogram_duration storage_set_pending_external_block{storage, success},
 
     "Time to execute storage finish_block operation."
     histogram_duration storage_finish_block{storage, success},
