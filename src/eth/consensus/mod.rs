@@ -822,7 +822,7 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            peer.match_index = prev_log_index + 1;
+                            peer.match_index = response.match_log_index;
                             tracing::info!("successfully appended block to peer: {:?}, match_index: {}", peer.client, peer.match_index);                            Ok(())
                         }
                         _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
@@ -849,7 +849,7 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            peer.match_index = prev_log_index + 1;
+                            peer.match_index = response.match_log_index;
                             tracing::info!("successfully appended transaction executions to peer: {:?}, match_index: {}", peer.client, peer.match_index);                            Ok(())
                         }
                         _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
