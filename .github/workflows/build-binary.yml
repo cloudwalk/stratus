@@ -13,6 +13,9 @@ on:
       - 'static/**'
       - '.sqlx/**'
 
+env:
+  RETENTION_DAYS: 90
+
 jobs:
   build_run_with_importer:
     name: Run with importer
@@ -43,24 +46,55 @@ jobs:
         run: sudo apt-get install -y protobuf-compiler
 
       - name: Build
-        run: cargo build --release --bin run-with-importer
+        run: cargo build --release --bin run-with-importer --bin stratus --bin importer-online --bin relayer
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           LOG_FORMAT: json
           NO_COLOR: 1
 
-      - name: Upload a Build Artifact
+      - name: Upload run with importer
         uses: actions/upload-artifact@v4
-        id: upload-artifact
+        id: upload-rwi
         with:
             name: stratus-run-with-importer-linux-${{ github.sha }}
             path: target/release/run-with-importer
             if-no-files-found: error
-            retention-days: 90
+            retention-days: env.RETENTION_DAYS
+
+      - name: Upload stratus
+        uses: actions/upload-artifact@v4
+        id: upload-str
+        with:
+            name: stratus-linux-${{ github.sha }}
+            path: target/release/stratus
+            if-no-files-found: error
+            retention-days: env.RETENTION_DAYS
+      
+      - name: Upload importer online
+        uses: actions/upload-artifact@v4
+        id: upload-iom
+        with:
+            name: stratus-importer-online-${{ github.sha }}
+            path: target/release/importer-online
+            if-no-files-found: error
+            retention-days: env.RETENTION_DAYS
+
+      - name: Upload relayer
+        uses: actions/upload-artifact@v4
+        id: upload-rel
+        with:
+            name: stratus-relayer-linux-${{ github.sha }}
+            path: target/release/relayer
+            if-no-files-found: error
+            retention-days: env.RETENTION_DAYS
 
       - name: Print outputs
         run: |
-            echo "Artifact ID: ${{ steps.upload-artifact.outputs.artifact-id }}"
-            echo "Artifact URL: ${{ steps.upload-artifact.outputs.artifact-url }}"
-      
-
+            echo "Artifact ID: ${{ steps.upload-rwi.outputs.artifact-id }} (run with importer)"
+            echo "Artifact URL: ${{ steps.upload-rwi.outputs.artifact-url }} (run with importer)"
+            echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
+            echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
+            echo "Artifact ID: ${{ steps.upload-iom.outputs.artifact-id }} (importer online)"
+            echo "Artifact URL: ${{ steps.upload-iom.outputs.artifact-url }} (importer online)"
+            echo "Artifact ID: ${{ steps.upload-rel.outputs.artifact-id }} (relayer)"
+            echo "Artifact URL: ${{ steps.upload-rel.outputs.artifact-url }} (relayer)"
