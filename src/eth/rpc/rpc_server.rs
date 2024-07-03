@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::ops::Deref;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use ethereum_types::U256;
@@ -43,7 +45,7 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
-use crate::eth::rpc::rpc_invalid_params_error;
+use crate::eth::rpc::rpc_params_error;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
@@ -94,6 +96,7 @@ pub async fn serve_rpc(
         chain_id,
         client_version: "stratus",
         gas_price: 0,
+        reject_unknown_client_enabled: AtomicBool::new(false),
 
         // services
         executor,
@@ -163,6 +166,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_version", stratus_version)?;
 
     // stratus state
+    module.register_method("stratus_blockUnknownClients", stratus_block_unknown_clients)?;
+    module.register_method("stratus_unblockUnknownClients", stratus_unblock_unknown_clients)?;
     module.register_blocking_method("stratus_getSlots", stratus_get_slots)?;
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
 
@@ -270,12 +275,21 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
     Ok(build_info::as_json())
 }
 
+fn stratus_block_unknown_clients(_: Params<'_>, ctx: &RpcContext, _: &Extensions) {
+    ctx.reject_unknown_client_enabled.store(true, Ordering::Release);
+}
+
+fn stratus_unblock_unknown_clients(_: Params<'_>, ctx: &RpcContext, _: &Extensions) {
+    ctx.reject_unknown_client_enabled.store(false, Ordering::Release);
+}
+
 fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<Vec<Slot>, RpcError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::stratus_getSlots", address = field::Empty, indexes = field::Empty).entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (params, indexes) = next_rpc_param_or_default::<Vec<SlotIndex>>(params)?;
     let (_, block_filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
@@ -309,9 +323,11 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     }
 }
 
-async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> JsonValue {
+async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+    ctx.reject_unknown_client(ext.rpc_client())?;
+
     let (pending_txs, new_heads, logs) = join!(ctx.subs.new_heads.read(), ctx.subs.pending_txs.read(), ctx.subs.logs.read());
-    json!({
+    let response = json!({
         "newPendingTransactions":
             pending_txs.values().map(|s|
                 json!({
@@ -345,7 +361,8 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Exten
                     }
                 })
             ).collect_vec()
-    })
+    });
+    Ok(response)
 }
 
 // -----------------------------------------------------------------------------
@@ -423,6 +440,7 @@ fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcC
     };
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
@@ -468,6 +486,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let _method_enter = info_span!("rpc::eth_getTransactionByHash", tx_hash = field::Empty, found = field::Empty).entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (_, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
 
     // track
@@ -498,6 +517,7 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (_, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
 
     // track
@@ -528,6 +548,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     let _method_enter = info_span!("rpc::eth_estimateGas", tx_from = field::Empty, tx_to = field::Empty).entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
     // track
@@ -565,6 +586,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow
     let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -610,6 +632,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     .entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
 
@@ -674,6 +697,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
     .entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params.sequence())?;
     let mut filter = filter_input.parse(&ctx.storage)?;
 
@@ -694,7 +718,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
-        return Err(rpc_invalid_params_error(format!(
+        return Err(rpc_params_error(format!(
             "filter range will fetch logs from {} blocks, but the max allowed is {}",
             blocks_in_range, MAX_BLOCK_RANGE
         ))
@@ -720,6 +744,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     let _method_enter = info_span!("rpc::eth_getTransactionCount", address = field::Empty, filter = field::Empty).entered();
 
     // pare params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -741,6 +766,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
     let _method_enter = info_span!("rpc::eth_getBalance", address = field::Empty, filter = field::Empty).entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -763,6 +789,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
     let _method_enter = info_span!("rpc::eth_getCode", address = field::Empty, filter = field::Empty).entered();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -790,6 +817,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     let _method_enter = method_span.enter();
 
     // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let client = ext.rpc_client();
     let (params, event) = next_rpc_param::<String>(params.sequence())?;
 
@@ -821,7 +849,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
             tracing::warn!(%kind, "unsupported subscription event");
             drop(_method_enter);
             pending
-                .reject(rpc_invalid_params_error(format!("unsupported subscription event: {}", kind)))
+                .reject(rpc_params_error(format!("unsupported subscription event: {}", kind)))
                 .instrument(method_span)
                 .await;
         }
@@ -834,9 +862,12 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 // -----------------------------------------------------------------------------
 
 fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<String, RpcError> {
+    // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getStorageAt", address = field::Empty, index = field::Empty).entered();
 
+    // parse params
+    ctx.reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (params, index) = next_rpc_param::<SlotIndex>(params)?;
     let (_, block_filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
@@ -846,6 +877,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
         s.rec_str("index", &index);
     });
 
+    // execute
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_filter)?;
     let slot = ctx.storage.read_slot(&address, &index, &point_in_time)?;
 
