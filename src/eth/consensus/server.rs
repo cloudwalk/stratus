@@ -363,8 +363,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eth::consensus::append_entry::BlockEntry;
     use crate::eth::consensus::tests::factories::*;
-    use crate::eth::consensus::BlockEntry;
 
     #[tokio::test]
     async fn test_append_transaction_executions_insert() {
