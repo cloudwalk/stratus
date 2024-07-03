@@ -98,10 +98,10 @@ impl StratusStorage {
         }
 
         // try to resume from pending block number
-        let active_number = self.read_pending_block_number()?;
-        if let Some(active_number) = active_number {
-            tracing::info!(block_number = %active_number, reason = %"set in storage", "resume from ACTIVE");
-            return Ok(active_number);
+        let pending_number = self.read_pending_block_number()?;
+        if let Some(pending_number) = pending_number {
+            tracing::info!(block_number = %pending_number, reason = %"set in storage", "resume from PENDING");
+            return Ok(pending_number);
         }
 
         // fallback to last mined block number
@@ -159,8 +159,8 @@ impl StratusStorage {
     }
 
     pub fn set_pending_block_number_as_next_if_not_set(&self) -> anyhow::Result<()> {
-        let active_block = self.read_pending_block_number()?;
-        if active_block.is_none() {
+        let pending_block = self.read_pending_block_number()?;
+        if pending_block.is_none() {
             self.set_pending_block_number_as_next()?;
         }
         Ok(())

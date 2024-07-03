@@ -73,16 +73,16 @@ pub struct InMemoryTemporaryStorageState {
 }
 
 impl InMemoryTemporaryStorageState {
-    /// Validates there is an active pending block being mined and returns a reference to it.
-    fn require_active_block(&mut self) -> anyhow::Result<&PendingBlock> {
+    /// Validates there is a pending block being mined and returns a reference to it.
+    fn require_pending_block(&mut self) -> anyhow::Result<&PendingBlock> {
         match &self.block {
             Some(block) => Ok(block),
             None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
 
-    /// Validates there is an active pending block being mined and returns a mutable reference to it.
-    fn require_active_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
+    /// Validates there is a pending block being mined and returns a mutable reference to it.
+    fn require_pending_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
         match &mut self.block {
             Some(block) => Ok(block),
             None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
@@ -143,7 +143,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
         let mut states = self.lock_write();
-        states.head.require_active_block_mut()?.external_block = Some(block);
+        states.head.require_pending_block_mut()?.external_block = Some(block);
         Ok(())
     }
 
@@ -185,7 +185,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.require_active_block_mut()?.push_transaction(tx);
+        states.head.require_pending_block_mut()?.push_transaction(tx);
 
         Ok(())
     }
@@ -199,7 +199,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
-        let finished_block = states.head.require_active_block()?.clone();
+        let finished_block = states.head.require_pending_block()?.clone();
 
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
