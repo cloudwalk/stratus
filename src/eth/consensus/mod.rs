@@ -392,10 +392,12 @@ impl Consensus {
         }
 
         // When a node becomes a leader, it should reset the match_index for all peers
-        let mut peers = self.peers.write().await;
-        for (_, (_peer, _)) in peers.iter_mut() {
-            tracing::info!("resetting match_index for peer");
-            //peer.match_index = 0;
+        {
+            let mut peers = self.peers.write().await;
+
+            for (_, (peer, _)) in peers.iter_mut() {
+                peer.match_index = 0;
+            }
         }
 
         self.set_role(Role::Leader);
@@ -714,16 +716,19 @@ impl Consensus {
             return;
         }
 
-        let mut peers = self.peers.write().await;
-
-        for (address, (peer, _)) in peers.iter_mut() {
-            if *address == leader_address {
-                peer.role = Role::Leader;
-
-                self.refresh_blockchain_client().await;
-            } else {
-                peer.role = Role::Follower;
+        {
+            let mut peers = self.peers.write().await;
+            for (address, (peer, _)) in peers.iter_mut() {
+                if *address == leader_address {
+                    peer.role = Role::Leader;
+                } else {
+                    peer.role = Role::Follower;
+                }
             }
+        }
+
+        if self.peers.read().await.get(&leader_address).map(|(peer, _)| peer.role) == Some(Role::Leader) {
+            self.refresh_blockchain_client().await;
         }
 
         tracing::info!(leader = %leader_address, "updated leader information");
