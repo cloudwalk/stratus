@@ -45,7 +45,7 @@ jobs:
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
-      - name: Build
+      - name: Build binaries
         run: cargo build --release --bin run-with-importer --bin stratus --bin importer-online --bin relayer
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
@@ -59,7 +59,7 @@ jobs:
             name: stratus-run-with-importer-linux-${{ github.sha }}
             path: target/release/run-with-importer
             if-no-files-found: error
-            retention-days: env.RETENTION_DAYS
+            retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Upload stratus
         uses: actions/upload-artifact@v4
@@ -68,7 +68,7 @@ jobs:
             name: stratus-linux-${{ github.sha }}
             path: target/release/stratus
             if-no-files-found: error
-            retention-days: env.RETENTION_DAYS
+            retention-days: ${{ env.RETENTION_DAYS }}
       
       - name: Upload importer online
         uses: actions/upload-artifact@v4
@@ -77,7 +77,7 @@ jobs:
             name: stratus-importer-online-${{ github.sha }}
             path: target/release/importer-online
             if-no-files-found: error
-            retention-days: env.RETENTION_DAYS
+            retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Upload relayer
         uses: actions/upload-artifact@v4
@@ -86,7 +86,7 @@ jobs:
             name: stratus-relayer-linux-${{ github.sha }}
             path: target/release/relayer
             if-no-files-found: error
-            retention-days: env.RETENTION_DAYS
+            retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Print outputs
         run: |
