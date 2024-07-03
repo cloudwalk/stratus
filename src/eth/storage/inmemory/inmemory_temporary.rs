@@ -197,7 +197,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
-    fn finish_block(&self) -> anyhow::Result<PendingBlock> {
+    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
         let finished_block = states.head.require_pending_block()?.clone();
 

@@ -311,18 +311,18 @@ impl StratusStorage {
         })
     }
 
-    /// gives the list of pending transactions on current block
+    /// Retrieves pending transactions being mined.
     pub fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
         self.temp.pending_transactions()
     }
 
-    pub fn finish_block(&self) -> anyhow::Result<PendingBlock> {
+    pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::finish_block", block_number = tracing::field::Empty).entered();
+        let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
 
-        let result = timed(|| self.temp.finish_block()).with(|m| {
-            metrics::inc_storage_finish_block(m.elapsed, label::TEMP, m.result.is_ok());
+        let result = timed(|| self.temp.finish_pending_block()).with(|m| {
+            metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, m.result.is_ok());
         });
 
         if let Ok(ref block) = result {

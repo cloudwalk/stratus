@@ -127,7 +127,7 @@ impl BlockMiner {
     pub fn mine_external(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external block");
 
-        let block = self.storage.finish_block()?;
+        let block = self.storage.finish_pending_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -161,7 +161,7 @@ impl BlockMiner {
     pub fn mine_external_mixed(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining external mixed block");
 
-        let block = self.storage.finish_block()?;
+        let block = self.storage.finish_pending_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
@@ -199,7 +199,7 @@ impl BlockMiner {
     pub fn mine_local(&self) -> anyhow::Result<Block> {
         tracing::debug!("mining local block");
 
-        let block = self.storage.finish_block()?;
+        let block = self.storage.finish_pending_block()?;
         let (local_txs, external_txs) = block.split_transactions();
 
         // validate
