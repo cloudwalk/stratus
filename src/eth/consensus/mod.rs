@@ -392,10 +392,10 @@ impl Consensus {
         }
 
         // When a node becomes a leader, it should reset the match_index for all peers
-        //let mut peers = self.peers.write().await;
-        //for (_, (peer, _)) in peers.iter_mut() {
-        //    peer.match_index = 0;
-        //}
+        let mut peers = self.peers.write().await;
+        for (_, (peer, _)) in peers.iter_mut() {
+            peer.match_index = 0;
+        }
 
         self.set_role(Role::Leader);
     }
