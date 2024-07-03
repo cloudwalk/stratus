@@ -385,6 +385,8 @@ impl Executor {
             return Err(anyhow!("transaction sent from zero address is not allowed"));
         }
 
+        let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or(1.into());
+
         // executes transaction until no more conflicts
         let mut attempt = 0;
         loop {
@@ -417,7 +419,7 @@ impl Executor {
 
             // execute transaction in evm
             // in case of failure, do not retry
-            let evm_input = EvmInput::from_eth_transaction(tx_input.clone());
+            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_block_number);
             let evm_result = match self.evms.execute(evm_input, evm_route) {
                 Ok(evm_result) => evm_result,
                 Err(e) => return Err(e),
@@ -463,7 +465,9 @@ impl Executor {
             "executing read-only local transaction"
         );
 
-        let evm_input = EvmInput::from_eth_call(input, point_in_time);
+        let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or(1.into());
+
+        let evm_input = EvmInput::from_eth_call(input, point_in_time, pending_block_number);
         let evm_route = match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => EvmRoute::CallPresent,
             StoragePointInTime::MinedPast(_) => EvmRoute::CallPast,
