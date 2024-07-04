@@ -100,6 +100,7 @@ impl TransactionDag {
 
         Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
         Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
+        Self::add_nonce_edges(&mut dag, &node_indexes);
 
         #[cfg(feature = "metrics")]
         metrics::inc_compute_tx_dag(start.elapsed());
@@ -122,6 +123,20 @@ impl TransactionDag {
                 if tx1_from != tx2_from && !set1.is_disjoint(set2) {
                     tracing::debug!(?tx1, ?tx2, "adding edge");
                     dag.add_edge(*node_indexes.get(tx1).unwrap(), *node_indexes.get(tx2).unwrap(), 1);
+                }
+            }
+        }
+    }
+
+    fn add_nonce_edges(dag: &mut StableGraph<TransactionMined, i32>, node_indexes: &HashMap<(BlockNumber, Index), NodeIndex>) {
+        for (i, (tx1_id, tx1_idx)) in node_indexes.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
+            let tx1 = dag.node_weight(*tx1_idx).unwrap();
+            let (tx1_signer, tx1_nonce) = (tx1.input.signer, tx1.input.nonce);
+            for (tx2_id, tx2_idx) in node_indexes.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
+                let tx2 = dag.node_weight(*tx2_idx).unwrap();
+                let (tx2_signer, tx2_nonce) = (tx2.input.signer, tx2.input.nonce);
+                if tx1_signer == tx2_signer && tx1_nonce.next() == tx2_nonce {
+                    dag.add_edge(*node_indexes.get(tx1_id).unwrap(), *node_indexes.get(tx2_id).unwrap(), 1);
                 }
             }
         }
@@ -181,10 +196,26 @@ mod tests {
     use crate::eth::primitives::Hash;
     use crate::eth::primitives::Slot;
     use crate::eth::primitives::SlotIndex;
+    use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
 
     const ADDRESS: Address = Address::ZERO;
+
+    fn create_tx_nonce(nonce: u64, idx: u64) -> TransactionMined {
+        let mut input: TransactionInput = Faker.fake();
+        input.signer = Address::ZERO;
+        input.nonce = nonce.into();
+
+        TransactionMined {
+            input,
+            execution: Faker.fake(),
+            logs: vec![],
+            transaction_index: idx.into(),
+            block_number: 0.into(),
+            block_hash: Hash::default(),
+        }
+    }
 
     fn create_tx(changed_slots_inidices: HashSet<SlotIndex>, block_number: u64, tx_idx: u64) -> TransactionMined {
         let execution_changes = ExecutionAccountChanges {
@@ -235,6 +266,25 @@ mod tests {
             i += 1;
         }
         //println!("{:?}", petgraph::dot::Dot::with_config(&dag.dag, &[petgraph::dot::Config::EdgeNoLabel, petgraph::dot::Config::NodeIndexLabel]));
+    }
+
+    #[test]
+    fn test_nonce_dependency() {
+        let expected = [vec![0, 3], vec![1, 4], vec![2]];
+        let transactions = vec![
+            create_tx_nonce(0, 0),
+            create_tx_nonce(1, 1),
+            create_tx_nonce(2, 2),
+            create_tx_nonce(4, 3),
+            create_tx_nonce(5, 4),
+        ];
+        let mut dag = TransactionDag::new(transactions);
+        let mut i = 0;
+        while let Some(roots) = dag.take_roots() {
+            assert_eq!(roots.len(), expected[i].len());
+            assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+            i += 1;
+        }
     }
 
     #[test]
