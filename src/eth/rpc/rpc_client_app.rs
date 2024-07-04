@@ -25,7 +25,10 @@ impl Display for RpcClientApp {
 impl RpcClientApp {
     /// Parse known client application name to groups.
     pub fn parse(name: &str) -> RpcClientApp {
-        let name = name.trim().trim_end_matches('/').to_ascii_lowercase().replace('_', "-");
+        let name = name.trim().trim_start_matches('/').trim_end_matches('/').to_ascii_lowercase().replace('_', "-");
+        if name.is_empty() {
+            return RpcClientApp::Unknown;
+        }
         let name = match name {
             n if n.starts_with("banking") => format!("banking::{}", n),
             n if n.starts_with("issuing") || n.starts_with("infinitecard") => format!("issuing::{}", n),
