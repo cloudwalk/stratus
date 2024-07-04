@@ -544,8 +544,11 @@ impl ExternalRelayer {
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
             tracing::info!(elapsed=?start.elapsed().as_secs(), transaction_num=roots.len(), remaining=dag.txs_remaining(),"forwarding");
-            let futures = roots.into_iter().map(|root_tx| self.relay_transaction(root_tx));
-            results.extend(join_all(futures).await);
+            let futures = roots.into_iter().sorted().map(|root_tx| self.relay_transaction(root_tx));
+            let mut stream = futures::stream::iter(futures).buffered(30);
+            while let Some(result) = stream.next().await {
+                results.push(result);
+            }
         }
 
         let errors = results.into_iter().filter_map(Result::err);
