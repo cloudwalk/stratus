@@ -15,6 +15,7 @@ use crate::channel_read;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::DateTimeNow;
 use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::rpc::RpcClientApp;
@@ -77,13 +78,51 @@ impl RpcSubscriptions {
                     return Ok(());
                 }
 
+                // store here which subscriptions were cleaned to later log them
+                let mut pending_txs_subs_cleaned = Vec::<RpcClientApp>::new();
+                let mut new_heads_subs_cleaned = Vec::<RpcClientApp>::new();
+                let mut logs_subs_cleaned = Vec::<(RpcClientApp, LogFilterInput)>::new();
+
                 // remove closed subscriptions
-                subs.pending_txs.write().await.retain(|_, s| not(s.sink.is_closed()));
-                subs.new_heads.write().await.retain(|_, s| not(s.sink.is_closed()));
-                subs.logs.write().await.retain(|_, inner_map| {
-                    inner_map.retain(|_, s| not(s.sink.is_closed()));
-                    not(inner_map.is_empty())
+                subs.pending_txs.write().await.retain(|_, sub| {
+                    let should_keep = not(sub.sink.is_closed());
+                    if !should_keep {
+                        pending_txs_subs_cleaned.push(sub.client.clone());
+                    }
+                    should_keep
                 });
+                subs.new_heads.write().await.retain(|_, sub| {
+                    let should_keep = not(sub.sink.is_closed());
+                    if !should_keep {
+                        new_heads_subs_cleaned.push(sub.client.clone());
+                    }
+                    should_keep
+                });
+                subs.logs.write().await.retain(|_, connection_sub_map| {
+                    // clear inner map first
+                    connection_sub_map.retain(|_, sub| {
+                        let should_keep = not(sub.sink.is_closed());
+                        if !should_keep {
+                            logs_subs_cleaned.push((sub.client.clone(), sub.filter.original_input.clone()));
+                        }
+                        should_keep
+                    });
+
+                    // remove empty connection maps
+                    not(connection_sub_map.is_empty())
+                });
+
+                // log cleaned subscriptions
+                let amount_cleaned = pending_txs_subs_cleaned.len() + new_heads_subs_cleaned.len() + logs_subs_cleaned.len();
+
+                if amount_cleaned > 0 {
+                    tracing::info!(
+                        pending_txs = ?pending_txs_subs_cleaned,
+                        new_heads = ?new_heads_subs_cleaned,
+                        logs = ?logs_subs_cleaned,
+                        "Cleaned {amount_cleaned} subscriptions",
+                    );
+                }
 
                 // update metrics
                 #[cfg(feature = "metrics")]
