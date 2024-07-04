@@ -107,14 +107,14 @@ impl RocksStorageState {
         tracing::debug!("opened database successfully");
         let state = Self {
             db_path,
-            accounts: new_cf(&db, "accounts"),
-            accounts_history: new_cf(&db, "accounts_history"),
-            account_slots: new_cf(&db, "account_slots"),
-            account_slots_history: new_cf(&db, "account_slots_history"),
-            transactions: new_cf(&db, "transactions"),
-            blocks_by_number: new_cf(&db, "blocks_by_number"),
-            blocks_by_hash: new_cf(&db, "blocks_by_hash"), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
-            logs: new_cf(&db, "logs"),
+            accounts: new_cf_ref(&db, "accounts"),
+            accounts_history: new_cf_ref(&db, "accounts_history"),
+            account_slots: new_cf_ref(&db, "account_slots"),
+            account_slots_history: new_cf_ref(&db, "account_slots_history"),
+            transactions: new_cf_ref(&db, "transactions"),
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number"),
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash"), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            logs: new_cf_ref(&db, "logs"),
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
             #[cfg(feature = "metrics")]
@@ -551,16 +551,16 @@ impl fmt::Debug for RocksStorageState {
     }
 }
 
-fn new_cf<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCf<K, V>
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCf<K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
     let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
-        panic!("column_family `{column_family}` given to `new_cf` not found in options map");
+        panic!("column_family `{column_family}` given to `new_cf_ref` not found in options map");
     };
-    RocksCf::new_cf(Arc::clone(db), column_family, options.clone())
+    RocksCf::new(Arc::clone(db), column_family, options.clone())
 }
 
 #[cfg(test)]
@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn test_rocks_multi_get() {
         let (db, _db_options) = create_or_open_db("./data/slots_test.rocksdb", &CF_OPTIONS_MAP).unwrap();
-        let account_slots: RocksCf<SlotIndex, SlotValue> = new_cf(&db, "account_slots");
+        let account_slots: RocksCf<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots");
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
         let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)

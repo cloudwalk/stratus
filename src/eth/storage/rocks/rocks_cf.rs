@@ -32,7 +32,7 @@ where
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
     /// Create Column Family for given DB if it doesn't exist.
-    pub fn new_cf(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
+    pub fn new(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
         Self {
             db,
             column_family: column_family.to_owned(),
