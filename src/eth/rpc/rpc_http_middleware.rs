@@ -44,44 +44,60 @@ where
 
 /// Extracts the client application name from the `app` query parameter.
 fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp {
-    fn normalize(client_app: &str) -> String {
-        client_app.trim().to_ascii_lowercase()
-    }
-
-    // try http headers
-    for header in ["x-app", "x-stratus-app", "x-client", "x-stratus-client"] {
-        if let Some(client_app) = headers.get(header) {
-            let Ok(client_app) = client_app.to_str() else {
-                tracing::warn!(%header, value = ?client_app, "failed to parse http header as ascii string");
-                continue;
-            };
-            let client_app = normalize(client_app);
-            if not(client_app.is_empty()) {
-                return RpcClientApp::parse(&client_app);
+    fn try_query_params(uri: &Uri) -> Option<RpcClientApp> {
+        let query_params = uri.query()?;
+        let query_params: HashMap<String, String> = match serde_urlencoded::from_str(query_params) {
+            Ok(url) => url,
+            Err(e) => {
+                tracing::warn!(reason = ?e, "failed to parse http request query parameters");
+                return None;
+            }
+        };
+        for param in ["app", "client"] {
+            if let Some(name) = query_params.get(param) {
+                return Some(RpcClientApp::parse(name));
             }
         }
+        None
     }
 
-    // try query params
-    let Some(query_params_str) = uri.query() else {
-        return RpcClientApp::default();
-    };
-    let query_params: HashMap<String, String> = match serde_urlencoded::from_str(query_params_str) {
-        Ok(url) => url,
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to parse http request query parameters");
-            return RpcClientApp::Unknown;
-        }
-    };
-    for param in ["app", "client"] {
-        if let Some(client_app) = query_params.get(param) {
-            let client_app = normalize(client_app);
-            if not(client_app.is_empty()) {
-                return RpcClientApp::parse(&client_app);
+    fn try_headers(headers: &HeaderMap<HeaderValue>) -> Option<RpcClientApp> {
+        for header in ["x-app", "x-stratus-app", "x-client", "x-stratus-client"] {
+            if let Some(name) = headers.get(header) {
+                let Ok(name) = name.to_str() else {
+                    tracing::warn!(%header, value = ?name, "failed to parse http header as ascii string");
+                    continue;
+                };
+                if not(name.is_empty()) {
+                    return Some(RpcClientApp::parse(name));
+                }
             }
         }
+        None
     }
 
-    // not identified
+    fn try_path(uri: &Uri) -> Option<RpcClientApp> {
+        let path = uri.path();
+        let mut path_parts = path.split('/');
+        while let Some(part) = path_parts.next() {
+            if part == "app" || part == "client" {
+                match path_parts.next() {
+                    Some(name) => return Some(RpcClientApp::parse(name)),
+                    None => return None,
+                }
+            }
+        }
+        None
+    }
+
+    if let Some(app) = try_query_params(uri) {
+        return app;
+    }
+    if let Some(app) = try_headers(headers) {
+        return app;
+    }
+    if let Some(app) = try_path(uri) {
+        return app;
+    }
     RpcClientApp::default()
 }
