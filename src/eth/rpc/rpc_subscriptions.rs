@@ -114,14 +114,13 @@ impl RpcSubscriptions {
 
                 // log cleaned subscriptions
                 let amount_cleaned = pending_txs_subs_cleaned.len() + new_heads_subs_cleaned.len() + logs_subs_cleaned.len();
-
                 if amount_cleaned > 0 {
                     tracing::info!(
                         amount_cleaned,
                         pending_txs = ?pending_txs_subs_cleaned,
                         new_heads = ?new_heads_subs_cleaned,
                         logs = ?logs_subs_cleaned,
-                        "Cleaned subscriptions",
+                        "cleaned subscriptions",
                     );
                 }
 
