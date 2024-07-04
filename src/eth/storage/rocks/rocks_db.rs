@@ -36,7 +36,7 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static s
             DB::repair(&db_opts, path).context("attempting to repair RocksDB cause it failed to open")?;
             open_db().context("trying to open RocksDB a second time, after repairing")?
         }
-    }; // XXX in case of corruption, use DB
+    };
 
     tracing::info!("Successfully opened RocksDB at {:?}", path);
     Ok((Arc::new(db), db_opts))

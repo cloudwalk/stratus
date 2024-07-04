@@ -107,7 +107,9 @@ where
             .zip(keys)
             .filter_map(|(value, key)| {
                 if let Ok(Some(value)) = value {
-                    let Ok(value) = bincode::deserialize::<V>(&value) else { return None }; // XXX: Maybe we should fail on a failed conversion instead of ignoring;
+                    // XXX: Maybe we should fail on a failed conversion instead of ignoring
+                    // Didn't fix this yet cause it's currently dead_code, nobody is using it
+                    let Ok(value) = bincode::deserialize::<V>(&value) else { return None };
                     Some((key, value))
                 } else {
                     None

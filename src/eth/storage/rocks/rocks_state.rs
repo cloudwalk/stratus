@@ -127,7 +127,7 @@ impl RocksStorageState {
             account_slots_history: new_cf_ref(&db, "account_slots_history"),
             transactions: new_cf_ref(&db, "transactions"),
             blocks_by_number: new_cf_ref(&db, "blocks_by_number"),
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash"), //XXX this is not needed we can afford to have blocks_by_hash pointing into blocks_by_number
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash"),
             logs: new_cf_ref(&db, "logs"),
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
