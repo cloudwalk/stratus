@@ -177,7 +177,7 @@ run_test() {
         local metrics_exporter_port=$((9000 + i))
         
         # Exclude current instance's address to get candidate_peers
-        local candidate_peers=($(printf "%s\n" "${all_addresses[@]}" | grep -v "http://0.0.0.0:$base_port;$grpc_port"))
+        local candidate_peers=($(printf "%s\n" "${all_addresses[@]}"))
         local candidate_peers_str=""
 
         if [ ${#candidate_peers[@]} -gt 0 ]; then
