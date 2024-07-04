@@ -79,8 +79,9 @@ where
 {
     tracing::debug!(column_family = column_family, "creating new column family");
     let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
-        panic!("column_family `{column_family}` given to `new_cf_ref` not found in options map");
+        panic!("column_family `{column_family}` given to `new_cf_ref` not found in config options map");
     };
+    // NOTE: this doesn't create the CF in the database, read `RocksCfRef` docs for details
     RocksCfRef::new(Arc::clone(db), column_family, options.clone())
 }
 
@@ -112,8 +113,8 @@ pub struct RocksStorageState {
 impl RocksStorageState {
     pub fn new(path: impl AsRef<Path>) -> Self {
         let db_path = path.as_ref().to_path_buf();
-        tracing::debug!("initializing RocksStorageState");
 
+        tracing::debug!("creating (or opening an existing) database with the specified column families");
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
 

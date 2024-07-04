@@ -1,4 +1,6 @@
 //! RocksDB handling of column families.
+//!
+//! Check `RocksCfRef` docs for more details.
 
 use std::iter;
 use std::marker::PhantomData;
@@ -14,13 +16,20 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
-/// A Column Family in RocksDB.
+/// A RocksDB Column Family (CF) reference.
 ///
-/// Exposes an API for key-value pair storage.
+/// Different CFs can hold data of different types, the main purpose of this struct is to help
+/// serializing and deserializing to the correct types, and passing the unique handle in every
+/// call to the underlying library.
+///
+/// Note that creating this struct doesn't write a new CF to the database, instead, CFs are created
+/// when creating/opening the database (via `rocksdb::DB` or a wrapper). This is just a reference
+/// to an already created CF.
+///
 #[derive(Clone)]
 pub struct RocksCfRef<K, V> {
     db: Arc<DB>,
-    // TODO: check if we can gather metrics from a Column Family, if not, remove this field
+    // TODO: check if it's possible to gather metrics from a Column Family, if not, remove this
     _opts: Options,
     column_family: String,
     _marker: PhantomData<(K, V)>,
@@ -31,7 +40,7 @@ where
     K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
-    /// Create Column Family for given DB if it doesn't exist.
+    /// Create Column Family reference struct.
     pub fn new(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
         Self {
             db,
