@@ -29,6 +29,7 @@ cfg_if::cfg_if! {
     if #[cfg(test)] {
         use crate::eth::storage::InMemoryPermanentStorage;
         use crate::eth::storage::InMemoryTemporaryStorage;
+        use crate::eth::storage::RocksPermanentStorage;
     }
 }
 
@@ -71,7 +72,7 @@ impl StratusStorage {
         let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
         let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
 
-        let rocks_permanent_storage = crate::eth::storage::RocksPermanentStorage::new(Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
+        let rocks_permanent_storage = RocksPermanentStorage::new(Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
 
         (
             Self {
