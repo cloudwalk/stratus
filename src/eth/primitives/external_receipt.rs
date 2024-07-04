@@ -6,6 +6,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
+use crate::ext::JsonValue;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
@@ -64,10 +65,10 @@ impl From<EthersReceipt> for ExternalReceipt {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
-impl TryFrom<serde_json::Value> for ExternalReceipt {
+impl TryFrom<JsonValue> for ExternalReceipt {
     type Error = anyhow::Error;
 
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
         match ExternalReceipt::deserialize(&value) {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),

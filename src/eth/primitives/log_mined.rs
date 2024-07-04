@@ -1,7 +1,6 @@
 use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
-use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -10,6 +9,7 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogTopic;
 use crate::ext::to_json_value;
+use crate::ext::JsonValue;
 
 /// Log that was emitted by the EVM and added to a block.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]

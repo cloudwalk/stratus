@@ -27,7 +27,6 @@ use opentelemetry_sdk::trace::Tracer as SdkTracer;
 use opentelemetry_sdk::Resource as SdkResource;
 use serde::ser::SerializeStruct;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
 use tracing::span;
@@ -55,6 +54,7 @@ use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
+use crate::ext::JsonValue;
 use crate::infra::build_info;
 
 /// Init application tracing.

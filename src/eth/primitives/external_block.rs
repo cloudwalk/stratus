@@ -9,6 +9,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
+use crate::ext::JsonValue;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
@@ -65,10 +66,10 @@ impl TryFrom<&ExternalBlock> for Block {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-impl TryFrom<serde_json::Value> for ExternalBlock {
+impl TryFrom<JsonValue> for ExternalBlock {
     type Error = anyhow::Error;
 
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
         match ExternalBlock::deserialize(&value) {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),

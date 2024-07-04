@@ -5,7 +5,6 @@ use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde::Deserialize;
-use serde_json::Value as JsonValue;
 
 use super::LogMined;
 use super::TransactionInput;
@@ -18,6 +17,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
+use crate::ext::JsonValue;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -183,10 +183,10 @@ impl From<Block> for EthersBlock<H256> {
     }
 }
 
-impl TryFrom<serde_json::Value> for Block {
+impl TryFrom<JsonValue> for Block {
     type Error = anyhow::Error;
 
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
         match Block::deserialize(&value) {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to Block"),
