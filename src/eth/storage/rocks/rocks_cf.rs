@@ -18,7 +18,7 @@ use serde::Serialize;
 ///
 /// Exposes an API for key-value pair storage.
 #[derive(Clone)]
-pub struct RocksCf<K, V> {
+pub struct RocksCfRef<K, V> {
     db: Arc<DB>,
     // TODO: check if we can gather metrics from a Column Family, if not, remove this field
     _opts: Options,
@@ -26,7 +26,7 @@ pub struct RocksCf<K, V> {
     _marker: PhantomData<(K, V)>,
 }
 
-impl<K, V> RocksCf<K, V>
+impl<K, V> RocksCfRef<K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Clone,

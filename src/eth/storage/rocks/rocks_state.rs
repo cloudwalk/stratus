@@ -17,7 +17,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use sugars::hmap;
 
-use super::rocks_cf::RocksCf;
+use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
 use super::rocks_db::create_or_open_db;
@@ -71,20 +71,33 @@ lazy_static! {
     };
 }
 
+/// Helper for creating a `RocksCfRef` with our option presets.
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCfRef<K, V>
+where
+    K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Clone,
+{
+    tracing::debug!(column_family = column_family, "creating new column family");
+    let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
+        panic!("column_family `{column_family}` given to `new_cf_ref` not found in options map");
+    };
+    RocksCfRef::new(Arc::clone(db), column_family, options.clone())
+}
+
 /// State handler for our RocksDB storage, separating "tables" by column families.
 ///
-/// With data separated by column families, writing and reading should be done via the `RocksCf` fields.
+/// With data separated by column families, writing and reading should be done via the `RocksCfRef` fields.
 pub struct RocksStorageState {
     db: Arc<DB>,
     db_path: PathBuf,
-    accounts: RocksCf<AddressRocksdb, AccountRocksdb>,
-    accounts_history: RocksCf<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
-    account_slots: RocksCf<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
-    account_slots_history: RocksCf<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
-    transactions: RocksCf<HashRocksdb, BlockNumberRocksdb>,
-    blocks_by_number: RocksCf<BlockNumberRocksdb, BlockRocksdb>,
-    blocks_by_hash: RocksCf<HashRocksdb, BlockNumberRocksdb>,
-    logs: RocksCf<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
+    accounts: RocksCfRef<AddressRocksdb, AccountRocksdb>,
+    accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
+    account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
+    account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
+    transactions: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
+    blocks_by_number: RocksCfRef<BlockNumberRocksdb, BlockRocksdb>,
+    blocks_by_hash: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
+    logs: RocksCfRef<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -551,18 +564,6 @@ impl fmt::Debug for RocksStorageState {
     }
 }
 
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCf<K, V>
-where
-    K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Clone,
-{
-    tracing::debug!(column_family = column_family, "creating new column family");
-    let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
-        panic!("column_family `{column_family}` given to `new_cf_ref` not found in options map");
-    };
-    RocksCf::new(Arc::clone(db), column_family, options.clone())
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -576,7 +577,7 @@ mod tests {
     #[test]
     fn test_rocks_multi_get() {
         let (db, _db_options) = create_or_open_db("./data/slots_test.rocksdb", &CF_OPTIONS_MAP).unwrap();
-        let account_slots: RocksCf<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots");
+        let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots");
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
         let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
