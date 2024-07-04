@@ -737,14 +737,12 @@ impl Consensus {
             for (address, (peer, _)) in peers.iter_mut() {
                 if *address == leader_address {
                     peer.role = Role::Leader;
+
+                    self.refresh_blockchain_client().await;
                 } else {
                     peer.role = Role::Follower;
                 }
             }
-        }
-
-        if self.peers.read().await.get(&leader_address).map(|(peer, _)| peer.role) == Some(Role::Leader) {
-            self.refresh_blockchain_client().await;
         }
 
         tracing::info!(leader = %leader_address, "updated leader information");
