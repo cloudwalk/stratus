@@ -1,4 +1,6 @@
 //! RocksDB handling of column families.
+//!
+//! Check `RocksCfRef` docs for more details.
 
 use std::iter;
 use std::marker::PhantomData;
@@ -14,35 +16,65 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
-/// A Column Family in RocksDB.
+/// A RocksDB Column Family (CF) reference.
 ///
-/// Exposes an API for key-value pair storage.
+/// Different CFs can hold data of different types, the main purpose of this struct is to help
+/// serializing and deserializing to the correct types, and passing the unique handle in every
+/// call to the underlying library.
+///
+/// Note that creating this struct doesn't write a new CF to the database, instead, CFs are created
+/// when creating/opening the database (via `rocksdb::DB` or a wrapper). This is just a reference
+/// to an already created CF.
+///
 #[derive(Clone)]
-pub struct RocksCf<K, V> {
+pub struct RocksCfRef<K, V> {
     db: Arc<DB>,
-    // TODO: check if we can gather metrics from a Column Family, if not, remove this field
+    // TODO: check if it's possible to gather metrics from a Column Family, if not, remove this
     _opts: Options,
     column_family: String,
     _marker: PhantomData<(K, V)>,
 }
 
-impl<K, V> RocksCf<K, V>
+impl<K, V> RocksCfRef<K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
-    /// Create Column Family for given DB if it doesn't exist.
-    pub fn new_cf(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
-        Self {
+    /// Create Column Family reference struct.
+    pub fn new(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
+        let this = Self {
             db,
             column_family: column_family.to_owned(),
             _opts: opts,
             _marker: PhantomData,
-        }
+        };
+
+        // Guarantee that the referred database does contain the CF in it
+        // With this, we'll be able to talk to the DB
+        assert!(
+            this.handle_checked().is_some(),
+            "Can't find column family '{}' in database! Check if CFs are provided properly when creating/opening the DB",
+            this.column_family,
+        );
+
+        this
     }
 
+    fn handle_checked(&self) -> Option<Arc<BoundColumnFamily>> {
+        self.db.cf_handle(&self.column_family)
+    }
+
+    /// Get the necessary handle for any operation in the CF
     fn handle(&self) -> Arc<BoundColumnFamily> {
-        self.db.cf_handle(&self.column_family).unwrap()
+        match self.handle_checked() {
+            Some(handle) => handle,
+            None => {
+                panic!(
+                    "Accessing the RocksDB Column Family named '{}' failed, but it was there before! something weird happened",
+                    self.column_family
+                );
+            }
+        }
     }
 
     // Clears the database
@@ -98,7 +130,9 @@ where
             .zip(keys)
             .filter_map(|(value, key)| {
                 if let Ok(Some(value)) = value {
-                    let Ok(value) = bincode::deserialize::<V>(&value) else { return None }; // XXX: Maybe we should fail on a failed conversion instead of ignoring;
+                    // XXX: Maybe we should fail on a failed conversion instead of ignoring
+                    // Didn't fix this yet cause it's currently dead_code, nobody is using it
+                    let Ok(value) = bincode::deserialize::<V>(&value) else { return None };
                     Some((key, value))
                 } else {
                     None
