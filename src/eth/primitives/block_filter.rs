@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::ext::JsonValue;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
 pub enum BlockFilter {
@@ -43,23 +44,40 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
     where
         D: serde::Deserializer<'de>,
     {
-        let value = String::deserialize(deserializer)?.to_lowercase();
-        match value.as_str() {
-            // parse special keywords
-            "latest" => Ok(Self::Latest),
-            "pending" => Ok(Self::Pending),
-            "earliest" => Ok(Self::Earliest),
+        let value = JsonValue::deserialize(deserializer)?;
+        match value {
+            // default
+            JsonValue::Null => Ok(Self::Latest),
 
-            // parse hash (64: H256 without 0x prefix; 66: H256 with 0x prefix)
-            s if s.len() == 64 || s.len() == 66 => {
-                let hash: Hash = s.parse().map_err(serde::de::Error::custom)?;
-                Ok(Self::Hash(hash))
+            // number
+            serde_json::Value::Number(number) => match number.as_u64() {
+                Some(number) => Ok(Self::Number(BlockNumber::from(number))),
+                None => Err(serde::de::Error::custom("block filter must be zero or a positive integer")),
+            },
+
+            // string
+            serde_json::Value::String(value) => {
+                match value.as_str() {
+                    // parse special keywords
+                    "latest" => Ok(Self::Latest),
+                    "pending" => Ok(Self::Pending),
+                    "earliest" => Ok(Self::Earliest),
+
+                    // parse hash (64: H256 without 0x prefix; 66: H256 with 0x prefix)
+                    s if s.len() == 64 || s.len() == 66 => {
+                        let hash: Hash = s.parse().map_err(serde::de::Error::custom)?;
+                        Ok(Self::Hash(hash))
+                    }
+                    // parse number
+                    s => {
+                        let number: BlockNumber = s.parse().map_err(serde::de::Error::custom)?;
+                        Ok(Self::Number(number))
+                    }
+                }
             }
-            // parse number
-            s => {
-                let number: BlockNumber = s.parse().map_err(serde::de::Error::custom)?;
-                Ok(Self::Number(number))
-            }
+
+            // unhandled type
+            _ => Err(serde::de::Error::custom("block filter must be a string or integer")),
         }
     }
 }
