@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -8,6 +7,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
+use crate::ext::JsonValue;
 
 #[async_trait]
 pub trait ExternalRpcStorage: Send + Sync {

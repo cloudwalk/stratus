@@ -19,6 +19,7 @@ use stratus::eth::storage::InMemoryTemporaryStorage;
 use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StratusStorage;
 use stratus::ext::traced_sleep;
+use stratus::ext::JsonValue;
 use stratus::ext::SleepReason;
 use stratus::infra::docker::Docker;
 use stratus::GlobalServices;
@@ -170,7 +171,7 @@ pub async fn execute_test(
 
         // get metrics and print them
         let url = format!("{}?query={}", docker.prometheus_api_url(), query);
-        let response = reqwest::get(&url).await.unwrap().json::<serde_json::Value>().await.unwrap();
+        let response = reqwest::get(&url).await.unwrap().json::<JsonValue>().await.unwrap();
         let results = response.get("data").unwrap().get("result").unwrap().as_array().unwrap();
         if results.is_empty() {
             continue;

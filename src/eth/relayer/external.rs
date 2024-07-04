@@ -13,7 +13,6 @@ use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::Span;
@@ -33,6 +32,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::to_json_value;
+use crate::ext::JsonValue;
 use crate::ext::ResultExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
@@ -214,7 +214,7 @@ impl ExternalRelayer {
         Ok(join_all(futures)
             .await
             .into_iter()
-            .collect::<Result<Vec<Value>, _>>()?
+            .collect::<Result<Vec<JsonValue>, _>>()?
             .into_iter()
             .map(|inner| inner.is_null())
             .zip(blocks)

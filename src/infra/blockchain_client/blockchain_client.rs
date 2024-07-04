@@ -11,7 +11,6 @@ use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::ws_client::WsClient;
 use jsonrpsee::ws_client::WsClientBuilder;
-use serde_json::Value as JsonValue;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
@@ -28,6 +27,7 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::Wei;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
+use crate::ext::JsonValue;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
 

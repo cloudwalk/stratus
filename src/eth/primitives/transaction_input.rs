@@ -24,6 +24,7 @@ use crate::eth::primitives::Signature;
 use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
+use crate::ext::JsonValue;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
@@ -196,10 +197,10 @@ impl From<TransactionInput> for TransactionRequest {
     }
 }
 
-impl TryFrom<serde_json::Value> for TransactionInput {
+impl TryFrom<JsonValue> for TransactionInput {
     type Error = anyhow::Error;
 
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
         match Self::deserialize(&value) {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to TransactionInput"),

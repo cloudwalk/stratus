@@ -1,10 +1,10 @@
 use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
-use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::to_json_value;
+use crate::ext::JsonValue;
 
 /// Stages that a transaction can be in.
 #[allow(clippy::large_enum_variant)]

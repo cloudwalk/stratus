@@ -1,5 +1,7 @@
 use serde_json::json;
 
+use crate::ext::JsonValue;
+
 // -----------------------------------------------------------------------------
 // Build constants
 // -----------------------------------------------------------------------------
@@ -56,7 +58,7 @@ pub fn version() -> &'static str {
 }
 
 /// Returns build info as JSON.
-pub fn as_json() -> serde_json::Value {
+pub fn as_json() -> JsonValue {
     json!(
         {
             "build": {
