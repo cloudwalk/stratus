@@ -361,6 +361,7 @@ impl Consensus {
                                 tracing::info!(peer_address = %peer_address, "received vote on election");
                                 votes += 1;
                             } else {
+                                // this usually happens when we have either a split brain or a network issue, maybe both
                                 tracing::error!(
                                     peer_address = %peer_address,
                                     expected_term = response_inner.term,
@@ -410,7 +411,7 @@ impl Consensus {
         // When a node becomes a leader, it should reset the match_index for all peers
         {
             let mut peers = self.peers.write().await;
-            for (_, (peer, _)) in peers.iter_mut() {
+            for (peer, _) in peers.values_mut() {
                 peer.match_index = 0;
             }
         }
@@ -846,7 +847,10 @@ impl Consensus {
                             tracing::info!("successfully appended block to peer: {:?}, match_index: {}", peer.client, peer.match_index);
                             Ok(())
                         }
-                        _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
+                        _ => {
+                            tracing::error!("failed to append block due to unexpected status code: {:?}", response);
+                            Err(anyhow!("failed to append block due to unexpected status code: {:?}", response))
+                        }
                     }
                 }
                 LogEntryData::TransactionExecutionEntries(executions) => {
@@ -878,7 +882,10 @@ impl Consensus {
                             );
                             Ok(())
                         }
-                        _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
+                        _ => {
+                            tracing::error!("failed to append transaction execution due to unexpected status code: {:?}", response);
+                            Err(anyhow!("failed to append transaction execution due to unexpected status code: {:?}", response))
+                        }
                     }
                 }
                 LogEntryData::EmptyData => Ok(()),
