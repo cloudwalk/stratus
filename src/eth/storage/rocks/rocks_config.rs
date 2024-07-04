@@ -153,6 +153,7 @@ impl DbConfig {
         if let CacheSetting::Enabled(cache_size) = cache_setting {
             let cache = Cache::new_lru_cache(cache_size);
             block_based_options.set_block_cache(&cache);
+            block_based_options.set_cache_index_and_filter_blocks(true);
         }
         opts.set_block_based_table_factory(&block_based_options);
         opts
