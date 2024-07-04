@@ -78,10 +78,12 @@ where
     V: Serialize + for<'de> Deserialize<'de> + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
+
     let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
         panic!("column_family `{column_family}` given to `new_cf_ref` not found in config options map");
     };
-    // NOTE: this doesn't create the CF in the database, read `RocksCfRef` docs for details
+
+    // NOTE: this doesn't create the CFs in the database, read `RocksCfRef` docs for details
     RocksCfRef::new(Arc::clone(db), column_family, options.clone())
 }
 

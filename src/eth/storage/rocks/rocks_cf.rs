@@ -42,16 +42,39 @@ where
 {
     /// Create Column Family reference struct.
     pub fn new(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
-        Self {
+        let this = Self {
             db,
             column_family: column_family.to_owned(),
             _opts: opts,
             _marker: PhantomData,
-        }
+        };
+
+        // Guarantee that the referred database does contain the CF in it
+        // With this, we'll be able to talk to the DB
+        assert!(
+            this.handle_checked().is_some(),
+            "Can't find column family '{}' in database! Check if CFs are provided properly when creating/opening the DB",
+            this.column_family,
+        );
+
+        this
     }
 
+    fn handle_checked(&self) -> Option<Arc<BoundColumnFamily>> {
+        self.db.cf_handle(&self.column_family)
+    }
+
+    /// Get the necessary handle for any operation in the CF
     fn handle(&self) -> Arc<BoundColumnFamily> {
-        self.db.cf_handle(&self.column_family).unwrap()
+        match self.handle_checked() {
+            Some(handle) => handle,
+            None => {
+                panic!(
+                    "Accessing the RocksDB Column Family named '{}' failed, but it was there before! something weird happened",
+                    self.column_family
+                );
+            }
+        }
     }
 
     // Clears the database
