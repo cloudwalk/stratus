@@ -153,7 +153,6 @@ type ClientType = MockAppendEntryServiceClient;
 #[derive(Clone)]
 struct Peer {
     client: ClientType,
-    #[allow(dead_code)]
     match_index: u64,
     #[allow(dead_code)]
     next_index: u64,
@@ -327,53 +326,70 @@ impl Consensus {
 
         let mut votes = 1; // Vote for self
 
+        let peer_addresses = {
+            let peers = consensus.peers.read().await;
+            peers.keys().cloned().collect::<Vec<_>>()
+        };
+
         tracing::info!(
             requested_term = term,
             candidate_id = %consensus.my_address,
             "requesting vote on election for {} peers",
-            consensus.peers.read().await.len()
+            peer_addresses.len()
         );
-        let peers = consensus.peers.read().await;
-        for (peer_address, (peer, _)) in peers.iter() {
-            let mut peer_clone = peer.clone();
 
-            let request = Request::new(RequestVoteRequest {
-                term,
-                candidate_id: consensus.my_address.to_string(),
-                last_log_index: consensus.prev_log_index.load(Ordering::SeqCst),
-                last_log_term: term,
-            });
+        for peer_address in peer_addresses {
+            let peer_clone = {
+                let peers = consensus.peers.read().await;
+                peers.get(&peer_address).map(|(p, _)| p.clone())
+            };
 
-            match peer_clone.client.request_vote(request).await {
-                Ok(response) => {
-                    let response_inner = response.into_inner();
-                    if response_inner.vote_granted {
-                        let current_term = consensus.current_term.load(Ordering::SeqCst);
-                        if response_inner.term == current_term {
-                            tracing::info!(peer_address = %peer_address, "received vote on election");
-                            votes += 1;
+            if let Some(mut peer) = peer_clone {
+                let request = Request::new(RequestVoteRequest {
+                    term,
+                    candidate_id: consensus.my_address.to_string(),
+                    last_log_index: consensus.prev_log_index.load(Ordering::SeqCst),
+                    last_log_term: term,
+                });
+
+                match peer.client.request_vote(request).await {
+                    Ok(response) => {
+                        let response_inner = response.into_inner();
+                        if response_inner.vote_granted {
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            if response_inner.term == current_term {
+                                tracing::info!(peer_address = %peer_address, "received vote on election");
+                                votes += 1;
+                            } else {
+                                // this usually happens when we have either a split brain or a network issue, maybe both
+                                tracing::error!(
+                                    peer_address = %peer_address,
+                                    expected_term = response_inner.term,
+                                    "received vote on election with different term"
+                                );
+                            }
                         } else {
-                            // this usually happens when we have either a split brain or a network issue, maybe both
-                            tracing::error!(peer_address = %peer_address, expected_term = response_inner.term, "received vote on election with different term");
+                            tracing::info!(peer_address = %peer_address, "did not receive vote on election");
                         }
-                    } else {
-                        tracing::info!(peer_address = %peer_address, "did not receive vote on election");
                     }
-                }
-                Err(_) => {
-                    tracing::warn!("failed to request vote on election from {:?}", peer_address);
+                    Err(_) => {
+                        tracing::warn!("failed to request vote on election from {:?}", peer_address);
+                    }
                 }
             }
         }
 
-        let total_nodes = peers.len() + 1; // Including self
+        let total_nodes = {
+            let peers = consensus.peers.read().await;
+            peers.len() + 1 // Including self
+        };
         let majority = total_nodes / 2 + 1;
 
         if votes >= majority {
-            tracing::info!(votes = votes, peers = peers.len(), term = term, "became the leader on election");
+            tracing::info!(votes = votes, peers = total_nodes - 1, term = term, "became the leader on election");
             consensus.become_leader().await;
         } else {
-            tracing::info!(votes = votes, peers = peers.len(), term = term, "failed to become the leader on election");
+            tracing::info!(votes = votes, peers = total_nodes - 1, term = term, "failed to become the leader on election");
             consensus.set_role(Role::Follower);
         }
 
@@ -390,6 +406,14 @@ impl Consensus {
         } else {
             let mut blockchain_client_lock = self.blockchain_client.lock().await;
             *blockchain_client_lock = None; // clear the blockchain client for safety reasons when not running on importer-online mode
+        }
+
+        // When a node becomes a leader, it should reset the match_index for all peers
+        {
+            let mut peers = self.peers.write().await;
+            for (peer, _) in peers.values_mut() {
+                peer.match_index = 0;
+            }
         }
 
         self.set_role(Role::Leader);
@@ -708,15 +732,16 @@ impl Consensus {
             return;
         }
 
-        let mut peers = self.peers.write().await;
+        {
+            let mut peers = self.peers.write().await;
+            for (address, (peer, _)) in peers.iter_mut() {
+                if *address == leader_address {
+                    peer.role = Role::Leader;
 
-        for (address, (peer, _)) in peers.iter_mut() {
-            if *address == leader_address {
-                peer.role = Role::Leader;
-
-                self.refresh_blockchain_client().await;
-            } else {
-                peer.role = Role::Follower;
+                    self.refresh_blockchain_client().await;
+                } else {
+                    peer.role = Role::Follower;
+                }
             }
         }
 
@@ -816,10 +841,14 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            tracing::info!("successfully appended block to peer: {:?}", peer.client);
+                            peer.match_index = response.match_log_index;
+                            tracing::info!("successfully appended block to peer: {:?}, match_index: {}", peer.client, peer.match_index);
                             Ok(())
                         }
-                        _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
+                        _ => {
+                            tracing::error!("failed to append block due to unexpected status code: {:?}", response);
+                            Err(anyhow!("failed to append block due to unexpected status code: {:?}", response))
+                        }
                     }
                 }
                 LogEntryData::TransactionExecutionEntries(executions) => {
@@ -843,10 +872,18 @@ impl Consensus {
 
                     match StatusCode::try_from(response.status) {
                         Ok(StatusCode::AppendSuccess) => {
-                            tracing::info!("successfully appended transaction executions to peer: {:?}", peer.client);
+                            peer.match_index = response.match_log_index;
+                            tracing::info!(
+                                "successfully appended transaction executions to peer: {:?}, match_index: {}",
+                                peer.client,
+                                peer.match_index
+                            );
                             Ok(())
                         }
-                        _ => Err(anyhow!("unexpected status code: {:?}", response.status)),
+                        _ => {
+                            tracing::error!("failed to append transaction execution due to unexpected status code: {:?}", response);
+                            Err(anyhow!("failed to append transaction execution due to unexpected status code: {:?}", response))
+                        }
                     }
                 }
                 LogEntryData::EmptyData => Ok(()),
