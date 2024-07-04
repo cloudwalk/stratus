@@ -130,3 +130,36 @@ impl From<TransactionMined> for EthersReceipt {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+    use rand::Rng;
+
+    use super::*;
+
+    fn create_tx(transaction_index: u64, block_number: u64) -> TransactionMined {
+        TransactionMined {
+            input: Faker.fake(),
+            execution: Faker.fake(),
+            logs: vec![],
+            transaction_index: transaction_index.into(),
+            block_number: block_number.into(),
+            block_hash: Hash::default(),
+        }
+    }
+
+    #[test]
+    fn sort_transactions() {
+        let mut rng = rand::thread_rng();
+        let v = (0..1000)
+            .map(|_| create_tx(rng.gen_range(0..100), rng.gen_range(0..100)))
+            .sorted()
+            .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.inner_value()))
+            .collect_vec();
+        for pair in v {
+            println!("{:?}", pair);
+        }
+    }
+}
