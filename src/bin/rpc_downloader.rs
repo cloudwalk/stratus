@@ -112,7 +112,7 @@ async fn download(
         Some(number) => number.next(),
         None => start,
     };
-    tracing::info!(%start, current = %current, end = %end_inclusive, "starting");
+    tracing::info!(%start, current = %current, end = %end_inclusive, "starting download task (might skip)");
 
     // download blocks
     while current <= end_inclusive {
