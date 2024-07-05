@@ -44,7 +44,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
 
-        tracing::debug!(
+        tracing::info!(
             "append_transaction_execution request received. term: {}, prev_log_index: {}, prev_log_term: {}",
             request.get_ref().term,
             request.get_ref().prev_log_index,
@@ -158,7 +158,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
 
-        tracing::debug!(
+        tracing::info!(
             "append_block_commit request received. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
             request.get_ref().block_entry.as_ref().map(|b| b.number).unwrap_or(0),
             request.get_ref().term,
