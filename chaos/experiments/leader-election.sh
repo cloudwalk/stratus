@@ -51,6 +51,17 @@ echo "Number of instances: $num_instances"
 echo "Number of iterations: $iterations"
 echo "Enable leader restart: $enable_leader_restart"
 
+cleanup() {
+  echo "Cleaning up..."
+  for port in "${ports[@]}"; do
+    killport --quiet $port
+  done
+  rm instance_30* || true
+  find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf
+  echo "Job is done."
+}
+trap cleanup EXIT INT TERM
+
 # Function to start an instance
 start_instance() {
     local address=$1
@@ -150,13 +161,8 @@ find_leader() {
             leaders+=("$grpc_address")
         fi
     done
-    
-    echo "${leaders[@]}"
-}
 
-# Function to remove rocks-path directory
-remove_rocks_path() {
-    find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf
+    echo "${leaders[@]}"
 }
 
 # Function to run the election test
@@ -175,7 +181,7 @@ run_test() {
         local grpc_port=$((3777 + i))
         local tokio_console_port=$((6668 + i))
         local metrics_exporter_port=$((9000 + i))
-        
+
         # Exclude current instance's address to get candidate_peers
         local candidate_peers=($(printf "%s\n" "${all_addresses[@]}"))
         local candidate_peers_str=""
@@ -336,14 +342,6 @@ run_test() {
             fi
         done
     fi
-
-    # Clean up
-    echo "Cleaning up..."
-    for port in "${ports[@]}"; do
-        killport --quiet $port
-    done
-    
-    remove_rocks_path
 }
 
 # Run the test n times
