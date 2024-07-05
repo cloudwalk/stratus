@@ -84,29 +84,28 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         #[cfg(feature = "rocks")]
         {
-            // TODO Uncomment when snapshot is implemented
-            //if request_inner.prev_log_index != 0 {
-            //    if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
-            //        if log_entry.term != request_inner.prev_log_term {
-            //            let error_message = format!(
-            //                "Log entry term {} does not match request term {} at index {}",
-            //                log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
-            //            );
-            //            tracing::error!(
-            //                log_entry_term = log_entry.term,
-            //                request_term = request_inner.prev_log_term,
-            //                index = request_inner.prev_log_index,
-            //                "{}",
-            //                &error_message
-            //            );
-            //            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
-            //        }
-            //    } else {
-            //        let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
-            //        tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
-            //        return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
-            //    }
-            //}
+            if request_inner.prev_log_index != 0 {
+                if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+                    if log_entry.term != request_inner.prev_log_term {
+                        let error_message = format!(
+                            "Log entry term {} does not match request term {} at index {}",
+                            log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+                        );
+                        tracing::error!(
+                            log_entry_term = log_entry.term,
+                            request_term = request_inner.prev_log_term,
+                            index = request_inner.prev_log_index,
+                            "{}",
+                            &error_message
+                        );
+                        return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+                    }
+                } else {
+                    let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
+                    tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+                    return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+                }
+            }
 
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction", false) {
                 tracing::error!("Failed to save log entry: {:?}", e);
@@ -203,29 +202,28 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         #[cfg(feature = "rocks")]
         {
-            // TODO Uncomment when snapshot is implemented
-            //if request_inner.prev_log_index != 0 {
-            //    if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
-            //        if log_entry.term != request_inner.prev_log_term {
-            //            let error_message = format!(
-            //                "Log entry term {} does not match request term {} at index {}",
-            //                log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
-            //            );
-            //            tracing::error!(
-            //                log_entry_term = log_entry.term,
-            //                request_term = request_inner.prev_log_term,
-            //                index = request_inner.prev_log_index,
-            //                "{}",
-            //                &error_message
-            //            );
-            //            return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
-            //        }
-            //    } else {
-            //        let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
-            //        tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
-            //        return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
-            //    }
-            //}
+            if request_inner.prev_log_index != 0 {
+                if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+                    if log_entry.term != request_inner.prev_log_term {
+                        let error_message = format!(
+                            "Log entry term {} does not match request term {} at index {}",
+                            log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+                        );
+                        tracing::error!(
+                            log_entry_term = log_entry.term,
+                            request_term = request_inner.prev_log_term,
+                            index = request_inner.prev_log_index,
+                            "{}",
+                            &error_message
+                        );
+                        return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+                    }
+                } else {
+                    let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
+                    tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+                    return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+                }
+            }
             tracing::info!(number = block_entry.number, "appending new block");
 
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block", false) {
