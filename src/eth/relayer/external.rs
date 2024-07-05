@@ -560,7 +560,6 @@ impl ExternalRelayer {
         mismatched_blocks
     }
 
-
     // Split the dag and relay its components.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
     async fn relay_dag(&self, dag: TransactionDag) -> MismatchedBlocks {
