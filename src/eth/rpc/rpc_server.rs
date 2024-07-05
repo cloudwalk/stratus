@@ -61,7 +61,6 @@ use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 use crate::infra::build_info;
 use crate::infra::metrics;
-use crate::infra::tracing::warn_task_cancellation;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
 
@@ -138,8 +137,7 @@ pub async fn serve_rpc(
         _ = handle_rpc_server_watch.stopped() => {
             GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
         },
-        _ = GlobalState::until_shutdown() => {
-            warn_task_cancellation(TASK_NAME);
+        _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
             let _ = handle_rpc_server.stop();
         }
     }
