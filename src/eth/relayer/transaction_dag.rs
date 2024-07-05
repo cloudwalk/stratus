@@ -163,7 +163,7 @@ impl TransactionDag {
             for node in current_component {
                 transactions_in_component.push(
                     dag.remove_node(node)
-                        .expect("all the nodes were obtained in the previous step, and should still exitst in the graph"),
+                        .expect("all the nodes were obtained in the previous step, and should still exists in the graph"),
                 );
             }
 
@@ -287,13 +287,15 @@ mod tests {
         let expected_component_1 = vec![vec![0, 1], vec![2], vec![3], vec![4, 5], vec![6]];
         let expected_component_2 = vec![vec![7], vec![8, 9], vec![10, 11], vec![12, 13, 14, 15], vec![16]];
         let test = vec![
-            vec![1],              // (0): component root
-            vec![2],              // (1): component root
-            vec![1, 2, 3],        // (2): depends on (0) and (1)
-            vec![3, 4, 5],        // (3): depends on (2)
-            vec![4, 7],           // (4): depends on (3)
-            vec![3, 8],           // (5): depends on (3)
-            vec![8, 7],           // (6): depends on (4) and (5)
+            // component 1
+            vec![1],       // (0): component root
+            vec![2],       // (1): component root
+            vec![1, 2, 3], // (2): depends on (0) and (1)
+            vec![3, 4, 5], // (3): depends on (2)
+            vec![4, 7],    // (4): depends on (3)
+            vec![3, 8],    // (5): depends on (3)
+            vec![8, 7],    // (6): depends on (4) and (5)
+            // component 2
             vec![9, 10],          // (7): component root
             vec![9, 11],          // (8): depends on (7)
             vec![10, 15],         // (9): depends on (7)
