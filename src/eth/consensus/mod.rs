@@ -816,48 +816,73 @@ impl Consensus {
             tracing::error!("append_entry_to_peer called on non-leader node");
             return Err(anyhow!("append_entry_to_peer called on non-leader node"));
         }
-
+    
         let current_term = self.current_term.load(Ordering::SeqCst);
-        let prev_log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
-        let prev_log_term = self.log_entries_storage.get_last_term().unwrap_or(0);
-
-        let response = self
-            .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, entry_data)
-            .await?;
-
-        let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
-            AppendResponse::BlockCommitResponse(res) => {
-                let inner: AppendBlockCommitResponse = res.into_inner();
-                (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
-            }
-            AppendResponse::TransactionExecutionsResponse(res) => {
-                let inner: AppendTransactionExecutionsResponse = res.into_inner();
-                (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
-            }
-        };
-
-        match StatusCode::try_from(response_status) {
-            Ok(StatusCode::AppendSuccess) => {
-                peer.match_index = response_match_log_index;
-                peer.next_index = peer.match_index + 1;
-                tracing::info!(
-                    "successfully appended entry to peer: {:?}, match_index: {}, next_index: {}",
-                    peer.client,
-                    peer.match_index,
-                    peer.next_index
-                );
-                Ok(())
-            }
-            Ok(StatusCode::LogMismatch | StatusCode::TermMismatch) => {
-                tracing::warn!(
-                    "failed to append entry due to log mismatch or term mismatch. Peer last log index: {}",
-                    response_last_log_index
-                );
-                Ok(())
-            }
-            _ => {
-                tracing::error!("failed to append entry due to unexpected status code");
-                Err(anyhow!("failed to append entry due to unexpected status code"))
+        let mut next_index = peer.next_index;
+    
+        loop {
+            let prev_log_index = next_index.saturating_sub(1);
+            let prev_log_term = if prev_log_index == 0 {
+                0
+            } else {
+                match self.log_entries_storage.get_entry(prev_log_index) {
+                    Ok(Some(entry)) => entry.term,
+                    Ok(None) => {
+                        tracing::warn!("no log entry found at index {}", prev_log_index);
+                        0
+                    },
+                    Err(e) => {
+                        tracing::error!("error getting log entry at index {}: {:?}", prev_log_index, e);
+                        return Err(anyhow!("error getting log entry"));
+                    }
+                }
+            };
+    
+            let response = self
+                .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, entry_data)
+                .await?;
+    
+            let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
+                AppendResponse::BlockCommitResponse(res) => {
+                    let inner: AppendBlockCommitResponse = res.into_inner();
+                    (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
+                }
+                AppendResponse::TransactionExecutionsResponse(res) => {
+                    let inner: AppendTransactionExecutionsResponse = res.into_inner();
+                    (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
+                }
+            };
+    
+            match StatusCode::try_from(response_status) {
+                Ok(StatusCode::AppendSuccess) => {
+                    peer.match_index = response_match_log_index;
+                    peer.next_index = peer.match_index + 1;
+                    tracing::info!(
+                        "successfully appended entry to peer: {:?}, match_index: {}, next_index: {}",
+                        peer.client,
+                        peer.match_index,
+                        peer.next_index
+                    );
+                    return Ok(());
+                }
+                Ok(StatusCode::LogMismatch | StatusCode::TermMismatch) => {
+                    tracing::warn!(
+                        "failed to append entry due to log mismatch or term mismatch. Peer last log index: {}",
+                        response_last_log_index
+                    );
+                    if next_index > 0 {
+                        next_index -= 1;
+                    } else {
+                        tracing::info!("reached beginning of log, peer likely has empty log");
+                        peer.next_index = 1;
+                        peer.match_index = 0;
+                        return Ok(());
+                    }
+                }
+                _ => {
+                    tracing::error!("failed to append entry due to unexpected status code");
+                    return Err(anyhow!("failed to append entry due to unexpected status code"));
+                }
             }
         }
     }
