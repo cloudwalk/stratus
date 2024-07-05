@@ -532,14 +532,9 @@ impl ExternalRelayer {
         }
     }
 
-    /// Relays a dag by removing its roots and sending them consecutively. Returns `Ok` if we confirmed that all transactions
-    /// had the same receipts, returns `Err` if one or more transactions had receipts mismatches. The mismatches are saved
-    /// on the `mismatches` table in pgsql, or in ./data as a fallback.
-    #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
-    async fn relay_dag(&self, mut dag: TransactionDag) -> MismatchedBlocks {
+    /// Relays a dag by removing its roots and sending them consecutively.
+    async fn relay_component(&self, mut dag: TransactionDag) -> MismatchedBlocks {
         let start = Instant::now();
-
-        tracing::debug!("relaying transactions");
 
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
@@ -561,6 +556,21 @@ impl ExternalRelayer {
                 _ => panic!("unexpected error"),
             };
         }
+
+        mismatched_blocks
+    }
+
+    // Split the dag and relay its components.
+    #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
+    async fn relay_dag(&self, dag: TransactionDag) -> MismatchedBlocks {
+        let start = Instant::now();
+
+        tracing::debug!("relaying transactions");
+
+        let futures = dag.split_components().into_iter().map(|dag| self.relay_component(dag));
+        let results = join_all(futures).await;
+
+        let mismatched_blocks: MismatchedBlocks = results.into_iter().flatten().collect();
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_dag(start.elapsed());

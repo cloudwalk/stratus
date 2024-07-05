@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -100,7 +101,6 @@ impl TransactionDag {
 
         Self::compute_edges(&mut dag, slot_conflicts, &node_indexes);
         Self::compute_edges(&mut dag, balance_conflicts, &node_indexes);
-        Self::add_nonce_edges(&mut dag, &node_indexes);
 
         #[cfg(feature = "metrics")]
         metrics::inc_compute_tx_dag(start.elapsed());
@@ -128,18 +128,48 @@ impl TransactionDag {
         }
     }
 
-    fn add_nonce_edges(dag: &mut StableGraph<TransactionMined, i32>, node_indexes: &HashMap<(BlockNumber, Index), NodeIndex>) {
-        for (i, (tx1_id, tx1_idx)) in node_indexes.iter().sorted_by_key(|(idx, _)| **idx).enumerate() {
-            let tx1 = dag.node_weight(*tx1_idx).unwrap();
-            let (tx1_signer, tx1_nonce) = (tx1.input.signer, tx1.input.nonce);
-            for (tx2_id, tx2_idx) in node_indexes.iter().sorted_by_key(|(idx, _)| **idx).skip(i + 1) {
-                let tx2 = dag.node_weight(*tx2_idx).unwrap();
-                let (tx2_signer, tx2_nonce) = (tx2.input.signer, tx2.input.nonce);
-                if tx1_signer == tx2_signer && tx1_nonce.next() == tx2_nonce {
-                    dag.add_edge(*node_indexes.get(tx1_id).unwrap(), *node_indexes.get(tx2_id).unwrap(), 1);
+    pub fn split_components(self) -> Vec<Self> {
+        let mut dag = self.dag;
+        let mut ret = vec![];
+
+        while dag.node_count() > 0 {
+            let mut root = None;
+
+            // find a root
+            for index in dag.node_identifiers() {
+                if dag.neighbors_directed(index, petgraph::Direction::Incoming).next().is_none() {
+                    root = Some(index);
+                    break;
                 }
             }
+
+            let Some(root) = root else {
+                panic!("cycle detected, transaction dag with more than 0 vertices but no roots")
+            };
+
+            // get the root's component vertices
+            let mut current_component = HashSet::new();
+            let mut current_component_queue = vec![root];
+            while let Some(node) = current_component_queue.pop() {
+                current_component.insert(node);
+                for neighbor in dag.neighbors_undirected(node) {
+                    if !current_component.contains(&neighbor) {
+                        current_component_queue.push(neighbor);
+                    }
+                }
+            }
+
+            let mut transactions_in_component = vec![];
+            for node in current_component {
+                transactions_in_component.push(
+                    dag.remove_node(node)
+                        .expect("all the nodes were obtained in the previous step, and should still exitst in the graph"),
+                );
+            }
+
+            ret.push(Self::new(transactions_in_component));
         }
+        ret
     }
 
     /// Takes the roots (vertices with no parents) from the DAG, removing them from the graph,
@@ -196,26 +226,10 @@ mod tests {
     use crate::eth::primitives::Hash;
     use crate::eth::primitives::Slot;
     use crate::eth::primitives::SlotIndex;
-    use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
 
     const ADDRESS: Address = Address::ZERO;
-
-    fn create_tx_nonce(nonce: u64, idx: u64) -> TransactionMined {
-        let mut input: TransactionInput = Faker.fake();
-        input.signer = Address::ZERO;
-        input.nonce = nonce.into();
-
-        TransactionMined {
-            input,
-            execution: Faker.fake(),
-            logs: vec![],
-            transaction_index: idx.into(),
-            block_number: 0.into(),
-            block_hash: Hash::default(),
-        }
-    }
 
     fn create_tx(changed_slots_inidices: HashSet<SlotIndex>, block_number: u64, tx_idx: u64) -> TransactionMined {
         let execution_changes = ExecutionAccountChanges {
@@ -269,21 +283,63 @@ mod tests {
     }
 
     #[test]
-    fn test_nonce_dependency() {
-        let expected = [vec![0, 3], vec![1, 4], vec![2]];
-        let transactions = vec![
-            create_tx_nonce(0, 0),
-            create_tx_nonce(1, 1),
-            create_tx_nonce(2, 2),
-            create_tx_nonce(4, 3),
-            create_tx_nonce(5, 4),
+    fn test_split_components() {
+        let expected_component_1 = vec![vec![0, 1], vec![2], vec![3], vec![4, 5], vec![6]];
+        let expected_component_2 = vec![vec![7], vec![8, 9], vec![10, 11], vec![12, 13, 14, 15], vec![16]];
+        let test = vec![
+            vec![1],              // (0): component root
+            vec![2],              // (1): component root
+            vec![1, 2, 3],        // (2): depends on (0) and (1)
+            vec![3, 4, 5],        // (3): depends on (2)
+            vec![4, 7],           // (4): depends on (3)
+            vec![3, 8],           // (5): depends on (3)
+            vec![8, 7],           // (6): depends on (4) and (5)
+            vec![9, 10],          // (7): component root
+            vec![9, 11],          // (8): depends on (7)
+            vec![10, 15],         // (9): depends on (7)
+            vec![11, 12, 13],     // (10): depends on (8)
+            vec![15, 16, 17],     // (11): depends on (9)
+            vec![12, 18],         // (12): depends on (10)
+            vec![13, 19],         // (13): depends on (10)
+            vec![16, 20],         // (14): depends on (11)
+            vec![17, 21],         // (15): depends on (11)
+            vec![18, 19, 20, 21], // (17): depends on (12), (13), (14) and (15)
         ];
-        let mut dag = TransactionDag::new(transactions);
-        let mut i = 0;
-        while let Some(roots) = dag.take_roots() {
-            assert_eq!(roots.len(), expected[i].len());
-            assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
-            i += 1;
+
+        let transactions = test
+            .into_iter()
+            .map(|indexes| indexes.into_iter().map(SlotIndex::from))
+            .enumerate()
+            .map(|(i, indexes)| create_tx(indexes.collect(), i as u64, i as u64))
+            .collect();
+
+        let dag = TransactionDag::new(transactions);
+        let components = dag.split_components();
+        assert_eq!(components.len(), 2);
+
+        for mut component in components {
+            if component.dag.node_count() == 7 {
+                let mut i = 0;
+                let expected = expected_component_1.clone();
+                while let Some(roots) = component.take_roots() {
+                    assert_eq!(roots.len(), expected[i].len());
+                    assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+                    i += 1;
+                }
+                continue;
+            }
+
+            if component.dag.node_count() == 10 {
+                let expected = expected_component_2.clone();
+                let mut i = 0;
+                while let Some(roots) = component.take_roots() {
+                    assert_eq!(roots.len(), expected[i].len());
+                    assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+                    i += 1;
+                }
+                continue;
+            }
+            panic!("unreachable")
         }
     }
 
