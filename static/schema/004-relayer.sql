@@ -21,7 +21,14 @@ create table slot_mismatches(
     primary key (block_number, address, index)
 );
 create table tx_hash_map(
-    stratus_hash bytea primary key not null,
-    substrate_hash bytea not null,
+    stratus_hash bytea not null unique,
+    substrate_hash bytea primary key not null,
     resigned_transaction jsonb not null
+);
+create table unsent_transactions(
+    transaction_hash bytea primary key not null,
+    transaction jsonb not null
+);
+create table out_of_sync_wallets(
+    address bytea primary key not null
 );
