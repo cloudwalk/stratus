@@ -223,7 +223,7 @@ impl<'a> Future for RpcResponse<'a> {
                 rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
                 rpc_result = %response_result,
                 rpc_success = %response_success,
-                rpc_duration_us = %elapsed.as_micros(),
+                duration_us = %elapsed.as_micros(),
                 "rpc response"
             );
 
