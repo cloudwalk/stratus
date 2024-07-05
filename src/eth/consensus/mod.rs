@@ -755,8 +755,14 @@ impl Consensus {
 
     /// Handles the propagation of log entries to peers in the consensus network.
     async fn handle_peer_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
+        const TASK_NAME: &str = "consensus::propagate";
+
         let mut log_entry_queue: Vec<LogEntryData> = Vec::new();
         loop {
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
+                return;
+            };
+
             let mut receiver_lock = peer.receiver.lock().await;
             match receiver_lock.recv().await {
                 Ok(log_entry) => {
