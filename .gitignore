@@ -36,7 +36,6 @@ e2e_logs/
 /target
 vendor
 stratus.log
-kubeconfig.yaml
 
 # OS specific
 .DS_Store
