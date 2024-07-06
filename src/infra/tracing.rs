@@ -47,7 +47,6 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
-use ulid::Ulid;
 
 use crate::config::TracingConfig;
 use crate::ext::not;
@@ -567,9 +566,15 @@ macro_rules! log_and_err {
 // Tracing functions
 // -----------------------------------------------------------------------------
 
-/// Creates a new unique correlation ID.
+/// Creates a new possible unique correlation ID.
+///
+/// Uniqueness is not strictly necessary because traces are not stored permanently.
 pub fn new_cid() -> String {
-    Ulid::new().to_string()
+    pub const ALPHABET: [char; 36] = [
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z',
+    ];
+    nanoid::nanoid!(8, &ALPHABET)
 }
 
 /// Emits an info message that a task was spawned to backgroud.
