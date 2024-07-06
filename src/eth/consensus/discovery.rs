@@ -23,7 +23,6 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
     #[allow(unused_mut)]
     let mut new_peers: Vec<(PeerAddress, Peer)> = Vec::new();
 
-
     #[cfg(not(test))] // FIXME: This is a workaround to avoid running this code in tests we need a proper Tonic mock
     match discover_peers_env(&consensus.direct_peers, Arc::clone(&consensus)).await {
         Ok(env_peers) => {
@@ -116,4 +115,3 @@ async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> 
     tracing::info!("Completed peer discovery with {} peers found", peers.len());
     Ok(peers)
 }
-
