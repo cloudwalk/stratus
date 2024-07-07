@@ -86,6 +86,10 @@ async fn discover_peers_env(addresses: &[String], consensus: Arc<Consensus>) -> 
     for address in addresses {
         match PeerAddress::from_string(address.to_string()) {
             Ok(peer_address) => {
+                if peer_address == consensus.my_address || peer_address == PeerAddress::new("http://0.0.0.0".to_string(), consensus.my_address.jsonrpc_port, consensus.my_address.grpc_port) {
+                    continue;
+                }
+
                 let grpc_address = peer_address.full_grpc_address();
                 tracing::info!("Attempting to connect to peer gRPC address: {}", grpc_address);
                 match AppendEntryServiceClient::connect(grpc_address.clone()).await {
