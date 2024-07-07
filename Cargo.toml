@@ -75,8 +75,6 @@ triehash = "=0.8.4"
 
 # network
 jsonrpsee = { version = "=0.23.2", features = ["server", "client"] }
-k8s-openapi = { version = "=0.21.1", optional = true, features = ["v1_27"] }
-kube = { version = "=0.90.0", optional = true, features = ["runtime", "derive"] }
 reqwest = { version = "=0.12.4", features = ["json"] }
 tonic = "=0.11.0"
 tower = "=0.4.13"
@@ -197,9 +195,6 @@ bg-threads = []
 
 # Enable RocksDB dependencies.
 rocks = ["rocksdb", "bincode"]
-
-# Tools to comunicate with other pods
-kubernetes = ["kube", "k8s-openapi"]
 
 # ------------------------------------------------------------------------------
 # Lints
