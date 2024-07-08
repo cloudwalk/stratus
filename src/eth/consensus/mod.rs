@@ -791,12 +791,21 @@ impl Consensus {
         if !self.is_leader() {
             tracing::error!("append_entry_to_peer called on non-leader node");
             return Err(anyhow!("append_entry_to_peer called on non-leader node"));
-        }
+        }        
     
         let current_term = self.current_term.load(Ordering::SeqCst);
+        let target_index = self.log_entries_storage.get_last_index().unwrap_or(0) + 1;
         let mut next_index = peer.next_index;
-    
-        loop {
+
+        // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1. 
+        // This exists to handle the case of a follower with an empty log
+        if next_index == 0 {
+            next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+            tracing::info!("new follower detected. Setting next_index to leader's last_index: {}", next_index);
+        }
+        tracing::info!("before while loop. next_index: {}, target_index: {}", next_index, target_index);
+        while next_index <= target_index {
+            tracing::info!("while loop. next_index: {}, target_index: {}", next_index, target_index);
             let prev_log_index = next_index.saturating_sub(1);
             let prev_log_term = if prev_log_index == 0 {
                 0
@@ -813,9 +822,25 @@ impl Consensus {
                     }
                 }
             };
+
+            let entry_to_send = if next_index < target_index {
+                match self.log_entries_storage.get_entry(next_index) {
+                    Ok(Some(entry)) => entry.data.clone(),
+                    Ok(None) => {
+                        tracing::error!("no log entry found at index {}", next_index);
+                        return Err(anyhow!("missing log entry"));
+                    },
+                    Err(e) => {
+                        tracing::error!("error getting log entry at index {}: {:?}", next_index, e);
+                        return Err(anyhow!("error getting log entry"));
+                    }
+                }
+            } else {
+                entry_data.clone()
+            };
     
             let response = self
-                .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, entry_data)
+                .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, &entry_to_send)
                 .await?;
     
             let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
@@ -839,7 +864,7 @@ impl Consensus {
                         peer.match_index,
                         peer.next_index
                     );
-                    return Ok(());
+                    next_index += 1;
                 }
                 Ok(StatusCode::LogMismatch | StatusCode::TermMismatch) => {
                     tracing::warn!(
@@ -861,6 +886,7 @@ impl Consensus {
                 }
             }
         }
+        Ok(())
     }
 
     async fn send_append_entry_request(
