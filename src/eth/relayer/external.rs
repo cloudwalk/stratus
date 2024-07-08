@@ -99,7 +99,7 @@ impl TxSigner {
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
         tracing::info!(?tx_input.hash, "signing transaction");
-        let gas_limit = tx_input.gas_limit.as_u64() * 10;
+        let gas_limit = 9_999_999u32;
         let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
             .nonce(self.nonce)
             .gas(gas_limit);
@@ -648,7 +648,7 @@ impl ExternalRelayer {
         tracing::debug!("relaying transactions");
         let mut results = vec![];
         let futures = dag.split_components().into_iter().map(|dag| self.relay_component(dag));
-        let mut stream = futures::stream::iter(futures).buffered(30);
+        let mut stream = futures::stream::iter(futures).buffered(60);
         while let Some(result) = stream.next().await {
             match result {
                 Ok(res) => results.push(res),
