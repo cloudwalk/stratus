@@ -79,7 +79,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let executions = request_inner.executions;
         let index = request_inner.prev_log_index + 1;
-        let term = request_inner.prev_log_term;
+        let term = request_inner.prev_log_term.max(1);
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
 
         #[cfg(feature = "rocks")]
@@ -197,7 +197,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         };
 
         let index = request_inner.prev_log_index + 1;
-        let term = request_inner.prev_log_term;
+        let term = request_inner.prev_log_term.max(1);
         let data = LogEntryData::BlockEntry(block_entry.clone());
 
         #[cfg(feature = "rocks")]
