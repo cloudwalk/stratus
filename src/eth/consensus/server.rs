@@ -82,7 +82,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.term;
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
 
-        let last_entry = consensus.log_entries_storage.get_last_entry();
+        let last_entry;
+        #[cfg(feature = "rocks")]
+        {
+            last_entry = consensus.log_entries_storage.get_last_entry();
+        }
+        #[cfg(not(feature = "rocks"))]
+        {
+            last_entry = 0;
+        }
         let (last_index, last_term) = match last_entry {
             Ok(Some(entry)) => (entry.index, entry.term),
             Ok(None) => (0, 0),
@@ -234,7 +242,15 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.term;
         let data = LogEntryData::BlockEntry(block_entry.clone());
 
-        let last_entry = consensus.log_entries_storage.get_last_entry();
+        let last_entry;
+        #[cfg(feature = "rocks")]
+        {
+            last_entry = consensus.log_entries_storage.get_last_entry();
+        }
+        #[cfg(not(feature = "rocks"))]
+        {
+            last_entry = 0;
+        }
         let (last_index, last_term) = match last_entry {
             Ok(Some(entry)) => (entry.index, entry.term),
             Ok(None) => (0, 0),
