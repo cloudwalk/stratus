@@ -305,8 +305,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     }));
                 }
             }
-
-            // Append the new entry
             tracing::info!(number = block_entry.number, "appending new block");
 
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block", false) {
