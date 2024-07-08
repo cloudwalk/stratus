@@ -82,26 +82,18 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.term;
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
 
-        let last_entry;
         #[cfg(feature = "rocks")]
         {
-            last_entry = consensus.log_entries_storage.get_last_entry();
-        }
-        #[cfg(not(feature = "rocks"))]
-        {
-            last_entry = 0;
-        }
-        let (last_index, last_term) = match last_entry {
-            Ok(Some(entry)) => (entry.index, entry.term),
-            Ok(None) => (0, 0),
-            Err(e) => {
-                tracing::error!("Error getting last log entry: {:?}", e);
-                (0, 0)
-            }
-        };
+            let last_entry = consensus.log_entries_storage.get_last_entry();
+            let (last_index, last_term) = match last_entry {
+                Ok(Some(entry)) => (entry.index, entry.term),
+                Ok(None) => (0, 0),
+                Err(e) => {
+                    tracing::error!("Error getting last log entry: {:?}", e);
+                    (0, 0)
+                }
+            };
 
-        #[cfg(feature = "rocks")]
-        {
             if request_inner.prev_log_index > 0 {
                 if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
                     if log_entry.term != request_inner.prev_log_term {
@@ -242,26 +234,18 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.term;
         let data = LogEntryData::BlockEntry(block_entry.clone());
 
-        let last_entry;
         #[cfg(feature = "rocks")]
         {
-            last_entry = consensus.log_entries_storage.get_last_entry();
-        }
-        #[cfg(not(feature = "rocks"))]
-        {
-            last_entry = 0;
-        }
-        let (last_index, last_term) = match last_entry {
-            Ok(Some(entry)) => (entry.index, entry.term),
-            Ok(None) => (0, 0),
-            Err(e) => {
-                tracing::error!("Error getting last log entry: {:?}", e);
-                (0, 0)
-            }
-        };
+            let last_entry = consensus.log_entries_storage.get_last_entry();
+            let (last_index, last_term) = match last_entry {
+                Ok(Some(entry)) => (entry.index, entry.term),
+                Ok(None) => (0, 0),
+                Err(e) => {
+                    tracing::error!("Error getting last log entry: {:?}", e);
+                    (0, 0)
+                }
+            };
 
-        #[cfg(feature = "rocks")]
-        {
             if request_inner.prev_log_index > 0 {
                 if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
                     if log_entry.term != request_inner.prev_log_term {
