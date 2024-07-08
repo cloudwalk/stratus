@@ -144,7 +144,6 @@ type ClientType = MockAppendEntryServiceClient;
 struct Peer {
     client: ClientType,
     match_index: u64,
-    #[allow(dead_code)]
     next_index: u64,
     role: Role,
     receiver: Arc<Mutex<broadcast::Receiver<LogEntryData>>>,
@@ -815,7 +814,6 @@ impl Consensus {
             }
 
             while next_index < target_index {
-                tracing::debug!("next_index: {}, target_index: {}", next_index, target_index);
                 let prev_log_index = next_index.saturating_sub(1);
                 let prev_log_term = if prev_log_index == 0 {
                     0
