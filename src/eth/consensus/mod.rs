@@ -813,7 +813,9 @@ impl Consensus {
             if next_index == 0 {
                 next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
             }
-            while next_index <= target_index {
+
+            while next_index < target_index {
+                tracing::debug!("next_index: {}, target_index: {}", next_index, target_index);
                 let prev_log_index = next_index.saturating_sub(1);
                 let prev_log_term = if prev_log_index == 0 {
                     0
@@ -879,14 +881,7 @@ impl Consensus {
                             "failed to append entry due to log mismatch or term mismatch. Peer last log index: {}",
                             response_last_log_index
                         );
-                        if next_index > 0 {
-                            next_index = response_last_log_index + 1;
-                        } else {
-                            tracing::info!("reached beginning of log, peer likely has empty log");
-                            peer.next_index = 1;
-                            peer.match_index = 0;
-                            return Ok(());
-                        }
+                        next_index = response_last_log_index + 1;
                     }
                     _ => {
                         tracing::error!("failed to append entry due to unexpected status code");
