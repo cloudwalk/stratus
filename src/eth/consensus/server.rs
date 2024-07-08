@@ -637,7 +637,7 @@ mod tests {
 
         let status = response.unwrap_err();
         assert_eq!(status.code(), tonic::Code::NotFound);
-        assert_eq!(status.message(), "Request term 1 is less than current term 2");
+        assert_eq!(status.message(), "request term 1 is less than current term 2");
     }
 
     #[tokio::test]
@@ -666,6 +666,6 @@ mod tests {
 
         let status = response.unwrap_err();
         assert_eq!(status.code(), tonic::Code::NotFound);
-        assert_eq!(status.message(), "Request term 1 is less than current term 2");
+        assert_eq!(status.message(), "request term 1 is less than current term 2");
     }
 }
