@@ -10,8 +10,6 @@ pub mod utils;
 mod server;
 
 use std::collections::HashMap;
-#[cfg(feature = "kubernetes")]
-use std::env;
 use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::sync::atomic::AtomicU64;
@@ -21,22 +19,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-#[cfg(feature = "kubernetes")]
-use k8s_openapi::api::core::v1::Pod;
-#[cfg(feature = "kubernetes")]
-use kube::api::Api;
-#[cfg(feature = "kubernetes")]
-use kube::api::ListParams;
-#[cfg(feature = "kubernetes")]
-use kube::Client;
 use rand::Rng;
 use server::AppendEntryServiceImpl;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-#[cfg(feature = "kubernetes")]
-use tokio::time::sleep;
 use tonic::transport::Server;
 use tonic::Request;
 
@@ -706,18 +694,6 @@ impl Consensus {
             #[cfg(not(feature = "rocks"))] // TODO remove this branch when rocksdb is not optional in consensus
             true
         }
-    }
-
-    #[cfg(feature = "kubernetes")]
-    fn current_node() -> Option<String> {
-        let pod_name = env::var("MY_POD_NAME").ok()?;
-        Some(pod_name.trim().to_string())
-    }
-
-    #[cfg(feature = "kubernetes")]
-    fn current_namespace() -> Option<String> {
-        let namespace = env::var("NAMESPACE").ok()?;
-        Some(namespace.trim().to_string())
     }
 
     async fn leader_address(&self) -> anyhow::Result<PeerAddress> {

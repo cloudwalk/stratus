@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::anyhow;
@@ -71,20 +72,24 @@ pub enum RelayError {
 
     #[error("Transaction not found")]
     TransactionNotFound,
+
+    #[error("Relaying transaction timed-out")]
+    RelayTimeout,
 }
 
 struct TxSigner {
     wallet: LocalWallet,
     nonce: Nonce,
+    address: Address,
 }
 
 impl TxSigner {
     pub async fn new(private_key: String, chain: &BlockchainClient) -> anyhow::Result<Self> {
         let private_key = const_hex::decode(private_key)?;
         let wallet = LocalWallet::from_bytes(&private_key)?;
-        let addr = wallet.address().into();
-        let nonce = chain.fetch_transaction_count(&addr).await?;
-        Ok(Self { wallet, nonce })
+        let address = wallet.address().into();
+        let nonce = chain.fetch_transaction_count(&address).await?;
+        Ok(Self { wallet, nonce, address })
     }
 
     pub async fn sync_nonce(&mut self, chain: &BlockchainClient) -> anyhow::Result<()> {
@@ -94,7 +99,7 @@ impl TxSigner {
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
         tracing::info!(?tx_input.hash, "signing transaction");
-        let gas_limit = tx_input.gas_limit.as_u64() * 10;
+        let gas_limit = 9_999_999u32;
         let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
             .nonce(self.nonce)
             .gas(gas_limit);
@@ -127,9 +132,14 @@ pub struct ExternalRelayer {
     /// RPC client that will submit transactions.
     stratus_chain: BlockchainClient,
 
+    /// The signer to resign whatever transactions we can
     signer: TxSigner,
 
+    /// How many blocks to fetch per relay operation
     blocks_to_fetch: u64,
+
+    /// Wallets that have mismatched nonces
+    out_of_sync_wallets: HashSet<Address>,
 }
 
 impl ExternalRelayer {
@@ -146,18 +156,44 @@ impl ExternalRelayer {
 
         let substrate_chain = BlockchainClient::new_http(&config.forward_to, config.rpc_timeout).await?;
         let signer = TxSigner::new(config.signer, &substrate_chain).await?;
-        let relayer = Self {
+        let mut relayer = Self {
             substrate_chain,
             stratus_chain: BlockchainClient::new_http(&config.stratus_rpc, config.rpc_timeout).await?,
             pool,
             signer,
             blocks_to_fetch: config.blocks_to_fetch,
+            out_of_sync_wallets: HashSet::new(),
         };
-
+        relayer.load_out_of_sync_wallets().await?;
         if config.cleanup {
             relayer.cleanup_database().await;
         }
         Ok(relayer)
+    }
+
+    async fn insert_unsent_transaction(&mut self, tx_mined: TransactionMined) {
+        let tx_hash = tx_mined.input.hash;
+        let tx_json = serde_json::to_value(tx_mined).expect_infallible();
+        while let Err(e) = sqlx::query!(
+            "INSERT INTO unsent_transactions(transaction_hash, transaction) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            tx_hash as _,
+            tx_json as _
+        )
+        .execute(&self.pool)
+        .await
+        {
+            tracing::warn!(?e, "failed to insert unsent transaction, retrying...");
+        }
+    }
+
+    async fn insert_out_of_sync_wallet(&mut self, address: Address) {
+        self.out_of_sync_wallets.insert(address);
+        while let Err(e) = sqlx::query!("INSERT INTO out_of_sync_wallets(address) VALUES ($1) ON CONFLICT DO NOTHING", address as _)
+            .execute(&self.pool)
+            .await
+        {
+            tracing::warn!(?e, "failed to insert out of sync wallet, retrying...");
+        }
     }
 
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
@@ -172,16 +208,32 @@ impl ExternalRelayer {
                 if let Some(transaction) = transaction_signed {
                     tx.input = transaction;
                 } else if tx.is_success() {
+                    if !self.out_of_sync_wallets.contains(&tx.input.signer) {
+                        self.insert_out_of_sync_wallet(tx.input.signer).await;
+                    }
                     let prev_hash = tx.input.hash;
                     tx.input = self.signer.sign_transaction_input(tx.input);
                     self.insert_transaction_mapping(prev_hash, &tx.input).await;
                 } else {
                     continue;
                 }
+            } else if self.out_of_sync_wallets.contains(&tx.input.signer) {
+                self.insert_unsent_transaction(tx).await;
+                continue;
             }
             combined_transactions.push(tx);
         }
         Ok(combined_transactions)
+    }
+
+    async fn load_out_of_sync_wallets(&mut self) -> anyhow::Result<()> {
+        self.out_of_sync_wallets = sqlx::query!("SELECT address FROM out_of_sync_wallets")
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|row| Address::try_from(row.address))
+            .collect::<Result<HashSet<_>, _>>()?;
+        Ok(())
     }
 
     /// Cleanups the database in case of rollbacks by deleting blocks in the relayer_blocks table that have not been mined in stratus
@@ -326,6 +378,19 @@ impl ExternalRelayer {
             .collect::<Result<_, _>>()
     }
 
+    async fn check_nonces(&mut self, addresses: HashSet<Address>) -> anyhow::Result<()> {
+        for from in addresses.into_iter() {
+            if !self.out_of_sync_wallets.contains(&from) {
+                let substrate_nonce = self.substrate_chain.fetch_transaction_count(&from).await?;
+                let stratus_nonce = self.stratus_chain.fetch_transaction_count(&from).await?;
+                if substrate_nonce != stratus_nonce {
+                    self.insert_out_of_sync_wallet(from).await;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Polls the next block to be relayed and relays it to Substrate.
     #[tracing::instrument(name = "external_relayer::relay_blocks", skip_all, fields(block_number))]
     pub async fn relay_blocks(&mut self) -> anyhow::Result<Vec<BlockNumber>> {
@@ -351,10 +416,19 @@ impl ExternalRelayer {
         self.signer.sync_nonce(&self.substrate_chain).await?;
         let combined_transactions = self.combine_transactions(blocks).await?;
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
+        let senders = combined_transactions
+            .iter()
+            .map(|tx| tx.input.signer)
+            .filter(|address| address != &self.signer.address)
+            .collect();
 
         let dag = TransactionDag::new(combined_transactions);
 
-        let mismatched_blocks = self.relay_dag(dag).await;
+        let Ok(mismatched_blocks) = self.relay_dag(dag).await else {
+            self.check_nonces(senders).await?;
+            return Err(anyhow!("relay timedout, updated out of sync wallets and will try again"));
+        };
+
         let ok_blocks: Vec<BlockNumber> = block_numbers.difference(&mismatched_blocks).cloned().collect();
 
         if !mismatched_blocks.is_empty() {
@@ -533,16 +607,22 @@ impl ExternalRelayer {
     }
 
     /// Relays a dag by removing its roots and sending them consecutively.
-    async fn relay_component(&self, mut dag: TransactionDag) -> MismatchedBlocks {
+    async fn relay_component(&self, mut dag: TransactionDag) -> anyhow::Result<MismatchedBlocks, RelayError> {
         let start = Instant::now();
 
         let mut results = vec![];
         while let Some(roots) = dag.take_roots() {
             tracing::info!(elapsed=?start.elapsed().as_secs(), transaction_num=roots.len(), remaining=dag.txs_remaining(),"forwarding");
-            let futures = roots.into_iter().sorted().map(|root_tx| self.relay_transaction(root_tx));
+            let futures = roots
+                .into_iter()
+                .sorted()
+                .map(|root_tx| tokio::time::timeout(Duration::from_secs(120), self.relay_transaction(root_tx)));
             let mut stream = futures::stream::iter(futures).buffered(30);
             while let Some(result) = stream.next().await {
-                results.push(result);
+                match result {
+                    Ok(res) => results.push(res),
+                    Err(_) => return Err(RelayError::RelayTimeout),
+                }
             }
         }
 
@@ -557,25 +637,31 @@ impl ExternalRelayer {
             };
         }
 
-        mismatched_blocks
+        Ok(mismatched_blocks)
     }
 
     // Split the dag and relay its components.
     #[tracing::instrument(name = "external_relayer::relay_dag", skip_all)]
-    async fn relay_dag(&self, dag: TransactionDag) -> MismatchedBlocks {
+    async fn relay_dag(&self, dag: TransactionDag) -> anyhow::Result<MismatchedBlocks, RelayError> {
         let start = Instant::now();
 
         tracing::debug!("relaying transactions");
-
+        let mut results = vec![];
         let futures = dag.split_components().into_iter().map(|dag| self.relay_component(dag));
-        let results = join_all(futures).await;
+        let mut stream = futures::stream::iter(futures).buffered(30);
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(res) => results.push(res),
+                err => return err,
+            }
+        }
 
         let mismatched_blocks: MismatchedBlocks = results.into_iter().flatten().collect();
 
         #[cfg(feature = "metrics")]
         metrics::inc_relay_dag(start.elapsed());
 
-        mismatched_blocks
+        Ok(mismatched_blocks)
     }
 }
 
