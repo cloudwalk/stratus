@@ -79,8 +79,18 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let executions = request_inner.executions;
         let index = request_inner.prev_log_index + 1;
-        let term = request_inner.prev_log_term.max(1);
+        let term = request_inner.term;
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
+
+        let last_entry = consensus.log_entries_storage.get_last_entry();
+        let (last_index, last_term) = match last_entry {
+            Ok(Some(entry)) => (entry.index, entry.term),
+            Ok(None) => (0, 0),
+            Err(e) => {
+                tracing::error!("Error getting last log entry: {:?}", e);
+                (0, 0)
+            }
+        };
 
         #[cfg(feature = "rocks")]
         {
@@ -98,13 +108,37 @@ impl AppendEntryService for AppendEntryServiceImpl {
                             "{}",
                             &error_message
                         );
-                        return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+
+                        return Ok(Response::new(AppendTransactionExecutionsResponse {
+                            status: StatusCode::TermMismatch as i32,
+                            message: "Transaction Executions append failed due to term mismatch".into(),
+                            match_log_index: last_index,
+                            last_log_index: last_index,
+                            last_log_term: last_term,
+                        }));
                     }
                 } else {
                     let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
                     tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
-                    return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+                    return Ok(Response::new(AppendTransactionExecutionsResponse {
+                        status: StatusCode::LogMismatch as i32,
+                        message: "Transaction Executions append failed due to log mismatch".into(),
+                        match_log_index: last_index,
+                        last_log_index: last_index,
+                        last_log_term: last_term,
+                    }));
                 }
+            } else if request_inner.prev_log_index == 0 {
+                tracing::info!("appending initial entry");
+            } else {
+                // Invalid prev_log_index
+                return Ok(Response::new(AppendTransactionExecutionsResponse {
+                    status: StatusCode::LogMismatch as i32,
+                    message: "Invalid prev_log_index".into(),
+                    match_log_index: last_index,
+                    last_log_index: last_index,
+                    last_log_term: last_term,
+                }));
             }
 
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction", false) {
@@ -197,8 +231,18 @@ impl AppendEntryService for AppendEntryServiceImpl {
         };
 
         let index = request_inner.prev_log_index + 1;
-        let term = request_inner.prev_log_term.max(1);
+        let term = request_inner.term;
         let data = LogEntryData::BlockEntry(block_entry.clone());
+
+        let last_entry = consensus.log_entries_storage.get_last_entry();
+        let (last_index, last_term) = match last_entry {
+            Ok(Some(entry)) => (entry.index, entry.term),
+            Ok(None) => (0, 0),
+            Err(e) => {
+                tracing::error!("Error getting last log entry: {:?}", e);
+                (0, 0)
+            }
+        };
 
         #[cfg(feature = "rocks")]
         {
@@ -216,14 +260,40 @@ impl AppendEntryService for AppendEntryServiceImpl {
                             "{}",
                             &error_message
                         );
-                        return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
+
+                        return Ok(Response::new(AppendBlockCommitResponse {
+                            status: StatusCode::TermMismatch as i32,
+                            message: "Block Commit append failed due to term mismatch".into(),
+                            match_log_index: last_index,
+                            last_log_index: last_index,
+                            last_log_term: last_term,
+                        }));
                     }
                 } else {
                     let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
                     tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
-                    return Err(Status::new((StatusCode::LogMismatch as i32).into(), error_message));
+                    return Ok(Response::new(AppendBlockCommitResponse {
+                        status: StatusCode::LogMismatch as i32,
+                        message: "Block Commit append failed due to log mismatch".into(),
+                        match_log_index: last_index,
+                        last_log_index: last_index,
+                        last_log_term: last_term,
+                    }));
                 }
+            } else if request_inner.prev_log_index == 0 {
+                tracing::info!("appending initial entry");
+            } else {
+                // Invalid prev_log_index
+                return Ok(Response::new(AppendBlockCommitResponse {
+                    status: StatusCode::LogMismatch as i32,
+                    message: "Invalid prev_log_index".into(),
+                    match_log_index: last_index,
+                    last_log_index: last_index,
+                    last_log_term: last_term,
+                }));
             }
+
+            // Append the new entry
             tracing::info!(number = block_entry.number, "appending new block");
 
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block", false) {
