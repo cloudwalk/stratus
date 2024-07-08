@@ -84,7 +84,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         #[cfg(feature = "rocks")]
         {
-            if request_inner.prev_log_index != 0 {
+            if request_inner.prev_log_index > 0 {
                 if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
                     if log_entry.term != request_inner.prev_log_term {
                         let error_message = format!(
@@ -202,7 +202,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         #[cfg(feature = "rocks")]
         {
-            if request_inner.prev_log_index != 0 {
+            if request_inner.prev_log_index > 0 {
                 if let Ok(Some(log_entry)) = consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
                     if log_entry.term != request_inner.prev_log_term {
                         let error_message = format!(
