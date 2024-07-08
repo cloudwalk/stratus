@@ -880,7 +880,7 @@ impl Consensus {
                             response_last_log_index
                         );
                         if next_index > 0 {
-                            next_index -= 1;
+                            next_index = response_last_log_index + 1;
                         } else {
                             tracing::info!("reached beginning of log, peer likely has empty log");
                             peer.next_index = 1;
