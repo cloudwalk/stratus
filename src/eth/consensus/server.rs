@@ -67,7 +67,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         if request_inner.term < current_term {
-            let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
+            let error_message = format!("request term {} is less than current term {}", request_inner.term, current_term);
             tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
             return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
         }
@@ -92,7 +92,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 Ok(Some(entry)) => (entry.index, entry.term),
                 Ok(None) => (0, 0),
                 Err(e) => {
-                    tracing::error!("Error getting last log entry: {:?}", e);
+                    tracing::error!("error getting last log entry: {:?}", e);
                     (0, 0)
                 }
             };
@@ -102,7 +102,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     match consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
                         Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
                             let error_message = format!(
-                                "Log entry term {} does not match request term {} at index {}",
+                                "log entry term {} does not match request term {} at index {}",
                                 log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
                             );
                             tracing::error!(
@@ -115,7 +115,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
                             return Ok(Response::new(AppendTransactionExecutionsResponse {
                                 status: StatusCode::TermMismatch as i32,
-                                message: "Transaction Executions append failed due to term mismatch".into(),
+                                message: "transaction Executions append failed due to term mismatch".into(),
                                 match_log_index: last_index,
                                 last_log_index: last_index,
                                 last_log_term: last_term,
@@ -123,11 +123,11 @@ impl AppendEntryService for AppendEntryServiceImpl {
                         }
                         Ok(Some(_)) => {} // Log entry exists and terms match, continue
                         _ => {
-                            let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
+                            let error_message = format!("no log entry found at index {}", request_inner.prev_log_index);
                             tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
                             return Ok(Response::new(AppendTransactionExecutionsResponse {
                                 status: StatusCode::LogMismatch as i32,
-                                message: "Transaction Executions append failed due to log mismatch".into(),
+                                message: "transaction Executions append failed due to log mismatch".into(),
                                 match_log_index: last_index,
                                 last_log_index: last_index,
                                 last_log_term: last_term,
@@ -141,7 +141,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 Less => {
                     return Ok(Response::new(AppendTransactionExecutionsResponse {
                         status: StatusCode::LogMismatch as i32,
-                        message: "Invalid prev_log_index".into(),
+                        message: "invalid prev_log_index".into(),
                         match_log_index: last_index,
                         last_log_index: last_index,
                         last_log_term: last_term,
@@ -150,8 +150,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
             }
 
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction", false) {
-                tracing::error!("Failed to save log entry: {:?}", e);
-                return Err(Status::internal("Failed to save log entry"));
+                tracing::error!("failed to save log entry: {:?}", e);
+                return Err(Status::internal("failed to save log entry"));
             }
         }
 
@@ -169,14 +169,14 @@ impl AppendEntryService for AppendEntryServiceImpl {
                             tracing::info!("transaction execution commited into memory successfully");
                         }
                         Err(err) => {
-                            tracing::error!("Failed to commit transaction execution: {:?}", err);
-                            return Err(Status::internal("Failed to commit transaction execution"));
+                            tracing::error!("failed to commit transaction execution: {:?}", err);
+                            return Err(Status::internal("failed to commit transaction execution"));
                         }
                     }
                 }
                 Err(err) => {
-                    tracing::error!("Failed to append transaction execution: {:?}", err);
-                    return Err(Status::internal("Failed to parse transaction execution for commit"));
+                    tracing::error!("failed to append transaction execution: {:?}", err);
+                    return Err(Status::internal("failed to parse transaction execution for commit"));
                 }
             }
         }
@@ -221,7 +221,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         }
 
         if request_inner.term < current_term {
-            let error_message = format!("Request term {} is less than current term {}", request_inner.term, current_term);
+            let error_message = format!("request term {} is less than current term {}", request_inner.term, current_term);
             tracing::error!(request_term = request_inner.term, current_term = current_term, "{}", &error_message);
             return Err(Status::new((StatusCode::TermMismatch as i32).into(), error_message));
         }
@@ -249,7 +249,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 Ok(Some(entry)) => (entry.index, entry.term),
                 Ok(None) => (0, 0),
                 Err(e) => {
-                    tracing::error!("Error getting last log entry: {:?}", e);
+                    tracing::error!("error getting last log entry: {:?}", e);
                     (0, 0)
                 }
             };
@@ -259,7 +259,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                     match consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
                         Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
                             let error_message = format!(
-                                "Log entry term {} does not match request term {} at index {}",
+                                "log entry term {} does not match request term {} at index {}",
                                 log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
                             );
                             tracing::error!(
@@ -272,7 +272,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
                             return Ok(Response::new(AppendBlockCommitResponse {
                                 status: StatusCode::TermMismatch as i32,
-                                message: "Block commit append failed due to term mismatch".into(),
+                                message: "block commit append failed due to term mismatch".into(),
                                 match_log_index: last_index,
                                 last_log_index: last_index,
                                 last_log_term: last_term,
@@ -284,7 +284,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                             tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
                             return Ok(Response::new(AppendBlockCommitResponse {
                                 status: StatusCode::LogMismatch as i32,
-                                message: "Block commit append failed due to log mismatch".into(),
+                                message: "block commit append failed due to log mismatch".into(),
                                 match_log_index: last_index,
                                 last_log_index: last_index,
                                 last_log_term: last_term,
@@ -298,7 +298,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 Less => {
                     return Ok(Response::new(AppendBlockCommitResponse {
                         status: StatusCode::LogMismatch as i32,
-                        message: "Invalid prev_log_index".into(),
+                        message: "invalid prev_log_index".into(),
                         match_log_index: last_index,
                         last_log_index: last_index,
                         last_log_term: last_term,
@@ -308,8 +308,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
             tracing::info!(number = block_entry.number, "appending new block");
 
             if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block", false) {
-                tracing::error!("Failed to save log entry: {:?}", e);
-                return Err(Status::internal("Failed to save log entry"));
+                tracing::error!("failed to save log entry: {:?}", e);
+                return Err(Status::internal("failed to save log entry"));
             }
         }
 
