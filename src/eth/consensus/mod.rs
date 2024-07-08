@@ -801,11 +801,8 @@ impl Consensus {
         // This exists to handle the case of a follower with an empty log
         if next_index == 0 {
             next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
-            tracing::info!("new follower detected. Setting next_index to leader's last_index: {}", next_index);
         }
-        tracing::info!("before while loop. next_index: {}, target_index: {}", next_index, target_index);
         while next_index <= target_index {
-            tracing::info!("while loop. next_index: {}, target_index: {}", next_index, target_index);
             let prev_log_index = next_index.saturating_sub(1);
             let prev_log_term = if prev_log_index == 0 {
                 0
