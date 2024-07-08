@@ -44,8 +44,8 @@ use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
 use append_entry::AppendBlockCommitRequest;
-use append_entry::AppendTransactionExecutionsRequest;
 use append_entry::AppendBlockCommitResponse;
+use append_entry::AppendTransactionExecutionsRequest;
 use append_entry::AppendTransactionExecutionsResponse;
 use append_entry::RequestVoteRequest;
 use append_entry::StatusCode;
@@ -791,13 +791,13 @@ impl Consensus {
         if !self.is_leader() {
             tracing::error!("append_entry_to_peer called on non-leader node");
             return Err(anyhow!("append_entry_to_peer called on non-leader node"));
-        }        
-    
+        }
+
         let current_term = self.current_term.load(Ordering::SeqCst);
         let target_index = self.log_entries_storage.get_last_index().unwrap_or(0) + 1;
         let mut next_index = peer.next_index;
 
-        // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1. 
+        // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1.
         // This exists to handle the case of a follower with an empty log
         if next_index == 0 {
             next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
@@ -815,7 +815,7 @@ impl Consensus {
                     Ok(None) => {
                         tracing::warn!("no log entry found at index {}", prev_log_index);
                         0
-                    },
+                    }
                     Err(e) => {
                         tracing::error!("error getting log entry at index {}: {:?}", prev_log_index, e);
                         return Err(anyhow!("error getting log entry"));
@@ -829,7 +829,7 @@ impl Consensus {
                     Ok(None) => {
                         tracing::error!("no log entry found at index {}", next_index);
                         return Err(anyhow!("missing log entry"));
-                    },
+                    }
                     Err(e) => {
                         tracing::error!("error getting log entry at index {}: {:?}", next_index, e);
                         return Err(anyhow!("error getting log entry"));
@@ -838,11 +838,11 @@ impl Consensus {
             } else {
                 entry_data.clone()
             };
-    
+
             let response = self
                 .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, &entry_to_send)
                 .await?;
-    
+
             let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
                 AppendResponse::BlockCommitResponse(res) => {
                     let inner: AppendBlockCommitResponse = res.into_inner();
@@ -853,7 +853,7 @@ impl Consensus {
                     (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
                 }
             };
-    
+
             match StatusCode::try_from(response_status) {
                 Ok(StatusCode::AppendSuccess) => {
                     peer.match_index = response_match_log_index;
@@ -913,7 +913,13 @@ impl Consensus {
                     executions: executions.clone(),
                     leader_id: self.my_address.to_string(),
                 })),
-            LogEntryData::EmptyData => return Err(anyhow!("cannot send empty data")),
+            LogEntryData::EmptyData => AppendRequest::TransactionExecutionsRequest(Request::new(AppendTransactionExecutionsRequest {
+                term: current_term,
+                prev_log_index,
+                prev_log_term,
+                executions: Vec::<TransactionExecutionEntry>::new(),
+                leader_id: self.my_address.to_string(),
+            })),
         };
 
         tracing::info!(
