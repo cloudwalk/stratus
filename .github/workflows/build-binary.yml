@@ -49,7 +49,7 @@ jobs:
         run: cargo build --release --bin run-with-importer --bin stratus --bin importer-online --bin relayer
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
-          LOG_FORMAT: json
+          TRACING_LOG_FORMAT: json
           NO_COLOR: 1
 
       - name: Upload run with importer
