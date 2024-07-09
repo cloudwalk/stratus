@@ -1,6 +1,3 @@
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
-
 use anyhow::anyhow;
 use tracing::Span;
 
@@ -47,10 +44,6 @@ mod label {
 pub struct StratusStorage {
     temp: Box<dyn TemporaryStorage>,
     perm: Box<dyn PermanentStorage>,
-
-    /// Used to perform extra checks, this simulates an `Option<u64>` with `0` being `None`
-    /// (`Mutex` was avoided because I'm too afraid of deadlokcs in this part of the code)
-    last_saved_block_number: AtomicU64,
 }
 
 impl StratusStorage {
@@ -60,11 +53,7 @@ impl StratusStorage {
 
     /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Self {
-        Self {
-            temp,
-            perm,
-            last_saved_block_number: AtomicU64::new(0),
-        }
+        Self { temp, perm }
     }
 
     /// Creates an inmemory stratus storage for testing.
@@ -73,7 +62,6 @@ impl StratusStorage {
         Self {
             temp: Box::new(InMemoryTemporaryStorage::new()),
             perm: Box::new(InMemoryPermanentStorage::new()),
-            last_saved_block_number: AtomicU64::new(0),
         }
     }
 
@@ -90,7 +78,6 @@ impl StratusStorage {
             Self {
                 temp: Box::new(InMemoryTemporaryStorage::new()),
                 perm: Box::new(rocks_permanent_storage),
-                last_saved_block_number: AtomicU64::new(0),
             },
             temp_dir,
         )
@@ -351,32 +338,30 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
         tracing::debug!(storage = %label::PERM, block_number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
 
-        // run some checks on the block number to warn order problems
-        let new_block_number = block.number().as_u64();
-        let last_block_number = self.last_saved_block_number.load(Ordering::SeqCst);
-        // treated it as an option where 0 is `None` (also means we can't run this check on block `0`, it'll be skipped)
-        if last_block_number > 0 {
-            if last_block_number > new_block_number {
+        let new_block_number = block.number();
+        let last_mined_block_number = self.perm.read_mined_block_number()?;
+
+        // check permanent storage block number
+        if new_block_number != last_mined_block_number + 1 {
+            let gap_size = new_block_number.as_i64() - last_mined_block_number.as_i64();
+            tracing::warn!(
+                ?new_block_number,
+                ?last_mined_block_number,
+                gap_size,
+                "new block number isn't expected based on previous one, some might've been skipped or order is broken",
+            );
+        }
+
+        // check temporary storage block number, if set
+        if let Some(pending_block_number) = self.temp.read_pending_block_number()? {
+            if new_block_number != pending_block_number {
                 tracing::warn!(
                     ?new_block_number,
-                    ?last_block_number,
-                    "last saved block had a number higher than new one, disrespecting order",
+                    ?pending_block_number,
+                    "new block number doesn't match pending block number in temporary storage",
                 );
-            } else {
-                let gap = new_block_number.saturating_sub(last_block_number);
-
-                if gap > 1 {
-                    tracing::warn!(
-                        ?new_block_number,
-                        ?last_block_number,
-                        skipped_amount = gap,
-                        "gap between new block and last block is bigger than one, indicating that at least one block was skipped",
-                    );
-                }
             }
         }
-        // update for the next run
-        self.last_saved_block_number.store(new_block_number, Ordering::SeqCst);
 
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| self.perm.save_block(block)).with(|m| {
