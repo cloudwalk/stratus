@@ -807,7 +807,11 @@ impl Consensus {
             while let Some(log_entry) = log_entry_queue.first() {
                 match log_entry {
                     LogEntryData::BlockEntry(_block) => {
-                        tracing::info!("sending block to peer: peer.match_index: {:?}, peer.next_index: {:?}", peer.match_index, peer.next_index);
+                        tracing::info!(
+                            "sending block to peer: peer.match_index: {:?}, peer.next_index: {:?}",
+                            peer.match_index,
+                            peer.next_index
+                        );
                         match consensus.append_entry_to_peer(&mut peer, log_entry).await {
                             Ok(_) => {
                                 log_entry_queue.remove(0);
