@@ -275,9 +275,7 @@ run_test() {
             fi
         done
 
-        if [ $num_instances -eq 2 ]; then
-            sleep 40 # wait for leader election before raising the other instance to avoid split vote
-        fi
+        sleep 40 # wait for leader election before raising the other instance to avoid split vote
 
         # Restart the killed instance
         echo "Restarting the killed instance..."
