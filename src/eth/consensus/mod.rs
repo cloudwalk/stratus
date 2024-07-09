@@ -807,7 +807,7 @@ impl Consensus {
             while let Some(log_entry) = log_entry_queue.first() {
                 match log_entry {
                     LogEntryData::BlockEntry(_block) => {
-                        tracing::info!("sending block to peer: {:?}", peer.client);
+                        tracing::info!("sending block to peer: peer.match_index: {:?}, peer.next_index: {:?}", peer.match_index, peer.next_index);
                         match consensus.append_entry_to_peer(&mut peer, log_entry).await {
                             Ok(_) => {
                                 log_entry_queue.remove(0);
@@ -844,6 +844,13 @@ impl Consensus {
             let current_term = self.current_term.load(Ordering::SeqCst);
             let target_index = self.log_entries_storage.get_last_index().unwrap_or(0) + 1;
             let mut next_index = peer.next_index;
+
+            tracing::info!(
+                "appending entry to peer: current_term: {}, target_index: {}, next_index: {}",
+                current_term,
+                target_index,
+                next_index
+            );
 
             // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1.
             // This exists to handle the case of a follower with an empty log
