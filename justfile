@@ -354,7 +354,7 @@ e2e-relayer-external-up:
     if [ -d e2e/cloudwalk-contracts ]; then
     (
         cd e2e/cloudwalk-contracts/integration
-        npx hardhat test test/*.test.ts --network stratus --bail
+        npx hardhat test test/relayer.test.ts --network stratus --bail
         if [ $? -ne 0 ]; then
             echo "Hardhat tests failed"
             exit 1
