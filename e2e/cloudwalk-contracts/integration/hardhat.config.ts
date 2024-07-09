@@ -7,7 +7,7 @@ const ACCOUNTS_MNEMONIC = "test test test test test test test test test test tes
 
 const STRATUS_PORT = process.env.STRATUS_PORT || 3000; // Default to 3000 if not set
 
-const url = `http://localhost:${STRATUS_PORT}?app=e2e`;
+const url = `http://0.0.0.0:${STRATUS_PORT}?app=e2e`;
 
 const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
