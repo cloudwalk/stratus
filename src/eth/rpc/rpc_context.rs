@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
-use crate::eth::rpc::rpc_client_error;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::rpc::RpcError;
 use crate::eth::storage::StratusStorage;
@@ -38,8 +37,7 @@ impl RpcContext {
     pub fn reject_unknown_client(&self, client: RpcClientApp) -> Result<(), RpcError> {
         let enabled = self.reject_unknown_client_enabled.load(Ordering::Relaxed);
         if enabled && client.is_unknown() {
-            tracing::warn!("operation rejected because rpc client is unknown");
-            return Err(rpc_client_error("operation rejected because client did not identify itself using url query parameter or headers").into());
+            return Err(RpcError::ClientMissing);
         }
         Ok(())
     }
