@@ -327,8 +327,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 consensus.set_role(Role::Follower);
                 consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
 
-                let mut voted_for = consensus.voted_for.lock().await;
-                *voted_for = Some(candidate_address.clone());
+                *consensus.voted_for.lock().await = Some(candidate_address.clone());
 
                 tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
                 return Ok(Response::new(RequestVoteResponse {
