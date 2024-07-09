@@ -469,8 +469,15 @@ contracts-coverage-erase:
 
 # Chaos Testing: Run chaos experiment
 run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
+    #!/bin/bash
+
     echo "Building Stratus"
     cargo build --release --bin {{ bin }} --features dev
+
+    cd e2e/cloudwalk-contracts/integration
+    if [ ! -d node_modules ]; then
+        npm install
+    fi
 
     echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
     ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
