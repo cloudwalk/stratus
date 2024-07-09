@@ -37,7 +37,7 @@ COPY Cargo.toml /app/Cargo.toml
 COPY Cargo.lock /app/Cargo.lock
 
 ENV CARGO_PROFILE_RELEASE_DEBUG=1
-ENV LOG_FORMAT=json
+ENV TRACING_LOG_FORMAT=json
 ENV NO_COLOR=1
 ENV ENABLE_TEST_ACCOUNTS=1
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
