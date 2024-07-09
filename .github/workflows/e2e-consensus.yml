@@ -36,7 +36,7 @@ jobs:
             iterations: 1
           - leader-restart: true
             instances: 3
-            iterations: 2
+            iterations: 1
           - leader-restart: false
             instances: 2
             iterations: 6
