@@ -876,9 +876,9 @@ impl Consensus {
                     }
                 };
 
-                let (entry_to_send, entry_term) = if next_index < target_index {
+                let entry_to_send = if next_index < target_index {
                     match self.log_entries_storage.get_entry(next_index) {
-                        Ok(Some(entry)) => (entry.data.clone(), entry.term),
+                        Ok(Some(entry)) => entry.data.clone(),
                         Ok(None) => {
                             tracing::error!("no log entry found at index {}", next_index);
                             return Err(anyhow!("missing log entry"));
@@ -889,20 +889,20 @@ impl Consensus {
                         }
                     }
                 } else {
-                    (entry_data.clone(), current_term)
+                    entry_data.clone()
                 };
 
                 tracing::info!(
-                    "appending entry to peer: prev_log_term: {}, entry_term: {}, prev_log_index: {}, target_index: {}, next_index: {}",
+                    "appending entry to peer: current_term: {}, prev_log_term: {}, prev_log_index: {}, target_index: {}, next_index: {}",
+                    current_term,
                     prev_log_term,
-                    entry_term,
                     prev_log_index,
                     target_index,
                     next_index
                 );
 
                 let response = self
-                    .send_append_entry_request(peer, entry_term, prev_log_index, prev_log_term, &entry_to_send)
+                    .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, &entry_to_send)
                     .await?;
 
                 let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
