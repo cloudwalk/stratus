@@ -30,7 +30,7 @@ impl RpcClientApp {
             return RpcClientApp::Unknown;
         }
         let name = match name {
-            n if n.starts_with("banking") => format!("banking::{}", n),
+            n if n.starts_with("banking") || n.starts_with("balance") => format!("banking::{}", n),
             n if n.starts_with("issuing") || n.starts_with("infinitecard") => format!("issuing::{}", n),
             n if n.starts_with("lending") => format!("lending::{}", n),
             n if n == "blockscout" || n == "golani" || n == "tx-replayer" => format!("infra::{}", n),
