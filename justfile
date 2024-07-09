@@ -478,6 +478,7 @@ run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" 
     if [ ! -d node_modules ]; then
         npm install
     fi
+    cd ../../..
 
     echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
     ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
