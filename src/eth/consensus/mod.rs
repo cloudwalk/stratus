@@ -414,6 +414,9 @@ impl Consensus {
     async fn refresh_blockchain_client(&self) {
         let (http_url, _) = self.get_chain_url().await.expect("failed to get chain url");
         let mut blockchain_client_lock = self.blockchain_client.lock().await;
+
+        tracing::info!(http_url = http_url, "changing blockchain client");
+
         *blockchain_client_lock = Some(
             BlockchainClient::new_http(&http_url, Duration::from_secs(2))
                 .await
