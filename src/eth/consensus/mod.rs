@@ -271,7 +271,8 @@ impl Consensus {
     /// When there are healthy peers we need to wait for the grace period of discovery
     /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
-        spawn_named("consensus::heartbeat_timer", async move {
+        const TASK_NAME: &str = "consensus::heartbeat_timer";
+        spawn_named(TASK_NAME, async move {
             discovery::discover_peers(Arc::clone(&consensus)).await;
             if consensus.peers.read().await.is_empty() {
                 tracing::info!("no peers, starting hearbeat timer immediately");
@@ -284,6 +285,9 @@ impl Consensus {
             let timeout = consensus.heartbeat_timeout;
             loop {
                 tokio::select! {
+                    _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
+                        return;
+                    },
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
                         if !consensus.is_leader() {
                             tracing::info!("starting election due to heartbeat timeout");
@@ -445,13 +449,23 @@ impl Consensus {
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
-        spawn_named("consensus::peer_discovery", async move {
+        const TASK_NAME: &str = "consensus::peer_discovery";
+        spawn_named(TASK_NAME, async move {
             let mut interval = tokio::time::interval(PEER_DISCOVERY_DELAY);
-            loop {
-                tracing::info!("starting periodic peer discovery");
-                discovery::discover_peers(Arc::clone(&consensus)).await;
-                interval.tick().await;
-            }
+
+            let periodic_discover = || async move {
+                loop {
+                    discovery::discover_peers(Arc::clone(&consensus)).await;
+                    interval.tick().await;
+                }
+            };
+
+            tokio::select! {
+                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {},
+                _ = periodic_discover() => {
+                    unreachable!("this infinite future doesn't end");
+                },
+            };
         });
     }
 
@@ -462,9 +476,15 @@ impl Consensus {
         // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
         // TODO: maybe check if I'm currently the leader?
 
-        spawn_named("consensus::transaction_execution_queue", async move {
+        const TASK_NAME: &str = "consensus::transaction_execution_queue";
+
+        spawn_named(TASK_NAME, async move {
             let interval = Duration::from_millis(40);
             loop {
+                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                    return;
+                };
+
                 tokio::time::sleep(interval).await;
 
                 if consensus.is_leader() {
@@ -517,9 +537,13 @@ impl Consensus {
         mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
         mut rx_blocks: broadcast::Receiver<Block>,
     ) {
-        spawn_named("consensus::block_and_executions_sender", async move {
+        const TASK_NAME: &str = "consensus::block_and_executions_sender";
+        spawn_named(TASK_NAME, async move {
             loop {
                 tokio::select! {
+                    _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
+                        return;
+                    },
                     Ok(tx) = rx_pending_txs.recv() => {
                         tracing::debug!("Attempting to receive transaction execution");
                         if consensus.is_leader() {
@@ -535,7 +559,7 @@ impl Consensus {
                                 tracing::error!("failed to broadcast transaction");
                             }
                         }
-                    }
+                    },
                     Ok(block) = rx_blocks.recv() => {
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
@@ -579,17 +603,18 @@ impl Consensus {
                                 }
                             }
                         }
-                    }
+                    },
                     else => {
                         tokio::task::yield_now().await;
-                    }
+                    },
                 }
             }
         });
     }
 
     fn initialize_server(consensus: Arc<Consensus>) {
-        spawn_named("consensus::server", async move {
+        const TASK_NAME: &str = "consensus::server";
+        spawn_named(TASK_NAME, async move {
             tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
             let addr = consensus.grpc_address;
 
@@ -597,9 +622,11 @@ impl Consensus {
                 consensus: Mutex::new(consensus),
             };
 
+            let shutdown = GlobalState::wait_shutdown_and_warn(TASK_NAME);
+
             let server = Server::builder()
                 .add_service(AppendEntryServiceServer::new(append_entry_service))
-                .serve(addr)
+                .serve_with_shutdown(addr, shutdown)
                 .await;
 
             if let Err(e) = server {
@@ -668,8 +695,7 @@ impl Consensus {
             return true;
         }
 
-        let blockchain_client_lock = self.blockchain_client.lock().await;
-        if blockchain_client_lock.is_none() {
+        if self.blockchain_client.lock().await.is_none() {
             tracing::warn!("blockchain client is not set, cannot serve requests because they cant be forwarded");
             return false;
         }
@@ -752,18 +778,31 @@ impl Consensus {
 
     /// Handles the propagation of log entries to peers in the consensus network.
     async fn handle_peer_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
+        const TASK_NAME: &str = "consensus::propagate";
+
         let mut log_entry_queue: Vec<LogEntryData> = Vec::new();
         loop {
-            let mut receiver_lock = peer.receiver.lock().await;
-            match receiver_lock.recv().await {
-                Ok(log_entry) => {
-                    log_entry_queue.push(log_entry);
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
+                return;
+            };
+
+            let receive_log_entry_from_peer = async {
+                let message = peer.receiver.lock().await.recv().await;
+                match message {
+                    Ok(log_entry) => {
+                        log_entry_queue.push(log_entry);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Error receiving log entry for peer {:?}: {:?}", peer.client, e);
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!("Error receiving log entry for peer {:?}: {:?}", peer.client, e);
-                }
-            }
-            drop(receiver_lock);
+            };
+
+            tokio::select! {
+                biased;
+                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => return,
+                _ = receive_log_entry_from_peer => {},
+            };
 
             while let Some(log_entry) = log_entry_queue.first() {
                 match log_entry {
@@ -782,8 +821,7 @@ impl Consensus {
                     }
                     LogEntryData::TransactionExecutionEntries(transaction_executions) => {
                         tracing::info!("adding transaction executions to queue");
-                        let mut queue = consensus.transaction_execution_queue.lock().await;
-                        queue.extend(transaction_executions.clone());
+                        consensus.transaction_execution_queue.lock().await.extend(transaction_executions.clone());
                         log_entry_queue.remove(0);
                     }
                     LogEntryData::EmptyData => {

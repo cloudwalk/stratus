@@ -10,10 +10,13 @@ describe("Multiple Transactions Per Block", () => {
     });
 
     it("Resets blockchain", async () => {
+        // HACK: sleeps for 50ms to avoid having the previous test interfering
+        await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
         expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
+
     it("Send multiple transactions and mine block", async () => {
         const counterParty = randomAccounts(1)[0];
         expect(await sendGetBalance(counterParty.address)).eq(0);

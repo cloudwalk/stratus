@@ -30,6 +30,8 @@ describe("Transaction: serial transfer", () => {
     var new_account: Account;
 
     it("Resets blockchain", async () => {
+        // HACK: sleeps for 50ms to avoid having the previous test interfering
+        await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
         expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
@@ -126,6 +128,8 @@ describe("EIP-1559: serial transfer", () => {
     var _txSentTimestamp: number;
 
     it("Resets blockchain", async () => {
+        // HACK: sleeps for 50ms to avoid having the previous test interfering
+        await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
         expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);

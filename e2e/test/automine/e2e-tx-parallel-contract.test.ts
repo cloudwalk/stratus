@@ -17,6 +17,8 @@ describe("Transaction: parallel TestContractBalances", async () => {
     let _contract: TestContractBalances;
 
     it("Resets blockchain", async () => {
+        // HACK: sleeps for 50ms to avoid having the previous test interfering
+        await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
         expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
@@ -109,11 +111,11 @@ describe("Transaction: parallel TestContractCounter", async () => {
     let _contract: TestContractCounter;
 
     it("Resets blockchain", async () => {
+        // HACK: sleeps for 50ms to avoid having the previous test interfering
+        await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
-        // // TODO: re-enable this, for some reason it's returning `0x49`
-        // // maybe the Rocks running in multi-threaded mode doesn't guarantee an immediate impact
-        // expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
 
     it("Deploy TestContractCounter", async () => {
