@@ -669,8 +669,7 @@ impl Consensus {
             return true;
         }
 
-        let blockchain_client_lock = self.blockchain_client.lock().await;
-        if blockchain_client_lock.is_none() {
+        if self.blockchain_client.lock().await.is_none() {
             tracing::warn!("blockchain client is not set, cannot serve requests because they cant be forwarded");
             return false;
         }
@@ -762,8 +761,8 @@ impl Consensus {
             };
 
             let receive_log_entry_from_peer = async {
-                let mut receiver_lock = peer.receiver.lock().await;
-                match receiver_lock.recv().await {
+                let message = peer.receiver.lock().await.recv().await;
+                match message {
                     Ok(log_entry) => {
                         log_entry_queue.push(log_entry);
                     }
@@ -796,8 +795,7 @@ impl Consensus {
                     }
                     LogEntryData::TransactionExecutionEntries(transaction_executions) => {
                         tracing::info!("adding transaction executions to queue");
-                        let mut queue = consensus.transaction_execution_queue.lock().await;
-                        queue.extend(transaction_executions.clone());
+                        consensus.transaction_execution_queue.lock().await.extend(transaction_executions.clone());
                         log_entry_queue.remove(0);
                     }
                     LogEntryData::EmptyData => {
