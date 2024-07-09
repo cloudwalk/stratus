@@ -852,13 +852,6 @@ impl Consensus {
             let target_index = self.log_entries_storage.get_last_index().unwrap_or(0) + 1;
             let mut next_index = peer.next_index;
 
-            tracing::info!(
-                "appending entry to peer: current_term: {}, target_index: {}, next_index: {}",
-                current_term,
-                target_index,
-                next_index
-            );
-
             // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1.
             // This exists to handle the case of a follower with an empty log
             if next_index == 0 {
@@ -883,9 +876,9 @@ impl Consensus {
                     }
                 };
 
-                let entry_to_send = if next_index < target_index {
+                let (entry_to_send, entry_term) = if next_index < target_index {
                     match self.log_entries_storage.get_entry(next_index) {
-                        Ok(Some(entry)) => entry.data.clone(),
+                        Ok(Some(entry)) => (entry.data.clone(), entry.term),
                         Ok(None) => {
                             tracing::error!("no log entry found at index {}", next_index);
                             return Err(anyhow!("missing log entry"));
@@ -896,11 +889,20 @@ impl Consensus {
                         }
                     }
                 } else {
-                    entry_data.clone()
+                    (entry_data.clone(), current_term)
                 };
 
+                tracing::info!(
+                    "appending entry to peer: prev_log_term: {}, entry_term: {}, prev_log_index: {}, target_index: {}, next_index: {}",
+                    prev_log_term,
+                    entry_term,
+                    prev_log_index,
+                    target_index,
+                    next_index
+                );
+
                 let response = self
-                    .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, &entry_to_send)
+                    .send_append_entry_request(peer, entry_term, prev_log_index, prev_log_term, &entry_to_send)
                     .await?;
 
                 let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
