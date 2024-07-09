@@ -348,17 +348,17 @@ impl StratusStorage {
                 ?new_block_number,
                 ?last_mined_block_number,
                 gap_size,
-                "new block number isn't expected based on previous one, some might've been skipped or order is broken",
+                "block to save isn't sucessor of the last saved one in permanent storage, were blocks skipped? is order broken?",
             );
         }
 
         // check temporary storage block number, if set
         if let Some(pending_block_number) = self.temp.read_pending_block_number()? {
-            if new_block_number != pending_block_number {
+            if new_block_number.as_i64() != pending_block_number.as_i64() - 1 {
                 tracing::warn!(
                     ?new_block_number,
                     ?pending_block_number,
-                    "new block number doesn't match pending block number in temporary storage",
+                    "block to save isn't predecessor of the pending block number in temporary storage, didn't it increment its number?",
                 );
             }
         }
