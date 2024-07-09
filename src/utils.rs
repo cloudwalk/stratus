@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tokio::time::Instant;
 
-/// Amount of bytes in one GB
+/// Amount of bytes in one GB (technically, GiB).
 pub const GIGABYTE: usize = 1024 * 1024 * 1024;
 
 pub fn calculate_tps_and_bpm(duration: Duration, transaction_count: usize, block_count: usize) -> (f64, f64) {
