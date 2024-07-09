@@ -435,9 +435,7 @@ impl Consensus {
             };
 
             tokio::select! {
-                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
-                    // end
-                }
+                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {},
                 _ = periodic_discover() => {
                     unreachable!("this infinite future doesn't end");
                 },
@@ -763,16 +761,23 @@ impl Consensus {
                 return;
             };
 
-            let mut receiver_lock = peer.receiver.lock().await;
-            match receiver_lock.recv().await {
-                Ok(log_entry) => {
-                    log_entry_queue.push(log_entry);
+            let receive_log_entry_from_peer = async {
+                let mut receiver_lock = peer.receiver.lock().await;
+                match receiver_lock.recv().await {
+                    Ok(log_entry) => {
+                        log_entry_queue.push(log_entry);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Error receiving log entry for peer {:?}: {:?}", peer.client, e);
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!("Error receiving log entry for peer {:?}: {:?}", peer.client, e);
-                }
-            }
-            drop(receiver_lock);
+            };
+
+            tokio::select! {
+                biased;
+                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => return,
+                _ = receive_log_entry_from_peer => {},
+            };
 
             while let Some(log_entry) = log_entry_queue.first() {
                 match log_entry {
