@@ -431,6 +431,7 @@ impl Consensus {
             for (peer, _) in peers.values_mut() {
                 peer.match_index = 0;
                 peer.next_index = next_index;
+                peer.last_sent_index = last_index;
             }
         }
 
@@ -848,7 +849,8 @@ impl Consensus {
             // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1.
             // This exists to handle the case of a follower with an empty log
             if next_index == 0 {
-                next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+                peer.next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+                next_index = peer.next_index;
             }
 
             while next_index < target_index {
@@ -903,10 +905,9 @@ impl Consensus {
                 match StatusCode::try_from(response_status) {
                     Ok(StatusCode::AppendSuccess) => {
                         peer.match_index = response_match_log_index;
-                        peer.next_index = peer.match_index + 1;
+                        peer.next_index = response_match_log_index + 1;
                         tracing::info!(
-                            "successfully appended entry to peer: {:?}, match_index: {}, next_index: {}",
-                            peer.client,
+                            "successfully appended entry to peer: match_index: {}, next_index: {}",
                             peer.match_index,
                             peer.next_index
                         );
