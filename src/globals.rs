@@ -107,7 +107,14 @@ impl GlobalState {
     }
 
     /// Awaits until a shutdown is received.
-    pub async fn until_shutdown() {
+    #[allow(dead_code)]
+    async fn wait_shutdown() {
         CANCELLATION.cancelled().await;
+    }
+
+    /// Waits until a shutdown is signalled. Emits an warning with the task name when it is.
+    pub async fn wait_shutdown_and_warn(task_name: &str) {
+        CANCELLATION.cancelled().await;
+        warn_task_cancellation(task_name);
     }
 }
