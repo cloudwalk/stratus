@@ -274,7 +274,7 @@ run_test() {
         exit 1
     fi
 
-    sleep 15 # wait for log to be appended
+    sleep 40 # wait for log to be appended
 
     if [ "$enable_leader_restart" = true ]; then
         # Kill the leader instance
