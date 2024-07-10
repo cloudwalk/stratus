@@ -299,7 +299,10 @@ impl Consensus {
                     },
                     _ = consensus.reset_heartbeat_signal.notified() => {
                         // Timer reset upon receiving AppendEntries
-                        tracing::info!("resetting election timer due to AppendEntries");
+                        match consensus.leader_address().await {
+                            Ok(leader_address) => tracing::info!(leader_address = %leader_address, "resetting election timer due to AppendEntries"),
+                            Err(e) => tracing::warn!(error = %e, "resetting election timer due to AppendEntries, but leader not found"), // this should not happen, but if it does it's because the leader changed in the middle of an append entry
+                        }
                     },
                 }
             }
