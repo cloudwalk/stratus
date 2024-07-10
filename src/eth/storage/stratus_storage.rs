@@ -342,14 +342,10 @@ impl StratusStorage {
         let last_mined_block_number = self.perm.read_mined_block_number()?;
 
         // check permanent storage block number
-        if new_block_number != last_mined_block_number + 1 {
+        if new_block_number > BlockNumber::ZERO && new_block_number != last_mined_block_number + 1 {
             let gap_size = new_block_number.as_i64() - last_mined_block_number.as_i64();
-            tracing::warn!(
-                ?new_block_number,
-                ?last_mined_block_number,
-                gap_size,
-                "block to save isn't sucessor of the last saved one in permanent storage, were blocks skipped? is order broken?",
-            );
+            tracing::error!(?new_block_number, ?last_mined_block_number, gap_size);
+            return Err(anyhow!("block to save is not on the correct order"));
         }
 
         // check temporary storage block number, if set
