@@ -26,6 +26,10 @@ use crate::eth::storage::StratusStorage;
 
 static GLOBAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+pub fn zero_global_counter() {
+    GLOBAL_COUNTER.store(0, Ordering::SeqCst);
+}
+
 pub fn create_mock_block_entry(transaction_hashes: Vec<Vec<u8>>, deterministic_transaction_root: Option<Hash>) -> BlockEntry {
     let transactions_root = match deterministic_transaction_root {
         Some(hash) => hash.as_fixed_bytes().to_vec(),
@@ -173,12 +177,14 @@ pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Con
     let mut peers = consensus.peers.write().await;
     peers.insert(leader_address, (leader_peer, tokio::spawn(async {})));
 
+    zero_global_counter();
     Arc::clone(&consensus)
 }
 
 pub async fn create_leader_consensus() -> Arc<Consensus> {
     let consensus = create_mock_consensus().await;
     consensus.set_role(Role::Leader);
+    zero_global_counter();
     consensus
 }
 
