@@ -7,6 +7,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+#[warn(unused_imports)]
+use anyhow::anyhow;
 use ethereum_types::U256;
 use futures::join;
 use itertools::Itertools;
@@ -574,7 +576,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_estimateGas with failure");
-            Err(RpcError::TransactionReverted { output: result.output })
+            Err(rpc_internal_error(hex_data(result.output)).into())
         }
 
         // internal error

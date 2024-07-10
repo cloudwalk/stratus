@@ -58,6 +58,7 @@ cleanup() {
   done
   rm instance_30* || true
   rm entries_30* || true
+  rm checksums.txt || true
   find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf
   echo "Job is done."
 }
