@@ -44,7 +44,6 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_internal_error;
-use crate::eth::rpc::rpc_params_error;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
@@ -248,22 +247,22 @@ fn stratus_startup(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Res
     Ok(json!(true))
 }
 
-async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
     let should_serve = context.consensus.should_serve().await;
     if not(should_serve) {
         tracing::warn!("readiness check failed because consensus is not ready");
         metrics::set_consensus_is_ready(0_u64);
-        return Err(rpc_internal_error("Service Not Ready".to_string()).into());
+        return Err(RpcError::StratusNotReady);
     }
 
     metrics::set_consensus_is_ready(1_u64);
     Ok(json!(true))
 }
 
-fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
+fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
-        return Err(rpc_internal_error("Service Unhealthy".to_string()).into());
+        return Err(RpcError::StratusShutdown);
     }
 
     Ok(json!(true))
@@ -680,7 +679,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
 // Logs
 // -----------------------------------------------------------------------------
 
-fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
     const MAX_BLOCK_RANGE: u64 = 5_000;
 
     // enter span
@@ -716,11 +715,10 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> an
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
-        return Err(rpc_params_error(format!(
-            "filter range will fetch logs from {} blocks, but the max allowed is {}",
-            blocks_in_range, MAX_BLOCK_RANGE
-        ))
-        .into());
+        return Err(RpcError::BlockRangeInvalid {
+            actual: blocks_in_range,
+            max: MAX_BLOCK_RANGE,
+        });
     }
 
     // execute
@@ -817,7 +815,14 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     // parse params
     ctx.reject_unknown_client(ext.rpc_client())?;
     let client = ext.rpc_client();
-    let (params, event) = next_rpc_param::<String>(params.sequence())?;
+    let (params, event) = match next_rpc_param::<String>(params.sequence()) {
+        Ok((params, event)) => (params, event),
+        Err(e) => {
+            drop(_method_enter);
+            pending.reject(e).instrument(method_span).await;
+            return Ok(());
+        }
+    };
 
     // track
     Span::with(|s| s.rec_str("subscription", &event));
@@ -843,11 +848,10 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         }
 
         // unsupported
-        kind => {
-            tracing::warn!(%kind, "unsupported subscription event");
+        event => {
             drop(_method_enter);
             pending
-                .reject(rpc_params_error(format!("unsupported subscription event: {}", kind)))
+                .reject(RpcError::SubscriptionUnknown { event: event.to_string() })
                 .instrument(method_span)
                 .await;
         }
