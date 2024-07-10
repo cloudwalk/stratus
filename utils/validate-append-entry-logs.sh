@@ -52,9 +52,8 @@ compare_logs() {
   echo "Common entries up to index: $common_index"
 
   local different_entries=$((max_entries - common_index - 1))
-  local difference_percentage=$((invalid_entries * 100 / max_entries))
+  local difference_percentage=$((different_entries * 100 / max_entries))
 
-  echo "Different entries: $different_entries out of $max_entries"
   echo "Difference percentage: $difference_percentage%"
 
   if (( difference_percentage > 5 )); then
