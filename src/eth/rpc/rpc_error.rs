@@ -1,9 +1,13 @@
+use jsonrpsee::types::error::CALL_EXECUTION_FAILED_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
-use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
+use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 use jsonrpsee::types::error::INVALID_REQUEST_CODE;
-use jsonrpsee::types::error::INVALID_REQUEST_MSG;
+use jsonrpsee::types::error::SERVER_IS_BUSY_CODE;
 use jsonrpsee::types::ErrorObject;
 use jsonrpsee::types::ErrorObjectOwned;
+
+use crate::eth::primitives::Bytes;
+use crate::ext::JsonValue;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RpcError {
@@ -16,14 +20,11 @@ pub enum RpcError {
     #[error("Expected {rust_type} parameter, but received nothing.")]
     ParameterMissing { rust_type: &'static str },
 
-    #[error("Failed to decode {rust_type} parameter: {decode_error}.")]
+    #[error("Failed to decode {rust_type} parameter.")]
     ParameterInvalid { rust_type: &'static str, decode_error: String },
 
     #[error("Unknown subscription event: {event}")]
     SubscriptionUnknown { event: String },
-
-    #[error("Failed to decode transaction data from RLP payload: {decode_error}.")]
-    TransactionInvalid { decode_error: String },
 
     #[error("Stratus is not ready to start servicing requests.")]
     StratusNotReady,
@@ -31,8 +32,14 @@ pub enum RpcError {
     #[error("Stratus is shutting down.")]
     StratusShutdown,
 
+    #[error("Failed to decode transaction RLP data.")]
+    TransactionInvalidRlp { decode_error: String },
+
+    #[error("Transaction reverted during execution.")]
+    TransactionReverted { output: Bytes },
+
     /// Deprecated. Generic error executing RPC method.
-    #[error("RPC error: {0}")]
+    #[error("Unexpected error")]
     Generic(anyhow::Error),
 
     /// Deprecated. Custom RPC error response.
@@ -41,21 +48,67 @@ pub enum RpcError {
 }
 
 impl RpcError {
-    /// Decides the error code and message to be used according to the error type.
-    pub fn response_code(&self) -> (i32, &str) {
+    /// Error code to be used in the JSON-RPC response.
+    pub fn code(&self) -> i32 {
         match self {
-            RpcError::BlockRangeInvalid { .. } => (INVALID_REQUEST_CODE, INVALID_REQUEST_MSG),
-            RpcError::ClientMissing => (INVALID_REQUEST_CODE, INVALID_REQUEST_MSG),
-            RpcError::ParameterInvalid { .. } => (INVALID_REQUEST_CODE, INVALID_REQUEST_MSG),
-            RpcError::ParameterMissing { .. } => (INVALID_REQUEST_CODE, INVALID_REQUEST_MSG),
-            RpcError::SubscriptionUnknown { .. } => (INVALID_REQUEST_CODE, INVALID_REQUEST_MSG),
-            RpcError::TransactionInvalid { .. } => (INVALID_REQUEST_CODE, INVALID_REQUEST_MSG),
-            // TODO: use another code for status endpoints instead of internal error
-            RpcError::StratusNotReady => (INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG),
-            RpcError::StratusShutdown => (INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG),
-            // TODO: remove these variants
-            RpcError::Generic(_) => (INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG),
-            RpcError::Response(resp) => (resp.code(), resp.message()),
+            // -----------------------------------------------------------------
+            // Request
+            // -----------------------------------------------------------------
+            RpcError::ClientMissing => INVALID_REQUEST_CODE,
+
+            // -----------------------------------------------------------------
+            // Params
+            // -----------------------------------------------------------------
+            RpcError::BlockRangeInvalid { .. } => INVALID_PARAMS_CODE,
+            RpcError::ParameterInvalid { .. } => INVALID_PARAMS_CODE,
+            RpcError::ParameterMissing { .. } => INVALID_PARAMS_CODE,
+            RpcError::SubscriptionUnknown { .. } => INVALID_PARAMS_CODE,
+            RpcError::TransactionInvalidRlp { .. } => INVALID_PARAMS_CODE,
+
+            // -----------------------------------------------------------------
+            // Execution
+            // -----------------------------------------------------------------
+            RpcError::TransactionReverted { .. } => CALL_EXECUTION_FAILED_CODE,
+
+            // -----------------------------------------------------------------
+            // Stratus
+            // -----------------------------------------------------------------
+            RpcError::StratusNotReady => SERVER_IS_BUSY_CODE,
+            RpcError::StratusShutdown => SERVER_IS_BUSY_CODE,
+
+            // -----------------------------------------------------------------
+            // Deprecated
+            // -----------------------------------------------------------------
+            RpcError::Generic(_) => INTERNAL_ERROR_CODE,
+            RpcError::Response(resp) => resp.code(),
+        }
+    }
+
+    /// Error message to be used in the JSON-RPC response.
+    pub fn message(&self) -> String {
+        match self {
+            RpcError::Response(resp) => resp.message().to_string(),
+            e => e.to_string(),
+        }
+    }
+
+    /// Error additional data to be used in the JSON-RPC response.
+    pub fn data(&self) -> JsonValue {
+        match self {
+            RpcError::ParameterInvalid { decode_error, .. } => JsonValue::String(decode_error.to_string()),
+            RpcError::TransactionInvalidRlp { decode_error } => JsonValue::String(decode_error.to_string()),
+            RpcError::TransactionReverted { output } => JsonValue::String(const_hex::encode_prefixed(output)),
+
+            // -----------------------------------------------------------------
+            // Deprecated
+            // -----------------------------------------------------------------
+            RpcError::Generic(error) => JsonValue::String(error.to_string()),
+            RpcError::Response(resp) => JsonValue::String(resp.data().map(|v| v.to_string()).unwrap_or_default()),
+
+            // -----------------------------------------------------------------
+            // No data
+            // -----------------------------------------------------------------
+            _ => JsonValue::Null,
         }
     }
 }
@@ -89,15 +142,11 @@ impl From<RpcError> for ErrorObjectOwned {
         // convert
         let response = match value {
             RpcError::Response(resp) => resp,
-            ref e => {
-                let (code, message) = e.response_code();
-                let data = e.to_string();
-                Self::owned(code, message, Some(data))
-            }
+            ref e => Self::owned(e.code(), e.message(), Some(e.data())),
         };
 
         // log
-        if response.code() == INVALID_REQUEST_CODE {
+        if [INVALID_REQUEST_CODE, INVALID_PARAMS_CODE].contains(&response.code()) {
             tracing::warn!(?response, "invalid client request");
         }
         if response.code() == INTERNAL_ERROR_CODE {
