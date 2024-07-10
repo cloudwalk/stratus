@@ -44,7 +44,9 @@ use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
 use append_entry::AppendBlockCommitRequest;
+use append_entry::AppendBlockCommitResponse;
 use append_entry::AppendTransactionExecutionsRequest;
+use append_entry::AppendTransactionExecutionsResponse;
 use append_entry::RequestVoteRequest;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
@@ -142,13 +144,24 @@ type ClientType = MockAppendEntryServiceClient;
 struct Peer {
     client: ClientType,
     match_index: u64,
-    #[allow(dead_code)]
     next_index: u64,
     role: Role,
     receiver: Arc<Mutex<broadcast::Receiver<LogEntryData>>>,
 }
 
 type PeerTuple = (Peer, JoinHandle<()>);
+
+#[derive(Debug)]
+enum AppendRequest {
+    BlockCommitRequest(tonic::Request<AppendBlockCommitRequest>),
+    TransactionExecutionsRequest(tonic::Request<AppendTransactionExecutionsRequest>),
+}
+
+#[derive(Debug)]
+enum AppendResponse {
+    BlockCommitResponse(tonic::Response<AppendBlockCommitResponse>),
+    TransactionExecutionsResponse(tonic::Response<AppendTransactionExecutionsResponse>),
+}
 
 pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
@@ -258,7 +271,8 @@ impl Consensus {
     /// When there are healthy peers we need to wait for the grace period of discovery
     /// to avoid starting an election too soon (due to the leader not being discovered yet)
     fn initialize_heartbeat_timer(consensus: Arc<Consensus>) {
-        spawn_named("consensus::heartbeat_timer", async move {
+        const TASK_NAME: &str = "consensus::heartbeat_timer";
+        spawn_named(TASK_NAME, async move {
             discovery::discover_peers(Arc::clone(&consensus)).await;
             if consensus.peers.read().await.is_empty() {
                 tracing::info!("no peers, starting hearbeat timer immediately");
@@ -271,6 +285,9 @@ impl Consensus {
             let timeout = consensus.heartbeat_timeout;
             loop {
                 tokio::select! {
+                    _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
+                        return;
+                    },
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
                         if !consensus.is_leader() {
                             tracing::info!("starting election due to heartbeat timeout");
@@ -282,7 +299,10 @@ impl Consensus {
                     },
                     _ = consensus.reset_heartbeat_signal.notified() => {
                         // Timer reset upon receiving AppendEntries
-                        tracing::info!("resetting election timer due to AppendEntries");
+                        match consensus.leader_address().await {
+                            Ok(leader_address) => tracing::info!(leader_address = %leader_address, "resetting election timer due to AppendEntries"),
+                            Err(e) => tracing::warn!(error = %e, "resetting election timer due to AppendEntries, but leader not found"), // this should not happen, but if it does it's because the leader changed in the middle of an append entry
+                        }
                     },
                 }
             }
@@ -396,11 +416,24 @@ impl Consensus {
             *blockchain_client_lock = None; // clear the blockchain client for safety reasons when not running on importer-online mode
         }
 
-        // When a node becomes a leader, it should reset the match_index for all peers
+        let last_index: u64;
+        #[cfg(feature = "rocks")]
+        {
+            last_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+        }
+        #[cfg(not(feature = "rocks"))]
+        {
+            last_index = 0;
+        }
+
+        let next_index = last_index + 1;
+        // When a node becomes a leader, it should reset the match_index for all peers.
+        // Also, the next_index should be set to the last index + 1.
         {
             let mut peers = self.peers.write().await;
             for (peer, _) in peers.values_mut() {
                 peer.match_index = 0;
+                peer.next_index = next_index;
             }
         }
 
@@ -422,13 +455,23 @@ impl Consensus {
     }
 
     fn initialize_periodic_peer_discovery(consensus: Arc<Consensus>) {
-        spawn_named("consensus::peer_discovery", async move {
+        const TASK_NAME: &str = "consensus::peer_discovery";
+        spawn_named(TASK_NAME, async move {
             let mut interval = tokio::time::interval(PEER_DISCOVERY_DELAY);
-            loop {
-                tracing::info!("starting periodic peer discovery");
-                discovery::discover_peers(Arc::clone(&consensus)).await;
-                interval.tick().await;
-            }
+
+            let periodic_discover = || async move {
+                loop {
+                    discovery::discover_peers(Arc::clone(&consensus)).await;
+                    interval.tick().await;
+                }
+            };
+
+            tokio::select! {
+                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {},
+                _ = periodic_discover() => {
+                    unreachable!("this infinite future doesn't end");
+                },
+            };
         });
     }
 
@@ -439,9 +482,15 @@ impl Consensus {
         // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
         // TODO: maybe check if I'm currently the leader?
 
-        spawn_named("consensus::transaction_execution_queue", async move {
+        const TASK_NAME: &str = "consensus::transaction_execution_queue";
+
+        spawn_named(TASK_NAME, async move {
             let interval = Duration::from_millis(40);
             loop {
+                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                    return;
+                };
+
                 tokio::time::sleep(interval).await;
 
                 if consensus.is_leader() {
@@ -494,9 +543,13 @@ impl Consensus {
         mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
         mut rx_blocks: broadcast::Receiver<Block>,
     ) {
-        spawn_named("consensus::block_and_executions_sender", async move {
+        const TASK_NAME: &str = "consensus::block_and_executions_sender";
+        spawn_named(TASK_NAME, async move {
             loop {
                 tokio::select! {
+                    _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
+                        return;
+                    },
                     Ok(tx) = rx_pending_txs.recv() => {
                         tracing::debug!("Attempting to receive transaction execution");
                         if consensus.is_leader() {
@@ -512,7 +565,7 @@ impl Consensus {
                                 tracing::error!("failed to broadcast transaction");
                             }
                         }
-                    }
+                    },
                     Ok(block) = rx_blocks.recv() => {
                         if consensus.is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
@@ -556,17 +609,18 @@ impl Consensus {
                                 }
                             }
                         }
-                    }
+                    },
                     else => {
                         tokio::task::yield_now().await;
-                    }
+                    },
                 }
             }
         });
     }
 
     fn initialize_server(consensus: Arc<Consensus>) {
-        spawn_named("consensus::server", async move {
+        const TASK_NAME: &str = "consensus::server";
+        spawn_named(TASK_NAME, async move {
             tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
             let addr = consensus.grpc_address;
 
@@ -574,9 +628,11 @@ impl Consensus {
                 consensus: Mutex::new(consensus),
             };
 
+            let shutdown = GlobalState::wait_shutdown_and_warn(TASK_NAME);
+
             let server = Server::builder()
                 .add_service(AppendEntryServiceServer::new(append_entry_service))
-                .serve(addr)
+                .serve_with_shutdown(addr, shutdown)
                 .await;
 
             if let Err(e) = server {
@@ -645,8 +701,7 @@ impl Consensus {
             return true;
         }
 
-        let blockchain_client_lock = self.blockchain_client.lock().await;
-        if blockchain_client_lock.is_none() {
+        if self.blockchain_client.lock().await.is_none() {
             tracing::warn!("blockchain client is not set, cannot serve requests because they cant be forwarded");
             return false;
         }
@@ -729,23 +784,40 @@ impl Consensus {
 
     /// Handles the propagation of log entries to peers in the consensus network.
     async fn handle_peer_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
+        const TASK_NAME: &str = "consensus::propagate";
+
         let mut log_entry_queue: Vec<LogEntryData> = Vec::new();
         loop {
-            let mut receiver_lock = peer.receiver.lock().await;
-            match receiver_lock.recv().await {
-                Ok(log_entry) => {
-                    log_entry_queue.push(log_entry);
+            if GlobalState::warn_if_shutdown(TASK_NAME) {
+                return;
+            };
+
+            let receive_log_entry_from_peer = async {
+                let message = peer.receiver.lock().await.recv().await;
+                match message {
+                    Ok(log_entry) => {
+                        log_entry_queue.push(log_entry);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Error receiving log entry for peer {:?}: {:?}", peer.client, e);
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!("Error receiving log entry for peer {:?}: {:?}", peer.client, e);
-                }
-            }
-            drop(receiver_lock);
+            };
+
+            tokio::select! {
+                biased;
+                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => return,
+                _ = receive_log_entry_from_peer => {},
+            };
 
             while let Some(log_entry) = log_entry_queue.first() {
                 match log_entry {
                     LogEntryData::BlockEntry(_block) => {
-                        tracing::info!("sending block to peer: {:?}", peer.client);
+                        tracing::info!(
+                            "sending block to peer: peer.match_index: {:?}, peer.next_index: {:?}",
+                            peer.match_index,
+                            peer.next_index
+                        );
                         match consensus.append_entry_to_peer(&mut peer, log_entry).await {
                             Ok(_) => {
                                 log_entry_queue.remove(0);
@@ -759,8 +831,7 @@ impl Consensus {
                     }
                     LogEntryData::TransactionExecutionEntries(transaction_executions) => {
                         tracing::info!("adding transaction executions to queue");
-                        let mut queue = consensus.transaction_execution_queue.lock().await;
-                        queue.extend(transaction_executions.clone());
+                        consensus.transaction_execution_queue.lock().await.extend(transaction_executions.clone());
                         log_entry_queue.remove(0);
                     }
                     LogEntryData::EmptyData => {
@@ -773,104 +844,169 @@ impl Consensus {
     }
 
     async fn append_entry_to_peer(&self, peer: &mut Peer, entry_data: &LogEntryData) -> Result<(), anyhow::Error> {
-        if self.is_leader() {
-            #[cfg(feature = "metrics")]
-            let start = metrics::now();
+        #[cfg(feature = "rocks")]
+        {
+            if !self.is_leader() {
+                tracing::error!("append_entry_to_peer called on non-leader node");
+                return Err(anyhow!("append_entry_to_peer called on non-leader node"));
+            }
 
             let current_term = self.current_term.load(Ordering::SeqCst);
+            let target_index = self.log_entries_storage.get_last_index().unwrap_or(0) + 1;
+            let mut next_index = peer.next_index;
 
-            let prev_log_index: u64;
-            let prev_log_term: u64;
-
-            #[cfg(feature = "rocks")]
-            {
-                prev_log_index = self.log_entries_storage.get_last_index().unwrap_or(0);
-                prev_log_term = self.log_entries_storage.get_last_term().unwrap_or(0);
+            // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1.
+            // This exists to handle the case of a follower with an empty log
+            if next_index == 0 {
+                next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
             }
 
-            #[cfg(not(feature = "rocks"))]
-            {
-                prev_log_index = 0;
-                prev_log_term = 0;
-            }
-
-            match &entry_data {
-                LogEntryData::BlockEntry(block_entry) => {
-                    let request = Request::new(AppendBlockCommitRequest {
-                        term: current_term,
-                        prev_log_index,
-                        prev_log_term,
-                        block_entry: Some(block_entry.clone()),
-                        leader_id: self.my_address.to_string(),
-                    });
-
-                    tracing::debug!(
-                        "append_block_commit request sent. block_number: {}, term: {}, prev_log_index: {}, prev_log_term: {}",
-                        block_entry.number,
-                        current_term,
-                        prev_log_index,
-                        prev_log_term,
-                    );
-
-                    let response = peer.client.append_block_commit(request).await?;
-                    let response = response.into_inner();
-
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_consensus_append_block_to_peer(start.elapsed());
-
-                    match StatusCode::try_from(response.status) {
-                        Ok(StatusCode::AppendSuccess) => {
-                            peer.match_index = response.match_log_index;
-                            tracing::info!("successfully appended block to peer: {:?}, match_index: {}", peer.client, peer.match_index);
-                            Ok(())
+            while next_index < target_index {
+                let prev_log_index = next_index.saturating_sub(1);
+                let prev_log_term = if prev_log_index == 0 {
+                    0
+                } else {
+                    match self.log_entries_storage.get_entry(prev_log_index) {
+                        Ok(Some(entry)) => entry.term,
+                        Ok(None) => {
+                            tracing::warn!("no log entry found at index {}", prev_log_index);
+                            0
                         }
-                        _ => {
-                            tracing::error!("failed to append block due to unexpected status code: {:?}", response);
-                            Err(anyhow!("failed to append block due to unexpected status code: {:?}", response))
+                        Err(e) => {
+                            tracing::error!("error getting log entry at index {}: {:?}", prev_log_index, e);
+                            return Err(anyhow!("error getting log entry"));
                         }
                     }
-                }
-                LogEntryData::TransactionExecutionEntries(executions) => {
-                    let request = Request::new(AppendTransactionExecutionsRequest {
-                        term: current_term,
-                        prev_log_index,
-                        prev_log_term,
-                        executions: executions.clone(),
-                        leader_id: self.my_address.to_string(),
-                    });
+                };
 
-                    tracing::debug!(
-                        "append_transaction_execution request sent. term: {}, prev_log_index: {}, prev_log_term: {}",
-                        current_term,
-                        prev_log_index,
-                        prev_log_term,
-                    );
-
-                    let response = peer.client.append_transaction_executions(request).await?;
-                    let response = response.into_inner();
-
-                    match StatusCode::try_from(response.status) {
-                        Ok(StatusCode::AppendSuccess) => {
-                            peer.match_index = response.match_log_index;
-                            tracing::info!(
-                                "successfully appended transaction executions to peer: {:?}, match_index: {}",
-                                peer.client,
-                                peer.match_index
-                            );
-                            Ok(())
+                let entry_to_send = if next_index < target_index {
+                    match self.log_entries_storage.get_entry(next_index) {
+                        Ok(Some(entry)) => entry.data.clone(),
+                        Ok(None) => {
+                            tracing::error!("no log entry found at index {}", next_index);
+                            return Err(anyhow!("missing log entry"));
                         }
-                        _ => {
-                            tracing::error!("failed to append transaction execution due to unexpected status code: {:?}", response);
-                            Err(anyhow!("failed to append transaction execution due to unexpected status code: {:?}", response))
+                        Err(e) => {
+                            tracing::error!("error getting log entry at index {}: {:?}", next_index, e);
+                            return Err(anyhow!("error getting log entry"));
                         }
                     }
+                } else {
+                    entry_data.clone()
+                };
+
+                tracing::info!(
+                    "appending entry to peer: current_term: {}, prev_log_term: {}, prev_log_index: {}, target_index: {}, next_index: {}",
+                    current_term,
+                    prev_log_term,
+                    prev_log_index,
+                    target_index,
+                    next_index
+                );
+
+                let response = self
+                    .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, &entry_to_send)
+                    .await?;
+
+                let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
+                    AppendResponse::BlockCommitResponse(res) => {
+                        let inner: AppendBlockCommitResponse = res.into_inner();
+                        (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
+                    }
+                    AppendResponse::TransactionExecutionsResponse(res) => {
+                        let inner: AppendTransactionExecutionsResponse = res.into_inner();
+                        (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
+                    }
+                };
+
+                match StatusCode::try_from(response_status) {
+                    Ok(StatusCode::AppendSuccess) => {
+                        peer.match_index = response_match_log_index;
+                        peer.next_index = response_match_log_index + 1;
+                        tracing::info!(
+                            "successfully appended entry to peer: match_index: {}, next_index: {}",
+                            peer.match_index,
+                            peer.next_index
+                        );
+                        next_index += 1;
+                    }
+                    Ok(StatusCode::LogMismatch | StatusCode::TermMismatch) => {
+                        tracing::warn!(
+                            "failed to append entry due to log mismatch or term mismatch. Peer last log index: {}",
+                            response_last_log_index
+                        );
+                        next_index = response_last_log_index + 1;
+                    }
+                    _ => {
+                        tracing::error!("failed to append entry due to unexpected status code");
+                        return Err(anyhow!("failed to append entry due to unexpected status code"));
+                    }
                 }
-                LogEntryData::EmptyData => Ok(()),
             }
-        } else {
-            tracing::error!("append_entry_to_peer called on non-leader node");
-            Err(anyhow!("append_entry_to_peer called on non-leader node"))
+            Ok(())
         }
+        #[cfg(not(feature = "rocks"))]
+        {
+            Ok(())
+        }
+    }
+
+    async fn send_append_entry_request(
+        &self,
+        peer: &mut Peer,
+        current_term: u64,
+        prev_log_index: u64,
+        prev_log_term: u64,
+        entry_data: &LogEntryData,
+    ) -> Result<AppendResponse, anyhow::Error> {
+        let request = match entry_data {
+            LogEntryData::BlockEntry(block_entry) => AppendRequest::BlockCommitRequest(Request::new(AppendBlockCommitRequest {
+                term: current_term,
+                prev_log_index,
+                prev_log_term,
+                block_entry: Some(block_entry.clone()),
+                leader_id: self.my_address.to_string(),
+            })),
+            LogEntryData::TransactionExecutionEntries(executions) =>
+                AppendRequest::TransactionExecutionsRequest(Request::new(AppendTransactionExecutionsRequest {
+                    term: current_term,
+                    prev_log_index,
+                    prev_log_term,
+                    executions: executions.clone(),
+                    leader_id: self.my_address.to_string(),
+                })),
+            LogEntryData::EmptyData => AppendRequest::TransactionExecutionsRequest(Request::new(AppendTransactionExecutionsRequest {
+                term: current_term,
+                prev_log_index,
+                prev_log_term,
+                executions: Vec::<TransactionExecutionEntry>::new(),
+                leader_id: self.my_address.to_string(),
+            })),
+        };
+
+        tracing::info!(
+            "sending append request. term: {}, prev_log_index: {}, prev_log_term: {}",
+            current_term,
+            prev_log_index,
+            prev_log_term,
+        );
+
+        let response = match request {
+            AppendRequest::BlockCommitRequest(request) => peer
+                .client
+                .append_block_commit(request)
+                .await
+                .map(AppendResponse::BlockCommitResponse)
+                .map_err(|e| anyhow::anyhow!("failed to append block commit: {}", e)),
+            AppendRequest::TransactionExecutionsRequest(request) => peer
+                .client
+                .append_transaction_executions(request)
+                .await
+                .map(AppendResponse::TransactionExecutionsResponse)
+                .map_err(|e| anyhow::anyhow!("failed to append transaction executions: {}", e)),
+        }?;
+
+        Ok(response)
     }
 }
 

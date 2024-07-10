@@ -159,7 +159,7 @@ mod tests {
             .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.inner_value()))
             .collect_vec();
         for pair in v {
-            println!("{:?}", pair);
+            format!("{:?}", pair);
         }
     }
 }

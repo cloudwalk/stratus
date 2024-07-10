@@ -264,7 +264,7 @@ impl Executor {
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         if receipt.is_failure() {
-            let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Mined)?;
+            let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Pending)?;
             let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block)?;
             let evm_result = EvmExecutionResult {
                 execution,

@@ -13,12 +13,13 @@ use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::Span;
 
 use super::transaction_dag::TransactionDag;
+use super::SIGNATURES;
+use super::UNRESIGNABLE_FUNCTIONS;
 use crate::config::ExternalRelayerClientConfig;
 use crate::config::ExternalRelayerServerConfig;
 use crate::eth::primitives::Address;
@@ -44,26 +45,6 @@ use crate::infra::BlockchainClient;
 use crate::log_and_err;
 
 type MismatchedBlocks = HashSet<BlockNumber>;
-
-lazy_static! {
-    static ref SIGNATURES: HashSet<&'static str> = [
-        "PixCashier",
-        "PixCashierv3",
-        "CardPaymentProcessor",
-        "CardPaymentProcessorv2",
-        "CompoundAgent",
-        // "BRLCToken::freeze(address,uint256)",
-        // "BRLCToken::transferFrozen(address,address,uint256)",
-        // "BRLCToken::restrictionIncrease(address,bytes32,uint256)",
-        // "BRLCToken::restrictionDecrease(address,bytes32,uint256)",
-        // "BRLCToken::blocklist(address)",
-        // "BRLCToken::unBlocklist(address)",
-        // "BRLCToken::blacklist(address)",
-        // "BRLCToken::unBlacklist(address)",
-    ]
-    .into_iter()
-    .collect();
-}
 
 #[derive(Debug, thiserror::Error, derive_new::new)]
 pub enum RelayError {
@@ -99,7 +80,7 @@ impl TxSigner {
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
         tracing::info!(?tx_input.hash, "signing transaction");
-        let gas_limit = tx_input.gas_limit.as_u64() * 10;
+        let gas_limit = 9_999_999u32;
         let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
             .nonce(self.nonce)
             .gas(gas_limit);
@@ -199,11 +180,15 @@ impl ExternalRelayer {
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
         let mut combined_transactions = vec![];
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
-            if tx
-                .input
-                .extract_function()
-                .is_some_and(|sig| SIGNATURES.contains(sig.as_ref()) || sig.split("::").next().is_some_and(|scope| SIGNATURES.contains(scope)))
-            {
+            let should_resign = {
+                tx.input.extract_function().is_some_and(|sig| {
+                    let scope_split = sig.split_once("::");
+                    let function_split = sig.split_once('(');
+                    (SIGNATURES.contains(sig.as_ref()) || scope_split.is_some_and(|(scope, _)| SIGNATURES.contains(scope)))
+                        && !function_split.is_some_and(|(function, _)| UNRESIGNABLE_FUNCTIONS.contains(function))
+                })
+            };
+            if should_resign {
                 let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
                 if let Some(transaction) = transaction_signed {
                     tx.input = transaction;
@@ -648,7 +633,7 @@ impl ExternalRelayer {
         tracing::debug!("relaying transactions");
         let mut results = vec![];
         let futures = dag.split_components().into_iter().map(|dag| self.relay_component(dag));
-        let mut stream = futures::stream::iter(futures).buffered(30);
+        let mut stream = futures::stream::iter(futures).buffered(60);
         while let Some(result) = stream.next().await {
             match result {
                 Ok(res) => results.push(res),

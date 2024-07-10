@@ -1,12 +1,7 @@
 //! Helper functions for parsing RPC requests and responses.
 
-use anyhow::anyhow;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
-use jsonrpsee::types::error::INVALID_PARAMS_CODE;
-use jsonrpsee::types::error::INVALID_PARAMS_MSG;
-use jsonrpsee::types::error::INVALID_REQUEST_CODE;
-use jsonrpsee::types::error::INVALID_REQUEST_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::ParamsSequence;
 use jsonrpsee::Extensions;
@@ -14,6 +9,8 @@ use rlp::Decodable;
 use tracing::Span;
 
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
+use crate::eth::rpc::RpcError;
+use crate::ext::type_basename;
 
 /// Extensions for jsonrpsee Extensions.
 pub trait RpcExtensionsExt {
@@ -35,47 +32,40 @@ impl RpcExtensionsExt for Extensions {
 }
 
 /// Extracts the next RPC parameter. Fails if parameter not present.
-pub fn next_rpc_param<'a, T: serde::Deserialize<'a>>(mut params: ParamsSequence<'a>) -> anyhow::Result<(ParamsSequence, T)> {
-    match params.next::<T>() {
-        Ok(value) => Ok((params, value)),
-        Err(e) => {
-            tracing::warn!(reason = ?e, kind = std::any::type_name::<T>(), "failed to parse rpc param");
-            Err(e.into())
-        }
+pub fn next_rpc_param<'a, T>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), RpcError>
+where
+    T: serde::Deserialize<'a>,
+{
+    match params.optional_next::<T>() {
+        Ok(Some(value)) => Ok((params, value)),
+        Ok(None) => Err(RpcError::ParameterMissing {
+            rust_type: type_basename::<T>(),
+        }),
+        Err(e) => Err(RpcError::ParameterInvalid {
+            rust_type: type_basename::<T>(),
+            decode_error: e.data().map(|x| x.to_string()).unwrap_or_default(),
+        }),
     }
 }
 
 /// Extract the next RPC parameter. Assumes default value if not present.
-pub fn next_rpc_param_or_default<'a, T: serde::Deserialize<'a> + Default>(mut params: ParamsSequence<'a>) -> anyhow::Result<(ParamsSequence, T)> {
-    match params.optional_next::<T>() {
-        Ok(Some(value)) => Ok((params, value)),
-        Ok(None) => Ok((params, T::default())),
-        Err(e) => {
-            tracing::warn!(reason = ?e, kind = std::any::type_name::<T>(), "failed to parse rpc param");
-            Err(e.into())
-        }
+pub fn next_rpc_param_or_default<'a, T>(params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), RpcError>
+where
+    T: serde::Deserialize<'a> + Default,
+{
+    match next_rpc_param(params) {
+        Ok((params, value)) => Ok((params, value)),
+        Err(RpcError::ParameterMissing { .. }) => Ok((params, T::default())),
+        Err(e) => Err(e),
     }
 }
 
 /// Decode an RPC parameter encoded in RLP.
-pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> anyhow::Result<T> {
+pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, RpcError> {
     match rlp::decode::<T>(value) {
         Ok(trx) => Ok(trx),
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to decode rlp data");
-            Err(anyhow!("Parse error {:?}", Some(value)))
-        }
+        Err(e) => Err(RpcError::TransactionInvalidRlp { decode_error: e.to_string() }),
     }
-}
-
-/// Creates an RPC parsing error response.
-pub fn rpc_params_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(INVALID_PARAMS_CODE, INVALID_PARAMS_MSG, Some(message))
-}
-
-/// Creates an RPC internal error response.
-pub fn rpc_client_error<S: serde::Serialize>(message: S) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(INVALID_REQUEST_CODE, INVALID_REQUEST_MSG, Some(message))
 }
 
 /// Creates an RPC internal error response.

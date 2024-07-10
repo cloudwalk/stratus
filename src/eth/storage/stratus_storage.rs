@@ -29,6 +29,7 @@ cfg_if::cfg_if! {
     if #[cfg(test)] {
         use crate::eth::storage::InMemoryPermanentStorage;
         use crate::eth::storage::InMemoryTemporaryStorage;
+        use crate::eth::storage::RocksPermanentStorage;
     }
 }
 
@@ -71,7 +72,7 @@ impl StratusStorage {
         let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
         let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
 
-        let rocks_permanent_storage = crate::eth::storage::RocksPermanentStorage::new(Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
+        let rocks_permanent_storage = RocksPermanentStorage::new(Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
 
         (
             Self {
@@ -336,6 +337,27 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
         tracing::debug!(storage = %label::PERM, block_number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
+
+        let new_block_number = block.number();
+        let last_mined_block_number = self.perm.read_mined_block_number()?;
+
+        // check permanent storage block number
+        if new_block_number > BlockNumber::ZERO && new_block_number != last_mined_block_number + 1 {
+            let gap_size = new_block_number.as_i64() - last_mined_block_number.as_i64();
+            tracing::error!(?new_block_number, ?last_mined_block_number, gap_size);
+            return Err(anyhow!("block to save is not on the correct order"));
+        }
+
+        // check temporary storage block number, if set
+        if let Some(pending_block_number) = self.temp.read_pending_block_number()? {
+            if new_block_number.as_i64() != pending_block_number.as_i64() - 1 {
+                tracing::warn!(
+                    ?new_block_number,
+                    ?pending_block_number,
+                    "block to save isn't predecessor of the pending block number in temporary storage, didn't it increment its number?",
+                );
+            }
+        }
 
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| self.perm.save_block(block)).with(|m| {

@@ -107,6 +107,7 @@ impl AppendLogEntriesStorage {
         match self.get_entry(log_entry.index) {
             Ok(Some(existing_entry)) => {
                 if existing_entry.term == log_entry.term {
+                    tracing::info!(index = log_entry.index, term = log_entry.term, "Log entry already exists");
                     Ok(())
                 } else if append_only {
                     // Append-only if called by Leader

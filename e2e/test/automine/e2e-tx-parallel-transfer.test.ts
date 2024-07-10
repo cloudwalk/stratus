@@ -5,10 +5,13 @@ import { pollReceipts, send, sendGetBalance, sendRawTransactions, sendReset } fr
 
 describe("Transaction: parallel transfer", () => {
     it("Resets blockchain", async () => {
+        // HACK: sleeps for 50ms to avoid having the previous test interfering
+        await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
         expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
+
     it("Sends parallel requests", async () => {
         const counterParty = randomAccounts(1)[0];
         expect(await sendGetBalance(counterParty.address)).eq(0, "counterParty initial balance mismatch");
