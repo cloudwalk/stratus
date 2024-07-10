@@ -64,7 +64,7 @@ where
 pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, RpcError> {
     match rlp::decode::<T>(value) {
         Ok(trx) => Ok(trx),
-        Err(e) => Err(RpcError::TransactionInvalid { decode_error: e.to_string() }),
+        Err(e) => Err(RpcError::TransactionInvalidRlp { decode_error: e.to_string() }),
     }
 }
 
