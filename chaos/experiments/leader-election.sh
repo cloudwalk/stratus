@@ -141,7 +141,7 @@ check_leader() {
     }' "$grpc_address" append_entry.AppendEntryService/AppendTransactionExecutions 2>&1)
 
     # Check the response for specific strings to determine the node status
-    if [[ "$response" == *"append_transaction_executions called on leader node"* ]]; then
+    if [[ "$response" == *"called on leader node"* ]]; then
         return 0 # Success exit code for leader
     elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
         return 1 # Failure exit code for non-leader
@@ -206,7 +206,7 @@ run_test() {
         grpc_addresses+=("${params[1]}")
         rocks_paths+=("${params[2]}")
         liveness+=(false)
-        sleep 5
+        sleep 15
     done
 
     all_ready=false
@@ -275,7 +275,7 @@ run_test() {
             fi
         done
 
-        if [ $num_instances -eq 2 ]; then
+        if [ $num_instances -gt 1 ]; then
             sleep 40 # wait for leader election before raising the other instance to avoid split vote
         fi
 
