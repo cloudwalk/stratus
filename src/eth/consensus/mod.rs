@@ -1017,11 +1017,7 @@ impl Consensus {
         }
         #[cfg(not(feature = "rocks"))]
         {
-            Ok(Vec::new())
-        }
-        #[cfg(not(feature = "rocks"))]
-        {
-            Ok(())
+            return Ok(Vec::new());
         }
     }
 }
