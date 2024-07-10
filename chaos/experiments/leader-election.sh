@@ -359,6 +359,7 @@ run_test() {
     done
 
     # Validate the append entry logs
+    echo "Validating the append entry logs..."
     ./utils/validate-append-entry-logs.sh entries_*.json
 }
 
