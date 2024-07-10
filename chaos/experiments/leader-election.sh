@@ -274,6 +274,8 @@ run_test() {
         exit 1
     fi
 
+    sleep 15 # wait for log to be appended
+
     if [ "$enable_leader_restart" = true ]; then
         # Kill the leader instance
         echo "Killing the leader instance on address $leader_grpc_address..."
