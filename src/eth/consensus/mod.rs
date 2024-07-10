@@ -1011,7 +1011,14 @@ impl Consensus {
     }
 
     pub fn get_log_entries_from(&self, start_index: u64) -> Result<Vec<LogEntry>, anyhow::Error> {
-        self.log_entries_storage.get_entries_from(start_index)
+        #[cfg(feature = "rocks")]
+        {
+            self.log_entries_storage.get_entries_from(start_index)
+        }
+        #[cfg(not(feature = "rocks"))]
+        {
+            Ok(Vec::new())
+        }
     }
 }
 
