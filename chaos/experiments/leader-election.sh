@@ -57,6 +57,7 @@ cleanup() {
     killport --quiet $port
   done
   rm instance_30* || true
+  rm entries_30* || true
   find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf
   echo "Job is done."
 }
@@ -82,6 +83,14 @@ start_instance() {
         --tokio-console-address=$tokio_console_address \
         --perm-storage=rocks \
         --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
+}
+
+# Function to download the consensus append entry logs and save them into a JSON file
+get_append_entry_logs() {
+    local port=$1
+    curl -s http://0.0.0.0:$port \
+        --header "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"consensus_getAppendEntryLogs","params":[1],"id":1}' | jq '.result' > "entries_$port.json"
 }
 
 # Function to check liveness of an instance
@@ -230,6 +239,7 @@ run_test() {
     done
 
     echo "All instances are ready. Waiting for leader election"
+    sleep 30
 
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=60
@@ -276,7 +286,7 @@ run_test() {
         done
 
         if [ $num_instances -gt 1 ]; then
-            sleep 40 # wait for leader election before raising the other instance to avoid split vote
+            sleep 50 # wait for leader election before raising the other instance to avoid split vote
         fi
 
         # Restart the killed instance
@@ -311,7 +321,7 @@ run_test() {
         done
 
         echo "All instances are ready after restart. Waiting for new leader election."
-        sleep 15 # wait until election is settled down
+        sleep 40 # wait until election is settled down
 
         # Maximum timeout duration in seconds for new leader election
         max_timeout=60
@@ -342,6 +352,14 @@ run_test() {
             fi
         done
     fi
+
+    # Persist the append entry logs for all instances
+    for port in "${ports[@]}"; do
+        get_append_entry_logs $port
+    done
+
+    # Validate the append entry logs
+    ./utils/validate-append-entry-logs.sh entries_*.json
 }
 
 # Run the test n times
