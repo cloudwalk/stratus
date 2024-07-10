@@ -49,7 +49,7 @@ compare_logs() {
     fi
   done
 
-  echo "Common entries up to index: $common_index"
+  echo "Common entries up to index $common_index out of $max_entries entries."
 
   local different_entries=$((max_entries - common_index - 1))
   local difference_percentage=$((different_entries * 100 / max_entries))
