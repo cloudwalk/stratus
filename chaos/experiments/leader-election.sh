@@ -54,10 +54,10 @@ echo "Enable leader restart: $enable_leader_restart"
 cleanup() {
   echo "Cleaning up..."
   for port in "${ports[@]}"; do
-    killport --quiet $port
+    killport --quiet $port || true
   done
   rm instance_30* || true
-  find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf
+  find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf || true
   echo "Job is done."
 }
 trap cleanup EXIT INT TERM
