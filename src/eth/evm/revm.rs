@@ -114,6 +114,8 @@ impl Evm for Revm {
         let db = evm.db_mut();
         db.reset(input.clone());
 
+        // if this stratus instance is the receiver of request replications we circumvent possible
+        // nonce mismatches by setting it to the latest nonce of the sender.
         let nonce = if cfg!(feature = "request-replication-test-receiver") {
             db.basic(input.from.into())?.map(|acc| acc.nonce)
         } else {
