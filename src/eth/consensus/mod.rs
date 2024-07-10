@@ -171,6 +171,7 @@ pub struct Consensus {
     grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
     blockchain_client: Mutex<Option<Arc<BlockchainClient>>>,
+    duplicated_blockchain_client: Option<Arc<BlockchainClient>>,
 }
 
 impl Consensus {
@@ -206,6 +207,19 @@ impl Consensus {
             prev_log_index = 0;
         }
 
+        //XXX this is temporary while we test transactions being forwarded to a "real" miner environment
+        //TODO when the tests are done, remove everything related to duplicated_blockchain_client
+        let mut duplicated_blockchain_client = None;
+        match importer_config.clone().and_then(|i| i.duplicated_forward_to) {
+            Some(duplicated_forward_to) => {
+                let doppio_blockchain_client = BlockchainClient::new_http(&duplicated_forward_to, Duration::from_secs(2)).await
+                    .expect("failed to create blockchain client")
+                    .into();
+                duplicated_blockchain_client = Some(Arc::new(doppio_blockchain_client));
+            },
+            None => tracing::info!("no duplicated forward to configured, moving along"),
+        }
+
         let consensus = Self {
             broadcast_sender,
             miner: Arc::clone(&miner),
@@ -226,6 +240,7 @@ impl Consensus {
             grpc_address,
             reset_heartbeat_signal: tokio::sync::Notify::new(),
             blockchain_client: Mutex::new(None),
+            duplicated_blockchain_client,
         };
         let consensus = Arc::new(consensus);
 
@@ -662,7 +677,18 @@ impl Consensus {
             return Err(anyhow::anyhow!("blockchain client is not set, cannot forward transaction"));
         };
 
-        let result = blockchain_client.send_raw_transaction(transaction.into()).await?;
+        let result = blockchain_client.send_raw_transaction(transaction.clone().into()).await?;
+
+        //TODO spawn a light thread to send them
+        if let Some(ref duplicated_blockchain_client) = self.duplicated_blockchain_client {
+            let duplicated_blockchain_client_clone = duplicated_blockchain_client.clone();
+            tokio::spawn(async move {
+                match duplicated_blockchain_client_clone.send_raw_transaction(transaction.into()).await {
+                    Ok(_) => tracing::info!("Duplicated transaction sent successfully."),
+                    Err(e) => tracing::warn!("Failed to send duplicated transaction: {:?}", e),
+                }
+            });
+        }
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());

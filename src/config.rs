@@ -618,6 +618,13 @@ pub struct RunWithImporterConfig {
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
+
+    //XXX this is temporary while we test transactions being forwarded to a "real" miner environment
+    //TODO when the tests are done, remove everything related to duplicated_blockchain_client
+    /// RPC address to forward transactions duplicating it to a non-main node
+    /// the main usage is so we can simulate production payload on a given stratus env
+    #[arg(long = "duplicated-forward-to", env = "DUPLICATED_FORWARD_TO")]
+    pub duplicated_forward_to: Option<String>,
 }
 
 impl WithCommonConfig for RunWithImporterConfig {
