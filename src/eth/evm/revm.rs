@@ -111,7 +111,14 @@ impl Evm for Revm {
 
         // configure session
         let evm = &mut self.evm;
-        evm.db_mut().reset(input.clone());
+        let db = evm.db_mut();
+        db.reset(input.clone());
+
+        let nonce = if cfg!(feature = "request-replication-test-receiver") {
+            db.basic(input.from.into())?.map(|acc| acc.nonce)
+        } else {
+            input.nonce.map_into()
+        };
 
         // configure block params
         let block_env = evm.block_mut();
@@ -129,7 +136,7 @@ impl Evm for Revm {
         tx_env.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
         tx_env.gas_price = input.gas_price.into();
         tx_env.chain_id = input.chain_id.map_into();
-        tx_env.nonce = input.nonce.map_into();
+        tx_env.nonce = nonce;
         tx_env.data = input.data.into();
         tx_env.value = input.value.into();
 
