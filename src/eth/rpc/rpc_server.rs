@@ -566,7 +566,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_estimateGas with failure");
-            Err(rpc_internal_error(hex_data(result.output)).into())
+            Err(RpcError::TransactionReverted { output: result.output })
         }
 
         // internal error
