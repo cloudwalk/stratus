@@ -55,7 +55,7 @@ impl RpcError {
             RpcError::StratusShutdown => (INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG),
             // TODO: remove these variants
             RpcError::Generic(_) => (INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG),
-            RpcError::Response(r) => (r.code(), r.message()),
+            RpcError::Response(resp) => (resp.code(), resp.message()),
         }
     }
 }
@@ -86,14 +86,24 @@ impl From<ErrorObjectOwned> for RpcError {
 // -----------------------------------------------------------------------------
 impl From<RpcError> for ErrorObjectOwned {
     fn from(value: RpcError) -> Self {
-        let (code, message) = value.response_code();
-        let reason = value.to_string();
-        if code == INVALID_REQUEST_CODE {
-            tracing::warn!(%reason, "invalid client request");
+        // convert
+        let response = match value {
+            RpcError::Response(resp) => resp,
+            ref e => {
+                let (code, message) = e.response_code();
+                let data = e.to_string();
+                Self::owned(code, message, Some(data))
+            }
+        };
+
+        // log
+        if response.code() == INVALID_REQUEST_CODE {
+            tracing::warn!(?response, "invalid client request");
         }
-        if code == INTERNAL_ERROR_CODE {
-            tracing::error!(%reason, "internal error handling request");
+        if response.code() == INTERNAL_ERROR_CODE {
+            tracing::error!(?response, "server error handling request");
         }
-        Self::owned(code, message, Some(reason))
+
+        response
     }
 }
