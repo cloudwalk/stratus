@@ -182,10 +182,10 @@ impl ExternalRelayer {
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
             let should_resign = {
                 tx.input.extract_function().is_some_and(|sig| {
-                    let scope = sig.split("::").next();
-                    let function = sig.split('(').next();
-                    (SIGNATURES.contains(sig.as_ref()) || scope.is_some_and(|scope| SIGNATURES.contains(scope)))
-                        && !function.is_some_and(|fstr| UNRESIGNABLE_FUNCTIONS.contains(fstr))
+                    let scope_split = sig.split_once("::");
+                    let function_split = sig.split_once('(');
+                    (SIGNATURES.contains(sig.as_ref()) || scope_split.is_some_and(|(scope, _)| SIGNATURES.contains(scope)))
+                        && !function_split.is_some_and(|(function, _)| UNRESIGNABLE_FUNCTIONS.contains(function))
                 })
             };
             if should_resign {
