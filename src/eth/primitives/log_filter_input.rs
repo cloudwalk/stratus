@@ -1,17 +1,11 @@
-//! Log Filter Input Module
-//!
-//! Manages the input structure for Ethereum log filtering, particularly for
-//! JSON-RPC methods like `eth_getLogs` and `eth_subscribe`. This module
-//! defines how filters are inputted, parsed, and translated into log filters.
-//! It's a critical interface for users or applications specifying criteria for
-//! log entries they are interested in retrieving or monitoring.
-
 use std::ops::Deref;
 use std::sync::Arc;
 
 use serde_with::formats::PreferMany;
 use serde_with::serde_as;
+use serde_with::DefaultOnNull;
 use serde_with::OneOrMany;
+use serde_with::PickFirst;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
@@ -35,11 +29,12 @@ pub struct LogFilterInput {
     pub block_hash: Option<Hash>,
 
     #[serde(rename = "address", default)]
-    #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+    #[serde_as(deserialize_as = "PickFirst<(DefaultOnNull, OneOrMany<_, PreferMany>)>")]
     pub address: Vec<Address>,
 
     // NOTE: we are not checking if this is of size 4, which is the limit in the spec
     #[serde(rename = "topics", default)]
+    #[serde_as(deserialize_as = "DefaultOnNull")]
     pub topics: Vec<LogFilterInputTopic>,
 }
 
