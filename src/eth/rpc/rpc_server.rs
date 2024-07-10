@@ -7,8 +7,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-#[warn(unused_imports)]
-use anyhow::anyhow;
 use ethereum_types::U256;
 use futures::join;
 use itertools::Itertools;
