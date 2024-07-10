@@ -1024,64 +1024,6 @@ impl Consensus {
             Ok(())
         }
     }
-
-    async fn send_append_entry_request(
-        &self,
-        peer: &mut Peer,
-        current_term: u64,
-        prev_log_index: u64,
-        prev_log_term: u64,
-        entry_data: &LogEntryData,
-    ) -> Result<AppendResponse, anyhow::Error> {
-        let request = match entry_data {
-            LogEntryData::BlockEntry(block_entry) => AppendRequest::BlockCommitRequest(Request::new(AppendBlockCommitRequest {
-                term: current_term,
-                prev_log_index,
-                prev_log_term,
-                block_entry: Some(block_entry.clone()),
-                leader_id: self.my_address.to_string(),
-            })),
-            LogEntryData::TransactionExecutionEntries(executions) =>
-                AppendRequest::TransactionExecutionsRequest(Request::new(AppendTransactionExecutionsRequest {
-                    term: current_term,
-                    prev_log_index,
-                    prev_log_term,
-                    executions: executions.clone(),
-                    leader_id: self.my_address.to_string(),
-                })),
-            LogEntryData::EmptyData => AppendRequest::TransactionExecutionsRequest(Request::new(AppendTransactionExecutionsRequest {
-                term: current_term,
-                prev_log_index,
-                prev_log_term,
-                executions: Vec::<TransactionExecutionEntry>::new(),
-                leader_id: self.my_address.to_string(),
-            })),
-        };
-
-        tracing::info!(
-            "sending append request. term: {}, prev_log_index: {}, prev_log_term: {}",
-            current_term,
-            prev_log_index,
-            prev_log_term,
-        );
-
-        let response = match request {
-            AppendRequest::BlockCommitRequest(request) => peer
-                .client
-                .append_block_commit(request)
-                .await
-                .map(AppendResponse::BlockCommitResponse)
-                .map_err(|e| anyhow::anyhow!("failed to append block commit: {}", e)),
-            AppendRequest::TransactionExecutionsRequest(request) => peer
-                .client
-                .append_transaction_executions(request)
-                .await
-                .map(AppendResponse::TransactionExecutionsResponse)
-                .map_err(|e| anyhow::anyhow!("failed to append transaction executions: {}", e)),
-        }?;
-
-        Ok(response)
-    }
 }
 
 #[cfg(test)]
