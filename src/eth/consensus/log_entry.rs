@@ -3,7 +3,8 @@
 /// The LogEntry struct is used to store the index and term of the log entry.
 use prost::bytes;
 use prost::Message;
-use serde::{Serialize, Deserialize};
+use serde::Deserialize;
+use serde::Serialize;
 
 use super::append_entry::BlockEntry;
 use super::append_entry::TransactionExecutionEntry;
