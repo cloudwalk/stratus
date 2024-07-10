@@ -38,6 +38,9 @@ fn print_build_directives() {
 fn generate_proto_structs() {
     tonic_build::configure()
         .protoc_arg("--experimental_allow_proto3_optional")
+        .type_attribute("Log", "use serde::{Serialize, Deserialize}; #[derive(Serialize, Deserialize)]")
+        .type_attribute("BlockEntry", " #[derive(Serialize, Deserialize)]")
+        .type_attribute("TransactionExecutionEntry", "#[derive(Serialize, Deserialize)]")
         .compile(&["static/proto/append_entry.proto"], &["static/proto"])
         .unwrap();
 }

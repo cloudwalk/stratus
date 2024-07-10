@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use ethereum_types::U256;
 use futures::join;
 use itertools::Itertools;
@@ -154,6 +155,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("debug_setHead", debug_set_head)?;
+        module.register_blocking_method("consensus_getEntriesFrom", consensus_get_entries_from)?;
     }
 
     // stratus status
@@ -237,6 +239,13 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
         None => return log_and_err!("reading latest block returned None")?,
     }
     Ok(to_json_value(timestamp))
+}
+
+#[cfg(feature = "dev")]
+fn consensus_get_entries_from(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
+    let (_, from) = next_rpc_param::<u64>(params.sequence())?;
+    let entries = ctx.consensus.get_log_entries_from(from).map_err(|e| RpcError::from(anyhow!(e)))?;
+    Ok(json!(entries))
 }
 
 // -----------------------------------------------------------------------------

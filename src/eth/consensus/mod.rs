@@ -53,6 +53,7 @@ use append_entry::TransactionExecutionEntry;
 
 #[cfg(feature = "rocks")]
 use self::append_log_entries_storage::AppendLogEntriesStorage;
+use self::log_entry::LogEntry;
 use self::log_entry::LogEntryData;
 use super::primitives::Bytes;
 use super::primitives::TransactionExecution;
@@ -1004,6 +1005,10 @@ impl Consensus {
         }?;
 
         Ok(response)
+    }
+
+    pub fn get_log_entries_from(&self, start_index: u64) -> Result<Vec<LogEntry>, anyhow::Error> {
+        self.log_entries_storage.get_entries_from(start_index)
     }
 }
 

@@ -135,6 +135,25 @@ impl AppendLogEntriesStorage {
             }
         }
     }
+
+    pub fn get_entries_from(&self, start_index: u64) -> Result<Vec<LogEntry>, anyhow::Error> {
+        let mut entries = Vec::new();
+        let iter = self
+            .db
+            .iterator(rocksdb::IteratorMode::From(start_index.to_be_bytes().as_ref(), rocksdb::Direction::Forward));
+
+        for result in iter {
+            match result {
+                Ok((_key, value)) => {
+                    let entry = LogEntry::decode(&*value).context("Failed to decode log entry")?;
+                    entries.push(entry);
+                }
+                Err(e) => return Err(anyhow::Error::new(e)).context("Error iterating over log entries"),
+            }
+        }
+
+        Ok(entries)
+    }
 }
 
 #[cfg(test)]

@@ -3,12 +3,13 @@
 /// The LogEntry struct is used to store the index and term of the log entry.
 use prost::bytes;
 use prost::Message;
+use serde::{Serialize, Deserialize};
 
 use super::append_entry::BlockEntry;
 use super::append_entry::TransactionExecutionEntry;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum LogEntryData {
     BlockEntry(BlockEntry),
     TransactionExecutionEntries(Vec<TransactionExecutionEntry>),
@@ -16,7 +17,7 @@ pub enum LogEntryData {
     EmptyData,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LogEntry {
     pub index: u64,
     pub term: u64,
