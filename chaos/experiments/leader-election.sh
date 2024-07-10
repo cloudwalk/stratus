@@ -239,7 +239,6 @@ run_test() {
     done
 
     echo "All instances are ready. Waiting for leader election"
-    sleep 30
 
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=60
@@ -286,7 +285,7 @@ run_test() {
         done
 
         if [ $num_instances -gt 1 ]; then
-            sleep 40 # wait for leader election before raising the other instance to avoid split vote
+            sleep 15 # wait for leader election before raising the other instance to avoid split vote
         fi
 
         # Restart the killed instance
@@ -321,7 +320,7 @@ run_test() {
         done
 
         echo "All instances are ready after restart. Waiting for new leader election."
-        sleep 40 # wait until election is settled down
+        sleep 15 # wait until election is settled down
 
         # Maximum timeout duration in seconds for new leader election
         max_timeout=60
