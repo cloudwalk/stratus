@@ -34,6 +34,12 @@ pub fn not(value: bool) -> bool {
     !value
 }
 
+/// Extracts only the basename of a Rust type instead of the full qualification.
+pub fn type_basename<T>() -> &'static str {
+    let name: &'static str = std::any::type_name::<T>();
+    name.split("::").last().unwrap()
+}
+
 // -----------------------------------------------------------------------------
 // From / TryFrom
 // -----------------------------------------------------------------------------
