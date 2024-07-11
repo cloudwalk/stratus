@@ -235,9 +235,9 @@ run_test() {
 
     if [ "$enable_leader_restart" = true ]; then
         # Kill the leader instance
-        echo "Killing the leader instance on address $leader_grpc_address..."
-        for i in "${!grpc_addresses[@]}"; do
-            if [ "${grpc_addresses[i]}" == "$leader_grpc_address" ]; then
+        echo "Killing the leader instance on address $leader_port..."
+        for i in "${!leader_ports[@]}"; do
+            if [ "${leader_ports[i]}" == "$leader_port" ]; then
                 killport --quiet ${ports[i]}
                 break
             fi
@@ -251,7 +251,7 @@ run_test() {
         echo "Restarting the killed instance..."
         for i in "${!instances[@]}"; do
             IFS=' ' read -r -a params <<< "${instances[i]}"
-            if [ "${params[1]}" == "$leader_grpc_address" ]; then
+            if [ "${params[1]}" == "$leader_port" ]; then
                 start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
                 liveness[i]=false
                 break
