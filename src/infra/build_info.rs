@@ -59,7 +59,7 @@ pub fn version() -> &'static str {
     }
 }
 
-pub fn is_leader(ctx: &RpcContext) -> bool {
+pub fn is_leader() -> bool {
     Consensus::is_leader()
 }
 
@@ -100,7 +100,7 @@ pub fn as_json(ctx: &RpcContext) -> JsonValue {
                 "target": RUST_TARGET,
             },
             "consensus": {
-                "is_leader": is_leader(ctx),
+                "is_leader": is_leader(),
                 "current_term": current_term(ctx),
                 "last_index": last_index(ctx),
             }
