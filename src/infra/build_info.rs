@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use crate::eth::rpc::RpcContext;
+use crate::eth::Consensus;
 use crate::ext::JsonValue;
 
 // -----------------------------------------------------------------------------
@@ -58,8 +59,8 @@ pub fn version() -> &'static str {
     }
 }
 
-pub fn is_leader(ctx: &RpcContext) -> bool {
-    ctx.consensus.is_leader()
+pub fn is_leader() -> bool {
+    Consensus::is_leader()
 }
 
 pub fn current_term(ctx: &RpcContext) -> u64 {
@@ -99,7 +100,7 @@ pub fn as_json(ctx: &RpcContext) -> JsonValue {
                 "target": RUST_TARGET,
             },
             "consensus": {
-                "is_leader": is_leader(ctx),
+                "is_leader": is_leader(),
                 "current_term": current_term(ctx),
                 "last_index": last_index(ctx),
             }

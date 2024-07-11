@@ -296,10 +296,7 @@ pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecu
         let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());
         for mined_log in tx.result.execution.logs.clone() {
             // calculate bloom
-            block.header.bloom.accrue(BloomInput::Raw(mined_log.address.as_ref()));
-            for topic in mined_log.topics().into_iter() {
-                block.header.bloom.accrue(BloomInput::Raw(topic.as_ref()));
-            }
+            block.header.bloom.accrue_log(&mined_log);
 
             // mine log
             let mined_log = LogMined {
@@ -439,6 +436,7 @@ mod interval_miner {
 
     use crate::channel_read_sync;
     use crate::eth::BlockMiner;
+    use crate::eth::Consensus;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
@@ -448,6 +446,11 @@ mod interval_miner {
         while let Ok(tick) = channel_read_sync!(ticks_rx) {
             if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
+            }
+
+            if !Consensus::is_leader() {
+                tracing::info!("skipping mining block because node is not a leader");
+                continue;
             }
 
             // mine
