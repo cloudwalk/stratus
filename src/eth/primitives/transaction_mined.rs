@@ -4,6 +4,7 @@ use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;
 
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalReceipt;
@@ -74,6 +75,14 @@ impl TransactionMined {
     pub fn is_success(&self) -> bool {
         self.execution.is_success()
     }
+
+    fn compute_bloom(&self) -> LogsBloom {
+        let mut bloom = LogsBloom::default();
+        for log_mined in self.logs.iter() {
+            bloom.accrue_log(&(log_mined.log));
+        }
+        bloom
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -106,6 +115,7 @@ impl From<TransactionMined> for EthersTransaction {
 
 impl From<TransactionMined> for EthersReceipt {
     fn from(value: TransactionMined) -> Self {
+        let logs_bloom = value.compute_bloom().into();
         Self {
             // receipt specific
             status: Some(if_else!(value.is_success(), 1, 0).into()),
@@ -124,6 +134,7 @@ impl From<TransactionMined> for EthersReceipt {
 
             // logs
             logs: value.logs.into_iter().map_into().collect(),
+            logs_bloom, // TODO: save this to the database instead of computing it every time (could also be useful for eth_getLogs)
 
             // TODO: there are more fields to populate here
             ..Default::default()
