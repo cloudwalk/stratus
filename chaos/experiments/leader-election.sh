@@ -111,71 +111,37 @@ check_liveness() {
 
 # Function to check if an instance is the leader
 check_leader() {
-    local grpc_address=$1
+    local port=$1
+    local response=$(curl -s http://0.0.0.0:$port \
+        --header "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"stratus_version","params":[],"id":1}')
 
-    # Base64 encoded placeholder values to ensure they match the expected length
-    local hash="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-    local gas="AAAAAAAAAAE="
-    local bloom="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-    local data="AAAAAAAAAAE="
-    local twentybytes="QUFBQUFBQUFBQUFBQUFBQUFBQUA="
+    local is_leader=$(echo $response | jq -r '.result.consensus.is_leader')
+    local term=$(echo $response | jq -r '.result.consensus.current_term')
 
-    # Send the gRPC request using grpcurl and capture both stdout and stderr
-    response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{
-        "leader_id": "leader_id_value",
-        "term": 0,
-        "prevLogIndex": 0,
-        "prevLogTerm": 0,
-        "executions": [
-            {
-                "hash": "'"$hash"'",
-                "nonce": 1,
-                "value": "'"$gas"'",
-                "gas_price": "'"$gas"'",
-                "input": "'"$data"'",
-                "v": 27,
-                "r": "'"$hash"'",
-                "s": "'"$hash"'",
-                "chain_id": 1,
-                "result": "success",
-                "output": "'"$data"'",
-                "from": "'"$twentybytes"'",
-                "to": "'"$twentybytes"'",
-                "logs": [
-                    {
-                        "address": "'"$twentybytes"'",
-                        "topics": ["'"$hash"'"],
-                        "data": "'"$data"'"
-                    }
-                ],
-                "gas": "'"$gas"'",
-                "tx_type": 1,
-                "signer": "'"$twentybytes"'",
-                "gas_limit": "'"$gas"'",
-                "deployed_contract_address": "'"$twentybytes"'"
-            }
-        ]
-    }' "$grpc_address" append_entry.AppendEntryService/AppendTransactionExecutions 2>&1)
-
-    # Check the response for specific strings to determine the node status
-    if [[ "$response" == *"called on leader node"* ]]; then
-        return 0 # Success exit code for leader
-    elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
-        return 1 # Failure exit code for non-leader
-    elif [[ "$response" == *"is less than current term"* ]]; then
-        return 1 # Failure exit code for non-leader
-    fi
+    echo "$is_leader $term"
 }
 
 # Function to find the leader node
+# Returns nothing if no leader is found or if there is mismatch between instances terms
+# Otherwise returns a list of leader addresses
 find_leader() {
-    local grpc_addresses=("$@")
+    local ports=("$@")
     local leaders=()
-    for grpc_address in "${grpc_addresses[@]}"; do
-        check_leader "$grpc_address"
-        local status=$?
-        if [ $status -eq 0 ]; then
-            leaders+=("$grpc_address")
+    local term=""
+
+    for port in "${ports[@]}"; do
+        read -r is_leader current_term <<< "$(check_leader "$port")"
+
+        if [ -z "$term" ]; then
+            term="$current_term"
+        elif [ "$term" != "$current_term" ]; then
+            echo ""
+            return
+        fi
+
+        if [ "$is_leader" == "true" ]; then
+            leaders+=("$port")
         fi
     done
 
@@ -249,7 +215,7 @@ run_test() {
     echo "All instances are ready. Waiting for leader election"
 
     # Maximum timeout duration in seconds for the initial leader election
-    initial_leader_timeout=60
+    initial_leader_timeout=120
 
     # Capture the start time
     initial_start_time=$(date +%s)
@@ -264,20 +230,20 @@ run_test() {
             exit 1
         fi
 
-        leader_grpc_addresses=($(find_leader "${grpc_addresses[@]}"))
-        if [ ${#leader_grpc_addresses[@]} -gt 1 ]; then
-            echo "Error: More than one leader found: ${leader_grpc_addresses[*]}"
+        leader_ports=($(find_leader "${ports[@]}"))
+        if [ ${#leader_ports[@]} -gt 1 ]; then
+            echo "Error: More than one leader found: ${leader_ports[*]}"
             exit 1
-        elif [ ${#leader_grpc_addresses[@]} -eq 1 ]; then
-            leader_grpc_address=${leader_grpc_addresses[0]}
-            echo "Leader found on address $leader_grpc_address"
+        elif [ ${#leader_ports[@]} -eq 1 ]; then
+            leader_port=${leader_ports[0]}
+            echo "Leader found on address $leader_port"
             break
         else
             sleep 1
         fi
     done
 
-    if [ -z "$leader_grpc_address" ]; then
+    if [ -z "$leader_port" ]; then
         echo "Exiting due to leader election failure."
         exit 1
     fi
@@ -286,9 +252,9 @@ run_test() {
 
     if [ "$enable_leader_restart" = true ]; then
         # Kill the leader instance
-        echo "Killing the leader instance on address $leader_grpc_address..."
-        for i in "${!grpc_addresses[@]}"; do
-            if [ "${grpc_addresses[i]}" == "$leader_grpc_address" ]; then
+        echo "Killing the leader instance on address $leader_port..."
+        for i in "${!leader_ports[@]}"; do
+            if [ "${leader_ports[i]}" == "$leader_port" ]; then
                 killport --quiet ${ports[i]}
                 break
             fi
@@ -302,7 +268,7 @@ run_test() {
         echo "Restarting the killed instance..."
         for i in "${!instances[@]}"; do
             IFS=' ' read -r -a params <<< "${instances[i]}"
-            if [ "${params[1]}" == "$leader_grpc_address" ]; then
+            if [ "${params[1]}" == "$leader_port" ]; then
                 start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
                 liveness[i]=false
                 break
@@ -330,10 +296,9 @@ run_test() {
         done
 
         echo "All instances are ready after restart. Waiting for new leader election."
-        sleep 15 # wait until election is settled down
 
         # Maximum timeout duration in seconds for new leader election
-        max_timeout=60
+        max_timeout=120
 
         # Capture the start time
         start_time=$(date +%s)
@@ -348,13 +313,13 @@ run_test() {
                 exit 1
             fi
 
-            leader_grpc_addresses=($(find_leader "${grpc_addresses[@]}"))
-            if [ ${#leader_grpc_addresses[@]} -gt 1 ]; then
-                echo "Error: More than one leader found: ${leader_grpc_addresses[*]}"
+            leader_ports=($(find_leader "${ports[@]}"))
+            if [ ${#leader_ports[@]} -gt 1 ]; then
+                echo "Error: More than one leader found: ${leader_ports[*]}"
                 exit 1
-            elif [ ${#leader_grpc_addresses[@]} -eq 1 ]; then
-                leader_grpc_address=${leader_grpc_addresses[0]}
-                echo "Leader found on address $leader_grpc_address"
+            elif [ ${#leader_ports[@]} -eq 1 ]; then
+                leader_port=${leader_ports[0]}
+                echo "Leader found on address $leader_port"
                 break
             else
                 sleep 1

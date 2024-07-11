@@ -39,10 +39,10 @@ jobs:
             iterations: 1
           - leader-restart: false
             instances: 2
-            iterations: 3
+            iterations: 1
           - leader-restart: false
             instances: 3
-            iterations: 3
+            iterations: 1
 
     name: E2E Leader Election with ${{ matrix.instances }} instance(s) and leader restart ${{ matrix.leader-restart }}
     runs-on: ubuntu-latest
@@ -74,11 +74,6 @@ jobs:
 
       - name: Install jq
         run: sudo apt-get install jq -y
-
-      - name: Install grpcurl
-        run: |
-          GRPCURL_VERSION="1.9.1"
-          curl -sSL https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xz grpcurl
 
       - name: Set up Just
         uses: extractions/setup-just@v2

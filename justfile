@@ -131,7 +131,7 @@ test-doc name="":
 
 # Test: Execute Rust unit tests
 test-unit name="":
-    cargo test --lib {{name}} --features {{feature_flags}} -- --nocapture
+    cargo test --lib {{name}} --features {{feature_flags}} -- --nocapture --test-threads=1
 
 # Test: Execute Rust integration tests
 test-int name="'*'":

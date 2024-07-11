@@ -68,6 +68,7 @@ use crate::GlobalState;
 // -----------------------------------------------------------------------------
 
 /// Starts JSON-RPC server.
+#[allow(clippy::too_many_arguments)]
 pub async fn serve_rpc(
     // services
     storage: Arc<StratusStorage>,
@@ -78,6 +79,7 @@ pub async fn serve_rpc(
     address: SocketAddr,
     chain_id: ChainId,
     max_connections: u32,
+    #[cfg(feature = "request-replication-test-sender")] replicate_request_to: String,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
     tracing::info!(%address, %max_connections, "creating {}", TASK_NAME);
@@ -111,7 +113,13 @@ pub async fn serve_rpc(
     module = register_methods(module)?;
 
     // configure middleware
-    let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+    let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |service| {
+        RpcMiddleware::new(
+            service,
+            #[cfg(feature = "request-replication-test-sender")]
+            replicate_request_to.clone(),
+        )
+    });
     let http_middleware = tower::ServiceBuilder::new()
         .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
@@ -268,8 +276,8 @@ fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Jso
     Ok(json!(true))
 }
 
-fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    Ok(build_info::as_json())
+fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(build_info::as_json(ctx))
 }
 
 fn stratus_block_unknown_clients(_: Params<'_>, ctx: &RpcContext, _: &Extensions) {
