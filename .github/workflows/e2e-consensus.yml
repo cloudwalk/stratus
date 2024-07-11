@@ -1,29 +1,29 @@
 name: E2E Consensus
 
 on:
-  pull_request:
-    branches:
-      - '*'
-    paths-ignore:
-      - '.github/workflows/deploy.yml'
-      - '.github/workflows/docs-release.yml'
-      - '.github/workflows/outdated.yml'
-      - '.github/workflows/comment-tag-report.yml'
-      - '.github/workflows/pr-agent.yml'
-      - '.github/workflows/build-binary.yml'
-      - '.github/CODEOWNERS'
-      - 'config/**'
-      - 'README.md'
-      - 'LICENSE'
-      - 'CONTRIBUTING.md'
-      - 'utils/slack-notifiers/**'
+  # pull_request:
+  #   branches:
+  #     - '*'
+  #   paths-ignore:
+  #     - '.github/workflows/deploy.yml'
+  #     - '.github/workflows/docs-release.yml'
+  #     - '.github/workflows/outdated.yml'
+  #     - '.github/workflows/comment-tag-report.yml'
+  #     - '.github/workflows/pr-agent.yml'
+  #     - '.github/workflows/build-binary.yml'
+  #     - '.github/CODEOWNERS'
+  #     - 'config/**'
+  #     - 'README.md'
+  #     - 'LICENSE'
+  #     - 'CONTRIBUTING.md'
+  #     - 'utils/slack-notifiers/**'
   workflow_dispatch:
-  push: # Rebuild cache policy
-    branches:
-      - 'main'
-    paths:
-      - 'Cargo.lock'
-      - 'Cargo.toml'
+  # push: # Rebuild cache policy
+  #   branches:
+  #     - 'main'
+  #   paths:
+  #     - 'Cargo.lock'
+  #     - 'Cargo.toml'
 
 jobs:
   e2e_leader_election:
@@ -83,6 +83,12 @@ jobs:
         run: |
           cargo install killport || true
           cargo install wait-service || true
+
+      - name: Clone all contracts
+        run: just contracts-clone
+
+      - name: Flatten all contracts
+        run: just contracts-flatten
 
       - name: Run e2e tests
         run: just run-chaos-experiment stratus ${{ matrix.instances }} ${{ matrix.iterations }} ${{ matrix.leader-restart }} leader-election

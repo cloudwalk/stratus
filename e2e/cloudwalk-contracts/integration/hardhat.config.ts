@@ -5,6 +5,10 @@ import { HardhatUserConfig } from "hardhat/config";
 
 const ACCOUNTS_MNEMONIC = "test test test test test test test test test test test junk";
 
+const STRATUS_PORT = process.env.STRATUS_PORT || 3000; // Default to 3000 if not set
+
+const url = `http://0.0.0.0:${STRATUS_PORT}?app=e2e`;
+
 const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
     solidity: {
@@ -48,7 +52,7 @@ const config: HardhatUserConfig = {
             },
         },
         stratus: {
-            url: "http://localhost:3000?app=e2e",
+            url: url,
             accounts: {
                 mnemonic: ACCOUNTS_MNEMONIC,
             },
