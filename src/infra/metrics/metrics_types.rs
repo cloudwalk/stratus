@@ -91,6 +91,12 @@ impl From<bool> for MetricLabelValue {
     }
 }
 
+impl From<i32> for MetricLabelValue {
+    fn from(value: i32) -> Self {
+        Self::Some(value.to_string())
+    }
+}
+
 /// Converts a list of label keys-value pairs to `metrics::Label`. Labels with missing values are filtered out.
 pub(super) fn into_labels(labels: Vec<(&'static str, MetricLabelValue)>) -> Vec<Label> {
     labels
