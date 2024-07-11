@@ -251,16 +251,16 @@ impl<'a> Future for RpcResponse<'a> {
             // trace response
             let response_success = response.is_success();
             let response_result: JsonValue = serde_json::from_str(response.as_result()).expect_infallible();
-            let level = match response_result
+            let (level, error_code) = match response_result
                 .get("error")
                 .and_then(|v| v.get("code"))
                 .and_then(|v| v.as_number())
                 .and_then(|v| v.as_i64())
                 .map(|v| v as i32)
             {
-                Some(INTERNAL_ERROR_CODE) => Level::ERROR,
-                Some(_) => Level::WARN,
-                None => Level::INFO,
+                Some(INTERNAL_ERROR_CODE) => (Level::ERROR, INTERNAL_ERROR_CODE),
+                Some(code) => (Level::WARN, code),
+                None => (Level::INFO, 0),
             };
 
             event_with!(
@@ -292,6 +292,7 @@ impl<'a> Future for RpcResponse<'a> {
                     resp.method.clone(),
                     resp.tx.as_ref().and_then(|tx| tx.function.clone()),
                     rpc_result,
+                    error_code,
                     response.is_success(),
                 );
             }
