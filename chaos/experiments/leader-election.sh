@@ -280,11 +280,14 @@ run_test() {
 
         echo "All instances are ready after restart. Waiting for new leader election."
 
+        echo "################################"
         # test: get the leadership for each port
         for port in "${ports[@]}"; do
+
             echo testing port $port
             echo check_leader $port
         done
+        echo "################################"
 
         # Maximum timeout duration in seconds for new leader election
         max_timeout=120
