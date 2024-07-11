@@ -565,6 +565,9 @@ impl RocksStorageState {
 
 impl Drop for RocksStorageState {
     fn drop(&mut self) {
+        if true {
+            return;
+        }
         let minute_in_micros = 60 * 1_000_000;
 
         let mut options = WaitForCompactOptions::default();
