@@ -113,6 +113,14 @@ impl Evm for Revm {
         let evm = &mut self.evm;
         evm.db_mut().reset(input.clone());
 
+        // if this stratus instance is the receiver of request replications we circumvent possible
+        // nonce mismatches by ignoring it.
+        let nonce = if cfg!(feature = "request-replication-test-receiver") {
+            None
+        } else {
+            input.nonce.map_into()
+        };
+
         // configure block params
         let block_env = evm.block_mut();
         block_env.basefee = U256::ZERO;
@@ -129,7 +137,7 @@ impl Evm for Revm {
         tx_env.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
         tx_env.gas_price = input.gas_price.into();
         tx_env.chain_id = input.chain_id.map_into();
-        tx_env.nonce = input.nonce.map_into();
+        tx_env.nonce = nonce;
         tx_env.data = input.data.into();
         tx_env.value = input.value.into();
 
