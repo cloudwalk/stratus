@@ -112,7 +112,8 @@ message RequestVoteRequest {
 message RequestVoteResponse {
     uint64 term = 1;
     bool vote_granted = 2;
-    string message = 3;
+    bool is_leader = 3;
+    string message = 4;
 }
 
 service AppendEntryService {

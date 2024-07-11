@@ -231,6 +231,7 @@ impl MockAppendEntryServiceClient {
         Ok(tonic::Response::new(RequestVoteResponse {
             term: 0,
             vote_granted: true,
+            is_leader: false,
             message: "Mock response".to_string(),
         }))
     }
