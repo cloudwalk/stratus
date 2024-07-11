@@ -59,7 +59,7 @@ pub fn version() -> &'static str {
 }
 
 pub fn is_leader(ctx: &RpcContext) -> bool {
-    ctx.consensus.is_leader()
+    Consensus::is_leader()
 }
 
 pub fn current_term(ctx: &RpcContext) -> u64 {
