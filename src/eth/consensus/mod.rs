@@ -670,7 +670,7 @@ impl Consensus {
     }
 
     pub fn last_index(&self) -> u64 {
-        self.prev_log_index.load(Ordering::SeqCst)
+        self.log_entries_storage.get_last_index().unwrap_or(0)
     }
 
     pub fn should_forward(&self) -> bool {
