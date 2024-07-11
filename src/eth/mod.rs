@@ -34,5 +34,6 @@ pub use block_miner::BlockMinerMode;
 pub use consensus::Consensus;
 pub use executor::EvmTask;
 pub use executor::Executor;
+pub use executor::ExecutorStrategy;
 
 pub use crate::eth::consensus::forward_to::TransactionRelayer;

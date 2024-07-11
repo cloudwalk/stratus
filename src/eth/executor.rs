@@ -1,13 +1,14 @@
 use std::cmp::max;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use tracing::info_span;
 use tracing::Span;
 
+use crate::config::ExecutorConfig;
 use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
-use crate::eth::evm::EvmConfig;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
 use crate::eth::primitives::BlockFilter;
@@ -79,8 +80,8 @@ struct Evms {
 
 impl Evms {
     /// Spawns EVM tasks in background.
-    fn spawn(storage: Arc<StratusStorage>, config: &EvmConfig) -> Self {
-        let chain_id = config.chain_id;
+    fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
+        let chain_id: ChainId = config.chain_id.into();
 
         // function executed by evm threads
         fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, chain_id: ChainId, task_rx: crossbeam_channel::Receiver<EvmTask>) {
@@ -174,12 +175,11 @@ pub enum EvmRoute {
 // -----------------------------------------------------------------------------
 
 pub struct Executor {
+    // Executor configuration.
+    config: ExecutorConfig,
+
     /// Channels to send transactions to background EVMs.
     evms: Evms,
-
-    // Number of running EVMs.
-    #[allow(unused)]
-    config: EvmConfig,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
     miner: Arc<BlockMiner>,
@@ -190,9 +190,8 @@ pub struct Executor {
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, config: EvmConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
-
         let evms = Evms::spawn(Arc::clone(&storage), &config);
         Self { evms, config, miner, storage }
     }
@@ -329,28 +328,24 @@ impl Executor {
             s.rec_opt("tx_to", &tx_input.to);
             s.rec_str("tx_nonce", &tx_input.nonce);
         });
-        tracing::info!(
-            tx_hash = %tx_input.hash,
-            tx_nonce = %tx_input.nonce,
-            tx_from = ?tx_input.from,
-            tx_signer = %tx_input.signer,
-            tx_to = ?tx_input.to,
-            tx_data_len = %tx_input.input.len(),
-            tx_data = %tx_input.input,
-            "executing local transaction"
-        );
 
-        // execute in parallel first
-        // fallback to serial in case of conflict
-        let parallel_result = self.execute_local_transaction_with_retries(tx_input.clone(), EvmRoute::Parallel, 1);
-        let tx_execution = match parallel_result {
-            Ok(tx_execution) => Ok(tx_execution),
-            Err(e) =>
-                if let Some(StorageError::Conflict(_)) = e.downcast_ref::<StorageError>() {
-                    self.execute_local_transaction_with_retries(tx_input, EvmRoute::Serial, usize::MAX)
-                } else {
-                    Err(e)
-                },
+        // execute according to the strategy
+        const INFINITE_ATTEMPTS: usize = usize::MAX;
+
+        let tx_execution = match self.config.strategy {
+            ExecutorStrategy::Serial => self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS),
+            ExecutorStrategy::Paralell => {
+                let parallel_attempt = self.execute_local_transaction_attempts(tx_input.clone(), EvmRoute::Parallel, 1);
+                match parallel_attempt {
+                    Ok(tx_execution) => Ok(tx_execution),
+                    Err(e) =>
+                        if let Some(StorageError::Conflict(_)) = e.downcast_ref::<StorageError>() {
+                            self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
+                        } else {
+                            Err(e)
+                        },
+                }
+            }
         };
 
         // track metrics
@@ -374,12 +369,7 @@ impl Executor {
     }
 
     /// Executes a transaction until it reaches the max number of attempts.
-    fn execute_local_transaction_with_retries(
-        &self,
-        tx_input: TransactionInput,
-        evm_route: EvmRoute,
-        max_attempts: usize,
-    ) -> anyhow::Result<TransactionExecution> {
+    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, evm_route: EvmRoute, max_attempts: usize) -> anyhow::Result<TransactionExecution> {
         // validate
         if tx_input.signer.is_zero() {
             tracing::warn!("rejecting transaction from zero address");
@@ -489,5 +479,23 @@ impl Executor {
         metrics::inc_executor_call_gas(execution.gas.as_u64() as usize, function.clone());
 
         Ok(execution)
+    }
+}
+
+#[derive(Clone, Copy, serde::Serialize)]
+pub enum ExecutorStrategy {
+    Serial,
+    Paralell,
+}
+
+impl FromStr for ExecutorStrategy {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "serial" => Ok(Self::Serial),
+            "par" | "parallel" => Ok(Self::Paralell),
+            s => Err(anyhow!("unknown executor strategy: {}", s)),
+        }
     }
 }
