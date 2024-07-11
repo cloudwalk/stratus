@@ -56,7 +56,7 @@ cleanup() {
   for port in "${ports[@]}"; do
     killport --quiet $port || true
   done
-  rm instance_30* || true
+  #rm instance_30* || true
   find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf || true
   echo "Job is done."
 }
@@ -230,6 +230,8 @@ run_test() {
         echo "Exiting due to leader election failure."
         exit 1
     fi
+
+    sleep 20 # wait for logs to be appended
 
     if [ "$enable_leader_restart" = true ]; then
         # Kill the leader instance
