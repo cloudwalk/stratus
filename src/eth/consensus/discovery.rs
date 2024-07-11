@@ -54,7 +54,7 @@ pub async fn discover_peers(consensus: Arc<Consensus>) {
 
     for (address, peer) in new_peers {
         if peers_lock.contains_key(&address) {
-            tracing::info!("consensus module peer {} already exists, skipping initialization", address.address);
+            tracing::info!("consensus module peer {} already exists, skipping initialization", address);
             continue;
         }
 
