@@ -101,7 +101,7 @@ check_leader() {
 
     local is_leader=$(echo $response | jq -r '.result.is_leader')
     local term=$(echo $response | jq -r '.result.term')
-    
+
     echo "$is_leader $term"
 }
 
@@ -109,12 +109,12 @@ check_leader() {
 # Returns nothing if no leader is found or if there is mismatch between instances terms
 # Otherwise returns a list of leader addresses
 find_leader() {
-    local grpc_addresses=("$@")
+    local ports=("$@")
     local leaders=()
     local term=""
 
-    for grpc_address in "${grpc_addresses[@]}"; do
-        read -r is_leader current_term <<< "$(check_leader "$grpc_address")"
+    for port in "${ports[@]}"; do
+        read -r is_leader current_term <<< "$(check_leader "$port")"
 
         if [ -z "$term" ]; then
             term="$current_term"
@@ -124,7 +124,7 @@ find_leader() {
         fi
 
         if [ "$is_leader" == "true" ]; then
-            leaders+=("$grpc_address")
+            leaders+=("$port")
         fi
     done
 
@@ -213,20 +213,20 @@ run_test() {
             exit 1
         fi
 
-        leader_grpc_addresses=($(find_leader "${grpc_addresses[@]}"))
-        if [ ${#leader_grpc_addresses[@]} -gt 1 ]; then
-            echo "Error: More than one leader found: ${leader_grpc_addresses[*]}"
+        leader_ports=($(find_leader "${ports[@]}"))
+        if [ ${#leader_ports[@]} -gt 1 ]; then
+            echo "Error: More than one leader found: ${leader_ports[*]}"
             exit 1
-        elif [ ${#leader_grpc_addresses[@]} -eq 1 ]; then
-            leader_grpc_address=${leader_grpc_addresses[0]}
-            echo "Leader found on address $leader_grpc_address"
+        elif [ ${#leader_ports[@]} -eq 1 ]; then
+            leader_port=${leader_ports[0]}
+            echo "Leader found on address $leader_port"
             break
         else
             sleep 1
         fi
     done
 
-    if [ -z "$leader_grpc_address" ]; then
+    if [ -z "$leader_port" ]; then
         echo "Exiting due to leader election failure."
         exit 1
     fi
@@ -294,13 +294,13 @@ run_test() {
                 exit 1
             fi
 
-            leader_grpc_addresses=($(find_leader "${grpc_addresses[@]}"))
-            if [ ${#leader_grpc_addresses[@]} -gt 1 ]; then
-                echo "Error: More than one leader found: ${leader_grpc_addresses[*]}"
+            leader_ports=($(find_leader "${ports[@]}"))
+            if [ ${#leader_ports[@]} -gt 1 ]; then
+                echo "Error: More than one leader found: ${leader_ports[*]}"
                 exit 1
-            elif [ ${#leader_grpc_addresses[@]} -eq 1 ]; then
-                leader_grpc_address=${leader_grpc_addresses[0]}
-                echo "Leader found on address $leader_grpc_address"
+            elif [ ${#leader_ports[@]} -eq 1 ]; then
+                leader_port=${leader_ports[0]}
+                echo "Leader found on address $leader_port"
                 break
             else
                 sleep 1

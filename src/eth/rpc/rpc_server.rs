@@ -227,9 +227,9 @@ fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow:
 }
 
 #[cfg(feature = "dev")]
-fn consensus_get_leadership_status(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let is_leader = ctx.consensus.is_leader().await;
-    let current_term = ctx.consensus.current_term.load(Ordering::SeqCst);
+fn consensus_get_leadership_status(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    let is_leader = ctx.consensus.is_leader();
+    let current_term = ctx.consensus.current_term();
     Ok(json!({"is_leader": is_leader, "term": current_term}))
 }
 

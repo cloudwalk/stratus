@@ -665,6 +665,10 @@ impl Consensus {
         self.role.load(Ordering::SeqCst) == Role::Follower as u8
     }
 
+    pub fn current_term(&self) -> u64 {
+        self.current_term.load(Ordering::SeqCst)
+    }
+
     pub fn should_forward(&self) -> bool {
         let is_leader = self.is_leader();
         tracing::info!(
