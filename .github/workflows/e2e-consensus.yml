@@ -84,6 +84,12 @@ jobs:
           cargo install killport || true
           cargo install wait-service || true
 
+      - name: Clone all contracts
+        run: just contracts-clone
+
+      - name: Flatten all contracts
+        run: just contracts-flatten
+
       - name: Run e2e tests
         run: just run-chaos-experiment stratus ${{ matrix.instances }} ${{ matrix.iterations }} ${{ matrix.leader-restart }} leader-election
         env:
