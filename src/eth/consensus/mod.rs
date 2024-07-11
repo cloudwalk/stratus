@@ -645,6 +645,12 @@ impl Consensus {
     }
 
     fn set_role(&self, role: Role) {
+        if self.role.load(Ordering::SeqCst) == role as u8 {
+            tracing::info!(role = ?role, "role remains the same");
+            return;
+        }
+
+        tracing::info!(role = ?role, "setting role");
         self.role.store(role as u8, Ordering::SeqCst);
 
         #[cfg(feature = "metrics")]
