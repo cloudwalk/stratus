@@ -276,8 +276,8 @@ fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Jso
     Ok(json!(true))
 }
 
-fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    Ok(build_info::as_json())
+fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(build_info::as_json(ctx))
 }
 
 fn stratus_block_unknown_clients(_: Params<'_>, ctx: &RpcContext, _: &Extensions) {

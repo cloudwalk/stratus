@@ -5,12 +5,14 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::anyhow;
 use anyhow::Context;
 use lazy_static::lazy_static;
 use rocksdb::Direction;
 use rocksdb::Options;
+use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use serde::Deserialize;
@@ -558,6 +560,35 @@ impl RocksStorageState {
 
         prev_values.insert(hist as u32, (data_sum, data_count));
         avg
+    }
+}
+
+impl Drop for RocksStorageState {
+    fn drop(&mut self) {
+        let minute_in_micros = 60 * 1_000_000;
+
+        let mut options = WaitForCompactOptions::default();
+        // if background jobs are paused, it makes no sense to keep waiting indefinitely
+        options.set_abort_on_pause(true);
+        // flush all write buffers before waiting
+        options.set_flush(true);
+        // wait for 15 minutes at max, we're accepting that our shutdown might be slow to guarantee
+        // that the boot is fast
+        options.set_timeout(15 * minute_in_micros);
+
+        tracing::info!("shutting down rocksdb database");
+        let instant = Instant::now();
+
+        // by waiting for compaction, we are also forcing logs to be processed in shutdown so that
+        // they don't take long to process when booting up
+        let result = self.db.wait_for_compact(&options);
+        let waited_for = instant.elapsed();
+
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, ?waited_for, "rocksdb shutdown compaction didn't finish in time, shutting it down anyways");
+        } else {
+            tracing::info!(?waited_for, "finished rocksdb shutdown");
+        }
     }
 }
 
