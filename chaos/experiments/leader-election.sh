@@ -97,10 +97,10 @@ check_leader() {
     local port=$1
     local response=$(curl -s http://0.0.0.0:$port \
         --header "content-type: application/json" \
-        --data '{"jsonrpc":"2.0","method":"consensus_getLeadershipStatus","params":[],"id":1}')
+        --data '{"jsonrpc":"2.0","method":"stratus_version","params":[],"id":1}')
 
-    local is_leader=$(echo $response | jq -r '.result.is_leader')
-    local term=$(echo $response | jq -r '.result.term')
+    local is_leader=$(echo $response | jq -r '.result.consensus.is_leader')
+    local term=$(echo $response | jq -r '.result.consensus.term')
 
     echo "$is_leader $term"
 }

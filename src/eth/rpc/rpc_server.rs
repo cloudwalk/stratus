@@ -154,7 +154,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("debug_setHead", debug_set_head)?;
-        module.register_blocking_method("consensus_getLeadershipStatus", consensus_get_leadership_status)?;
     }
 
     // stratus status
@@ -227,13 +226,6 @@ fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow:
 }
 
 #[cfg(feature = "dev")]
-fn consensus_get_leadership_status(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    let is_leader = ctx.consensus.is_leader();
-    let current_term = ctx.consensus.current_term();
-    Ok(json!({"is_leader": is_leader, "term": current_term}))
-}
-
-#[cfg(feature = "dev")]
 fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     use crate::eth::primitives::UnixTime;
     use crate::log_and_err;
@@ -276,8 +268,8 @@ fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Jso
     Ok(json!(true))
 }
 
-fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
-    Ok(build_info::as_json())
+fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    Ok(build_info::as_json(ctx))
 }
 
 fn stratus_block_unknown_clients(_: Params<'_>, ctx: &RpcContext, _: &Extensions) {
