@@ -40,7 +40,7 @@ where
         }),
         Err(e) => Err(RpcError::ParameterInvalid {
             rust_type: type_basename::<T>(),
-            decode_error: e.data().map(|x| x.get().to_owned()).unwrap_or_default(),
+            decode_error: e.data().map(|x| x.to_string()).unwrap_or_default(),
         }),
     }
 }
