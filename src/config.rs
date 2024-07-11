@@ -15,7 +15,6 @@ use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
-use crate::eth::evm::EvmConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
@@ -37,6 +36,7 @@ use crate::eth::storage::TemporaryStorage;
 use crate::eth::BlockMiner;
 use crate::eth::BlockMinerMode;
 use crate::eth::Executor;
+use crate::eth::ExecutorStrategy;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
@@ -224,6 +224,10 @@ pub struct ExecutorConfig {
     /// Number of EVM instances to run.
     #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
+
+    /// EVM execution strategy.
+    #[arg(long = "strategy", env = "STRATEGY", default_value = "serial")]
+    pub strategy: ExecutorStrategy,
 }
 
 impl ExecutorConfig {
@@ -231,10 +235,8 @@ impl ExecutorConfig {
     ///
     /// Note: Should be called only after async runtime is initialized.
     pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
-        let config = EvmConfig {
-            num_evms: max(self.num_evms, 1),
-            chain_id: self.chain_id.into(),
-        };
+        let mut config = self.clone();
+        config.num_evms = max(config.num_evms, 1);
         tracing::info!(?config, "creating executor");
 
         let executor = Executor::new(storage, miner, config);

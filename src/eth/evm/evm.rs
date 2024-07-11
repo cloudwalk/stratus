@@ -59,16 +59,6 @@ pub trait Evm {
     fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult>;
 }
 
-/// EVM configuration.
-#[derive(DebugAsJson, Clone, serde::Serialize)]
-pub struct EvmConfig {
-    /// Number of EVMs to spawn.
-    pub num_evms: usize,
-
-    /// Chain ID of the EVM.
-    pub chain_id: ChainId,
-}
-
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(Debug, Clone, Default)]
 pub struct EvmInput {
