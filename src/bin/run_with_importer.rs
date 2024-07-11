@@ -51,6 +51,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
             config.address,
             config.executor.chain_id.into(),
             config.max_connections,
+            #[cfg(feature = "request-replication-test-sender")]
+            config.replicate_request_to,
         )
         .await;
         GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");
