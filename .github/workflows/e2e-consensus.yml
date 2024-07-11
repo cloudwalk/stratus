@@ -1,29 +1,29 @@
 name: E2E Consensus
 
 on:
-  pull_request:
-    branches:
-      - '*'
-    paths-ignore:
-      - '.github/workflows/deploy.yml'
-      - '.github/workflows/docs-release.yml'
-      - '.github/workflows/outdated.yml'
-      - '.github/workflows/comment-tag-report.yml'
-      - '.github/workflows/pr-agent.yml'
-      - '.github/workflows/build-binary.yml'
-      - '.github/CODEOWNERS'
-      - 'config/**'
-      - 'README.md'
-      - 'LICENSE'
-      - 'CONTRIBUTING.md'
-      - 'utils/slack-notifiers/**'
+  # pull_request:
+  #   branches:
+  #     - '*'
+  #   paths-ignore:
+  #     - '.github/workflows/deploy.yml'
+  #     - '.github/workflows/docs-release.yml'
+  #     - '.github/workflows/outdated.yml'
+  #     - '.github/workflows/comment-tag-report.yml'
+  #     - '.github/workflows/pr-agent.yml'
+  #     - '.github/workflows/build-binary.yml'
+  #     - '.github/CODEOWNERS'
+  #     - 'config/**'
+  #     - 'README.md'
+  #     - 'LICENSE'
+  #     - 'CONTRIBUTING.md'
+  #     - 'utils/slack-notifiers/**'
   workflow_dispatch:
-  push: # Rebuild cache policy
-    branches:
-      - 'main'
-    paths:
-      - 'Cargo.lock'
-      - 'Cargo.toml'
+  # push: # Rebuild cache policy
+  #   branches:
+  #     - 'main'
+  #   paths:
+  #     - 'Cargo.lock'
+  #     - 'Cargo.toml'
 
 jobs:
   e2e_leader_election:
