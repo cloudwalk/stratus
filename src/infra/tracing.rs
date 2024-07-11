@@ -562,6 +562,22 @@ macro_rules! log_and_err {
     };
 }
 
+/// Dynamic event logging based on the provided level.
+///
+/// https://github.com/tokio-rs/tracing/issues/2730#issuecomment-1943022805
+#[macro_export]
+macro_rules! event_with {
+    ($lvl:ident, $($arg:tt)+) => {
+        match $lvl {
+            ::tracing::Level::ERROR => ::tracing::error!($($arg)+),
+            ::tracing::Level::WARN => ::tracing::warn!($($arg)+),
+            ::tracing::Level::INFO => ::tracing::info!($($arg)+),
+            ::tracing::Level::DEBUG => ::tracing::debug!($($arg)+),
+            ::tracing::Level::TRACE => ::tracing::trace!($($arg)+),
+        }
+    };
+}
+
 // -----------------------------------------------------------------------------
 // Tracing functions
 // -----------------------------------------------------------------------------
